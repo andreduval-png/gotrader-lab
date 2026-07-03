@@ -59,7 +59,7 @@ export function MissionControlActionPanel({
 }: MissionControlActionPanelProps) {
   return (
     <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-      <div className="rounded-xl border border-cyan-300/20 bg-cyan-950/30 p-4 shadow-[0_0_45px_rgba(8,145,178,0.1)]">
+      <div className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Primary controls</p>

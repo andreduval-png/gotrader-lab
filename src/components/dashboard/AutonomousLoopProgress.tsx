@@ -63,7 +63,7 @@ export function AutonomousLoopProgress({
   }, [isRunning]);
 
   return (
-    <section className="rounded-xl border border-cyan-300/20 bg-slate-950/80 p-4 shadow-[0_0_45px_rgba(34,211,238,0.08)]">
+    <section className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       {recoveryRun ? (
         <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-2">
@@ -109,7 +109,7 @@ export function AutonomousLoopProgress({
         <div className="h-3 overflow-hidden rounded-full bg-white/10">
           <div
             className={cn(
-              "h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-300 to-emerald-300 transition-all duration-500",
+              "h-full rounded-full bg-primary transition-all duration-500",
               isRunning && "animate-pulse"
             )}
             style={{ width: `${progressPercent}%` }}

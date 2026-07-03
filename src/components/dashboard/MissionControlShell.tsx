@@ -2136,7 +2136,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <p className={WORKSPACE_SECTION_LABEL}>GoTrader Command Center</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-normal text-slate-50 md:text-4xl">MT5-first research cockpit</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50 md:text-3xl">MT5-first research cockpit</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
               A read-only trading research terminal for source control, ICT recognition, validation progress, and Paper-Demo operations. Every action remains research-only.
             </p>
@@ -2178,7 +2178,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
               <p className="text-3xl font-semibold text-slate-50">{formatToken(thesisBias)}</p>
               <Badge variant={dashboardDecisionTone}>{dashboardDecisionLabel}</Badge>
             </div>
-            <p className="mt-3 text-xs leading-5 text-cyan-100/80">
+            <p className="mt-3 text-xs leading-5 text-slate-400">
               Confidence {pct(thesisConfidence)} / Target {compactNumber(thesisTarget)} / Invalidation {compactNumber(thesisInvalidation)}
             </p>
             <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">{topDecisionSummary}</p>
@@ -2193,10 +2193,10 @@ export function MissionControlShell({ state }: { state: LabState }) {
             <p className="mt-3 text-2xl font-semibold text-slate-50">{runtimeSnapshot?.readiness.readinessState ?? "loading"}</p>
             <p className="mt-2 line-clamp-2 text-xs text-slate-500">{primaryBlockerDetail}</p>
           </div>
-          <div className="premium-surface-soft rounded-2xl border-violet-300/15 bg-violet-300/[0.045] p-4">
+          <div className="premium-surface-soft rounded-2xl p-4">
             <p className={WORKSPACE_SECTION_LABEL}>Replay score</p>
             <p className="mt-3 text-2xl font-semibold text-slate-50">{latestBacktest ? `${latestBacktest.totalTrades} trades` : "pending"}</p>
-            <p className="mt-2 text-xs text-violet-100/75">
+            <p className="mt-2 text-xs text-slate-500">
               Win {pct(latestBacktest?.winRate)} / Avg {latestBacktest ? `${latestBacktest.averageR.toFixed(2)}R` : "n/a"} / PF{" "}
               {latestBacktest?.profitFactor !== null && latestBacktest?.profitFactor !== undefined ? latestBacktest.profitFactor.toFixed(2) : "n/a"}
             </p>
@@ -2260,12 +2260,12 @@ export function MissionControlShell({ state }: { state: LabState }) {
         </div>
         <IctAdvisorSummaryPanel mode="compact" snapshot={runtimeSnapshot} packetOverride={activateMarketResult?.advisorPacket} />
         <LLMAdvisoryReviewPanel mode="compact" snapshot={runtimeSnapshot} onAdvisoryEvent={addDataConnectionEvent} />
-        <section data-testid="dashboard-paper-demo-operations-card" className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.055] p-4">
+        <section data-testid="dashboard-paper-demo-operations-card" className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Paper-Demo Operations</p>
+              <p className={WORKSPACE_SECTION_LABEL}>Paper-Demo Operations</p>
               <h3 className="mt-1 text-lg font-semibold text-slate-50">Manual watchlist</h3>
-              <p className="mt-2 line-clamp-2 text-xs leading-5 text-emerald-100/75">{paperDemoOperationsNextAction}</p>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">{paperDemoOperationsNextAction}</p>
             </div>
             <Badge variant="secondary">manual only</Badge>
           </div>
@@ -2281,12 +2281,12 @@ export function MissionControlShell({ state }: { state: LabState }) {
             </Link>
           </Button>
         </section>
-        <section data-testid="dashboard-auto-paper-demo-cycle-card" className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.055] p-4">
+        <section data-testid="dashboard-auto-paper-demo-cycle-card" className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Auto Paper-Demo Cycle</p>
+              <p className={WORKSPACE_SECTION_LABEL}>Auto Paper-Demo Cycle</p>
               <h3 className="mt-1 text-lg font-semibold text-slate-50">{formatToken(autoPaperDemoCycleStage)}</h3>
-              <p className="mt-2 line-clamp-2 text-xs leading-5 text-cyan-100/75">{autoPaperDemoNextAction}</p>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400">{autoPaperDemoNextAction}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant={autoPaperDemoBusy ? "warning" : latestAutoPaperDemoCycle?.blockers.length ? "warning" : "secondary"}>

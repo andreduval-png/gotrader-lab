@@ -35,7 +35,7 @@ const formatTime = (timestamp?: string) => {
 
 export function MissionControlDataFeed({ items }: { items: MissionFeedItem[] }) {
   return (
-    <section className="rounded-xl border border-cyan-300/15 bg-slate-950/90 p-4 shadow-[0_0_40px_rgba(8,145,178,0.08)]">
+    <section className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Research flow tape</p>
@@ -49,7 +49,7 @@ export function MissionControlDataFeed({ items }: { items: MissionFeedItem[] }) 
             const row = (
               <div
                 className={`relative rounded-lg border border-white/10 bg-white/[0.03] p-3 pl-4 transition hover:border-cyan-300/25 ${
-                  item.severity === "running" ? "shadow-[0_0_18px_rgba(34,211,238,0.12)]" : ""
+                  item.severity === "running" ? "border-cyan-300/25" : ""
                 }`}
               >
                 <span

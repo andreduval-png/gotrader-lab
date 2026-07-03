@@ -7,15 +7,15 @@ export const WORKSPACE_SECTION_LABEL =
 export const AUTHORITY_BADGE_LABEL = "Authority: none";
 
 export const WORKSPACE_HERO =
-  "premium-surface premium-panel-grid overflow-hidden rounded-[24px] p-4 sm:p-5 lg:p-6";
+  "premium-surface overflow-hidden rounded-2xl p-4 sm:p-5 lg:p-6";
 export const WORKSPACE_METRIC_GRID = "grid gap-3 sm:grid-cols-2 xl:grid-cols-4";
 export const WORKSPACE_METRIC_CARD =
   "premium-surface-soft rounded-2xl px-4 py-4 shadow-none";
 export const WORKSPACE_TABS =
-  "scrollbar-thin flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-black/20 p-1.5";
+  "scrollbar-thin flex gap-1 overflow-x-auto rounded-xl border border-white/[0.07] bg-black/20 p-1";
 export const WORKSPACE_PRIMARY_PANEL =
-  "premium-surface rounded-[22px] p-4 sm:p-5";
+  "premium-surface rounded-2xl p-4 sm:p-5";
 export const WORKSPACE_DETAIL_PANEL =
   "premium-surface-soft rounded-2xl p-4";
 export const WORKSPACE_TABLE =
-  "overflow-hidden rounded-2xl border border-white/10 bg-black/20";
+  "overflow-hidden rounded-2xl border border-white/[0.07] bg-black/20";

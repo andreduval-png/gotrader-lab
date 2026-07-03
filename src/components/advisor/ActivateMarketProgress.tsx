@@ -68,7 +68,7 @@ export function ActivateMarketProgress({
   return (
     <section
       data-testid="activate-market-progress"
-      className="rounded-xl border border-cyan-300/15 bg-slate-950/85 p-4 shadow-[0_0_28px_rgba(8,145,178,0.08)]"
+      className="rounded-2xl border border-white/[0.07] bg-card/70 p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

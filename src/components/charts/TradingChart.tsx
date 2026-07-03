@@ -374,7 +374,7 @@ export function TradingChart({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border border-white/10 bg-slate-950/90 shadow-[0_0_45px_rgba(8,145,178,0.08)] ${className ?? ""}`}
+      className={`overflow-hidden rounded-xl border border-white/[0.07] bg-slate-950/90 ${className ?? ""}`}
       data-chart-candle-count={source.candleCount}
       data-chart-first-close={source.firstClose ?? ""}
       data-chart-first-timestamp={source.firstTimestamp ?? ""}

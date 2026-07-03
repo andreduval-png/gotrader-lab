@@ -224,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           >
             <div className={cn("flex min-w-0 items-center gap-3", navCollapsed && "lg:justify-center")}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 shadow-[0_0_28px_rgba(16,185,129,0.16)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/25 bg-primary/10">
                 <Gauge className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
               <div className={cn("min-w-0", navCollapsed && "lg:hidden")}>

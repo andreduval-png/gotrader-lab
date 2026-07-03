@@ -992,7 +992,7 @@ export function LLMAdvisoryReviewPanel({
     return (
       <section
         data-testid="dashboard-compact-advisor"
-        className="rounded-xl border border-cyan-300/15 bg-slate-950/85 p-4 shadow-[0_0_45px_rgba(8,145,178,0.07)]"
+        className="rounded-2xl border border-white/[0.07] bg-card/70 p-4"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1052,7 +1052,7 @@ export function LLMAdvisoryReviewPanel({
   }
 
   return (
-    <section className="rounded-xl border border-cyan-300/15 bg-slate-950/85 p-4 shadow-[0_0_45px_rgba(8,145,178,0.07)]">
+    <section className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Research Advisor</p>

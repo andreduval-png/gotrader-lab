@@ -2128,7 +2128,7 @@ function ResearchSignalCard({ signal }: { signal: IctResearchSignal }) {
       : "n/a";
 
   return (
-    <section data-testid="ict-research-signal-card" className="rounded-[24px] border border-emerald-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(2,6,23,0.94))] p-5 shadow-[0_0_50px_rgba(16,185,129,0.07)]">
+    <section data-testid="ict-research-signal-card" className="rounded-2xl border border-white/[0.07] bg-card/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">Research Signal Contract</p>
@@ -2222,7 +2222,7 @@ function PaperSimulationCard({
   const reasons = eligibility.eligible ? displaySignal.notes : eligibility.reasons;
 
   return (
-    <section data-testid="ict-paper-signal-simulator" className="rounded-[24px] border border-sky-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(56,189,248,0.12),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(2,6,23,0.94))] p-5 shadow-[0_0_50px_rgba(56,189,248,0.07)]">
+    <section data-testid="ict-paper-signal-simulator" className="rounded-2xl border border-white/[0.07] bg-card/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-300">Paper Signal Simulator</p>
@@ -2277,7 +2277,7 @@ function LatestResearchStateStrip({ latestResearchState }: { latestResearchState
     typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(value >= 10 ? 0 : 1)}%` : "n/a";
 
   return (
-    <section data-testid="ict-latest-research-state" className="rounded-2xl border border-fuchsia-300/15 bg-[radial-gradient(circle_at_8%_0%,rgba(217,70,239,0.12),transparent_32%),linear-gradient(135deg,rgba(15,23,42,0.86),rgba(2,6,23,0.9))] p-4">
+    <section data-testid="ict-latest-research-state" className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-fuchsia-300">Latest Research State</p>
@@ -2342,7 +2342,7 @@ function CmdPaperTrackingCard({
   const canCheck = Boolean(tracking && (tracking.state === "active" || tracking.state === "pending"));
 
   return (
-    <section data-testid="ict-cmd-paper-tracking-card" className="rounded-[24px] border border-violet-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(168,85,247,0.12),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.9),rgba(2,6,23,0.94))] p-5 shadow-[0_0_50px_rgba(168,85,247,0.07)]">
+    <section data-testid="ict-cmd-paper-tracking-card" className="rounded-2xl border border-white/[0.07] bg-card/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-300">CMD Paper Tracking</p>
@@ -2478,7 +2478,7 @@ function CurrentReadPanel({
   });
 
   return (
-    <section data-testid="ict-current-read-panel" className="rounded-[24px] border border-cyan-300/15 bg-[radial-gradient(circle_at_16%_0%,rgba(34,211,238,0.13),transparent_36%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.94))] p-5 shadow-[0_0_55px_rgba(8,145,178,0.08)]">
+    <section data-testid="ict-current-read-panel" className="rounded-2xl border border-white/[0.07] bg-card/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">Current Read</p>
@@ -2633,7 +2633,7 @@ function ResearchAdvisorDecisionExplanationPanel({
   return (
     <div
       data-testid="research-advisor-decision-explanation"
-      className="mt-4 rounded-2xl border border-cyan-300/15 bg-[radial-gradient(circle_at_18%_0%,rgba(34,211,238,0.12),transparent_34%),linear-gradient(135deg,rgba(2,6,23,0.78),rgba(15,23,42,0.62))] p-4"
+      className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

@@ -345,7 +345,7 @@ export function IctAdvisorSummaryPanel({
 
   if (mode === "compact") {
     return (
-      <section data-testid="dashboard-research-advisor-card" className="overflow-hidden rounded-2xl border border-cyan-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(34,211,238,0.14),transparent_38%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.94))] p-4 shadow-[0_0_45px_rgba(8,145,178,0.08)]">
+      <section data-testid="dashboard-research-advisor-card" className="overflow-hidden rounded-2xl border border-white/[0.07] bg-card/70 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">Research Advisor</p>
@@ -561,7 +561,7 @@ export function IctAdvisorSummaryPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-[24px] border border-cyan-300/15 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_82%_4%,rgba(168,85,247,0.12),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.96))] p-5 shadow-[0_0_55px_rgba(8,145,178,0.09)]">
+    <section className="overflow-hidden rounded-2xl border border-white/[0.07] bg-card/70 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">ICT Strategy Suite</p>
@@ -715,7 +715,7 @@ export function IctAdvisorSummaryPanel({
           <StrategyCalibrationPanel summary={strategyCalibrationSummary} />
           <DecisionExplanationPanel explanation={decisionExplanation} />
           {currentOpportunitySummary ? (
-            <div data-testid="advisor-current-opportunities-panel" className="mt-4 rounded-2xl border border-emerald-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(135deg,rgba(2,6,23,0.64),rgba(15,23,42,0.68))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div data-testid="advisor-current-opportunities-panel" className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Current Opportunities</p>
@@ -969,7 +969,7 @@ function DecisionExplanationPanel({
   return (
     <div
       data-testid="research-advisor-decision-explanation"
-      className="mt-4 rounded-2xl border border-cyan-300/15 bg-[radial-gradient(circle_at_16%_0%,rgba(34,211,238,0.12),transparent_34%),linear-gradient(135deg,rgba(2,6,23,0.72),rgba(15,23,42,0.58))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+      className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -1019,7 +1019,7 @@ function StrategyCalibrationPanel({
   return (
     <div
       data-testid="ict-strategy-calibration-summary"
-      className={`mt-4 rounded-2xl border border-emerald-300/15 bg-[radial-gradient(circle_at_12%_0%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(135deg,rgba(2,6,23,0.62),rgba(15,23,42,0.66))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${compact ? "mb-1" : ""}`}
+      className={`mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 ${compact ? "mb-1" : ""}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

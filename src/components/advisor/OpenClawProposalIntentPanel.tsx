@@ -69,7 +69,7 @@ export function OpenClawProposalIntentPanel({
   return (
     <section
       data-testid={testId}
-      className="rounded-2xl border border-cyan-300/15 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-[0_0_32px_rgba(8,145,178,0.07)]"
+      className="rounded-2xl border border-white/[0.07] bg-card/70 p-4 text-sm text-slate-300"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

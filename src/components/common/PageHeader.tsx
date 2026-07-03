@@ -20,7 +20,7 @@ export function PageHeader({ badges, className, description, eyebrow, testId, ti
     <header
       data-testid={testId ?? "workspace-page-header"}
       className={cn(
-        "premium-surface premium-panel-grid flex min-w-0 flex-col justify-between gap-4 rounded-[24px] px-4 py-4 sm:px-5 md:flex-row md:items-end",
+        "premium-surface flex min-w-0 flex-col justify-between gap-4 rounded-2xl px-4 py-4 sm:px-5 md:flex-row md:items-end",
         className
       )}
     >

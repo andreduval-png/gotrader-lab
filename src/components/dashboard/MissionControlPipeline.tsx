@@ -54,7 +54,7 @@ const stageIcon = (status: MissionStageStatus) => {
 
 export function MissionControlPipeline({ stages }: { stages: MissionPipelineStage[] }) {
   return (
-    <section className="rounded-xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_0_45px_rgba(8,145,178,0.08)]">
+    <section className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Pipeline</p>
@@ -69,7 +69,7 @@ export function MissionControlPipeline({ stages }: { stages: MissionPipelineStag
               className={cn(
                 "group relative h-full overflow-hidden rounded-lg border p-4 transition",
                 stage.status === "active"
-                  ? "border-cyan-300/50 bg-cyan-300/10 shadow-[0_0_35px_rgba(34,211,238,0.16)]"
+                  ? "border-cyan-300/40 bg-cyan-300/10"
                   : stage.status === "locked"
                     ? "border-rose-300/25 bg-rose-300/5"
                     : "border-white/10 bg-white/[0.035] hover:border-cyan-300/25"

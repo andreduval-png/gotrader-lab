@@ -101,7 +101,7 @@ function StatusReadout({
   variant: "success" | "warning" | "danger" | "secondary";
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-slate-950/80 p-4 shadow-[0_0_30px_rgba(8,145,178,0.08)]">
+    <div className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="rounded-md border border-cyan-300/20 bg-cyan-300/10 p-2">
           <Icon className="h-4 w-4 text-cyan-200" aria-hidden="true" />
