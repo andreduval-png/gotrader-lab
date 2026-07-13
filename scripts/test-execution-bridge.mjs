@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,20 @@ const smokeScript = await read("scripts/smoke-routes.mjs");
 const smokeSpec = await read("tests/smoke/routes.spec.ts");
 const disabledNotice = await read("src/components/execution/ExecuteHubView.tsx");
 const bridgeSource = await read("scripts/start-mt5-execution-bridge.mjs");
+const architecture = await read("ARCHITECTURE.md");
+const localStackUtils = await read("scripts/local-stack-utils.mjs");
+const localStackStart = await read("scripts/start-local-stack.mjs");
+const performance = await read("src/components/performance/PerformanceView.tsx");
+const runtimeTypes = await read("src/lib/runtime/researchRuntimeTypes.ts");
+const runtimeResolver = await read("src/lib/runtime/resolveResearchRuntimeSnapshot.ts");
+const agentIndex = await read("src/lib/agents/index.ts");
+const brokerRouter = await read("src/lib/brokers/brokerRouter.ts");
+const brokerTypes = await read("src/lib/brokers/brokerTypes.ts");
+const autonomyPolicy = await read("src/lib/autonomousResearch/autonomySafetyPolicy.ts");
+const autonomyTypes = await read("src/lib/autonomousResearch/autonomySafetyTypes.ts");
+const autonomyLoop = await read("src/lib/autonomousResearch/runAutonomousResearchLoop.ts");
+const selfImprovement = await read("src/components/self-improvement/SelfImprovementView.tsx");
+const selfImprovementIndex = await read("src/lib/selfImprovement/index.ts");
 const packageJson = JSON.parse(await read("package.json"));
 
 assert.doesNotMatch(app, /path=["']\/execute["']/i, "The app must not route /execute.");
@@ -66,6 +80,38 @@ assert.match(disabledNotice, /Execution authority[\s\S]*none/);
 assert.match(disabledNotice, /Broker authority[\s\S]*none/);
 assert.match(disabledNotice, /Readiness override[\s\S]*none/);
 assert.doesNotMatch(bridgeSource, /order_send|positions_get|orders_get|account_info|MetaTrader5/i);
+
+const activeExecutionSurfaces = [
+  architecture,
+  localStackUtils,
+  localStackStart,
+  performance,
+  runtimeTypes,
+  runtimeResolver,
+  agentIndex,
+  brokerRouter,
+  brokerTypes
+].join("\n");
+assert.doesNotMatch(activeExecutionSurfaces, /@\/lib\/execution|demo_auto|live_gated|demo_live_journal/i);
+assert.doesNotMatch(localStackUtils, /mt5-execution-bridge|7342/i);
+assert.doesNotMatch(localStackStart, /ENABLE_MT5_EXECUTION_BRIDGE|mt5:execution-bridge/i);
+assert.doesNotMatch(architecture, /staged execution|demo\/live journal|execution bridge on port 7342/i);
+
+const executionLibraryFiles = await readdir(new URL("src/lib/execution/", root)).catch((error) => {
+  if (error?.code === "ENOENT") return [];
+  throw error;
+});
+assert.deepEqual(executionLibraryFiles, [], "The unfinished execution library must remain quarantined.");
+
+assert.match(autonomyPolicy, /autoApplyEnabled:\s*false/);
+assert.match(autonomyPolicy, /autoApplyAllowed:\s*false/);
+assert.match(autonomyTypes, /autoApplyEnabled:\s*false/);
+assert.match(autonomyLoop, /autoApplyPolicyEnabled:\s*false/);
+assert.doesNotMatch(`${autonomyPolicy}\n${autonomyLoop}`, /autoApply(?:Enabled|PolicyEnabled):\s*true/);
+assert.doesNotMatch(
+  `${selfImprovement}\n${selfImprovementIndex}`,
+  /applyEmpiricalCalibrationWinner|Apply Winning Thresholds|runEmpiricalThresholdCalibration/
+);
 
 const port = await findFreePort();
 const bridgeUrl = `http://127.0.0.1:${port}`;
