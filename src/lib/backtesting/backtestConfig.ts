@@ -1,6 +1,7 @@
 import type {
   BacktestAgentWeights,
   BacktestConfig,
+  BacktestStrategyProfile,
   BacktestSessionFilter,
   BacktestStopModel,
   ResolvedBacktestConfig
@@ -51,6 +52,7 @@ export const defaultBacktestAgentWeights: BacktestAgentWeights = {
 };
 
 export const defaultBacktestConfig: ResolvedBacktestConfig = {
+  strategyProfile: "agent_consensus",
   symbol: "NQ",
   timeframe: "5m",
   sessionFilter: "all",
@@ -73,6 +75,7 @@ export const defaultBacktestConfig: ResolvedBacktestConfig = {
 const validSymbols: FuturesSymbol[] = ["ES", "NQ", "MES", "MNQ"];
 const validTimeframes: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const validRegimes: MarketRegime[] = ["trend", "balanced", "volatile", "range", "news-driven", "risk-off", "risk-on"];
+const validStrategyProfiles: BacktestStrategyProfile[] = ["agent_consensus", "ifvg_filtered_v2_research"];
 
 const coerceChoice = <T extends string>(value: unknown, choices: T[], fallback: T): T =>
   typeof value === "string" && choices.includes(value as T) ? (value as T) : fallback;
@@ -100,6 +103,7 @@ export function sanitizeBacktestConfig(config: BacktestConfig = {}): ResolvedBac
   ));
 
   return {
+    strategyProfile: coerceChoice(config.strategyProfile, validStrategyProfiles, fallback.strategyProfile),
     symbol: coerceChoice(config.symbol, validSymbols, fallback.symbol),
     timeframe: coerceChoice(config.timeframe, validTimeframes, fallback.timeframe),
     session: config.session,
@@ -155,6 +159,7 @@ export function resetBacktestConfig(): ResolvedBacktestConfig {
 
 export function describeBacktestConfig(config: ResolvedBacktestConfig) {
   return [
+    config.strategyProfile.replace(/_/g, " "),
     `${config.symbol} ${config.timeframe}`,
     `${config.sessionFilter} filter`,
     `conf >= ${(config.minimumConfidenceThreshold * 100).toFixed(0)}%`,

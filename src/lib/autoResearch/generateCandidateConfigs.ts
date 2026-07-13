@@ -13,7 +13,15 @@ const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 const candidateFamilyMetadataFor = (family?: AutoResearchCandidateFamily) =>
-  family === "reversal_expansion_confirmation"
+  family === "ifvg_filtered_v2_research"
+    ? {
+        id: "ifvg_filtered_v2_research" as const,
+        label: "IFVG Filtered v2 Research",
+        target: "IFVG clean retest and displacement validation",
+        researchOnly: true as const,
+        autoApplyAllowed: false as const
+      }
+    : family === "reversal_expansion_confirmation"
     ? {
         id: "reversal_expansion_confirmation" as const,
         label: "Reversal Expansion Confirmation",
@@ -95,6 +103,26 @@ export function generateCandidateConfigs(
   maxCandidateCount: number
 ): AutoResearchCandidateConfig[] {
   const candidates: AutoResearchCandidateConfig[] = [];
+
+  if (isAnyMode(searchMode, ["balanced", "quick", "standard", "deep", "conservative", "conservative_only"])) {
+    candidates.push(
+      candidate(
+        baseline,
+        searchMode,
+        "IFVG v2 clean retest + displacement",
+        "Evaluate the registered IFVG filtered v2 detector instead of treating strategy metadata as a tested result.",
+        {
+          strategyProfile: "ifvg_filtered_v2_research",
+          warmupCandles: 100,
+          decisionInterval: 6,
+          maxBarsToResolveTrade: 72,
+          visibleWindow: 80
+        },
+        ["strategyProfile", "warmupCandles", "decisionInterval", "maxBarsToResolveTrade"],
+        "ifvg_filtered_v2_research"
+      )
+    );
+  }
 
   if (isAnyMode(searchMode, ["conservative", "conservative_only", "quick", "standard", "deep"])) {
     candidates.push(

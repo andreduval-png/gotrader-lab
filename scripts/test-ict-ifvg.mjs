@@ -9,7 +9,13 @@ import ts from "typescript";
 const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-ifvg-test");
-const sourceFiles = ["ictTradeConstructionTypes.ts", "ictTradeConstruction.ts", "ictIfvgTypes.ts", "ictIfvg.ts"];
+const sourceFiles = [
+  "ictTradeConstructionTypes.ts",
+  "ictTradeConstruction.ts",
+  "ictIfvgTypes.ts",
+  "ictIfvg.ts",
+  "ictIfvgFilteredV2.ts"
+];
 
 function compileForNode() {
   fs.rmSync(outRoot, { recursive: true, force: true });
@@ -190,6 +196,7 @@ const assertSafe = (value) => {
 async function main() {
   compileForNode();
   const ifvg = await import(pathToFileURL(path.join(outRoot, "ictIfvg.mjs")).href);
+  const filteredV2 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFilteredV2.mjs")).href);
 
   const base = {
     sourceProvider: "mt5_read_only",
@@ -215,6 +222,17 @@ async function main() {
   assert.equal(ifvg.ictIfvgCanQueueValidation(long), true);
   assertSafe(long);
 
+  const filteredLong = filteredV2.assessIctIfvgFilteredV2(
+    { ...base, candles: validLongIfvg(), contextCandles: contextBullish },
+    long
+  );
+  assert.equal(filteredLong.strategyId, "ifvg_filtered_v2_research");
+  assert.equal(filteredLong.cleanRetest, true);
+  assert.equal(filteredLong.displacementConfirmed, true);
+  assert.equal(filteredLong.eligible, true);
+  assert.equal(filteredLong.researchOnly, true);
+  assertSafe(filteredLong);
+
   const short = ifvg.evaluateIctIfvg({ ...base, candles: validShortIfvg(), contextCandles: contextBearish, timeframe: "15m" });
   assert.equal(short.status, "replay_required");
   assert.equal(short.side, "short");
@@ -223,6 +241,16 @@ async function main() {
   assert.equal(short.tradeConstruction.valid, true);
   assert.ok(short.stop > short.ifvgBounds.high, "short IFVG stop must be above IFVG top");
   assertSafe(short);
+
+  const filteredShort = filteredV2.assessIctIfvgFilteredV2(
+    { ...base, candles: validShortIfvg(), contextCandles: contextBearish, timeframe: "15m" },
+    short
+  );
+  assert.equal(filteredShort.cleanRetest, false);
+  assert.equal(filteredShort.displacementConfirmed, true);
+  assert.equal(filteredShort.eligible, false);
+  assert.ok(filteredShort.blockers.includes("clean_retest_required"));
+  assertSafe(filteredShort);
 
   const blockedHtf = ifvg.evaluateIctIfvg({ ...base, candles: validLongIfvg(), contextCandles: contextBearish });
   assert.equal(blockedHtf.status, "blocked_against_htf");
@@ -292,6 +320,11 @@ async function main() {
     lowRrStatus: rr.status,
     lowVolumeStatus: lowVol.status,
     mockStatus: mock.status,
+    filteredV2: {
+      longEligible: filteredLong.eligible,
+      shortEligible: filteredShort.eligible,
+      researchOnly: filteredLong.researchOnly
+    },
     authority: authorityNone,
     safety: {
       rawCandlesSerialized: false,

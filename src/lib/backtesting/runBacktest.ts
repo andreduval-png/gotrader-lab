@@ -17,6 +17,7 @@ import type {
 } from "@/lib/backtesting/backtestTypes";
 import { scoreSimulatedTradeOutcome } from "@/lib/backtesting/outcomeScoring";
 import { buildICTContext, tagSession } from "@/lib/ict";
+import { assessIctIfvgFilteredV2 } from "@/lib/ict-strategy-suite/ictIfvgFilteredV2";
 import { calculateGrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { Candle, FairValueGap, FuturesSymbol, MarketBias, SimulatedTradePlan, ThesisInput, TradingSession } from "@/lib/types";
 
@@ -162,6 +163,13 @@ function buildDecision(
   config: ResolvedBacktestConfig
 ): BacktestDecisionPoint {
   const candle = candles[decisionIndex];
+  // Bound per-decision context so deep research remains linear enough for the
+  // browser while retaining more than one complete 5m session cycle.
+  const decisionContextWindow = Math.max(300, config.visibleWindow);
+  const historicalCandles = candles.slice(
+    Math.max(0, decisionIndex + 1 - decisionContextWindow),
+    decisionIndex + 1
+  );
   const input: ThesisInput = {
     symbol: config.symbol,
     timeframe: config.timeframe,
@@ -169,7 +177,6 @@ function buildDecision(
     marketRegime: config.marketRegime,
     notes: `Replay decision at candle ${decisionIndex + 1} using local simulation OHLC only.`
   };
-  const historicalCandles = candles.slice(0, decisionIndex + 1);
   const ictContext = buildICTContext(historicalCandles, input);
   const grinchScore = calculateGrinchStrategyScore({
     candles: historicalCandles,
@@ -417,6 +424,215 @@ const summarizeBacktest = (
   };
 };
 
+const candidateKeyFor = (candidate: ReturnType<typeof assessIctIfvgFilteredV2>["candidate"]) =>
+  [
+    candidate.originalFvgCandle?.timestamp,
+    candidate.inversionCandle?.timestamp,
+    candidate.retestCandle?.timestamp,
+    candidate.side
+  ].join("|");
+
+const sourceProviderFor = (candles: Candle[]) =>
+  candles.some((candle) => /mock|sample|fixture/i.test(candle.id)) ? "mock" : "canonical_research";
+
+const scoreIfvgFilteredTrade = ({
+  candidate,
+  decisionIndex,
+  candles,
+  config
+}: {
+  candidate: ReturnType<typeof assessIctIfvgFilteredV2>["candidate"];
+  decisionIndex: number;
+  candles: Candle[];
+  config: ResolvedBacktestConfig;
+}): SimulatedTradeRecord | undefined => {
+  if (
+    candidate.side === "flat" ||
+    !Number.isFinite(candidate.entry) ||
+    !Number.isFinite(candidate.stop) ||
+    !Number.isFinite(candidate.target)
+  ) {
+    return undefined;
+  }
+  const entry = candidate.entry!;
+  const stop = candidate.stop!;
+  const target = candidate.target!;
+  const risk = Math.abs(entry - stop);
+  if (!(risk > 0)) return undefined;
+  const direction = candidate.side === "long" ? 1 : -1;
+  const future = candles.slice(decisionIndex + 1, decisionIndex + 1 + config.maxBarsToResolveTrade);
+  if (!future.length) return undefined;
+
+  let outcome: SimulatedTradeRecord["outcome"] = "expired";
+  let exitIndex = decisionIndex + future.length;
+  let exitCandle = future.at(-1)!;
+  for (let offset = 0; offset < future.length; offset += 1) {
+    const candle = future[offset];
+    const stopHit = candidate.side === "long" ? candle.low <= stop : candle.high >= stop;
+    const targetHit = candidate.side === "long" ? candle.high >= target : candle.low <= target;
+    if (stopHit || targetHit) {
+      // Same-bar ambiguity is scored stop-first to avoid optimistic replay bias.
+      outcome = stopHit ? "stop_hit" : "target_hit";
+      exitIndex = decisionIndex + offset + 1;
+      exitCandle = candle;
+      break;
+    }
+  }
+
+  const tickSize = tickSizeBySymbol[config.symbol] ?? 0.25;
+  const optionalFriction = config as ResolvedBacktestConfig & {
+    spreadTicks?: number;
+    slippageTicks?: number;
+    commissionTicks?: number;
+  };
+  const frictionTicks =
+    (optionalFriction.spreadTicks ?? 1) +
+    (optionalFriction.slippageTicks ?? 1) +
+    (optionalFriction.commissionTicks ?? 1);
+  const frictionR = (frictionTicks * tickSize) / risk;
+  const targetR = Math.abs(target - entry) / risk;
+  const markR = direction * (exitCandle.close - entry) / risk;
+  const rMultiple = round(
+    outcome === "target_hit"
+      ? targetR - frictionR
+      : outcome === "stop_hit"
+        ? -1 - frictionR
+        : Math.max(-1, Math.min(targetR, markR)) - frictionR,
+    3
+  );
+  const favorable = future.map((candle) => direction > 0 ? candle.high - entry : entry - candle.low);
+  const adverse = future.map((candle) => direction > 0 ? entry - candle.low : candle.high - entry);
+  const openedAt = candles[decisionIndex]?.timestamp ?? candidate.retestCandle?.timestamp ?? new Date().toISOString();
+  const bias = candidate.side === "long" ? "bullish" as const : "bearish" as const;
+
+  return {
+    id: `bt_ifvg_v2_${decisionIndex}_${candidate.side}`,
+    decisionId: `bt_ifvg_v2_decision_${decisionIndex}`,
+    thesisId: `bt_ifvg_v2_thesis_${decisionIndex}`,
+    symbol: config.symbol,
+    timeframe: config.timeframe,
+    session: config.session ?? sessionFromCandle(candles[decisionIndex]),
+    marketRegime: config.marketRegime,
+    bias,
+    confidence: 0.75,
+    decisionIndex,
+    entryIndex: decisionIndex,
+    exitIndex,
+    openedAt,
+    resolvedAt: exitCandle.timestamp,
+    entryZone: [entry, entry],
+    entryPrice: entry,
+    invalidation: stop,
+    target,
+    targetHit: outcome === "target_hit",
+    stopHit: outcome === "stop_hit",
+    expired: outcome === "expired",
+    outcome,
+    maxFavorableExcursion: round(Math.max(0, ...favorable), 3),
+    maxAdverseExcursion: round(Math.max(0, ...adverse), 3),
+    rMultiple,
+    riskReward: round(targetR, 3),
+    reason: `IFVG filtered v2 clean retest + displacement; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
+    simulatedTradePlan: {
+      id: `bt_ifvg_v2_plan_${decisionIndex}`,
+      symbol: config.symbol,
+      timeframe: config.timeframe,
+      bias,
+      entryZone: [entry, entry],
+      invalidation: stop,
+      targetLiquidity: target,
+      stopRiskNotes: "Research-only IFVG filtered v2 simulation. Same-bar target/stop ambiguity resolves stop-first.",
+      riskReward: round(targetR, 3),
+      mode: "simulation"
+    },
+    agentAttribution: []
+  };
+};
+
+const runIfvgFilteredV2Backtest = (
+  sample: Candle[],
+  resolved: ResolvedBacktestConfig
+): BacktestResult => {
+  const skippedSignals: BacktestSkippedSignal[] = [];
+  const trades: SimulatedTradeRecord[] = [];
+  const seen = new Set<string>();
+  const blockerCounts: Record<string, number> = {};
+  let evaluatedWindows = 0;
+  let detectedCandidates = 0;
+  let eligibleCandidates = 0;
+  let duplicateCandidates = 0;
+  const sourceProvider = sourceProviderFor(sample);
+  const scanWindow = Math.max(resolved.timeframe === "5m" ? 160 : 120, resolved.visibleWindow);
+
+  for (
+    let decisionIndex = Math.max(resolved.warmupCandles, 40);
+    decisionIndex < sample.length - 1;
+    decisionIndex += resolved.decisionInterval
+  ) {
+    evaluatedWindows += 1;
+    const window = sample.slice(Math.max(0, decisionIndex + 1 - scanWindow), decisionIndex + 1);
+    const assessment = assessIctIfvgFilteredV2({
+      candles: window,
+      sourceProvider,
+      requestedSymbol: resolved.symbol,
+      timeframe: resolved.timeframe,
+      generatedAt: sample[decisionIndex].timestamp
+    });
+    const key = candidateKeyFor(assessment.candidate);
+    if (!assessment.candidate.originalFvgCandle || seen.has(key)) {
+      if (assessment.candidate.originalFvgCandle && seen.has(key)) duplicateCandidates += 1;
+      continue;
+    }
+    seen.add(key);
+    detectedCandidates += 1;
+    const sessionAllowed = sessionMatchesFilter(sample[decisionIndex], resolved);
+    const directionAllowed =
+      (assessment.candidate.side !== "long" || resolved.allowLong) &&
+      (assessment.candidate.side !== "short" || resolved.allowShort);
+    const blockers = [
+      ...assessment.blockers,
+      sessionAllowed ? undefined : `session_filter_${resolved.sessionFilter.replace(/\s+/g, "_").toLowerCase()}`,
+      directionAllowed ? undefined : `${assessment.candidate.side}_disabled`
+    ].filter((item): item is string => Boolean(item));
+
+    if (!assessment.eligible || blockers.length) {
+      for (const blocker of blockers.length ? blockers : ["filtered_profile_not_eligible"]) {
+        blockerCounts[blocker] = (blockerCounts[blocker] ?? 0) + 1;
+      }
+      skippedSignals.push({
+        id: `bt_ifvg_v2_skip_${decisionIndex}`,
+        decisionIndex,
+        timestamp: sample[decisionIndex].timestamp,
+        reason: blockers[0] ?? "IFVG filtered v2 conditions were incomplete.",
+        bias: assessment.candidate.side === "long" ? "bullish" : assessment.candidate.side === "short" ? "bearish" : "neutral",
+        confidence: 0,
+        confluenceScore: 0,
+        sessionLabel: tagSession(sample[decisionIndex]).label
+      });
+      continue;
+    }
+
+    const trade = scoreIfvgFilteredTrade({ candidate: assessment.candidate, decisionIndex, candles: sample, config: resolved });
+    if (!trade) {
+      blockerCounts.insufficient_outcome_window = (blockerCounts.insufficient_outcome_window ?? 0) + 1;
+      continue;
+    }
+    eligibleCandidates += 1;
+    trades.push(trade);
+  }
+
+  const summary = summarizeBacktest(trades, skippedSignals, []);
+  summary.strategyProfileSummary = {
+    strategyProfile: "ifvg_filtered_v2_research",
+    evaluatedWindows,
+    detectedCandidates,
+    eligibleCandidates,
+    duplicateCandidates,
+    blockerCounts
+  };
+  return { config: resolved, candles: sample, decisions: [], skippedSignals, trades, summary };
+};
+
 export function runBacktest(candles: Candle[], config: BacktestConfig = {}): BacktestResult {
   const resolved = resolveConfig(candles, config);
   const scopedCandles = candles.filter(
@@ -425,6 +641,9 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
   const sample = scopedCandles.length
     ? scopedCandles
     : candles.map((candle) => ({ ...candle, symbol: resolved.symbol, timeframe: resolved.timeframe }));
+  if (resolved.strategyProfile === "ifvg_filtered_v2_research") {
+    return runIfvgFilteredV2Backtest(sample, resolved);
+  }
   const decisions: BacktestDecisionPoint[] = [];
   const skippedSignals: BacktestSkippedSignal[] = [];
   const eligibleDecisions: BacktestDecisionPoint[] = [];

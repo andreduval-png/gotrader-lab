@@ -71,6 +71,7 @@ export * from "./ictCisdTypes";
 export * from "./ictCisd";
 export * from "./ictIfvgTypes";
 export * from "./ictIfvg";
+export * from "./ictIfvgFilteredV2";
 export * from "./ictResearchReportTypes";
 export * from "./ictResearchReport";
 export * from "../currentOpportunity";

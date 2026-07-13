@@ -17,10 +17,12 @@ import type {
 export type SimulatedTradeOutcome = "target_hit" | "stop_hit" | "expired" | "neutral";
 export type BacktestSessionFilter = "all" | "Asia" | "London" | "New York" | "NY AM Kill Zone" | "NY PM Kill Zone";
 export type BacktestStopModel = "latest swing" | "fixed ticks" | "FVG invalidation";
+export type BacktestStrategyProfile = "agent_consensus" | "ifvg_filtered_v2_research";
 export type BacktestAgentWeightId = Exclude<InternalAgentId, "cio-agent">;
 export type BacktestAgentWeights = Record<BacktestAgentWeightId, number>;
 
 export interface BacktestConfig {
+  strategyProfile?: BacktestStrategyProfile;
   symbol?: FuturesSymbol;
   timeframe?: Timeframe;
   session?: TradingSession;
@@ -42,6 +44,7 @@ export interface BacktestConfig {
 }
 
 export interface ResolvedBacktestConfig {
+  strategyProfile: BacktestStrategyProfile;
   symbol: FuturesSymbol;
   timeframe: Timeframe;
   session?: TradingSession;
@@ -172,6 +175,14 @@ export interface BacktestSummary {
   equityCurve: EquityCurvePoint[];
   agentAttribution: BacktestAgentAttributionSummary[];
   grinchSummary?: BacktestGrinchSummary;
+  strategyProfileSummary?: {
+    strategyProfile: BacktestStrategyProfile;
+    evaluatedWindows: number;
+    detectedCandidates: number;
+    eligibleCandidates: number;
+    duplicateCandidates: number;
+    blockerCounts: Record<string, number>;
+  };
 }
 
 export interface BacktestGrinchSummary {

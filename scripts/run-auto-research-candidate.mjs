@@ -345,6 +345,9 @@ const compileLibraryBundle = () => {
 };
 
 const variantForCandidate = (candidate) => {
+  if (candidate.candidateFamily === "ifvg_filtered_v2_research") {
+    return "balanced";
+  }
   const label = String(candidate.label || "").toLowerCase();
   if (label.includes("strict")) {
     return "strict";
@@ -453,7 +456,8 @@ const summarizeBacktest = (result) => ({
   drawdown: round(result.summary.maxDrawdown, 2),
   profitFactor: result.summary.profitFactor,
   bestTradeR: round(result.summary.bestTrade?.rMultiple ?? 0, 2),
-  worstTradeR: round(result.summary.worstTrade?.rMultiple ?? 0, 2)
+  worstTradeR: round(result.summary.worstTrade?.rMultiple ?? 0, 2),
+  strategyProfileSummary: result.summary.strategyProfileSummary
 });
 
 const metricsFromBacktest = (result) => {
@@ -565,6 +569,12 @@ const summarizeCandidate = ({
   expansionReplayDiagnostics
 }) => {
   const grinch = reportGrinch(backtestResult);
+  const strategySummary = backtestResult.summary.strategyProfileSummary;
+  const isIfvgProfile = strategySummary?.strategyProfile === "ifvg_filtered_v2_research";
+  const strategyMissingEvidence = Object.entries(strategySummary?.blockerCounts ?? {})
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8)
+    .map(([reason, count]) => `${reason.replace(/_/g, " ")} (${count})`);
   return {
     candidateId: candidate.candidateId,
     candidateFamily: candidate.candidateFamily,
@@ -578,11 +588,11 @@ const summarizeCandidate = ({
     requestedSymbol: config.requestedSymbol,
     brokerSymbol: config.brokerSymbol,
     candleCount: validationReport?.sourceCandleCount ?? backtestResult.candles?.length ?? 0,
-    grinchProfileSelected: grinch.selectedProfile,
-    timingStatus: grinch.timingStatus,
-    expansionConfirmationStatus: grinch.expansionConfirmationStatus,
-    expansionConfirmationPassed: grinch.reversalExpansionConditionPassed,
-    missingEvidence: grinch.missingExpansionEvidence,
+    grinchProfileSelected: isIfvgProfile ? "not_applicable" : grinch.selectedProfile,
+    timingStatus: isIfvgProfile ? "not_applicable" : grinch.timingStatus,
+    expansionConfirmationStatus: isIfvgProfile ? "not_applicable" : grinch.expansionConfirmationStatus,
+    expansionConfirmationPassed: isIfvgProfile ? undefined : grinch.reversalExpansionConditionPassed,
+    missingEvidence: isIfvgProfile ? strategyMissingEvidence : grinch.missingExpansionEvidence,
     backtest: summarizeBacktest(backtestResult),
     metricSource: config.validationMode === "full" ? "validation_suite" : "direct_backtest",
     trades: metrics.totalTrades,

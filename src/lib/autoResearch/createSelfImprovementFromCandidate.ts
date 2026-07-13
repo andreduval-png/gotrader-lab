@@ -27,6 +27,10 @@ const changesFor = (
   baseline: ResolvedBacktestConfig,
   candidate: AutoResearchCandidateResult
 ): CalibrationProposalChanges => ({
+  strategyProfile:
+    baseline.strategyProfile !== candidate.config.strategyProfile
+      ? candidate.config.strategyProfile
+      : undefined,
   confluenceThreshold:
     baseline.minimumConfluenceThreshold !== candidate.config.minimumConfluenceThreshold
       ? candidate.config.minimumConfluenceThreshold
@@ -88,6 +92,11 @@ const grinchImprovementText = (candidate: AutoResearchCandidateResult) => {
   return `${family}; targets ${targets.length ? targets.join(", ") : "Grinch filter quality"}. Grinch score ${candidate.scoreBreakdown.grinchModelScore ?? "n/a"}/100, false-positive risk ${candidate.scoreBreakdown.grinchFalsePositiveRisk ?? "n/a"}/100.`;
 };
 
+const strategyImprovementText = (candidate: AutoResearchCandidateResult) =>
+  candidate.candidateFamily === "ifvg_filtered_v2_research"
+    ? "IFVG filtered v2 clean-retest and displacement profile; replay, walk-forward, evidence, maturity, and readiness gates remain required."
+    : undefined;
+
 export function createSelfImprovementFromCandidate({
   baselineConfig,
   baselineMetrics,
@@ -109,6 +118,7 @@ export function createSelfImprovementFromCandidate({
       ? "paper-demo candidate review"
       : "research calibration candidate";
   const grinchContext = grinchImprovementText(candidate);
+  const strategyContext = strategyImprovementText(candidate);
 
   return {
     proposalId: uid("calibration_proposal"),
@@ -120,13 +130,15 @@ export function createSelfImprovementFromCandidate({
     executionAuthority: "none",
     brokerAuthority: "none",
     readinessOverrideAuthority: "none",
-    reason: `Auto Research selected ${candidate.label} as a ${intentLabel}: ${candidate.scoreBreakdown.rationale}${grinchContext ? ` Grinch context: ${grinchContext}` : ""}`,
+    reason: `Auto Research selected ${candidate.label} as a ${intentLabel}: ${candidate.scoreBreakdown.rationale}${grinchContext ? ` Grinch context: ${grinchContext}` : ""}${strategyContext ? ` Strategy context: ${strategyContext}` : ""}`,
     targetProblem: targetProblemFor(candidate),
     proposedChanges: changesFor(baselineConfig, candidate),
     expectedImprovement:
       proposalIntent === "paper_demo_candidate_review"
         ? "Review a Paper-Demo Candidate calibration in simulation. Approval remains required and broker/demo execution stays disabled."
-        : grinchContext
+        : strategyContext
+          ? `Queue deterministic validation for ${strategyContext} This proposal cannot auto-apply or approve readiness.`
+          : grinchContext
           ? `Improve stability-first validation metrics with ${grinchContext} Broker settings, execution authority, and readiness gates stay unchanged.`
           : "Improve stability-first validation metrics as a research calibration candidate without changing broker settings, execution authority, or readiness gates.",
     safetyNotes: [

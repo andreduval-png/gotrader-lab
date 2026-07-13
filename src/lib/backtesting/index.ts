@@ -9,6 +9,7 @@ export type {
   BacktestSessionFilter,
   BacktestSkipReasonSummary,
   BacktestStopModel,
+  BacktestStrategyProfile,
   BacktestSummary,
   EquityCurvePoint,
   ReplayFrame,

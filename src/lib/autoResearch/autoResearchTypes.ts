@@ -70,6 +70,7 @@ export type AutoResearchAdaptiveOutcome =
 
 export type AutoResearchCandidateFamily =
   | "baseline"
+  | "ifvg_filtered_v2_research"
   | "grinch_model_balanced"
   | "grinch_model_strict"
   | "grinch_model_model1_only"

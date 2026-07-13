@@ -103,6 +103,7 @@ export type CalibrationPromotionVerdict =
   | "paper_demo_review_candidate";
 
 export interface CalibrationProposalChanges {
+  strategyProfile?: ResolvedBacktestConfig["strategyProfile"];
   confluenceThreshold?: number;
   confidenceThreshold?: number;
   sessionFilter?: BacktestSessionFilter;

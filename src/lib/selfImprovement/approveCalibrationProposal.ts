@@ -55,6 +55,7 @@ const auditEntry = (
 });
 
 const compactAllowedConfigPatch = (changes: CalibrationProposalChanges = {}): CalibrationProposalChanges => ({
+  strategyProfile: changes.strategyProfile,
   confluenceThreshold: changes.confluenceThreshold,
   confidenceThreshold: changes.confidenceThreshold,
   sessionFilter: changes.sessionFilter,
@@ -72,6 +73,7 @@ const hasConfigPatch = (changes: CalibrationProposalChanges | undefined) =>
   Boolean(
     changes &&
       (changes.confluenceThreshold !== undefined ||
+        changes.strategyProfile !== undefined ||
         changes.confidenceThreshold !== undefined ||
         changes.sessionFilter !== undefined ||
         changes.stopModel !== undefined ||
@@ -97,6 +99,7 @@ const inferPatchFromConfigs = (
   after: ResolvedBacktestConfig
 ): CalibrationProposalChanges =>
   compactAllowedConfigPatch({
+    strategyProfile: before.strategyProfile !== after.strategyProfile ? after.strategyProfile : undefined,
     confluenceThreshold:
       before.minimumConfluenceThreshold !== after.minimumConfluenceThreshold
         ? after.minimumConfluenceThreshold
@@ -402,6 +405,7 @@ export function applyResearchCalibrationPatchToConfig(
 ): ResolvedBacktestConfig {
   return sanitizeBacktestConfig({
     ...currentConfig,
+    strategyProfile: changes.strategyProfile ?? currentConfig.strategyProfile,
     minimumConfluenceThreshold: changes.confluenceThreshold ?? currentConfig.minimumConfluenceThreshold,
     minimumConfidenceThreshold: changes.confidenceThreshold ?? currentConfig.minimumConfidenceThreshold,
     sessionFilter: changes.sessionFilter ?? currentConfig.sessionFilter,
