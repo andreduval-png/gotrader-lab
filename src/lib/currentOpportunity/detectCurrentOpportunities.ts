@@ -338,6 +338,86 @@ const ifvgFilteredV2Opportunity = (context: CurrentOpportunityContext): CurrentO
   });
 };
 
+const ifvgFreshRetestV3Opportunity = (context: CurrentOpportunityContext): CurrentOpportunity => {
+  const assessment = context.ifvgFreshRetestV3;
+  const sharedBlockers = baseBlockersFor(context);
+  const shallowDepth =
+    context.sourceDepth.depthPolicyStatus === "insufficient" ||
+    context.sourceDepth.depthPolicyStatus === "tactical_only";
+  const completeTrade = Boolean(
+    assessment &&
+    finite(assessment.entry) &&
+    finite(assessment.invalidation) &&
+    finite(assessment.target) &&
+    finite(assessment.rr) &&
+    assessment.rr >= 2
+  );
+  const status: CurrentOpportunityStatus = context.isMockOrSample
+    ? "rejected"
+    : !assessment
+      ? "no_trade"
+      : shallowDepth
+        ? "needs_more_data"
+        : assessment.eligible && completeTrade
+          ? "valid_candidate"
+          : !assessment.inversionDetected
+            ? "no_trade"
+            : assessment.cleanRetest && !assessment.signalFresh
+              ? "near_miss"
+              : assessment.cleanRetest && assessment.signalFresh
+                ? "near_miss"
+                : "forming";
+  const missingConditions = unique([
+    assessment ? undefined : "ifvg_v3_assessment_unavailable",
+    assessment && !assessment.inversionDetected ? "no_inverted_fvg" : undefined,
+    assessment && !assessment.cleanRetest ? "no_clean_retest" : undefined,
+    assessment && !assessment.signalFresh ? "stale_retest_signal" : undefined,
+    assessment && !finite(assessment.entry) ? "entry_missing" : undefined,
+    assessment && !finite(assessment.target) ? "target_missing" : undefined,
+    assessment && !finite(assessment.invalidation) ? "invalidation_missing" : undefined,
+    assessment && !finite(assessment.rr) ? "rr_unavailable" : undefined,
+    assessment && finite(assessment.rr) && assessment.rr < 2 ? "rr_below_minimum" : undefined,
+    ...(assessment?.missingConditions ?? [])
+  ]);
+  const blockers = unique([
+    ...sharedBlockers,
+    shallowDepth ? "needs_explicit_validation_depth" : undefined,
+    ...(assessment?.blockers ?? [])
+  ]);
+
+  const nextAction = !assessment
+    ? "Run Activate Market so the compact IFVG v3 detector can evaluate the latest closed candle."
+    : !finite(assessment.target)
+      ? "Define the draw-on-liquidity target before replay validation."
+      : !finite(assessment.invalidation)
+        ? "Define structure invalidation before replay validation."
+        : !finite(assessment.rr) || assessment.rr < 2
+          ? "Wait for a clean IFVG construction with at least 2R."
+          : assessment.nextAction;
+
+  return opportunity(context, {
+    strategyId: "ifvg_fresh_retest_v3_research",
+    model: "IFVG fresh retest v3",
+    status,
+    setupName: "IFVG fresh-retest v3",
+    thesis:
+      "Causal IFVG v3 requires a validation-eligible inversion and a clean retest on the latest closed candle. Current recognition can only queue deterministic replay and walk-forward validation.",
+    side: assessment?.side ?? "flat",
+    timeframe: assessment?.timeframe ?? context.primaryTimeframe,
+    entry: assessment?.entry,
+    invalidation: assessment?.invalidation,
+    target: assessment?.target,
+    rrEstimate: assessment?.rr,
+    confidence: assessment?.eligible ? Math.max(context.confidence ?? 0, 0.6) : context.confidence,
+    blockers,
+    missingConditions,
+    nextAction,
+    requiredValidation: status === "valid_candidate"
+      ? ["replay_required", "walk_forward_required", "evidence_required", "paper_demo_gate_required"]
+      : [...validationFor(status)]
+  });
+};
+
 const sessionRaidReversalOpportunity = (context: CurrentOpportunityContext): CurrentOpportunity | undefined => {
   const narrative = context.sessionRaidReversal;
   if (!narrative) return undefined;
@@ -495,9 +575,9 @@ const strategyDiagnostics = (context: CurrentOpportunityContext): CurrentOpportu
         /inversion|inverse|ifvg/i.test(context.topReasons.join(" ")) ? undefined : "full_inversion",
         "retest_confirmation"
       ],
-      nextAction: "Use IFVG filtered v2 clean-retest/displacement validation instead of promoting raw IFVG v1."
+      nextAction: "Use the causal IFVG fresh-retest v3 profile instead of promoting raw IFVG v1."
     }),
-    ifvgFilteredV2Opportunity(context),
+    ifvgFreshRetestV3Opportunity(context),
     opportunity(context, {
       strategyId: "market_map_only_diagnostic_v1",
       model: "Market map diagnostic",

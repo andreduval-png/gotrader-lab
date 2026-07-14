@@ -75,7 +75,11 @@ export const defaultBacktestConfig: ResolvedBacktestConfig = {
 const validSymbols: FuturesSymbol[] = ["ES", "NQ", "MES", "MNQ"];
 const validTimeframes: Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const validRegimes: MarketRegime[] = ["trend", "balanced", "volatile", "range", "news-driven", "risk-off", "risk-on"];
-const validStrategyProfiles: BacktestStrategyProfile[] = ["agent_consensus", "ifvg_filtered_v2_research"];
+const validStrategyProfiles: BacktestStrategyProfile[] = [
+  "agent_consensus",
+  "ifvg_filtered_v2_research",
+  "ifvg_fresh_retest_v3_research"
+];
 
 const coerceChoice = <T extends string>(value: unknown, choices: T[], fallback: T): T =>
   typeof value === "string" && choices.includes(value as T) ? (value as T) : fallback;

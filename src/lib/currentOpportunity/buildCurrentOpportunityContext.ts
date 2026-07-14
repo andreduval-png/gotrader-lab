@@ -214,6 +214,7 @@ export const buildCurrentOpportunityContext = ({
     sessionNarrativeProfile: currentRead?.sessionNarrativeProfile ?? packet?.compactSummary?.sessionNarrativeProfile,
     sessionDirectionalRead: currentRead?.sessionDirectionalRead ?? packet?.compactSummary?.sessionDirectionalRead,
     sessionRaidReversal: currentRead?.sessionRaidReversal ?? packet?.sessionRaidReversal,
+    ifvgFreshRetestV3: packet?.compactSummary?.ifvgFreshRetestV3,
     fvgStatus: currentRead?.fvgStatus,
     displacementStatus: currentRead?.displacementStatus,
     drawOnLiquidity: currentRead?.drawOnLiquidity ?? packet?.compactSummary?.drawOnLiquidity,

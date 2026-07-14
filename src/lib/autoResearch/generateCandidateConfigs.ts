@@ -13,7 +13,15 @@ const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 const candidateFamilyMetadataFor = (family?: AutoResearchCandidateFamily) =>
-  family === "ifvg_filtered_v2_research"
+  family === "ifvg_fresh_retest_v3_research"
+    ? {
+        id: "ifvg_fresh_retest_v3_research" as const,
+        label: "IFVG Fresh Retest v3 Research",
+        target: "Causal IFVG clean retest without post-entry confirmation",
+        researchOnly: true as const,
+        autoApplyAllowed: false as const
+      }
+    : family === "ifvg_filtered_v2_research"
     ? {
         id: "ifvg_filtered_v2_research" as const,
         label: "IFVG Filtered v2 Research",
@@ -106,6 +114,23 @@ export function generateCandidateConfigs(
 
   if (isAnyMode(searchMode, ["balanced", "quick", "standard", "deep", "conservative", "conservative_only"])) {
     candidates.push(
+      candidate(
+        baseline,
+        searchMode,
+        "IFVG v3 fresh clean retest",
+        "Evaluate the causal IFVG lane with a clean retest on the latest closed candle and no post-entry confirmation leakage.",
+        {
+          strategyProfile: "ifvg_fresh_retest_v3_research",
+          warmupCandles: 100,
+          decisionInterval: 1,
+          maxBarsToResolveTrade: 48,
+          visibleWindow: 80,
+          allowLong: true,
+          allowShort: true
+        },
+        ["strategyProfile", "warmupCandles", "decisionInterval", "maxBarsToResolveTrade", "allowLong", "allowShort"],
+        "ifvg_fresh_retest_v3_research"
+      ),
       candidate(
         baseline,
         searchMode,

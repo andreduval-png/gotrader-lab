@@ -19,6 +19,7 @@ import type { GrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { Candle, ICTScoringWeights } from "@/lib/types";
 import type { ValidationSuiteReport } from "@/lib/validation";
 import type { WalkForwardFollowUpSearchPlan } from "@/lib/walkForward/walkForwardTypes";
+import type { DetectorProfileWalkForwardResult } from "@/lib/walkForward/detectorProfileWalkForwardTypes";
 
 export type AutoResearchSearchMode =
   | "quick"
@@ -71,6 +72,7 @@ export type AutoResearchAdaptiveOutcome =
 export type AutoResearchCandidateFamily =
   | "baseline"
   | "ifvg_filtered_v2_research"
+  | "ifvg_fresh_retest_v3_research"
   | "grinch_model_balanced"
   | "grinch_model_strict"
   | "grinch_model_model1_only"
@@ -155,6 +157,11 @@ export interface AutoResearchScoreBreakdown {
   grinchModelScore?: number;
   grinchFalsePositiveRisk?: number;
   grinchProfileValidity?: number;
+  oosScore?: number;
+  oosTradeCount?: number;
+  oosAverageR?: number;
+  oosExpectancyLower95?: number;
+  oosVerdict?: string;
   stabilityImproved: boolean;
   sufficientSample: boolean;
   rationale: string;
@@ -219,6 +226,7 @@ export interface AutoResearchCandidateResult {
     source: string;
   };
   comparisonResult: CalibrationComparisonResult;
+  profileWalkForward?: DetectorProfileWalkForwardResult;
   resultCategory: AutoResearchResultCategory;
   promotionEligible: boolean;
   rejectionReasons: string[];

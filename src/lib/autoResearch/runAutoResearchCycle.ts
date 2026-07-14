@@ -62,6 +62,7 @@ import type { Candle } from "@/lib/types";
 import { safeArray, safeTopN, uid } from "@/lib/utils";
 import { runValidationSuite } from "@/lib/validation";
 import type { WalkForwardFollowUpSearchPlan } from "@/lib/walkForward/walkForwardTypes";
+import { runDetectorProfileWalkForward } from "@/lib/walkForward/detectorProfileWalkForward";
 import {
   saveScenarioSelectionReasoning,
   selectScenarioFamilyFromBlockers
@@ -256,6 +257,7 @@ const compactCandidate = (candidate: AutoResearchCandidateResult): AutoResearchC
       : undefined,
     grinchComparison: source.grinchComparison,
     comparisonResult: compactComparison(source.comparisonResult),
+    profileWalkForward: source.profileWalkForward,
     resultCategory: source.resultCategory ?? "rejected",
     promotionEligible: Boolean(source.promotionEligible),
     rejectionReasons: safeTopN(source.rejectionReasons, 3)
@@ -722,10 +724,169 @@ const buildCalibrationFamilyReport = ({
   };
 };
 
+const detectorSourceFingerprint = (candles: Candle[], provider: string) => {
+  const first = candles[0];
+  const last = candles.at(-1);
+  return [
+    provider,
+    first?.symbol ?? "unknown",
+    first?.timeframe ?? "unknown",
+    candles.length,
+    first?.timestamp ?? "unknown",
+    last?.timestamp ?? "unknown",
+    first?.close ?? "unknown",
+    last?.close ?? "unknown"
+  ].join("|");
+};
+
+const detectorMetricsFromBacktest = (
+  result: ReturnType<typeof runBacktest>,
+  walkForward: ReturnType<typeof runDetectorProfileWalkForward>
+): CalibrationProposalMetrics => ({
+  validationId: uid("detector_profile_validation"),
+  validationTimestamp: new Date().toISOString(),
+  totalTrades: result.summary.totalTrades,
+  winRate: result.summary.winRate,
+  averageR: result.summary.averageR,
+  maxDrawdown: result.summary.maxDrawdown,
+  profitFactor: result.summary.profitFactor,
+  skippedSignals: result.summary.skippedSignals,
+  falsePositiveCount: result.trades.filter((trade) => trade.outcome === "stop_hit").length,
+  confidenceCalibration: 0,
+  readinessScore: 0,
+  readinessStatus: "red",
+  stabilityScore: Math.round(walkForward.oosWindowPassRate * 100),
+  conservativeScenarioStable: false,
+  strongestScenario: walkForward.verdict === "passed" ? "Frozen chronological OOS holdout" : "Detector replay only",
+  weakestScenario: "Untouched forward evidence not collected"
+});
+
+const detectorReadinessEstimate = (
+  walkForward: ReturnType<typeof runDetectorProfileWalkForward>
+): ReadinessGateSnapshot => ({
+  ...fallbackReadinessEstimate(),
+  warnings: [
+    `Detector-profile chronological holdout: ${walkForward.verdict}.`,
+    "Recognition and historical OOS results do not create readiness by themselves."
+  ],
+  recommendedNextStep: walkForward.nextAction
+});
+
+const detectorComparison = (
+  walkForward: ReturnType<typeof runDetectorProfileWalkForward>
+): AutoResearchCandidateResult["comparisonResult"] => ({
+  improved: walkForward.verdict === "passed",
+  stabilityImproved: walkForward.verdict === "passed",
+  recommendation: walkForward.verdict === "passed" ? "keep_testing" : "reject",
+  summary: walkForward.verdict === "passed"
+    ? "Frozen detector profile passed chronological OOS validation; untouched forward evidence is still required."
+    : `Frozen detector profile did not pass chronological OOS validation (${walkForward.verdict}).`,
+  positiveChanges: walkForward.verdict === "passed"
+    ? [
+        `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} chronological OOS windows passed.`,
+        `Pooled OOS expectancy ${walkForward.pooledOos.averageR}R across ${walkForward.totalOosTrades} trades.`
+      ]
+    : [],
+  negativeChanges: walkForward.blockers,
+  neutralChanges: [],
+  improvedMetrics: walkForward.verdict === "passed" ? ["out_of_sample_expectancy", "window_stability"] : [],
+  worsenedMetrics: [],
+  criticalRegressions: walkForward.verdict === "passed" ? [] : walkForward.blockers,
+  sanityWarnings: walkForward.warnings,
+  promotionVerdict: "needs_follow_up",
+  followUpSearchDirection: walkForward.nextAction
+});
+
+const detectorScoreBreakdown = (
+  metrics: CalibrationProposalMetrics,
+  walkForward: ReturnType<typeof runDetectorProfileWalkForward>
+): AutoResearchCandidateResult["scoreBreakdown"] => {
+  const clamp = (value: number) => Math.min(100, Math.max(0, value));
+  const drawdownScore = clamp(100 - metrics.maxDrawdown * 5);
+  const averageRScore = clamp((metrics.averageR / 2) * 100);
+  const winRateScore = clamp(metrics.winRate * 100);
+  const falsePositiveRate = metrics.falsePositiveCount / Math.max(1, metrics.totalTrades);
+  const falsePositiveScore = clamp((1 - falsePositiveRate) * 100);
+  const tradeCountScore = clamp((metrics.totalTrades / 60) * 100);
+  const oosScore = walkForward.verdict === "passed" ? 100 : clamp(walkForward.oosWindowPassRate * 100);
+  return {
+    totalScore: Math.round(
+      drawdownScore * 0.1 +
+      averageRScore * 0.2 +
+      winRateScore * 0.1 +
+      falsePositiveScore * 0.1 +
+      tradeCountScore * 0.15 +
+      oosScore * 0.35
+    ),
+    drawdownScore: Math.round(drawdownScore),
+    averageRScore: Math.round(averageRScore),
+    winRateScore: Math.round(winRateScore),
+    falsePositiveScore: Math.round(falsePositiveScore),
+    confidenceCalibrationScore: 0,
+    sessionConsistencyScore: Math.round(walkForward.oosWindowPassRate * 100),
+    tradeCountScore: Math.round(tradeCountScore),
+    skippedSignalBalanceScore: 0,
+    profitFactorScore: clamp(((metrics.profitFactor ?? 0) / 3) * 100),
+    robustnessScore: oosScore,
+    oosScore,
+    oosTradeCount: walkForward.totalOosTrades,
+    oosAverageR: walkForward.pooledOos.averageR,
+    oosExpectancyLower95: walkForward.pooledOos.expectancyLower95,
+    oosVerdict: walkForward.pooledOos.edgeVerdict,
+    stabilityImproved: walkForward.verdict === "passed",
+    sufficientSample: walkForward.totalOosTrades >= 40,
+    rationale: "IFVG v3 uses frozen detector-profile OOS scoring. This score cannot create readiness, a proposal, or execution authority."
+  };
+};
+
+const evaluateFrozenDetectorCandidate = (
+  candidate: ReturnType<typeof generateCandidateConfigs>[number],
+  candles: Candle[],
+  sourceProvider: string
+): AutoResearchCandidateResult => {
+  const backtestResult = runBacktest(candles, candidate.config);
+  const profileWalkForward = runDetectorProfileWalkForward({
+    profileId: candidate.config.strategyProfile,
+    sourceProvider,
+    sourceFingerprint: detectorSourceFingerprint(candles, sourceProvider),
+    sourceStart: candles[0]?.timestamp ?? "",
+    sourceEnd: candles.at(-1)?.timestamp ?? "",
+    trades: backtestResult.trades.map((trade) => ({
+      openedAt: trade.openedAt,
+      rMultiple: trade.rMultiple,
+      outcome: trade.outcome
+    }))
+  });
+  const metrics = detectorMetricsFromBacktest(backtestResult, profileWalkForward);
+  return {
+    candidateId: candidate.candidateId,
+    label: candidate.label,
+    rationale: candidate.rationale,
+    config: candidate.config,
+    ictScoringWeights: candidate.ictScoringWeights,
+    changedParameters: candidate.changedParameters,
+    candidateFamily: candidate.candidateFamily,
+    candidateFamilyMetadata: candidate.candidateFamilyMetadata,
+    backtestResult,
+    readinessEstimate: detectorReadinessEstimate(profileWalkForward),
+    metrics,
+    scoreBreakdown: detectorScoreBreakdown(metrics, profileWalkForward),
+    grinchScore: undefined,
+    comparisonResult: detectorComparison(profileWalkForward),
+    profileWalkForward,
+    resultCategory: profileWalkForward.verdict === "passed" ? "improved_but_not_ready" : "rejected",
+    promotionEligible: false,
+    rejectionReasons: profileWalkForward.verdict === "passed"
+      ? ["Untouched forward evidence, maturity, and readiness gates remain required."]
+      : profileWalkForward.blockers
+  };
+};
+
 const evaluateCandidate = (
   candidate: ReturnType<typeof generateCandidateConfigs>[number],
   baselineMetrics: ReturnType<typeof summarizeValidationMetrics>,
-  candles: Candle[]
+  candles: Candle[],
+  sourceProvider = "canonical_research_source"
 ): AutoResearchCandidateResult => {
   const originalWeights = loadICTScoringWeights();
   const hasICTWeightPatch = Boolean(candidate.ictScoringWeights);
@@ -738,6 +899,9 @@ const evaluateCandidate = (
   }
 
   try {
+    if (candidate.config.strategyProfile === "ifvg_fresh_retest_v3_research") {
+      return evaluateFrozenDetectorCandidate(candidate, candles, sourceProvider);
+    }
     const backtestResult = runBacktest(candles, candidate.config);
     const validationReport = runValidationSuite(candles, candidate.config);
     const researchQualityReview = analyzeValidationResults(validationReport);
@@ -1684,7 +1848,12 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
 
       const passResults: AutoResearchCandidateResult[] = [];
       for (const candidate of passCandidateConfigs) {
-        const candidateResult = evaluateCandidate(candidate, baselineMetrics, activeCandles);
+        const candidateResult = evaluateCandidate(
+          candidate,
+          baselineMetrics,
+          activeCandles,
+          options.dataSource ?? "canonical_research_source"
+        );
         evaluatedCandidateResults.push(candidateResult);
         passResults.push(candidateResult);
         const { bestCandidate: bestCandidateSoFar } = selectBestCandidate(evaluatedCandidateResults, baselineMetrics);
@@ -1772,7 +1941,12 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
       });
       const recoveryResults: AutoResearchCandidateResult[] = [];
       for (const candidate of recoveryCandidates) {
-        const candidateResult = evaluateCandidate(candidate, baselineMetrics, activeCandles);
+        const candidateResult = evaluateCandidate(
+          candidate,
+          baselineMetrics,
+          activeCandles,
+          options.dataSource ?? "canonical_research_source"
+        );
         evaluatedCandidateResults.push(candidateResult);
         recoveryResults.push(candidateResult);
         const { bestCandidate: bestCandidateSoFar } = selectBestCandidate(evaluatedCandidateResults, baselineMetrics);
@@ -1850,7 +2024,12 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
       });
       const qualityResults: AutoResearchCandidateResult[] = [];
       for (const candidate of tradeQualityCandidateConfigs) {
-        const candidateResult = evaluateCandidate(candidate, baselineMetrics, activeCandles);
+        const candidateResult = evaluateCandidate(
+          candidate,
+          baselineMetrics,
+          activeCandles,
+          options.dataSource ?? "canonical_research_source"
+        );
         evaluatedCandidateResults.push(candidateResult);
         qualityResults.push(candidateResult);
         const { bestCandidate: bestCandidateSoFar } = selectBestCandidate(evaluatedCandidateResults, baselineMetrics);

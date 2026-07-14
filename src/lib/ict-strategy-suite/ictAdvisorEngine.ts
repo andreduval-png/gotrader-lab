@@ -70,6 +70,10 @@ import type {
 import type { IctHtfAlignmentBreakdown, IctHtfAlignmentDirection, IctHtfAlignmentTimeframe } from "./ictApprovedSetupProfileTypes";
 import type { IctIndexComparisonCandles } from "./ictIndexSmtTypes";
 import type { IctNewsSessionRiskContextInput } from "./ictNewsSessionRiskTypes";
+import {
+  assessIctIfvgFreshRetestV3,
+  compactIctIfvgFreshRetestV3Assessment
+} from "./ictIfvgFreshRetestV3";
 import { buildIctSessionNarrative } from "./ictSessionNarrative";
 import type { IctSessionNarrative } from "./ictSessionNarrativeTypes";
 import { evaluateIctSessionRaidReversal } from "./ictSessionRaidReversal";
@@ -1051,6 +1055,28 @@ export async function buildIctAdvisorPacketFromRuntime(
     approvedStatus: finalApprovedProfileDecision.status,
     generatedAt: new Date().toISOString()
   });
+  const ifvgContextSources = htfCandles as Record<string, Candle[]>;
+  const ifvgDetectorCandles = (bundledM5Candles.length ? bundledM5Candles : candles).slice(-300);
+  const ifvgDetectorTimeframe = bundledM5Candles.length ? "5m" : primaryTimeframe;
+  const ifvgFreshRetestV3 = ifvgDetectorCandles.length
+    ? compactIctIfvgFreshRetestV3Assessment(
+        assessIctIfvgFreshRetestV3({
+          candles: ifvgDetectorCandles,
+          contextCandles: {
+            "15m": (ifvgContextSources.M15 ?? ifvgContextSources["15m"] ?? []).slice(-160),
+            "1h": (ifvgContextSources.H1 ?? ifvgContextSources["1h"] ?? []).slice(-120),
+            "4h": (ifvgContextSources.H4 ?? ifvgContextSources["4h"] ?? []).slice(-90),
+            "1d": (ifvgContextSources.D1 ?? ifvgContextSources["1d"] ?? []).slice(-90)
+          },
+          sourceProvider: sourceSummary.provider,
+          sourceFingerprint: activeSource?.fingerprint ?? sourceSummary.fingerprint,
+          requestedSymbol,
+          brokerSymbol,
+          timeframe: ifvgDetectorTimeframe,
+          generatedAt: new Date().toISOString()
+        })
+      )
+    : undefined;
   const packet: IctAdvisorPacket = {
     packetId: createId("ict_advisor_packet"),
     source: "gotrader_ict_strategy_suite",
@@ -1141,6 +1167,7 @@ export async function buildIctAdvisorPacketFromRuntime(
       scalpStatus: universalRecognition.scalpOpportunity?.status,
       pdArrayCount: universalRecognition.pdArrays.length,
       recognitionOpportunitySummary: universalRecognition.opportunitySummary,
+      ifvgFreshRetestV3,
       hydrationSource: analysis.hydrationSource,
       hydrationWarning: analysis.hydrationWarning,
       noTradeReasonCount: recommendedSignal.noTradeReasons.length + (analysis.hydrationWarning ? 1 : 0)

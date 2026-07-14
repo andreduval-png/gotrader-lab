@@ -24,6 +24,9 @@ const config = {
     "USTECH",
   timeframe: process.env.AUTO_RESEARCH_TIMEFRAME || process.env.MT5_READONLY_TEST_TIMEFRAME || "5m",
   candleLimit: Number(process.env.AUTO_RESEARCH_CANDLE_LIMIT || process.env.MT5_READONLY_TEST_LIMIT || 1000),
+  lookbackDays: Math.max(0, Number(process.env.AUTO_RESEARCH_LOOKBACK_DAYS || 0)),
+  historyEndOffsetDays: Math.max(0, Number(process.env.AUTO_RESEARCH_HISTORY_END_OFFSET_DAYS || 0)),
+  historyChunkDays: Math.max(1, Number(process.env.AUTO_RESEARCH_HISTORY_CHUNK_DAYS || 10)),
   fetchTimeoutMs: Number(process.env.AUTO_RESEARCH_SOURCE_TIMEOUT_MS || process.env.MT5_READONLY_TEST_TIMEOUT_MS || 5000),
   maxCandidates: Number(process.env.AUTO_RESEARCH_MAX_CANDIDATES || 25),
   validationMode: process.env.AUTO_RESEARCH_VALIDATION_MODE || "direct"
@@ -62,6 +65,206 @@ if (!["direct", "full"].includes(config.validationMode)) {
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 const round = (value, digits = 2) =>
   typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(digits)) : value;
+const average = (values) =>
+  values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const median = (values) => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+const nyTradingDate = (timestamp) => {
+  if (!timestamp || Number.isNaN(Date.parse(timestamp))) return "unknown";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(timestamp));
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+const summarizeTradeSample = (trades, additionalCostR = 0) => {
+  const returns = trades
+    .map((trade) => Number(trade.rMultiple) - additionalCostR)
+    .filter(Number.isFinite);
+  const wins = returns.filter((value) => value > 0);
+  const losses = returns.filter((value) => value < 0);
+  const grossProfit = wins.reduce((sum, value) => sum + value, 0);
+  const grossLoss = Math.abs(losses.reduce((sum, value) => sum + value, 0));
+  let equity = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  for (const value of returns) {
+    equity += value;
+    peak = Math.max(peak, equity);
+    maxDrawdown = Math.max(maxDrawdown, peak - equity);
+  }
+  return {
+    trades: returns.length,
+    targetFirst: trades.filter((trade) => trade.outcome === "target_hit").length,
+    invalidationFirst: trades.filter((trade) => trade.outcome === "stop_hit").length,
+    stalled: trades.filter((trade) => trade.outcome === "expired").length,
+    winRate: round(returns.length ? wins.length / returns.length : 0, 4),
+    averageR: round(average(returns), 3),
+    medianR: round(median(returns), 3),
+    profitFactor: grossLoss > 0 ? round(grossProfit / grossLoss, 3) : grossProfit > 0 ? 99 : 0,
+    maxDrawdownR: round(maxDrawdown, 3),
+    uniqueTradingDates: new Set(trades.map((trade) => nyTradingDate(trade.openedAt))).size
+  };
+};
+const countBy = (items, selector) => Object.fromEntries(
+  [...items.reduce((counts, item) => {
+    const key = selector(item) || "unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    return counts;
+  }, new Map()).entries()].sort((left, right) => right[1] - left[1] || String(left[0]).localeCompare(String(right[0])))
+);
+const percentile = (values, ratio) => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * ratio)))];
+};
+const summarizeMonteCarlo = (trades, simulationCount = 2000) => {
+  const returns = trades.map((trade) => Number(trade.rMultiple)).filter(Number.isFinite);
+  if (returns.length < 30) {
+    return {
+      usableOutcomes: returns.length,
+      simulationCount: 0,
+      robustness: "insufficient_data",
+      reason: "At least 30 compact outcomes are required for Monte Carlo."
+    };
+  }
+  const tradesPerSimulation = Math.min(100, returns.length);
+  let randomState = 0x51f15e;
+  const random = () => {
+    randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+    return randomState / 0x100000000;
+  };
+  const endingR = [];
+  const drawdowns = [];
+  const losingStreaks = [];
+  let ruinCount = 0;
+  for (let simulation = 0; simulation < simulationCount; simulation += 1) {
+    let equity = 0;
+    let peak = 0;
+    let maxDrawdown = 0;
+    let losingStreak = 0;
+    let longestLosingStreak = 0;
+    let ruined = false;
+    for (let index = 0; index < tradesPerSimulation; index += 1) {
+      const value = returns[Math.floor(random() * returns.length)];
+      equity += value;
+      peak = Math.max(peak, equity);
+      maxDrawdown = Math.max(maxDrawdown, peak - equity);
+      losingStreak = value < 0 ? losingStreak + 1 : 0;
+      longestLosingStreak = Math.max(longestLosingStreak, losingStreak);
+      if (equity <= -20) ruined = true;
+    }
+    endingR.push(equity);
+    drawdowns.push(maxDrawdown);
+    losingStreaks.push(longestLosingStreak);
+    if (ruined) ruinCount += 1;
+  }
+  const p5EndingR = percentile(endingR, 0.05);
+  const medianDrawdownR = percentile(drawdowns, 0.5);
+  const p95DrawdownR = percentile(drawdowns, 0.95);
+  const riskOfRuinPct = (ruinCount / simulationCount) * 100;
+  const robustness = p5EndingR > 0 && riskOfRuinPct < 1
+    ? "strong"
+    : p5EndingR > -5 && riskOfRuinPct < 5
+      ? "moderate"
+      : "weak";
+  return {
+    usableOutcomes: returns.length,
+    simulationCount,
+    tradesPerSimulation,
+    robustness,
+    medianEndingR: round(percentile(endingR, 0.5), 3),
+    fifthPercentileEndingR: round(p5EndingR, 3),
+    medianMaxDrawdownR: round(medianDrawdownR, 3),
+    ninetyFifthPercentileMaxDrawdownR: round(p95DrawdownR, 3),
+    worstMaxDrawdownR: round(Math.max(...drawdowns), 3),
+    medianLongestLosingStreak: round(percentile(losingStreaks, 0.5), 0),
+    ninetyFifthPercentileLongestLosingStreak: round(percentile(losingStreaks, 0.95), 0),
+    riskOfRuinPct: round(riskOfRuinPct, 3),
+    recommendedMaxRiskPerIdeaPct: round(Math.min(0.5, p95DrawdownR > 0 ? 10 / p95DrawdownR : 0.5), 2),
+    note: "Deterministic bootstrap of compact R outcomes; ruin threshold is -20R. This is research evidence, not readiness or execution authority."
+  };
+};
+const summarizeTemporalRobustness = (backtestResult) => {
+  const trades = safeArray(backtestResult?.trades)
+    .filter((trade) => trade?.bias !== "neutral" && Number.isFinite(Number(trade?.rMultiple)))
+    .sort((left, right) => Date.parse(left.openedAt) - Date.parse(right.openedAt));
+  const candles = safeArray(backtestResult?.candles);
+  const firstTimestamp = candles[0]?.timestamp;
+  const lastTimestamp = candles.at(-1)?.timestamp;
+  const start = Date.parse(firstTimestamp);
+  const end = Date.parse(lastTimestamp);
+  const windowMs = 30 * 86_400_000;
+  const stepMs = 15 * 86_400_000;
+  const rollingWindows = [];
+  if (Number.isFinite(start) && Number.isFinite(end)) {
+    for (let cursor = start; cursor + windowMs <= end + 1; cursor += stepMs) {
+      const scoped = trades.filter((trade) => {
+        const value = Date.parse(trade.openedAt);
+        return value >= cursor && value < cursor + windowMs;
+      });
+      rollingWindows.push({
+        from: new Date(cursor).toISOString().slice(0, 10),
+        to: new Date(cursor + windowMs).toISOString().slice(0, 10),
+        ...summarizeTradeSample(scoped)
+      });
+    }
+  }
+  const midpoint = Math.floor(trades.length / 2);
+  const firstHalf = summarizeTradeSample(trades.slice(0, midpoint));
+  const secondHalf = summarizeTradeSample(trades.slice(midpoint));
+  const activeWindows = rollingWindows.filter((window) => window.trades > 0);
+  const weakWindows = activeWindows.filter((window) => window.averageR <= 0 || window.profitFactor <= 1);
+  const summary = summarizeTradeSample(trades);
+  const independentPass =
+    summary.trades >= 20 &&
+    summary.uniqueTradingDates >= 3 &&
+    activeWindows.length >= 2 &&
+    secondHalf.trades >= 10 &&
+    secondHalf.averageR > 0 &&
+    secondHalf.profitFactor > 1;
+  const classification = !independentPass
+    ? summary.trades < 20
+      ? "insufficient_data"
+      : "promising_but_unstable"
+    : weakWindows.length > Math.floor(activeWindows.length * 0.4)
+      ? "promising_but_unstable"
+      : "ready_for_formal_walk_forward";
+  return {
+    summary,
+    costSensitivity: {
+      modeledCostOnly: summary,
+      additional025R: summarizeTradeSample(trades, 0.25),
+      additional05R: summarizeTradeSample(trades, 0.5),
+      additional10R: summarizeTradeSample(trades, 1)
+    },
+    firstHalf,
+    secondHalf,
+    rolling: {
+      windowDays: 30,
+      stepDays: 15,
+      windowCount: rollingWindows.length,
+      activeWindows: activeWindows.length,
+      positiveWindows: activeWindows.length - weakWindows.length,
+      weakWindows: weakWindows.length,
+      windows: rollingWindows
+    },
+    bySide: countBy(trades, (trade) => trade.bias),
+    bySession: countBy(trades, (trade) => trade.session),
+    monteCarlo: summarizeMonteCarlo(trades),
+    classification,
+    nextAction: classification === "ready_for_formal_walk_forward"
+      ? "Run deterministic rolling walk-forward with the profile frozen; do not change gates or promote readiness yet."
+      : "Keep the profile research-only and inspect weak windows before any progression."
+  };
+};
 const debug = (...args) => {
   if (process.env.AUTO_RESEARCH_DEBUG === "1") {
     console.error("[auto-research-candidate]", ...args);
@@ -113,6 +316,49 @@ const fetchMt5Source = async () => {
     health = await fetchJson(healthUrl);
     status = await fetchJson(statusUrl);
     candlesResponse = await fetchJson(candlesUrl);
+    if (config.lookbackDays > 0 && candlesResponse.ok) {
+      const latestPayload = candlesResponse.payload && typeof candlesResponse.payload === "object"
+        ? candlesResponse.payload
+        : {};
+      const latestRows = safeArray(latestPayload.candles);
+      const anchorTimestamp = latestPayload.lastTimestamp ?? latestRows.at(-1)?.timestamp;
+      if (!anchorTimestamp) throw new Error("MT5 latest endpoint did not provide a history anchor timestamp.");
+      const end = Date.parse(anchorTimestamp) - config.historyEndOffsetDays * 86_400_000;
+      const start = end - config.lookbackDays * 86_400_000;
+      const rangeRows = [];
+      const chunks = [];
+      for (let cursor = start; cursor < end; cursor += config.historyChunkDays * 86_400_000) {
+        const next = Math.min(end, cursor + config.historyChunkDays * 86_400_000);
+        const rangeUrl = `${config.bridgeUrl}/candles/range?${new URLSearchParams({
+          requestedSymbol: config.requestedSymbol,
+          symbol: config.brokerSymbol,
+          timeframe: config.timeframe,
+          from: new Date(cursor).toISOString(),
+          to: new Date(next).toISOString(),
+          limit: "5000"
+        }).toString()}`;
+        const rangeResponse = await fetchJson(rangeUrl);
+        if (!rangeResponse.ok) throw new Error(`MT5 range endpoint returned HTTP ${rangeResponse.status}.`);
+        const rangePayload = rangeResponse.payload && typeof rangeResponse.payload === "object" ? rangeResponse.payload : {};
+        const rows = safeArray(rangePayload.candles);
+        rangeRows.push(...rows);
+        chunks.push({ from: new Date(cursor).toISOString(), to: new Date(next).toISOString(), returnedCount: rows.length });
+      }
+      candlesResponse = {
+        ok: true,
+        status: 200,
+        url: `${config.bridgeUrl}/candles/range`,
+        payload: {
+          ...latestPayload,
+          candles: rangeRows,
+          returnedCount: rangeRows.length,
+          historyMode: "explicit_chunked_range",
+          lookbackDays: config.lookbackDays,
+          historyEndOffsetDays: config.historyEndOffsetDays,
+          chunks
+        }
+      };
+    }
   } catch (error) {
     return {
       ok: false,
@@ -345,7 +591,7 @@ const compileLibraryBundle = () => {
 };
 
 const variantForCandidate = (candidate) => {
-  if (candidate.candidateFamily === "ifvg_filtered_v2_research") {
+  if (["ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research"].includes(candidate.candidateFamily)) {
     return "balanced";
   }
   const label = String(candidate.label || "").toLowerCase();
@@ -463,9 +709,10 @@ const summarizeBacktest = (result) => ({
 const metricsFromBacktest = (result) => {
   const grinchSummary = result.summary.grinchSummary;
   const falsePositiveRisk = grinchSummary?.averageFalsePositiveRisk ?? grinchSummary?.latestScore?.falsePositiveRisk ?? 0;
-  const estimatedFalsePositives = Math.round(
-    result.summary.totalTrades * (1 - result.summary.winRate) * (falsePositiveRisk / 100)
-  );
+  const detectorProfile = result.summary.strategyProfileSummary?.strategyProfile !== "agent_consensus";
+  const estimatedFalsePositives = detectorProfile
+    ? safeArray(result.trades).filter((trade) => trade?.outcome === "stop_hit").length
+    : Math.round(result.summary.totalTrades * (1 - result.summary.winRate) * (falsePositiveRisk / 100));
   return {
     validationId: `headless_direct_${Date.now()}`,
     validationTimestamp: new Date().toISOString(),
@@ -509,13 +756,19 @@ const directComparison = (baselineMetrics, metrics) => {
     metrics.winRate >= baselineMetrics.winRate &&
     metrics.maxDrawdown <= baselineMetrics.maxDrawdown &&
     metrics.totalTrades > 0;
+  const profitableResearchCandidate =
+    metrics.totalTrades >= 20 &&
+    metrics.averageR > 0 &&
+    Number(metrics.profitFactor ?? 0) > 1;
   return {
     improved,
     stabilityImproved: metrics.maxDrawdown <= baselineMetrics.maxDrawdown,
-    recommendation: improved ? "keep_testing" : "reject",
+    recommendation: improved || profitableResearchCandidate ? "keep_testing" : "reject",
     promotionVerdict: "needs_full_validation",
     summary: improved
       ? "Direct headless backtest improved headline metrics; full validation and walk-forward are still required."
+      : profitableResearchCandidate
+        ? "Direct backtest is profitable with a sufficient research sample, but drawdown or another headline metric did not beat baseline; keep testing without promotion."
       : "Direct headless backtest did not improve enough headline metrics for promotion.",
     positiveChanges,
     negativeChanges,
@@ -556,6 +809,43 @@ const directScoreBreakdown = (baselineMetrics, metrics, grinch) => {
   };
 };
 
+const detectorProfileComparison = (walkForward) => ({
+  improved: walkForward.verdict === "passed",
+  stabilityImproved: walkForward.verdict === "passed",
+  recommendation: walkForward.verdict === "passed" ? "keep_testing" : "reject",
+  promotionVerdict: "needs_follow_up",
+  summary:
+    walkForward.verdict === "passed"
+      ? "The frozen detector profile passed chronological holdout validation. Keep it research-only and collect untouched forward evidence."
+      : `The frozen detector profile did not pass chronological holdout validation (${walkForward.verdict}).`,
+  positiveChanges:
+    walkForward.verdict === "passed"
+      ? [
+          `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} OOS windows passed.`,
+          `Pooled OOS expectancy is ${walkForward.pooledOos.averageR}R with ${walkForward.totalOosTrades} trades.`
+        ]
+      : [],
+  negativeChanges: walkForward.blockers,
+  criticalRegressions: walkForward.verdict === "passed" ? [] : walkForward.blockers,
+  sanityWarnings: walkForward.warnings,
+  followUpSearchDirection: walkForward.nextAction
+});
+
+const detectorProfileScoreBreakdown = (metrics, walkForward) => {
+  const sampleScore = Math.min(100, (walkForward.totalOosTrades / 60) * 100);
+  const expectancyScore = Math.min(100, Math.max(0, (walkForward.pooledOos.averageR / 2) * 100));
+  const windowScore = walkForward.oosWindowPassRate * 100;
+  const costScore = Math.min(100, Math.max(0, (walkForward.additionalCost05R.averageR / 1.5) * 100));
+  const dateScore = Math.min(100, (walkForward.uniqueOosTradingDates / 30) * 100);
+  return {
+    totalScore: Math.round(sampleScore * 0.2 + expectancyScore * 0.25 + windowScore * 0.25 + costScore * 0.2 + dateScore * 0.1),
+    stabilityImproved: walkForward.verdict === "passed",
+    sufficientSample: walkForward.totalOosTrades >= 40,
+    rationale:
+      "Detector-profile score uses frozen chronological OOS windows, pooled expectancy, cost stress, and independent dates. It cannot promote readiness."
+  };
+};
+
 const summarizeCandidate = ({
   candidate,
   variant,
@@ -566,11 +856,12 @@ const summarizeCandidate = ({
   metrics,
   comparison,
   scoreBreakdown,
-  expansionReplayDiagnostics
+  expansionReplayDiagnostics,
+  profileWalkForward
 }) => {
   const grinch = reportGrinch(backtestResult);
   const strategySummary = backtestResult.summary.strategyProfileSummary;
-  const isIfvgProfile = strategySummary?.strategyProfile === "ifvg_filtered_v2_research";
+  const isDetectorProfile = ["ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research"].includes(strategySummary?.strategyProfile);
   const strategyMissingEvidence = Object.entries(strategySummary?.blockerCounts ?? {})
     .sort((left, right) => right[1] - left[1])
     .slice(0, 8)
@@ -588,13 +879,18 @@ const summarizeCandidate = ({
     requestedSymbol: config.requestedSymbol,
     brokerSymbol: config.brokerSymbol,
     candleCount: validationReport?.sourceCandleCount ?? backtestResult.candles?.length ?? 0,
-    grinchProfileSelected: isIfvgProfile ? "not_applicable" : grinch.selectedProfile,
-    timingStatus: isIfvgProfile ? "not_applicable" : grinch.timingStatus,
-    expansionConfirmationStatus: isIfvgProfile ? "not_applicable" : grinch.expansionConfirmationStatus,
-    expansionConfirmationPassed: isIfvgProfile ? undefined : grinch.reversalExpansionConditionPassed,
-    missingEvidence: isIfvgProfile ? strategyMissingEvidence : grinch.missingExpansionEvidence,
+    grinchProfileSelected: isDetectorProfile ? "not_applicable" : grinch.selectedProfile,
+    timingStatus: isDetectorProfile ? "not_applicable" : grinch.timingStatus,
+    expansionConfirmationStatus: isDetectorProfile ? "not_applicable" : grinch.expansionConfirmationStatus,
+    expansionConfirmationPassed: isDetectorProfile ? undefined : grinch.reversalExpansionConditionPassed,
+    missingEvidence: isDetectorProfile ? strategyMissingEvidence : grinch.missingExpansionEvidence,
     backtest: summarizeBacktest(backtestResult),
-    metricSource: config.validationMode === "full" ? "validation_suite" : "direct_backtest",
+    temporalRobustness: isDetectorProfile ? summarizeTemporalRobustness(backtestResult) : undefined,
+    metricSource: profileWalkForward
+      ? "detector_profile_frozen_oos"
+      : config.validationMode === "full"
+        ? "validation_suite"
+        : "direct_backtest",
     trades: metrics.totalTrades,
     winRate: metrics.winRate,
     averageR: metrics.averageR,
@@ -605,7 +901,8 @@ const summarizeCandidate = ({
     readinessScore: metrics.readinessScore,
     evidenceScore: "unavailable_in_headless_runner",
     maturityScore: "unavailable_in_headless_runner",
-    walkForwardVerdict: "not_run",
+    walkForwardVerdict: profileWalkForward?.verdict ?? "not_run",
+    profileWalkForward,
     expansionReplayDiagnostics,
     validationReadinessStatus: metrics.readinessStatus,
     stabilityScore: metrics.stabilityScore,
@@ -695,18 +992,8 @@ const main = async () => {
   const backtesting = await bundle.importLib("backtesting/index.js");
   const { generateCandidateConfigs } = await bundle.importLib("autoResearch/generateCandidateConfigs.js");
   const strategyLibrary = await bundle.importLib("strategyLibrary/index.js");
-  const fullValidationModules = config.validationMode === "full"
-    ? {
-        ...(await bundle.importLib("autoResearch/scoreCandidateConfig.js")),
-        ...(await bundle.importLib("autoResearch/configSearchSpace.js")),
-        ...(await bundle.importLib("validation/runValidationSuite.js")),
-        ...(await bundle.importLib("researchQuality/analyzeValidationResults.js")),
-        ...(await bundle.importLib("readiness/readinessGate.js")),
-        ...(await bundle.importLib("selfImprovement/evaluateCalibrationProposal.js")),
-        ...(await bundle.importLib("selfImprovement/compareProposalToBaseline.js")),
-        ...(await bundle.importLib("simulationRunbook/storage.js"))
-      }
-    : undefined;
+  let fullValidationModules;
+  let detectorProfileValidationModules;
 
   const baselineConfig = backtesting.sanitizeBacktestConfig({
     ...backtesting.loadBacktestConfig(),
@@ -749,14 +1036,35 @@ const main = async () => {
     );
   }
 
-  debug("running baseline backtest");
-  const baselineBacktest = backtesting.runBacktest(candles, baselineConfig);
+  const detectorOnlyRun = candidateConfigs.every((candidate) => Boolean(candidate.config.strategyProfile));
+  if (config.validationMode === "full" && detectorOnlyRun) {
+    detectorProfileValidationModules = await bundle.importLib("walkForward/detectorProfileWalkForward.js");
+  } else if (config.validationMode === "full") {
+    fullValidationModules = {
+      ...(await bundle.importLib("autoResearch/scoreCandidateConfig.js")),
+      ...(await bundle.importLib("autoResearch/configSearchSpace.js")),
+      ...(await bundle.importLib("validation/runValidationSuite.js")),
+      ...(await bundle.importLib("researchQuality/analyzeValidationResults.js")),
+      ...(await bundle.importLib("readiness/readinessGate.js")),
+      ...(await bundle.importLib("selfImprovement/evaluateCalibrationProposal.js")),
+      ...(await bundle.importLib("selfImprovement/compareProposalToBaseline.js")),
+      ...(await bundle.importLib("simulationRunbook/storage.js"))
+    };
+  }
+  const baselineCandles = config.lookbackDays > 0 && detectorOnlyRun
+    ? candles.slice(-Math.min(1000, candles.length))
+    : candles;
+  debug("running baseline backtest", { candles: baselineCandles.length, detectorOnlyRun });
+  // A generic-agent baseline is context, not the validation target for an
+  // explicit detector profile. Keep that comparison bounded during deep CLI
+  // history scans while the requested detector still receives every candle.
+  const baselineBacktest = backtesting.runBacktest(baselineCandles, baselineConfig);
   let baselineMetrics;
   let baselineReadiness;
   if (config.validationMode === "full" && fullValidationModules) {
     debug("running baseline validation");
-    const baselineValidation = fullValidationModules.runValidationSuite(candles, baselineConfig);
-    baselineValidation.sourceCandleCount = candles.length;
+    const baselineValidation = fullValidationModules.runValidationSuite(baselineCandles, baselineConfig);
+    baselineValidation.sourceCandleCount = baselineCandles.length;
     const baselineQuality = fullValidationModules.analyzeValidationResults(baselineValidation);
     baselineReadiness = fullValidationModules.evaluateReadinessGate({
       validation: baselineValidation,
@@ -779,7 +1087,29 @@ const main = async () => {
     let metrics;
     let comparison;
     let scoreBreakdown;
-    if (config.validationMode === "full" && fullValidationModules) {
+    let profileWalkForward;
+    const strategyProfile = backtestResult.summary.strategyProfileSummary?.strategyProfile;
+    const isDetectorProfile = strategyProfile && strategyProfile !== "agent_consensus";
+    if (config.validationMode === "full" && isDetectorProfile && detectorProfileValidationModules) {
+      debug("running frozen detector-profile walk-forward", candidate.label);
+      profileWalkForward = detectorProfileValidationModules.runDetectorProfileWalkForward({
+        profileId: strategyProfile,
+        sourceProvider: "mt5_read_only",
+        sourceFingerprint: fingerprintFor(candles),
+        sourceStart: candles[0]?.timestamp ?? "",
+        sourceEnd: candles.at(-1)?.timestamp ?? "",
+        trades: safeArray(backtestResult.trades).map((trade) => ({
+          openedAt: trade.openedAt,
+          rMultiple: trade.rMultiple,
+          outcome: trade.outcome
+        }))
+      });
+      metrics = metricsFromBacktest(backtestResult);
+      metrics.readinessStatus = "not_ready";
+      readiness = { state: "Not Ready" };
+      comparison = detectorProfileComparison(profileWalkForward);
+      scoreBreakdown = detectorProfileScoreBreakdown(metrics, profileWalkForward);
+    } else if (config.validationMode === "full" && fullValidationModules) {
       debug("running validation", candidate.label);
       validationReport = fullValidationModules.runValidationSuite(candles, candidate.config);
       validationReport.sourceCandleCount = candles.length;
@@ -815,7 +1145,8 @@ const main = async () => {
       metrics,
       comparison,
       scoreBreakdown,
-      expansionReplayDiagnostics
+      expansionReplayDiagnostics,
+      profileWalkForward
     });
   });
 
@@ -857,6 +1188,13 @@ const main = async () => {
       safetyAuthority: authorityNone
     },
     baseline: {
+      scope: {
+        candleCount: baselineCandles.length,
+        boundedForDetectorDiagnostic: baselineCandles.length !== candles.length,
+        note: baselineCandles.length !== candles.length
+          ? "Generic baseline is bounded to the latest 1,000 candles; the requested detector uses the full explicit history. No promotion comparison is inferred from different scopes."
+          : "Baseline and candidate use the same source depth."
+      },
       config: {
         symbol: baselineConfig.symbol,
         timeframe: baselineConfig.timeframe,
@@ -868,7 +1206,10 @@ const main = async () => {
       backtest: summarizeBacktest(baselineBacktest),
       metrics: baselineMetrics,
       readiness: baselineReadiness.state,
-      metricSource: config.validationMode === "full" ? "validation_suite" : "direct_backtest",
+      metricSource:
+        config.validationMode === "full" && !detectorOnlyRun
+          ? "validation_suite"
+          : "generic_context_direct_backtest",
       grinch: reportGrinch(baselineBacktest),
       expansionReplayDiagnostics
     },
@@ -889,8 +1230,10 @@ const main = async () => {
       "Auto-apply remains disabled.",
       "Production thresholds are not mutated.",
       "No execution intent, account mutation, order route, or readiness override is created.",
-      config.validationMode === "full"
-        ? "Full validation suite was run for baseline and requested candidates."
+      config.validationMode === "full" && detectorOnlyRun
+        ? "Frozen detector-profile chronological holdout validation ran; it cannot promote readiness or create execution authority."
+        : config.validationMode === "full"
+          ? "Full validation suite was run for baseline and requested candidates."
         : "Direct mode skips full validation, evidence ledger, maturity review, and walk-forward for speed."
     ],
     safetyAuthority: authorityNone

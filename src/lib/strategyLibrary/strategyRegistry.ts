@@ -393,10 +393,10 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
     id: "ifvg_filtered_v2_research",
     name: "IFVG Filtered v2 Research",
     family: "ifvg",
-    status: "paper_watchlist_candidate",
+    status: "replay_required",
     detectorStatus: "executable_research",
     description:
-      "Research-only filtered IFVG profile discovered from the 90-day variant audit. It requires clean retest plus displacement confirmation and remains paper-watchlist only until replay, walk-forward, evidence, maturity, and Paper-Demo checklist gates pass.",
+      "Executable research-only IFVG profile. Causal replay requires a fresh retest plus displacement confirmation observed before entry; independent 90-day validation failed, so the profile is replay-required and is not a paper-watchlist candidate.",
     side: "both",
     supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES", "XAUUSD", "EURUSD.pro", "BTCUSD"],
     primaryTimeframes: ["5m", "15m"],
@@ -430,7 +430,7 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
       {
         id: "displacement_confirmation",
         label: "Displacement confirmation",
-        description: "Inversion candle body and post-inversion delivery must confirm direction.",
+        description: "Inversion candle body and delivery before the retest must confirm direction without using post-entry candles.",
         requiredFor: ["replay", "paper_watchlist", "paper_demo"]
       },
       {
@@ -514,6 +514,8 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
       "raw_ifvg_v1_unfiltered",
       "missing clean retest",
       "missing displacement confirmation",
+      "stale retest signal",
+      "independent OOS degradation",
       "reused IFVG",
       "against HTF context",
       "RR below 2",
@@ -521,6 +523,73 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
       "mock/sample source",
       "missing replay/OOS",
       "Paper-Demo checklist incomplete"
+    ],
+    authority: STRATEGY_LIBRARY_AUTHORITY
+  },
+  {
+    id: "ifvg_fresh_retest_v3_research",
+    name: "IFVG Fresh Retest v3 Research",
+    family: "ifvg",
+    status: "replay_required",
+    detectorStatus: "executable_research",
+    description:
+      "Executable causal IFVG profile requiring a validation-eligible base inversion and a clean retest on the latest closed candle. It removes post-entry confirmation leakage and remains research-only pending exact-profile independent validation.",
+    side: "both",
+    supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES", "XAUUSD", "EURUSD.pro", "BTCUSD"],
+    primaryTimeframes: ["5m", "15m"],
+    higherTimeframes: ["15m", "1h", "4h", "1d"],
+    sourceRequirements: mt5ResearchSource,
+    requiredConditions: [
+      {
+        id: "validation_eligible_ifvg",
+        label: "Validation-eligible IFVG",
+        description: "The original gap must invert, remain unused before inversion, respect source/HTF checks, and construct valid entry, invalidation, target, and minimum 2R.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "fresh_clean_retest",
+        label: "Fresh clean retest",
+        description: "The clean IFVG retest must be the latest closed candle; stale historical retests cannot create a candidate.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      }
+    ],
+    invalidationRules: [
+      "Long invalidation remains below the inverted FVG structure.",
+      "Short invalidation remains above the inverted FVG structure.",
+      "Same-bar target and stop ambiguity resolves stop-first in replay."
+    ],
+    targetRules: [
+      "Target is prior directional liquidity available before the retest.",
+      "Minimum planned reward/risk is 2R.",
+      "Modeled spread, slippage, and commission must leave positive expectancy."
+    ],
+    minimumRR: 2,
+    sessionRules: [
+      "Use America/New_York session labels for diagnostics.",
+      "Session filters require independent ablation and are not assumed to improve the profile."
+    ],
+    regimeRules: [
+      "Mock/sample sources cannot create candidates or evidence.",
+      "Recognition is not evidence; independent replay and walk-forward remain mandatory."
+    ],
+    validationRequirements: compactValidation,
+    paperDemoRequirements: [
+      {
+        id: "ifvg_fresh_retest_v3_independent_validation",
+        label: "Independent IFVG v3 validation",
+        required: true,
+        detail: "Current and prior non-overlapping periods, rolling windows, walk-forward, evidence, maturity, and the Paper-Demo checklist must pass."
+      }
+    ],
+    forbiddenPromotionReasons: [
+      "stale retest signal",
+      "unclean retest",
+      "invalid trade construction",
+      "negative modeled-cost expectancy",
+      "independent-period degradation",
+      "weak rolling windows",
+      "mock/sample source",
+      "missing replay/OOS"
     ],
     authority: STRATEGY_LIBRARY_AUTHORITY
   },
@@ -1220,6 +1289,9 @@ export const suggestStrategyIdForRecognition = (input: {
   }
   if (input.family === "camerons_model" || /cameron/.test(text)) {
     return "camerons_model_research_v1";
+  }
+  if (/ifvg[_\s-]*fresh[_\s-]*retest|fresh.*ifvg.*retest|ifvg.*v3/.test(text)) {
+    return "ifvg_fresh_retest_v3_research";
   }
   if (/ifvg[_\s-]*filtered[_\s-]*v2|filtered.*ifvg|ifvg.*v2|clean.*retest.*displacement|clean_retest_displacement/.test(text)) {
     return "ifvg_filtered_v2_research";

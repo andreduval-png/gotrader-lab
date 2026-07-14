@@ -93,7 +93,9 @@ const grinchImprovementText = (candidate: AutoResearchCandidateResult) => {
 };
 
 const strategyImprovementText = (candidate: AutoResearchCandidateResult) =>
-  candidate.candidateFamily === "ifvg_filtered_v2_research"
+  candidate.candidateFamily === "ifvg_fresh_retest_v3_research"
+    ? "IFVG fresh-retest v3 profile; causal replay, rolling-window, independent-period, evidence, maturity, and readiness gates remain required."
+    : candidate.candidateFamily === "ifvg_filtered_v2_research"
     ? "IFVG filtered v2 clean-retest and displacement profile; replay, walk-forward, evidence, maturity, and readiness gates remain required."
     : undefined;
 

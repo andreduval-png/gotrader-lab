@@ -18,6 +18,7 @@ import type {
 import { scoreSimulatedTradeOutcome } from "@/lib/backtesting/outcomeScoring";
 import { buildICTContext, tagSession } from "@/lib/ict";
 import { assessIctIfvgFilteredV2 } from "@/lib/ict-strategy-suite/ictIfvgFilteredV2";
+import { assessIctIfvgFreshRetestV3 } from "@/lib/ict-strategy-suite/ictIfvgFreshRetestV3";
 import { calculateGrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { Candle, FairValueGap, FuturesSymbol, MarketBias, SimulatedTradePlan, ThesisInput, TradingSession } from "@/lib/types";
 
@@ -439,12 +440,14 @@ const scoreIfvgFilteredTrade = ({
   candidate,
   decisionIndex,
   candles,
-  config
+  config,
+  profileId
 }: {
   candidate: ReturnType<typeof assessIctIfvgFilteredV2>["candidate"];
   decisionIndex: number;
   candles: Candle[];
   config: ResolvedBacktestConfig;
+  profileId: "ifvg_filtered_v2_research" | "ifvg_fresh_retest_v3_research";
 }): SimulatedTradeRecord | undefined => {
   if (
     candidate.side === "flat" ||
@@ -506,9 +509,9 @@ const scoreIfvgFilteredTrade = ({
   const bias = candidate.side === "long" ? "bullish" as const : "bearish" as const;
 
   return {
-    id: `bt_ifvg_v2_${decisionIndex}_${candidate.side}`,
-    decisionId: `bt_ifvg_v2_decision_${decisionIndex}`,
-    thesisId: `bt_ifvg_v2_thesis_${decisionIndex}`,
+    id: `bt_${profileId}_${decisionIndex}_${candidate.side}`,
+    decisionId: `bt_${profileId}_decision_${decisionIndex}`,
+    thesisId: `bt_${profileId}_thesis_${decisionIndex}`,
     symbol: config.symbol,
     timeframe: config.timeframe,
     session: config.session ?? sessionFromCandle(candles[decisionIndex]),
@@ -532,16 +535,16 @@ const scoreIfvgFilteredTrade = ({
     maxAdverseExcursion: round(Math.max(0, ...adverse), 3),
     rMultiple,
     riskReward: round(targetR, 3),
-    reason: `IFVG filtered v2 clean retest + displacement; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
+    reason: `${profileId === "ifvg_filtered_v2_research" ? "IFVG filtered v2 clean retest + displacement" : "IFVG fresh clean retest v3"}; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
     simulatedTradePlan: {
-      id: `bt_ifvg_v2_plan_${decisionIndex}`,
+      id: `bt_${profileId}_plan_${decisionIndex}`,
       symbol: config.symbol,
       timeframe: config.timeframe,
       bias,
       entryZone: [entry, entry],
       invalidation: stop,
       targetLiquidity: target,
-      stopRiskNotes: "Research-only IFVG filtered v2 simulation. Same-bar target/stop ambiguity resolves stop-first.",
+      stopRiskNotes: `Research-only ${profileId} simulation. Same-bar target/stop ambiguity resolves stop-first.`,
       riskReward: round(targetR, 3),
       mode: "simulation"
     },
@@ -549,7 +552,7 @@ const scoreIfvgFilteredTrade = ({
   };
 };
 
-const runIfvgFilteredV2Backtest = (
+const runIfvgResearchBacktest = (
   sample: Candle[],
   resolved: ResolvedBacktestConfig
 ): BacktestResult => {
@@ -561,23 +564,29 @@ const runIfvgFilteredV2Backtest = (
   let detectedCandidates = 0;
   let eligibleCandidates = 0;
   let duplicateCandidates = 0;
+  let overlappingCandidates = 0;
+  let activeUntilIndex = -1;
   const sourceProvider = sourceProviderFor(sample);
   const scanWindow = Math.max(resolved.timeframe === "5m" ? 160 : 120, resolved.visibleWindow);
 
   for (
     let decisionIndex = Math.max(resolved.warmupCandles, 40);
     decisionIndex < sample.length - 1;
-    decisionIndex += resolved.decisionInterval
+    decisionIndex += 1
   ) {
     evaluatedWindows += 1;
     const window = sample.slice(Math.max(0, decisionIndex + 1 - scanWindow), decisionIndex + 1);
-    const assessment = assessIctIfvgFilteredV2({
+    const detectorInput = {
       candles: window,
       sourceProvider,
+      sourceFingerprint: `${sourceProvider}|${resolved.symbol}|${resolved.timeframe}|${sample.length}|${sample[0]?.timestamp}|${sample.at(-1)?.timestamp}`,
       requestedSymbol: resolved.symbol,
       timeframe: resolved.timeframe,
       generatedAt: sample[decisionIndex].timestamp
-    });
+    };
+    const assessment = resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
+      ? assessIctIfvgFreshRetestV3(detectorInput)
+      : assessIctIfvgFilteredV2(detectorInput);
     const key = candidateKeyFor(assessment.candidate);
     if (!assessment.candidate.originalFvgCandle || seen.has(key)) {
       if (assessment.candidate.originalFvgCandle && seen.has(key)) duplicateCandidates += 1;
@@ -612,22 +621,38 @@ const runIfvgFilteredV2Backtest = (
       continue;
     }
 
-    const trade = scoreIfvgFilteredTrade({ candidate: assessment.candidate, decisionIndex, candles: sample, config: resolved });
+    if (decisionIndex <= activeUntilIndex) {
+      overlappingCandidates += 1;
+      blockerCounts.overlapping_research_position = (blockerCounts.overlapping_research_position ?? 0) + 1;
+      continue;
+    }
+
+    const trade = scoreIfvgFilteredTrade({
+      candidate: assessment.candidate,
+      decisionIndex,
+      candles: sample,
+      config: resolved,
+      profileId: resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
+        ? "ifvg_fresh_retest_v3_research"
+        : "ifvg_filtered_v2_research"
+    });
     if (!trade) {
       blockerCounts.insufficient_outcome_window = (blockerCounts.insufficient_outcome_window ?? 0) + 1;
       continue;
     }
     eligibleCandidates += 1;
     trades.push(trade);
+    activeUntilIndex = trade.exitIndex;
   }
 
   const summary = summarizeBacktest(trades, skippedSignals, []);
   summary.strategyProfileSummary = {
-    strategyProfile: "ifvg_filtered_v2_research",
+    strategyProfile: resolved.strategyProfile,
     evaluatedWindows,
     detectedCandidates,
     eligibleCandidates,
     duplicateCandidates,
+    overlappingCandidates,
     blockerCounts
   };
   return { config: resolved, candles: sample, decisions: [], skippedSignals, trades, summary };
@@ -641,8 +666,8 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
   const sample = scopedCandles.length
     ? scopedCandles
     : candles.map((candle) => ({ ...candle, symbol: resolved.symbol, timeframe: resolved.timeframe }));
-  if (resolved.strategyProfile === "ifvg_filtered_v2_research") {
-    return runIfvgFilteredV2Backtest(sample, resolved);
+  if (resolved.strategyProfile === "ifvg_filtered_v2_research" || resolved.strategyProfile === "ifvg_fresh_retest_v3_research") {
+    return runIfvgResearchBacktest(sample, resolved);
   }
   const decisions: BacktestDecisionPoint[] = [];
   const skippedSignals: BacktestSkippedSignal[] = [];

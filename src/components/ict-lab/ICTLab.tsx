@@ -654,7 +654,7 @@ export function ICTLab() {
                     <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                       <div className="rounded-md border border-border/70 bg-background/35 px-2 py-1.5">
                         <span className="block uppercase tracking-wide text-muted-foreground/80">Entry model</span>
-                        <span className="font-medium text-foreground">{diagnostic ? "not expected" : item.strategyId === "ifvg_filtered_v2_research" ? "IFVG" : "research"}</span>
+                        <span className="font-medium text-foreground">{diagnostic ? "not expected" : item.strategyId === "ifvg_fresh_retest_v3_research" || item.strategyId === "ifvg_filtered_v2_research" ? "IFVG" : "research"}</span>
                       </div>
                       <div className="rounded-md border border-border/70 bg-background/35 px-2 py-1.5">
                         <span className="block uppercase tracking-wide text-muted-foreground/80">RR</span>

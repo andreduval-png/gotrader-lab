@@ -23,21 +23,36 @@ const hasCleanRetest = (candidate: IctIfvgCandidate) => {
     : retest.high >= bounds.midpoint && retest.high <= bounds.high && retest.close <= bounds.midpoint;
 };
 
-const postInversionDeliveryConfirmed = (input: IctIfvgInput, candidate: IctIfvgCandidate) => {
-  const inversionTimestamp = candidate.inversionCandle?.timestamp;
-  if (!inversionTimestamp || candidate.side === "flat") return false;
-  const sorted = input.candles
+const sortedInputCandles = (input: IctIfvgInput) =>
+  input.candles
     .filter((candle) => Number.isFinite(Date.parse(candle.timestamp)))
     .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+
+const signalAgeBars = (input: IctIfvgInput, candidate: IctIfvgCandidate) => {
+  const retestTimestamp = candidate.retestCandle?.timestamp;
+  if (!retestTimestamp) return undefined;
+  const sorted = sortedInputCandles(input);
+  const retestIndex = sorted.findIndex((candle) => candle.timestamp === retestTimestamp);
+  return retestIndex < 0 ? undefined : sorted.length - 1 - retestIndex;
+};
+
+const postInversionDeliveryConfirmed = (input: IctIfvgInput, candidate: IctIfvgCandidate) => {
+  const inversionTimestamp = candidate.inversionCandle?.timestamp;
+  const retestTimestamp = candidate.retestCandle?.timestamp;
+  if (!inversionTimestamp || !retestTimestamp || candidate.side === "flat") return false;
+  const sorted = sortedInputCandles(input);
   const inversionIndex = sorted.findIndex((candle) => candle.timestamp === inversionTimestamp);
-  if (inversionIndex < 0) return false;
-  const future = sorted.slice(inversionIndex + 1, inversionIndex + 4);
-  if (future.length < 2) return false;
+  const retestIndex = sorted.findIndex((candle) => candle.timestamp === retestTimestamp);
+  if (inversionIndex < 0 || retestIndex <= inversionIndex) return false;
+  // Confirmation must be observable before entry. Candles at or after the
+  // retest cannot be used to qualify the signal without look-ahead leakage.
+  const confirmation = sorted.slice(inversionIndex + 1, Math.min(retestIndex, inversionIndex + 4));
+  if (confirmation.length < 2) return false;
   const inversionClose = candidate.inversionCandle?.close;
   if (!Number.isFinite(inversionClose)) return false;
   return candidate.side === "long"
-    ? future.at(-1)!.close > inversionClose! && future.filter((candle) => candle.close >= candle.open).length >= 2
-    : future.at(-1)!.close < inversionClose! && future.filter((candle) => candle.close <= candle.open).length >= 2;
+    ? confirmation.at(-1)!.close > inversionClose! && confirmation.filter((candle) => candle.close >= candle.open).length >= 2
+    : confirmation.at(-1)!.close < inversionClose! && confirmation.filter((candle) => candle.close <= candle.open).length >= 2;
 };
 
 export interface IctIfvgFilteredV2Assessment {
@@ -47,6 +62,8 @@ export interface IctIfvgFilteredV2Assessment {
   strongInversionBody: boolean;
   postInversionDeliveryConfirmed: boolean;
   displacementConfirmed: boolean;
+  signalAgeBars?: number;
+  signalFresh: boolean;
   eligible: boolean;
   blockers: string[];
   researchOnly: true;
@@ -65,11 +82,14 @@ export const assessIctIfvgFilteredV2 = (
   const strongInversionBody = hasStrongBody(detected.inversionCandle);
   const deliveryConfirmed = postInversionDeliveryConfirmed(input, detected);
   const displacementConfirmed = strongInversionBody && deliveryConfirmed;
+  const ageBars = signalAgeBars(input, detected);
+  const signalFresh = ageBars === 0;
   const blockers = [
     ...detected.blockers,
     detected.canCreateValidationChainEntry ? undefined : "base_ifvg_not_validation_eligible",
     cleanRetest ? undefined : "clean_retest_required",
-    displacementConfirmed ? undefined : "displacement_confirmation_required"
+    displacementConfirmed ? undefined : "pre_retest_displacement_confirmation_required",
+    signalFresh ? undefined : "stale_retest_signal"
   ].filter((item): item is string => Boolean(item));
 
   return {
@@ -79,6 +99,8 @@ export const assessIctIfvgFilteredV2 = (
     strongInversionBody,
     postInversionDeliveryConfirmed: deliveryConfirmed,
     displacementConfirmed,
+    signalAgeBars: ageBars,
+    signalFresh,
     eligible: blockers.length === 0,
     blockers,
     researchOnly: true,

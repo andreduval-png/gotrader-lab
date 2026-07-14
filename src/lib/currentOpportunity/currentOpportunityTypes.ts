@@ -1,4 +1,5 @@
 import type { IctSessionRaidReversalNarrative } from "../ict-strategy-suite/ictSessionRaidReversalTypes";
+import type { IctIfvgFreshRetestV3CompactAssessment } from "../ict-strategy-suite/ictIfvgFreshRetestV3";
 
 export type CurrentOpportunityStatus =
   | "valid_candidate"
@@ -36,6 +37,7 @@ export type CurrentOpportunityStrategyId =
   | "cisd_v1"
   | "ifvg_v1"
   | "ifvg_filtered_v2_research"
+  | "ifvg_fresh_retest_v3_research"
   | "nasdaq_london_raid_ny_reversal_v1"
   | "market_map_only_diagnostic_v1";
 
@@ -116,6 +118,7 @@ export interface CurrentOpportunityContext {
   sessionNarrativeProfile?: string;
   sessionDirectionalRead?: string;
   sessionRaidReversal?: IctSessionRaidReversalNarrative;
+  ifvgFreshRetestV3?: IctIfvgFreshRetestV3CompactAssessment;
   fvgStatus?: string;
   displacementStatus?: string;
   drawOnLiquidity?: string;

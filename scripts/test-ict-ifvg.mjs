@@ -14,7 +14,8 @@ const sourceFiles = [
   "ictTradeConstruction.ts",
   "ictIfvgTypes.ts",
   "ictIfvg.ts",
-  "ictIfvgFilteredV2.ts"
+  "ictIfvgFilteredV2.ts",
+  "ictIfvgFreshRetestV3.ts"
 ];
 
 function compileForNode() {
@@ -94,6 +95,21 @@ function validLongIfvg() {
     candle(80, 95.7, 99, 95.2, 98.5),
     candle(85, 98.5, 101, 98, 100),
     ...overlapFiller(90, 10, 98)
+  ];
+}
+
+function validFilteredLongIfvg() {
+  return [
+    ...overlapFiller(-30, 6, 100),
+    ...overlapFiller(0, 10, 100),
+    candle(50, 101, 104, 96, 97),
+    candle(55, 97, 99, 95.5, 96.8),
+    candle(60, 93, 94, 90, 91),
+    candle(65, 91, 93.4, 90.5, 92.2),
+    candle(70, 92.5, 98.6, 92.2, 98),
+    candle(75, 98, 99.2, 97.2, 98.8),
+    candle(80, 98.8, 100.2, 98.2, 99.8),
+    candle(85, 99.6, 100, 94.8, 95.6)
   ];
 }
 
@@ -197,6 +213,7 @@ async function main() {
   compileForNode();
   const ifvg = await import(pathToFileURL(path.join(outRoot, "ictIfvg.mjs")).href);
   const filteredV2 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFilteredV2.mjs")).href);
+  const freshRetestV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")).href);
 
   const base = {
     sourceProvider: "mt5_read_only",
@@ -222,16 +239,64 @@ async function main() {
   assert.equal(ifvg.ictIfvgCanQueueValidation(long), true);
   assertSafe(long);
 
+  const filteredLongCandles = validFilteredLongIfvg();
+  const filteredLongBase = ifvg.evaluateIctIfvg({ ...base, candles: filteredLongCandles, contextCandles: contextBullish });
   const filteredLong = filteredV2.assessIctIfvgFilteredV2(
-    { ...base, candles: validLongIfvg(), contextCandles: contextBullish },
-    long
+    { ...base, candles: filteredLongCandles, contextCandles: contextBullish },
+    filteredLongBase
   );
   assert.equal(filteredLong.strategyId, "ifvg_filtered_v2_research");
   assert.equal(filteredLong.cleanRetest, true);
   assert.equal(filteredLong.displacementConfirmed, true);
+  assert.equal(filteredLong.signalAgeBars, 0);
+  assert.equal(filteredLong.signalFresh, true);
   assert.equal(filteredLong.eligible, true);
   assert.equal(filteredLong.researchOnly, true);
   assertSafe(filteredLong);
+
+  const freshLong = freshRetestV3.assessIctIfvgFreshRetestV3(
+    { ...base, candles: filteredLongCandles, contextCandles: contextBullish },
+    filteredLongBase
+  );
+  assert.equal(freshLong.strategyId, "ifvg_fresh_retest_v3_research");
+  assert.equal(freshLong.cleanRetest, true);
+  assert.equal(freshLong.signalFresh, true);
+  assert.equal(freshLong.eligible, true);
+  assertSafe(freshLong);
+  const compactFreshLong = freshRetestV3.compactIctIfvgFreshRetestV3Assessment(freshLong);
+  assert.equal(compactFreshLong.strategyId, "ifvg_fresh_retest_v3_research");
+  assert.equal(compactFreshLong.canCreateValidationChainEntry, true);
+  assert.equal(compactFreshLong.sourceFingerprint, base.sourceFingerprint);
+  assert.doesNotMatch(JSON.stringify(compactFreshLong), /"candles"\s*:|"rawCandles"\s*:|"retestCandle"\s*:/i);
+  assertSafe(compactFreshLong);
+
+  const staleFilteredCandles = [...filteredLongCandles, ...overlapFiller(90, 3, 98)];
+  const staleFilteredBase = ifvg.evaluateIctIfvg({ ...base, candles: staleFilteredCandles, contextCandles: contextBullish });
+  const staleFiltered = filteredV2.assessIctIfvgFilteredV2(
+    { ...base, candles: staleFilteredCandles, contextCandles: contextBullish },
+    staleFilteredBase
+  );
+  assert.equal(staleFiltered.signalFresh, false);
+  assert.ok((staleFiltered.signalAgeBars ?? 0) > 0);
+  assert.equal(staleFiltered.eligible, false);
+  assert.ok(staleFiltered.blockers.includes("stale_retest_signal"));
+  assertSafe(staleFiltered);
+  const staleFreshV3 = freshRetestV3.assessIctIfvgFreshRetestV3(
+    { ...base, candles: staleFilteredCandles, contextCandles: contextBullish },
+    staleFilteredBase
+  );
+  assert.equal(staleFreshV3.eligible, false);
+  assert.ok(staleFreshV3.blockers.includes("stale_retest_signal"));
+  assertSafe(staleFreshV3);
+
+  const postEntryConfirmationOnly = filteredV2.assessIctIfvgFilteredV2(
+    { ...base, candles: validLongIfvg(), contextCandles: contextBullish },
+    long
+  );
+  assert.equal(postEntryConfirmationOnly.postInversionDeliveryConfirmed, false);
+  assert.equal(postEntryConfirmationOnly.eligible, false);
+  assert.ok(postEntryConfirmationOnly.blockers.includes("pre_retest_displacement_confirmation_required"));
+  assertSafe(postEntryConfirmationOnly);
 
   const short = ifvg.evaluateIctIfvg({ ...base, candles: validShortIfvg(), contextCandles: contextBearish, timeframe: "15m" });
   assert.equal(short.status, "replay_required");
@@ -247,9 +312,10 @@ async function main() {
     short
   );
   assert.equal(filteredShort.cleanRetest, false);
-  assert.equal(filteredShort.displacementConfirmed, true);
+  assert.equal(filteredShort.displacementConfirmed, false);
   assert.equal(filteredShort.eligible, false);
   assert.ok(filteredShort.blockers.includes("clean_retest_required"));
+  assert.ok(filteredShort.blockers.includes("pre_retest_displacement_confirmation_required"));
   assertSafe(filteredShort);
 
   const blockedHtf = ifvg.evaluateIctIfvg({ ...base, candles: validLongIfvg(), contextCandles: contextBearish });
@@ -324,6 +390,11 @@ async function main() {
       longEligible: filteredLong.eligible,
       shortEligible: filteredShort.eligible,
       researchOnly: filteredLong.researchOnly
+    },
+    freshRetestV3: {
+      longEligible: freshLong.eligible,
+      staleBlocked: !staleFreshV3.eligible,
+      researchOnly: freshLong.researchOnly
     },
     authority: authorityNone,
     safety: {

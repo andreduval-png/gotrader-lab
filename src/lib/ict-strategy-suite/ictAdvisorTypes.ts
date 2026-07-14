@@ -33,6 +33,7 @@ import type {
   IctUniversalRecognitionResult
 } from "./ictUniversalRecognitionTypes";
 import type { CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
+import type { IctIfvgFreshRetestV3CompactAssessment } from "./ictIfvgFreshRetestV3";
 
 export type IctBias = "bullish" | "bearish" | "neutral";
 export type IctSide = "long" | "short" | "flat";
@@ -298,6 +299,7 @@ export interface IctAdvisorPacket {
     pdArrayCount?: number;
     recognitionOpportunitySummary?: string;
     currentOpportunitySummary?: CurrentOpportunitySummary;
+    ifvgFreshRetestV3?: IctIfvgFreshRetestV3CompactAssessment;
     hydrationSource?: "canonical_source_store" | "active_mt5_readonly_feed" | "metadata_only" | "unavailable";
     hydrationWarning?: string;
     noTradeReasonCount: number;

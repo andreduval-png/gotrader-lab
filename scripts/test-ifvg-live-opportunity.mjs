@@ -93,6 +93,33 @@ const basePacket = {
     htfAlignment: {
       alignmentStatus: "aligned",
       conflictReason: ""
+    },
+    ifvgFreshRetestV3: {
+      strategyId: "ifvg_fresh_retest_v3_research",
+      generatedAt: "2026-06-14T14:30:00.000Z",
+      requestedSymbol: "MNQ",
+      brokerSymbol: "USTECH",
+      sourceProvider: "mt5_read_only",
+      sourceFingerprint: "mt5|MNQ|USTECH|5m|17799|88.95d",
+      timeframe: "5m",
+      contextTimeframes: ["15m", "1h", "4h", "1d"],
+      side: "short",
+      baseStatus: "replay_required",
+      inversionDetected: true,
+      cleanRetest: true,
+      signalAgeBars: 0,
+      signalFresh: true,
+      eligible: true,
+      entry: 30510,
+      invalidation: 30540,
+      target: 30440,
+      rr: 2.33,
+      blockers: [],
+      missingConditions: [],
+      nextAction: "Queue replay validation for IFVG fresh-retest v3; recognition is not evidence.",
+      canCreateValidationChainEntry: true,
+      researchOnly: true,
+      authority: authorityNone
     }
   },
   recommendedSignal: {
@@ -177,7 +204,7 @@ const assertSafe = (scan) => {
   assert.doesNotMatch(serialized, /"apiKey"\s*:|"token"\s*:|"password"\s*:|"secret"\s*:|"mt5Credentials"\s*:/i);
 };
 
-const findIfvg = (scan) => scan.opportunities.find((item) => item.strategyId === "ifvg_filtered_v2_research");
+const findIfvg = (scan) => scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
 
 async function main() {
   compileForNode();
@@ -189,9 +216,9 @@ async function main() {
   const validContext = current.buildCurrentOpportunityContext({ packet: basePacket, currentRead: validIfvgRead });
   const validScan = current.detectCurrentOpportunities(validContext);
   const validIfvg = findIfvg(validScan);
-  assert.ok(validIfvg, "IFVG filtered v2 opportunity should be emitted");
+  assert.ok(validIfvg, "IFVG fresh-retest v3 opportunity should be emitted");
   assert.equal(validIfvg.status, "valid_candidate");
-  assert.equal(validIfvg.setupName, "IFVG filtered v2 - clean retest displacement");
+  assert.equal(validIfvg.setupName, "IFVG fresh-retest v3");
   assert.deepEqual(validIfvg.requiredValidation, [
     "replay_required",
     "walk_forward_required",
@@ -225,14 +252,30 @@ async function main() {
   assert.equal(queued.entry.hypothesisStatus, "replay_required");
   assert.equal(queued.entry.candidateFamily, "ifvg");
   assert.equal(queued.entry.sourceFingerprint, basePacket.activeSource.sourceFingerprint);
-  assert.match(queued.entry.nextAction, /IFVG filtered v2/i);
+  assert.match(queued.entry.nextAction, /IFVG fresh-retest v3/i);
   assert.match(queued.entry.paperDemoChecklistImpact, /Blocked for Paper-Demo/i);
   assert.equal(queued.entry.executionIntent, "none");
   assert.deepEqual(queued.entry.authority, authorityNone);
 
+  const noRetestPacket = {
+    ...basePacket,
+    compactSummary: {
+      ...basePacket.compactSummary,
+      ifvgFreshRetestV3: {
+        ...basePacket.compactSummary.ifvgFreshRetestV3,
+        cleanRetest: false,
+        signalFresh: false,
+        eligible: false,
+        blockers: ["clean_retest_required", "stale_retest_signal"],
+        missingConditions: ["no_clean_retest"],
+        nextAction: "Wait for a clean return into the inverted FVG.",
+        canCreateValidationChainEntry: false
+      }
+    }
+  };
   const noRetestScan = current.detectCurrentOpportunities(
     current.buildCurrentOpportunityContext({
-      packet: basePacket,
+      packet: noRetestPacket,
       currentRead: {
         ...validIfvgRead,
         fvgStatus: "IFVG full inversion no clean retest",
@@ -244,28 +287,56 @@ async function main() {
   const noRetest = findIfvg(noRetestScan);
   assert.equal(noRetest.status, "forming");
   assert.ok(noRetest.missingConditions.includes("no_clean_retest"));
-  assert.match(noRetest.nextAction, /clean IFVG retest/i);
+  assert.match(noRetest.nextAction, /clean (IFVG retest|return into the inverted FVG)/i);
   assertSafe(noRetestScan);
 
-  const noDisplacementScan = current.detectCurrentOpportunities(
+  const stalePacket = {
+    ...basePacket,
+    compactSummary: {
+      ...basePacket.compactSummary,
+      ifvgFreshRetestV3: {
+        ...basePacket.compactSummary.ifvgFreshRetestV3,
+        signalAgeBars: 2,
+        signalFresh: false,
+        eligible: false,
+        blockers: ["stale_retest_signal"],
+        missingConditions: ["stale_retest_signal"],
+        nextAction: "The prior retest is stale; wait for a new fresh IFVG retest.",
+        canCreateValidationChainEntry: false
+      }
+    }
+  };
+  const staleScan = current.detectCurrentOpportunities(
     current.buildCurrentOpportunityContext({
-      packet: basePacket,
+      packet: stalePacket,
       currentRead: {
         ...validIfvgRead,
-        displacementStatus: "missing_displacement",
-        topReasons: ["IFVG clean retest present.", "no_displacement_confirmation"],
-        opportunityMissingEvidence: ["no_displacement_confirmation"]
+        topReasons: ["IFVG clean retest present.", "stale_retest_signal"],
+        opportunityMissingEvidence: ["stale_retest_signal"]
       }
     })
   );
-  const noDisplacement = findIfvg(noDisplacementScan);
-  assert.equal(noDisplacement.status, "forming");
-  assert.ok(noDisplacement.missingConditions.includes("no_displacement_confirmation"));
-  assert.match(noDisplacement.nextAction, /displacement confirmation/i);
-  assertSafe(noDisplacementScan);
+  const stale = findIfvg(staleScan);
+  assert.equal(stale.status, "near_miss");
+  assert.ok(stale.missingConditions.includes("stale_retest_signal"));
+  assert.match(stale.nextAction, /stale|fresh IFVG retest/i);
+  assertSafe(staleScan);
 
   const missingTargetPacket = {
     ...basePacket,
+    compactSummary: {
+      ...basePacket.compactSummary,
+      ifvgFreshRetestV3: {
+        ...basePacket.compactSummary.ifvgFreshRetestV3,
+        eligible: false,
+        target: undefined,
+        rr: undefined,
+        blockers: ["target_missing", "rr_unavailable"],
+        missingConditions: ["target_missing", "rr_unavailable"],
+        nextAction: "Resolve the deterministic IFVG blockers before replay validation.",
+        canCreateValidationChainEntry: false
+      }
+    },
     recommendedSignal: {
       ...basePacket.recommendedSignal,
       target: undefined,
@@ -348,7 +419,7 @@ async function main() {
     },
     forming: {
       noRetest: noRetest.missingConditions,
-      noDisplacement: noDisplacement.missingConditions
+      staleRetest: stale.missingConditions
     },
     missingTarget: missingTarget.missingConditions,
     mockStatus: mockIfvg.status,

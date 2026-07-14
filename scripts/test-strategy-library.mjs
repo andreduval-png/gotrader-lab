@@ -161,7 +161,7 @@ async function main() {
   const evidence = await import(pathToFileURL(path.join(outRoot, "strategyEvidence.mjs")).href);
 
   const definitions = registry.listStrategyDefinitions();
-  assert.equal(definitions.length, 19);
+  assert.equal(definitions.length, 20);
   const newStrategyIds = [
     "silver_bullet_v1",
     "silver_bullet_v2_refined_research",
@@ -170,6 +170,7 @@ async function main() {
     "camerons_model_research_v1",
     "ifvg_v1",
     "ifvg_filtered_v2_research",
+    "ifvg_fresh_retest_v3_research",
     "turtle_soup_v1",
     "crt_research_v1",
     "ote_research_v1",
@@ -198,7 +199,9 @@ async function main() {
   assert.equal(registry.getStrategyDefinition("ifvg_v1").detectorStatus, "executable_research");
   assert.equal(registry.getStrategyDefinition("ifvg_v1").status, "replay_required");
   assert.equal(registry.getStrategyDefinition("ifvg_filtered_v2_research").detectorStatus, "executable_research");
-  assert.equal(registry.getStrategyDefinition("ifvg_filtered_v2_research").status, "paper_watchlist_candidate");
+  assert.equal(registry.getStrategyDefinition("ifvg_filtered_v2_research").status, "replay_required");
+  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v3_research").detectorStatus, "executable_research");
+  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v3_research").status, "replay_required");
   assert.deepEqual(
     registry.getStrategyDefinition("ifvg_filtered_v2_research").validationRequirements.map((item) => item.id),
     ["replay_required", "walk_forward_required", "evidence_required", "paper_demo_gate_required"]
@@ -215,7 +218,7 @@ async function main() {
       `ifvg filtered v2 should forbid promotion reason ${reason}`
     );
   }
-  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research"].includes(id))) {
+  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research"].includes(id))) {
     assert.equal(registry.getStrategyDefinition(strategyId).detectorStatus, "research_only_placeholder");
   }
   assert.ok(registry.getStrategyDefinition("ict_cmd_short_paper_watchlist_v1"));
@@ -239,6 +242,10 @@ async function main() {
   assert.equal(
     registry.suggestStrategyIdForRecognition({ candidateFamilies: ["clean_retest_displacement"] }),
     "ifvg_filtered_v2_research"
+  );
+  assert.equal(
+    registry.suggestStrategyIdForRecognition({ candidateFamilies: ["ifvg_fresh_retest_v3_research"] }),
+    "ifvg_fresh_retest_v3_research"
   );
   assert.equal(
     registry.suggestStrategyIdForRecognition({ setupName: "filtered IFVG v2" }),
@@ -399,7 +406,7 @@ async function main() {
   });
   const ifvgFilteredEligibility = eligibility.evaluateStrategyEligibility(ifvgFilteredRecord);
   assert.equal(ifvgFilteredEligibility.eligible, true);
-  assert.equal(ifvgFilteredEligibility.status, "paper_watchlist_candidate");
+  assert.equal(ifvgFilteredEligibility.status, "evidence_building");
   assertSafeRecord(ifvgFilteredRecord);
   assertSafeRecord(ifvgFilteredEligibility);
 

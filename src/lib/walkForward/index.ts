@@ -20,6 +20,14 @@ export {
   WALK_FORWARD_UPDATED_EVENT
 } from "@/lib/walkForward/walkForwardStorage";
 export { runWalkForwardValidation } from "@/lib/walkForward/walkForwardOrchestrator";
+export { runDetectorProfileWalkForward } from "@/lib/walkForward/detectorProfileWalkForward";
+export type {
+  DetectorProfileTradeOutcome,
+  DetectorProfileWalkForwardInput,
+  DetectorProfileWalkForwardResult,
+  DetectorProfileWalkForwardVerdict,
+  DetectorProfileWalkForwardWindow
+} from "@/lib/walkForward/detectorProfileWalkForwardTypes";
 export type {
   WalkForwardConfigSummary,
   WalkForwardEvidenceRules,
