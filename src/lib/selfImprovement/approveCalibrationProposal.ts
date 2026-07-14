@@ -26,6 +26,10 @@ import {
   proposalSnapshotMismatchReasons
 } from "@/lib/selfImprovement/proposalMetricsSnapshot";
 import { safeArray, uid } from "@/lib/utils";
+import {
+  reviewFrozenProfileMutation,
+  type FrozenProfileMutationReview
+} from "@/lib/forwardEvidence";
 
 export const SELF_IMPROVEMENT_STORAGE_KEY = "gotrader_ai_lab_self_improvement_state";
 export const ACTIVE_RESEARCH_CALIBRATION_STORAGE_KEY = "gotrader_ai_lab_active_research_calibration";
@@ -81,6 +85,23 @@ const hasConfigPatch = (changes: CalibrationProposalChanges | undefined) =>
         hasKeys(changes.agentWeights) ||
         hasKeys(changes.ictScoringWeights))
   );
+
+const hasAnyCalibrationMutation = (changes: CalibrationProposalChanges | undefined) =>
+  Boolean(
+    changes &&
+      Object.values(changes).some((value) =>
+        value && typeof value === "object" ? Object.keys(value).length > 0 : value !== undefined
+      )
+  );
+
+export const reviewFrozenCalibrationProposal = (
+  proposal: CalibrationProposal
+): FrozenProfileMutationReview =>
+  reviewFrozenProfileMutation({
+    baseProfileId: proposal.baselineConfig.strategyProfile,
+    targetProfileId: proposal.proposedChanges.strategyProfile ?? proposal.proposedConfig.strategyProfile,
+    parameterMutationRequested: hasAnyCalibrationMutation(proposal.proposedChanges)
+  });
 
 const diffAgentWeights = (
   before: ResolvedBacktestConfig,
@@ -354,6 +375,10 @@ export function canApproveProposal(proposal?: CalibrationProposal): ProposalAppr
   ) {
     reasons.push("Proposal contains unsafe authority changes.");
   }
+  const frozenProfileReview = reviewFrozenCalibrationProposal(proposal);
+  if (frozenProfileReview.blocked && frozenProfileReview.reason) {
+    reasons.push(frozenProfileReview.reason);
+  }
   if (!hasAllowedProposedChanges(proposal)) {
     reasons.push("Proposal missing proposedChanges.");
   }
@@ -403,6 +428,17 @@ export function applyResearchCalibrationPatchToConfig(
   currentConfig: ResolvedBacktestConfig,
   changes: CalibrationProposalChanges
 ): ResolvedBacktestConfig {
+  const frozenProfileReview = reviewFrozenProfileMutation({
+    baseProfileId: currentConfig.strategyProfile,
+    targetProfileId: changes.strategyProfile ?? currentConfig.strategyProfile,
+    parameterMutationRequested: hasAnyCalibrationMutation(changes)
+  });
+  if (frozenProfileReview.blocked) {
+    throw new Error(
+      frozenProfileReview.reason ??
+        "Frozen research profiles cannot be mutated through Self-Improvement."
+    );
+  }
   return sanitizeBacktestConfig({
     ...currentConfig,
     strategyProfile: changes.strategyProfile ?? currentConfig.strategyProfile,

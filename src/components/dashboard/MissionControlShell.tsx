@@ -17,6 +17,7 @@ import {
   type TradingChartPerformanceEvent
 } from "@/components/charts/TradingChart";
 import { WhyNotReadyCard } from "@/components/common/WhyNotReadyCard";
+import { IfvgForwardEvidenceCard } from "@/components/common/IfvgForwardEvidenceCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2871,6 +2872,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
         {dashboardAdvancedOpen ? (
           <>
         <div className="space-y-4">
+          <IfvgForwardEvidenceCard />
           <WhyNotReadyCard context="command_center" snapshot={runtimeSnapshot} />
           {researchCommitteeReport ? (
             <section className="rounded-xl border border-white/10 bg-slate-950/55 p-4">

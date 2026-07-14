@@ -10,6 +10,7 @@ export {
   loadActiveResearchCalibrationStorage,
   loadSelfImprovementState,
   rejectCalibrationProposal,
+  reviewFrozenCalibrationProposal,
   resolveActiveBacktestConfig,
   resolveActiveResearchConfig,
   revertCalibrationProposal,

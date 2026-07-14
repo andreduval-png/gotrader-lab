@@ -10,6 +10,7 @@ import { SafetyLockBanner } from "@/components/common/SafetyLockBanner";
 import { SourceStatusBanner } from "@/components/common/SourceStatusBanner";
 import { ValidationChainCard } from "@/components/common/ValidationChainCard";
 import { TechnicalDetails } from "@/components/common/TechnicalDetails";
+import { IfvgForwardEvidenceCard } from "@/components/common/IfvgForwardEvidenceCard";
 import { OpenClawProposalIntentPanel } from "@/components/advisor/OpenClawProposalIntentPanel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1050,6 +1051,7 @@ export function SelfImprovementView() {
 
       <SourceStatusBanner />
       <ValidationChainCard testId="self-improvement-validation-chain" />
+      <IfvgForwardEvidenceCard context="self_improvement" />
 
       <OpenClawProposalIntentPanel
         context="self_improvement"
