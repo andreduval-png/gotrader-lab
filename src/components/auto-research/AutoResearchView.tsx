@@ -49,6 +49,7 @@ import {
   type ResearchRuntimeSnapshot
 } from "@/lib/runtime";
 import { formatPercent, formatSigned, safeArray, safeTopN } from "@/lib/utils";
+import { buildForwardScenarioMapFromRuntime } from "@/lib/forwardScenario";
 
 const searchModeOptions = autoResearchSearchModes.map((mode) => ({
   label: mode.replace(/_/g, " "),
@@ -329,6 +330,7 @@ export function AutoResearchView() {
         dataSource: activeCandleSource.label,
         candleWindow: `${activeCandleSource.researchWindowCandles} raw window / ${activeCandleSource.processedCandleCount} processed ${activeCandleSource.appliedSettings.targetTimeframe} candles`,
         activeCalibrationIdUsed: activeCalibrationId,
+        forwardScenarioMap: runtimeSnapshot ? buildForwardScenarioMapFromRuntime(runtimeSnapshot) : undefined,
         signal: controller.signal,
         onCheckpoint: setLiveCheckpoint,
         timeoutMs: activeCandleSource.mode === "imported" ? 25_000 : 45_000

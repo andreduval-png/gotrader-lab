@@ -67,6 +67,7 @@ import { classifyMarketRegime } from "@/lib/regime";
 import type { Candle, MarketBias, MarketStructureEvent, SessionContext } from "@/lib/types";
 import { queueValidationChainEntry, saveValidationChainEntry } from "@/lib/validationChain";
 import { ValidationChainCard } from "@/components/common/ValidationChainCard";
+import { ForwardScenarioMapCard } from "@/components/common/ForwardScenarioMapCard";
 import { Button } from "@/components/ui/button";
 import {
   CURRENT_OPPORTUNITY_SCAN_UPDATED_EVENT,
@@ -74,6 +75,7 @@ import {
   type CurrentOpportunity,
   type CurrentOpportunityScan
 } from "@/lib/currentOpportunity";
+import { buildForwardScenarioMap } from "@/lib/forwardScenario";
 
 const formatTime = (timestamp: string) => timestamp.slice(11, 16);
 
@@ -381,6 +383,9 @@ export function ICTLab() {
   const latestSession = analysis.sessions[analysis.sessions.length - 1];
   const latestStructure = analysis.structureEvents[analysis.structureEvents.length - 1];
   const latestSweep = analysis.sweeps[analysis.sweeps.length - 1];
+  const hasRecentLiquiditySweep = Boolean(
+    latestSweep && latestSweep.index >= Math.max(0, activeCandles.length - 48)
+  );
   const unmitigatedGaps = analysis.gaps.filter((gap) => !gap.mitigated);
   const sessionCounts = analysis.sessions.reduce<Record<string, number>>((counts, session) => {
     counts[session.session] = (counts[session.session] ?? 0) + 1;
@@ -411,6 +416,87 @@ export function ICTLab() {
     [activeCandles, analysis, regimeClassification.dataQuality, regimeClassification.stableLabel, sessionTimeMapping]
   );
   const expansionReplay = grinchProfileDiagnostics.expansionReplayDiagnostics;
+  const forwardScenarioMap = useMemo(() => {
+    const ifvg = currentOpportunityScan?.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
+    const draw = analysis.grinchPhase1.htfDrawOnLiquidity;
+    const pdArray = analysis.grinchPhase1.activePdArrays[0];
+    const ifvgState = !ifvg
+      ? "absent" as const
+      : ifvg.status === "valid_candidate"
+        ? "confirmed" as const
+        : ifvg.status === "rejected"
+          ? "invalidated" as const
+          : "partial" as const;
+    return buildForwardScenarioMap({
+      timestamp: latestCandle?.timestamp,
+      sourceProvider: sourceType,
+      requestedSymbol: mt5RequestedSymbol,
+      brokerSymbol: mt5BrokerSymbol,
+      timeframe: latestCandle?.timeframe ?? displaySource.activeResearchSource.timeframe,
+      sourceFingerprint: displaySource.activeResearchSource.fingerprint,
+      currentSession: latestSession?.session,
+      regime: regimeClassification.stableLabel,
+      direction: latestStructure?.direction ?? "neutral",
+      confirmedSetup: ifvg?.status === "valid_candidate",
+      liquidityDraw: draw,
+      liquidityDrawDirection: draw === "buyside" ? "bullish" : draw === "sellside" ? "bearish" : "neutral",
+      liquiditySwept: hasRecentLiquiditySweep,
+      mitigationDetected: analysis.grinchPhase1.entryConfirmation.pdArrayRespect,
+      displacementConfirmed: analysis.grinchPhase1.entryConfirmation.displacementAway,
+      consolidationDetected: analysis.grinchConsolidationProfile.consolidationRange.isTight,
+      rangeBound: /range/i.test(regimeClassification.stableLabel),
+      twelveAmOpen: analysis.grinchPhase1.twelveAmOpenState.price,
+      sundayOpen: analysis.grinchPhase1.sundayOpenState.price,
+      londonRange: {
+        high: expansionReplay.londonInteraction.londonHigh,
+        low: expansionReplay.londonInteraction.londonLow
+      },
+      recentRange: {
+        high: analysis.grinchPhase1.dealingRange.rangeHigh,
+        low: analysis.grinchPhase1.dealingRange.rangeLow
+      },
+      premiumDiscountContext: analysis.grinchPhase1.dealingRange.premiumDiscountState,
+      ifvgFreshRetestState: ifvgState,
+      ifvgDirection: ifvg?.side === "long" ? "bullish" : ifvg?.side === "short" ? "bearish" : "neutral",
+      ifvgProfileStrength: ifvgState === "absent" ? "unvalidated" : "frozen_validated",
+      model1State:
+        analysis.grinchPhase1.modelOneState === "not_present"
+          ? "absent"
+          : analysis.grinchPhase1.modelOneState === "invalid"
+            ? "invalidated"
+            : analysis.grinchPhase1.modelOneState === "valid"
+              ? "confirmed"
+              : "partial",
+      grinchProfile: analysis.grinchStrategyScore.activeProfile,
+      conditionalEntryZone: pdArray ? { lower: Math.min(pdArray.startPrice, pdArray.endPrice), upper: Math.max(pdArray.startPrice, pdArray.endPrice) } : undefined,
+      conditionalTargets: [
+        { label: analysis.grinchPhase1.targetHierarchy.target1 },
+        { label: analysis.grinchPhase1.targetHierarchy.target2 }
+      ],
+      missingConfirmations: [
+        ...analysis.grinchPhase1.missingEvidence,
+        ...analysis.grinchReversalProfile.missingEvidence,
+        ...analysis.grinchConsolidationProfile.missingEvidence
+      ],
+      blockers: [analysis.grinchStrategyScore.hardGateReason, expansionReplay.expansionTest.failureReason].filter((item): item is string => Boolean(item)),
+      warnings: analysis.grinchStrategyScore.reasons.slice(0, 4)
+    });
+  }, [
+    analysis,
+    currentOpportunityScan?.opportunities,
+    displaySource.activeResearchSource.fingerprint,
+    displaySource.activeResearchSource.timeframe,
+    expansionReplay,
+    hasRecentLiquiditySweep,
+    latestCandle?.timeframe,
+    latestCandle?.timestamp,
+    latestSession?.session,
+    latestStructure?.direction,
+    mt5BrokerSymbol,
+    mt5RequestedSymbol,
+    regimeClassification.stableLabel,
+    sourceType
+  ]);
 
   useEffect(() => {
     const refreshTradingViewStatus = () => {
@@ -607,6 +693,7 @@ export function ICTLab() {
 
       <SourceStatusBanner />
       <ValidationChainCard />
+      <ForwardScenarioMapCard map={forwardScenarioMap} context="ict_lab" />
       <Card data-testid="ict-lab-current-opportunities" className="border-emerald-300/20 bg-emerald-300/5">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

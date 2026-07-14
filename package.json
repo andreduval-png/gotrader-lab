@@ -127,6 +127,7 @@
     "test:walk-forward-preflight": "node scripts/test-walk-forward-preflight.mjs",
     "test:detector-profile-walk-forward": "node scripts/test-detector-profile-walk-forward.mjs",
     "test:forward-evidence-ledger": "node scripts/test-forward-evidence-ledger.mjs",
+    "test:forward-scenario-map": "node scripts/test-forward-scenario-map.mjs",
     "test:advisor-provider-status": "node scripts/test-advisor-provider-status.mjs",
     "test:openclaw-pilot-dry-run": "node scripts/test-openclaw-pilot-dry-run.mjs",
     "test:paper-demo-operations": "node scripts/test-paper-demo-operations.mjs",

@@ -7,6 +7,7 @@ import {
   type ResearchDecisionVerdict
 } from "@/lib/researchDecisionLog";
 import { safeTopN, uid } from "@/lib/utils";
+import { buildForwardScenarioMapFromRuntime } from "@/lib/forwardScenario";
 
 import type { ResearchCommitteeReport, ResearchCommitteeSection } from "./researchCommitteeTypes";
 import { buildResearchReadinessDistinction } from "./researchReadinessDistinction";
@@ -113,6 +114,9 @@ export function buildResearchCommitteeReport(snapshot: ResearchRuntimeSnapshot):
   const bearCase = buildBearCase(entry);
   const readinessDistinction = buildResearchReadinessDistinction(entry);
   const paperDemoChecklist = buildPaperDemoChecklist(snapshot);
+  const forwardScenarioMap = buildForwardScenarioMapFromRuntime(snapshot);
+  const scenarioThesis = forwardScenarioMap.primaryScenario.thesis;
+  const scenarioGap = forwardScenarioMap.missingConfirmations[0] ?? "No additional confirmation identified.";
   const conservativeStatus = entry.blockers.length ? "blocking" : "cautious";
   const balancedStatus = entry.finalResearchVerdict === "reject_current_setup" ? "blocking" : "cautious";
   const riskChairChecklistBlocker = paperDemoChecklist.paperDemoCandidate
@@ -126,8 +130,15 @@ export function buildResearchCommitteeReport(snapshot: ResearchRuntimeSnapshot):
     sourceFingerprint: entry.source.sourceFingerprint,
     decisionLogEntry: entry,
     reflectionMemory: reflection,
-    bullCase,
-    bearCase,
+    forwardScenarioMap,
+    bullCase: {
+      ...bullCase,
+      evidence: compact([...bullCase.evidence, `Forward scenario: ${scenarioThesis}`], bullCase.evidence[0])
+    },
+    bearCase: {
+      ...bearCase,
+      evidence: compact([...bearCase.evidence, `Forecast remains conditional: ${scenarioGap}`], bearCase.evidence[0])
+    },
     readinessDistinction,
     paperDemoChecklist,
     riskCommittee: {
@@ -162,14 +173,14 @@ export function buildResearchCommitteeReport(snapshot: ResearchRuntimeSnapshot):
           ? `${readinessDistinction.riskChairSummary} ${riskChairChecklistBlocker}`
           : entry.finalResearchVerdict === "reject_current_setup"
           ? "Risk chair rejects the current setup for this window."
-          : "Risk chair permits research-only follow-up under existing gates.",
+          : `Risk chair permits research-only follow-up under existing gates. Primary scenario remains ${forwardScenarioMap.currentDecisionState.replace(/_/g, " ")}.`,
       blockers: entry.blockers
     },
     finalResearchChairSynthesis: {
       verdict: entry.finalResearchVerdict,
       summary: readinessDistinction.paperDemoCandidate
-        ? entry.finalResearchVerdictReason
-        : `${entry.finalResearchVerdictReason} ${readinessDistinction.riskChairSummary}`,
+        ? `${entry.finalResearchVerdictReason} Forward scenario: ${scenarioThesis}`
+        : `${entry.finalResearchVerdictReason} ${readinessDistinction.riskChairSummary} Forward scenario: ${scenarioThesis}`,
       nextActions: readinessDistinction.paperDemoCandidate
         ? nextActionsFor(entry.finalResearchVerdict, entry)
         : [

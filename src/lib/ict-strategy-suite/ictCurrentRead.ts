@@ -1,4 +1,5 @@
 import type { ResearchRuntimeSnapshot } from "../runtime";
+import { buildForwardScenarioMapFromCurrentRead } from "../forwardScenario";
 import { buildIctAdvisorPacketFromRuntime } from "./ictAdvisorEngine";
 import type { IctAdvisorPacket, IctAdvisorSignal } from "./ictAdvisorTypes";
 import { detectIctOpportunities } from "./ictOpportunityDetection";
@@ -492,7 +493,7 @@ export const buildUnavailableIctCurrentRead = (
 ): IctCurrentRead => {
   const opportunity = noOpportunity();
   const universalRecognition = unavailableRecognition();
-  return ({
+  const currentRead: IctCurrentRead = {
   researchOnly: true,
   packetSource: "unavailable",
   requestedSymbol: "MNQ",
@@ -623,7 +624,9 @@ export const buildUnavailableIctCurrentRead = (
   ...latestResearchSummaryFor(latestState),
   authority,
   safety
-});
+  };
+  currentRead.forwardScenarioMap = buildForwardScenarioMapFromCurrentRead(currentRead);
+  return currentRead;
 };
 
 export const buildIctCurrentReadFromPacket = (packet?: IctAdvisorPacket, latestState?: IctLatestResearchState): IctCurrentRead => {
@@ -853,7 +856,7 @@ export const buildIctCurrentReadFromPacket = (packet?: IctAdvisorPacket, latestS
     })
   );
 
-  return {
+  const currentRead: IctCurrentRead = {
     researchOnly: true,
     packetSource,
     requestedSymbol: packet.requestedSymbol,
@@ -1039,6 +1042,8 @@ export const buildIctCurrentReadFromPacket = (packet?: IctAdvisorPacket, latestS
     authority,
     safety
   };
+  currentRead.forwardScenarioMap = buildForwardScenarioMapFromCurrentRead(currentRead);
+  return currentRead;
 };
 
 export const buildIctCurrentReadFromRuntime = async (

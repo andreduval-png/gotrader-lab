@@ -5,6 +5,7 @@ import type {
   ResearchReflectionMemory
 } from "@/lib/researchDecisionLog";
 import type { PaperDemoChecklistSummary } from "@/lib/readiness";
+import type { ForwardScenarioMap } from "@/lib/forwardScenario";
 
 import type { ResearchReadinessDistinction } from "./researchReadinessDistinction";
 
@@ -40,6 +41,7 @@ export interface ResearchCommitteeReport {
   sourceFingerprint?: string;
   decisionLogEntry: ResearchDecisionLogEntry;
   reflectionMemory: ResearchReflectionMemory;
+  forwardScenarioMap: ForwardScenarioMap;
   bullCase: ResearchCommitteeSection;
   bearCase: ResearchCommitteeSection;
   readinessDistinction: ResearchReadinessDistinction;

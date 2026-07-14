@@ -1,4 +1,5 @@
 import type { IctBias, IctLocation, IctSide } from "./ictAdvisorTypes";
+import type { ForwardScenarioMap } from "../forwardScenario";
 import type { IctApprovedCandidateStatus, IctHtfAlignmentBreakdown } from "./ictApprovedSetupProfileTypes";
 import type { IctCmdIndependentDateGateStatus } from "./ictCmdIndependentDateGateTypes";
 import type {
@@ -106,6 +107,7 @@ export interface IctCurrentRead {
   paperOnly: boolean;
   readinessSummary: IctReadinessSummary;
   executionAllowed: false;
+  forwardScenarioMap?: ForwardScenarioMap;
   approvalScore?: number;
   confidence?: number;
   rrEstimate?: number;

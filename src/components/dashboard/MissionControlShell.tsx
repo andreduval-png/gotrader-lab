@@ -18,6 +18,7 @@ import {
 } from "@/components/charts/TradingChart";
 import { WhyNotReadyCard } from "@/components/common/WhyNotReadyCard";
 import { IfvgForwardEvidenceCard } from "@/components/common/IfvgForwardEvidenceCard";
+import { ForwardScenarioMapCard } from "@/components/common/ForwardScenarioMapCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2260,6 +2261,11 @@ export function MissionControlShell({ state }: { state: LabState }) {
           </div>
         </div>
         <IctAdvisorSummaryPanel mode="compact" snapshot={runtimeSnapshot} packetOverride={activateMarketResult?.advisorPacket} />
+        <ForwardScenarioMapCard
+          compact
+          map={activateMarketResult?.currentRead?.forwardScenarioMap ?? researchCommitteeReport?.forwardScenarioMap}
+          context="dashboard"
+        />
         <LLMAdvisoryReviewPanel mode="compact" snapshot={runtimeSnapshot} onAdvisoryEvent={addDataConnectionEvent} />
         <section data-testid="dashboard-paper-demo-operations-card" className="rounded-2xl border border-white/[0.07] bg-card/70 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">

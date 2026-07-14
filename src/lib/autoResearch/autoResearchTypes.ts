@@ -20,6 +20,7 @@ import type { Candle, ICTScoringWeights } from "@/lib/types";
 import type { ValidationSuiteReport } from "@/lib/validation";
 import type { WalkForwardFollowUpSearchPlan } from "@/lib/walkForward/walkForwardTypes";
 import type { DetectorProfileWalkForwardResult } from "@/lib/walkForward/detectorProfileWalkForwardTypes";
+import type { ForwardScenarioMap } from "@/lib/forwardScenario";
 
 export type AutoResearchSearchMode =
   | "quick"
@@ -408,6 +409,7 @@ export interface AutoResearchRunOptions {
   dataSource?: string;
   candleWindow?: string;
   activeCalibrationIdUsed?: string;
+  forwardScenarioMap?: ForwardScenarioMap;
   onCandidateEvaluated?: (progress: AutoResearchProgressSnapshot) => void;
   onCheckpoint?: (checkpoint: AutoResearchExecutionCheckpoint) => void;
   checkpointPersistence?: "storage" | "memory_only";

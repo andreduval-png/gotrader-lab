@@ -13,6 +13,7 @@ import { scoreCandidateConfig } from "@/lib/autoResearch/scoreCandidateConfig";
 import { selectBestCandidate } from "@/lib/autoResearch/selectBestCandidate";
 import type {
   AutoResearchCandidateResult,
+  AutoResearchCandidateConfig,
   AutoResearchCycle,
   AutoResearchGrinchComparison,
   AutoResearchAdaptiveOutcome,
@@ -24,6 +25,10 @@ import type {
   AutoResearchRunOptions,
   AutoResearchState
 } from "@/lib/autoResearch/autoResearchTypes";
+import {
+  recommendedAutoResearchCandidateFamilyForScenarioMap,
+  type ForwardScenarioMap
+} from "@/lib/forwardScenario";
 import {
   loadBacktestConfig,
   diagnoseTradeGeneration,
@@ -72,6 +77,20 @@ export const AUTO_RESEARCH_STORAGE_KEY = "gotrader_ai_lab_auto_research_state";
 export const AUTO_RESEARCH_UPDATED_EVENT = "gotrader-ai-lab-auto-research-updated";
 
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+export const prioritizeAutoResearchCandidatesByForwardScenario = (
+  candidates: AutoResearchCandidateConfig[],
+  map?: ForwardScenarioMap
+) => {
+  const family = recommendedAutoResearchCandidateFamilyForScenarioMap(map);
+  if (!family) return candidates;
+  const prioritized = candidates.filter((candidate) => candidate.candidateFamily === family);
+  if (!prioritized.length) return candidates;
+  return [
+    ...prioritized,
+    ...candidates.filter((candidate) => candidate.candidateFamily !== family)
+  ];
+};
 
 class AutoResearchCanceledError extends Error {
   constructor() {
@@ -1825,7 +1844,10 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
       const passFailedGates = passNumber === 1 ? [] : failedGatesForNextPass;
       const passCandidateConfigs =
         passNumber === 1
-          ? generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount)
+          ? prioritizeAutoResearchCandidatesByForwardScenario(
+              generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount),
+              options.forwardScenarioMap
+            )
           : generateAdaptiveCandidateConfigs({
               baseline: baselineConfig,
               failedGates: passFailedGates,

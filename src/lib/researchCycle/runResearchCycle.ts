@@ -86,6 +86,7 @@ import { safeArray, safeTopN, uid } from "@/lib/utils";
 import { runValidationSuite, saveLatestValidationReport } from "@/lib/validation";
 import type { ValidationSuiteReport } from "@/lib/validation";
 import { latestWalkForwardRun, loadWalkForwardState } from "@/lib/walkForward";
+import { buildForwardScenarioMap } from "@/lib/forwardScenario";
 
 export const RESEARCH_CYCLE_STORAGE_KEY = "gotrader_ai_lab_research_cycle_state";
 export const RESEARCH_CYCLE_UPDATED_EVENT = "gotrader-ai-lab-research-cycle-updated";
@@ -1099,6 +1100,48 @@ export async function runResearchCycle({
         dataSource: dataSourceLabel,
         candleWindow: `${activeCandleSource.researchWindowCandles} raw window / ${activeCandleSource.processedCandleCount} processed ${activeCandleSource.appliedSettings.targetTimeframe} candles`,
         activeCalibrationIdUsed: activeResearchConfig.activeCalibrationId,
+        forwardScenarioMap: buildForwardScenarioMap({
+          timestamp: run.startedAt,
+          sourceProvider: activeCandleSource.mode,
+          requestedSymbol: generatedThesis.thesis.symbol,
+          brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
+          timeframe: generatedThesis.thesis.timeframe,
+          regime: generatedThesis.thesis.regimeClassification?.stableLabel ?? generatedThesis.thesis.marketRegime,
+          evidenceQuality: generatedThesis.thesis.confidence * 100,
+          direction: generatedThesis.thesis.finalBias,
+          confirmedSetup: false,
+          liquidityDraw: `Conditional liquidity objective ${generatedThesis.thesis.targetLiquidity}`,
+          liquidityDrawDirection: generatedThesis.thesis.finalBias,
+          liquiditySwept: generatedThesis.thesis.ictContext.liquiditySweep,
+          mitigationDetected: false,
+          displacementConfirmed: generatedThesis.thesis.ictContext.displacement === "strong",
+          premiumDiscountContext: generatedThesis.thesis.ictContext.premiumDiscount,
+          ifvgFreshRetestState: generatedThesis.thesis.ictContext.fairValueGap === "none" ? "absent" : "partial",
+          ifvgDirection:
+            generatedThesis.thesis.ictContext.fairValueGap === "bullish"
+              ? "bullish"
+              : generatedThesis.thesis.ictContext.fairValueGap === "bearish"
+                ? "bearish"
+                : "neutral",
+          ifvgZone: {
+            lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
+            upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
+          },
+          ifvgProfileStrength: "unvalidated",
+          conditionalEntryZone: {
+            lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
+            upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
+          },
+          conditionalStopReference: generatedThesis.thesis.invalidationLevel,
+          conditionalTargets: [{ label: "Conditional thesis liquidity target", price: generatedThesis.thesis.targetLiquidity }],
+          missingConfirmations: [
+            generatedThesis.thesis.ictContext.liquiditySweep ? undefined : "Liquidity sweep is not confirmed.",
+            generatedThesis.thesis.ictContext.displacement === "strong" ? undefined : "Strong displacement is not confirmed.",
+            generatedThesis.thesis.ictContext.fairValueGap === "none" ? "A qualifying FVG is not confirmed." : "A fresh FVG retest is not confirmed."
+          ].filter((item): item is string => Boolean(item)),
+          blockers: generatedThesis.thesis.finalBias === "neutral" ? ["Directional thesis is neutral."] : [],
+          warnings: [generatedThesis.thesis.riskNotes]
+        }),
         signal,
         timeoutMs: autoResearchTimeoutMs ?? (activeCandleSource.mode === "imported" && !advancedFullResearchMode ? 25_000 : 45_000),
         checkpointPersistence: autoResearchCheckpointPersistence,
