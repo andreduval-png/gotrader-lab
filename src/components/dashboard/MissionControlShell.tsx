@@ -26,8 +26,10 @@ import { Select } from "@/components/ui/select";
 import {
   AUTONOMOUS_RESEARCH_UPDATED_EVENT,
   latestAutonomousResearchRun,
+  loadAutonomousCalibrationAutoApplyPreference,
   loadAutonomousResearchState,
   runAutonomousResearchLoop,
+  saveAutonomousCalibrationAutoApplyPreference,
   type AutonomousResearchSettings,
   type AutonomousResearchRun,
   type AutonomousResearchState
@@ -611,7 +613,9 @@ export function MissionControlShell({ state }: { state: LabState }) {
   const [abortController, setAbortController] = useState<AbortController>();
   const [maxIterations, setMaxIterations] = useState("1");
   const [noImprovementStop, setNoImprovementStop] = useState("1");
-  const [autoApplyPolicyEnabled, setAutoApplyPolicyEnabled] = useState(false);
+  const [autoApplyPolicyEnabled, setAutoApplyPolicyEnabled] = useState(
+    () => loadAutonomousCalibrationAutoApplyPreference().enabled
+  );
   const [advancedFullResearchMode, setAdvancedFullResearchMode] = useState(false);
   const [tradingViewBusy, setTradingViewBusy] = useState(false);
   const [tradingViewOperationMessage, setTradingViewOperationMessage] = useState(TRADINGVIEW_FEED_INACTIVE_MESSAGE);
@@ -3799,9 +3803,14 @@ export function MissionControlShell({ state }: { state: LabState }) {
                 <input
                   type="checkbox"
                   checked={autoApplyPolicyEnabled}
-                  onChange={(event) => setAutoApplyPolicyEnabled(event.target.checked)}
+                  onChange={(event) => {
+                    const preference = saveAutonomousCalibrationAutoApplyPreference(
+                      event.target.checked
+                    );
+                    setAutoApplyPolicyEnabled(preference.enabled);
+                  }}
                 />
-                Policy-gated auto-apply
+                Explicit research calibration auto-apply
               </label>
               <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/45 p-3 text-sm text-slate-200">
                 <input
@@ -3812,6 +3821,11 @@ export function MissionControlShell({ state }: { state: LabState }) {
                 Advanced full research
               </label>
             </div>
+            <p className="mt-3 text-xs text-slate-400">
+              {autoApplyPolicyEnabled
+                ? "Research calibration auto-apply is enabled for allowlisted research fields only. It cannot enable execution, broker authority, readiness override, or mutate frozen profiles."
+                : "Research calibration auto-apply is OFF. GoTrader may propose and validate changes but will not apply them unless explicitly enabled."}
+            </p>
           </section>
           <MissionControlPipeline stages={pipelineStages} />
         </div>

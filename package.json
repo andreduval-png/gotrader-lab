@@ -123,6 +123,7 @@
     "test:openclaw-phone-bridge": "node scripts/test-openclaw-phone-bridge-routing.mjs",
     "test:openclaw-skill-server": "node scripts/test-openclaw-skill-server.mjs",
     "test:auto-research-candidate": "node scripts/run-auto-research-candidate.mjs",
+    "test:autonomous-calibration-auto-apply": "node scripts/test-autonomous-calibration-auto-apply.mjs",
     "test:regime-classifier": "node scripts/test-regime-classifier.mjs",
     "test:source-status": "node scripts/test-source-status.mjs",
     "test:validation-chain": "node scripts/test-validation-chain.mjs",

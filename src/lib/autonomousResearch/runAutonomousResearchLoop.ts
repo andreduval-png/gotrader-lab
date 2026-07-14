@@ -8,6 +8,7 @@ import {
   evaluateAutoApplyEligibility,
   markProposalAutoApplyBlocked
 } from "@/lib/autonomousResearch/autoApplyResearchCalibration";
+import { loadAutonomousCalibrationAutoApplyPreference } from "@/lib/autonomousResearch/autonomousCalibrationAutoApplyPolicy";
 import { diagnoseAutonomousResearchBlockers, summarizeScenarioEvaluation } from "@/lib/autonomousResearch/evaluateScenarioFamily";
 import { saveAutonomousResearchRun } from "@/lib/autonomousResearch/autonomousResearchStorage";
 import { selectNextScenarioSet } from "@/lib/autonomousResearch/selectNextScenarioSet";
@@ -277,11 +278,14 @@ export async function runAutonomousResearchLoop({
   onUpdate
 }: RunAutonomousResearchLoopOptions): Promise<AutonomousResearchRun> {
   const requestedMaxIterations = Math.max(1, Math.min(8, partialSettings.maxIterations ?? defaultSettings.maxIterations));
+  const persistedAutoApplyPreference = loadAutonomousCalibrationAutoApplyPreference();
   const settings: AutonomousResearchSettings = {
     ...defaultSettings,
     ...partialSettings,
     maxIterations: partialSettings.advancedFullResearchMode ? requestedMaxIterations : 1,
-    noImprovementStop: Math.max(1, Math.min(5, partialSettings.noImprovementStop ?? defaultSettings.noImprovementStop))
+    noImprovementStop: Math.max(1, Math.min(5, partialSettings.noImprovementStop ?? defaultSettings.noImprovementStop)),
+    autoApplyPolicyEnabled:
+      partialSettings.autoApplyPolicyEnabled === true && persistedAutoApplyPreference.enabled
   };
   const runId = uid("autonomous_research");
   let noImprovementCount = 0;
@@ -879,7 +883,9 @@ export async function runAutonomousResearchLoop({
           eligibility,
           proposal,
           runId,
-          snapshot: snapshotAfter
+          snapshot: snapshotAfter,
+          runOptInEnabled: settings.autoApplyPolicyEnabled,
+          cancellationRequested: Boolean(signal?.aborted)
         });
         driftEntry = applied.driftEntry;
         finalEligibility = applied.eligibility;

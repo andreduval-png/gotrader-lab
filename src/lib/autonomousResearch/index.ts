@@ -18,6 +18,15 @@ export {
   markProposalAutoApplyBlocked
 } from "@/lib/autonomousResearch/autoApplyResearchCalibration";
 export {
+  AUTONOMOUS_CALIBRATION_ALLOWED_FIELDS,
+  AUTONOMOUS_CALIBRATION_APPLY_NOT_ENABLED,
+  AUTONOMOUS_CALIBRATION_AUTO_APPLY_STORAGE_KEY,
+  loadAutonomousCalibrationAutoApplyPreference,
+  saveAutonomousCalibrationAutoApplyPreference,
+  summarizeAutonomousCalibrationPermissions,
+  validateAutonomousCalibrationFinalApply
+} from "@/lib/autonomousResearch/autonomousCalibrationAutoApplyPolicy";
+export {
   AUTONOMOUS_RESEARCH_STORAGE_KEY,
   AUTONOMOUS_RESEARCH_UPDATED_EVENT,
   clearAutonomousResearchHistory,

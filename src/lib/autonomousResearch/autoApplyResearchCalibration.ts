@@ -21,6 +21,11 @@ import type { AutoApplyEligibility, AutonomousCalibrationDriftEntry } from "@/li
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
 import { safeArray, uid } from "@/lib/utils";
 import type { WalkForwardRun } from "@/lib/walkForward";
+import {
+  AUTONOMOUS_CALIBRATION_APPLY_NOT_ENABLED,
+  loadAutonomousCalibrationAutoApplyPreference,
+  validateAutonomousCalibrationFinalApply
+} from "@/lib/autonomousResearch/autonomousCalibrationAutoApplyPolicy";
 
 const allowedChangeKeys = new Set([
   "confluenceThreshold",
@@ -31,9 +36,7 @@ const allowedChangeKeys = new Set([
   "allowLong",
   "allowShort",
   "ictScoringWeights",
-  "agentWeights",
-  "confidencePenaltyRules",
-  "evidenceQualityPenaltyRules"
+  "agentWeights"
 ]);
 
 const changeDelta = (a?: number, b?: number) =>
@@ -118,7 +121,12 @@ export function evaluateAutoApplyEligibility({
   const priorPatchMatches =
     previousAppliedPatch && JSON.stringify(previousAppliedPatch) === JSON.stringify(proposal.proposedChanges);
 
-  if (!autoApplyPolicyEnabled) reasons.push("Autonomous auto-apply policy mode is disabled.");
+  if (!autoApplyPolicyEnabled) {
+    reasons.push(
+      AUTONOMOUS_CALIBRATION_APPLY_NOT_ENABLED,
+      "Research calibration auto-apply is OFF; proposal generation, scoring, and dry-run validation remain available."
+    );
+  }
   if (proposal.proposalIntent !== "research_calibration_candidate") {
     reasons.push("Only research calibration candidates can be auto-applied.");
   }
@@ -173,12 +181,16 @@ export function autoApplyResearchCalibration({
   eligibility,
   proposal,
   runId,
-  snapshot
+  snapshot,
+  runOptInEnabled = false,
+  cancellationRequested = false
 }: {
   eligibility: AutoApplyEligibility;
   proposal?: CalibrationProposal;
   runId: string;
   snapshot: ResearchRuntimeSnapshot;
+  runOptInEnabled?: boolean;
+  cancellationRequested?: boolean;
 }) {
   if (!proposal || !eligibility.eligible) {
     return {
@@ -188,8 +200,54 @@ export function autoApplyResearchCalibration({
   }
 
   const baselineConfig = snapshot.activeConfig.resolvedBacktestConfig;
-  const activeCalibration = saveApprovedResearchCalibration(proposal, baselineConfig);
   const state = loadSelfImprovementState();
+  const persistedProposal = state.proposals.find(
+    (item) => item.proposalId === proposal.proposalId
+  );
+  const persistedProposalMatches = Boolean(
+    persistedProposal &&
+      persistedProposal.timestamp === proposal.timestamp &&
+      persistedProposal.status === proposal.status &&
+      JSON.stringify(persistedProposal.proposedChanges) ===
+        JSON.stringify(proposal.proposedChanges)
+  );
+  const finalGuard = validateAutonomousCalibrationFinalApply({
+    preference: loadAutonomousCalibrationAutoApplyPreference(),
+    runOptInEnabled,
+    eligibilityPolicyEnabled: eligibility.policyModeEnabled,
+    eligibilityApproved: eligibility.eligible,
+    cancellationRequested,
+    proposalId: proposal.proposalId,
+    eligibilityProposalId: eligibility.proposalId,
+    persistedProposalFound: Boolean(persistedProposal),
+    persistedProposalMatches,
+    proposalStatus: persistedProposal?.status ?? proposal.status,
+    proposedChanges: proposal.proposedChanges,
+    allowedAgentWeightFields: Object.keys(baselineConfig.agentWeights),
+    baseProfileId: proposal.baselineConfig.strategyProfile,
+    targetProfileId:
+      proposal.proposedChanges.strategyProfile ?? proposal.proposedConfig.strategyProfile,
+    executionAuthority: proposal.executionAuthority,
+    brokerAuthority: proposal.brokerAuthority,
+    readinessOverrideAuthority: proposal.readinessOverrideAuthority
+  });
+
+  if (!finalGuard.allowed) {
+    const blockedEligibility: AutoApplyEligibility = {
+      ...eligibility,
+      eligible: false,
+      applied: false,
+      status: "blocked",
+      reasons: [...finalGuard.blockerCodes, ...finalGuard.details]
+    };
+    markProposalAutoApplyBlocked(proposal, blockedEligibility);
+    return {
+      eligibility: blockedEligibility,
+      driftEntry: undefined
+    };
+  }
+
+  const activeCalibration = saveApprovedResearchCalibration(proposal, baselineConfig);
   const updated: CalibrationProposal = {
     ...proposal,
     status: "accepted",

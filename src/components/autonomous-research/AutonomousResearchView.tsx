@@ -14,8 +14,10 @@ import {
   AUTONOMOUS_RESEARCH_UPDATED_EVENT,
   clearAutonomousResearchHistory,
   latestAutonomousResearchRun,
+  loadAutonomousCalibrationAutoApplyPreference,
   loadAutonomousResearchState,
   runAutonomousResearchLoop,
+  saveAutonomousCalibrationAutoApplyPreference,
   type AutonomousResearchRun,
   type AutonomousResearchState
 } from "@/lib/autonomousResearch";
@@ -63,7 +65,9 @@ export function AutonomousResearchView({ state }: { state: LabState }) {
   const [abortController, setAbortController] = useState<AbortController>();
   const [maxIterations, setMaxIterations] = useState("1");
   const [noImprovementStop, setNoImprovementStop] = useState("1");
-  const [autoApplyPolicyEnabled, setAutoApplyPolicyEnabled] = useState(false);
+  const [autoApplyPolicyEnabled, setAutoApplyPolicyEnabled] = useState(
+    () => loadAutonomousCalibrationAutoApplyPreference().enabled
+  );
   const [advancedFullResearchMode, setAdvancedFullResearchMode] = useState(false);
   const latestRun = liveRun ?? latestAutonomousResearchRun(autonomyState);
   const latestAutoResearch = latestAutoResearchCycle(loadAutoResearchState());
@@ -217,9 +221,14 @@ export function AutonomousResearchView({ state }: { state: LabState }) {
               <input
                 type="checkbox"
                 checked={autoApplyPolicyEnabled}
-                onChange={(event) => setAutoApplyPolicyEnabled(event.target.checked)}
+                onChange={(event) => {
+                  const preference = saveAutonomousCalibrationAutoApplyPreference(
+                    event.target.checked
+                  );
+                  setAutoApplyPolicyEnabled(preference.enabled);
+                }}
               />
-              Enable policy-gated auto-apply
+              Explicitly enable research calibration auto-apply
             </label>
             <label className="flex items-center gap-2 rounded-lg border border-border bg-background/45 p-3 text-sm">
               <input
@@ -249,12 +258,13 @@ export function AutonomousResearchView({ state }: { state: LabState }) {
           {autoApplyPolicyEnabled ? (
             <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
               <ShieldAlert className="mr-2 inline h-4 w-4" aria-hidden="true" />
-              Policy-gated auto-apply can apply only safe research calibration fields. It still cannot approve readiness,
-              enable demo/live trading, or send go-trader handoffs.
+              Research calibration auto-apply is enabled for allowlisted research fields only. It cannot enable
+              execution, broker authority, readiness override, or mutate frozen profiles.
             </div>
           ) : (
             <div className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 p-3 text-sm text-cyan-100">
-              Auto-apply is disabled. The loop will run research and mark proposals as blocked/pending for review.
+              Research calibration auto-apply is OFF. GoTrader may propose and validate changes but will not apply
+              them unless explicitly enabled.
             </div>
           )}
         </CardContent>
