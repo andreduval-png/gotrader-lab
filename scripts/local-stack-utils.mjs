@@ -18,6 +18,7 @@ export const stackHost = "127.0.0.1";
 export const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 export const pythonCommand = process.env.PYTHON || "python";
 export const mt5UpstreamDir = process.env.MT5_MCP_SERVER_DIR || "C:/Users/andre/metatrader-mcp-server";
+export const mt5TerminalPath = process.env.MT5_PATH || "C:/Program Files/MetaTrader 5/terminal64.exe";
 
 export const serviceDefinitions = [
   {
@@ -30,7 +31,7 @@ export const serviceDefinitions = [
   },
   {
     id: "mt5-upstream",
-    label: "MT5 upstream Python server",
+    label: "MT5 read-only market-data upstream",
     port: 8000,
     required: false,
     defaultEnabled: "env",
@@ -71,12 +72,20 @@ export function isTruthyEnv(value) {
 }
 
 export function mt5UpstreamEnvStatus(env = process.env) {
-  const required = ["LOGIN", "PASSWORD", "SERVER", "MT5_PATH"];
-  const missing = required.filter((key) => !env[key]);
+  const credentials = ["LOGIN", "PASSWORD", "SERVER"];
+  const missingCredentials = credentials.filter((key) => !env[key]);
+  const terminalPath = env.MT5_PATH || mt5TerminalPath;
   return {
-    ready: missing.length === 0,
-    missing,
-    present: Object.fromEntries(required.map((key) => [key, Boolean(env[key])]))
+    ready: Boolean(terminalPath),
+    mode: missingCredentials.length === 0 ? "terminal_session_with_credentials_available" : "authenticated_terminal_session",
+    terminalPath,
+    missing: missingCredentials,
+    present: {
+      LOGIN: Boolean(env.LOGIN),
+      PASSWORD: Boolean(env.PASSWORD),
+      SERVER: Boolean(env.SERVER),
+      MT5_PATH: Boolean(terminalPath)
+    }
   };
 }
 
@@ -283,7 +292,10 @@ export async function startProcess({
   await ensureStackDirs();
   const logFile = path.join(stackLogDir, `${id}.log`);
   const logHandle = await fs.open(logFile, "a");
-  const child = spawn(command, args, {
+  const isWindowsCommandScript = process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+  const executable = isWindowsCommandScript ? process.env.ComSpec || "cmd.exe" : command;
+  const executableArgs = isWindowsCommandScript ? ["/d", "/s", "/c", command, ...args] : args;
+  const child = spawn(executable, executableArgs, {
     cwd,
     env,
     detached: true,

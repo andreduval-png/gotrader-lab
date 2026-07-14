@@ -19,6 +19,8 @@
     "tradingview:diagnose": "node scripts/diagnose-tradingview-mcp.mjs",
     "tradingview:start-desktop-debug": "node scripts/start-tradingview-desktop-debug.mjs",
     "mt5:readonly-bridge": "node scripts/start-mt5-readonly-bridge.mjs",
+    "mt5:readonly-upstream": "python scripts/mt5-readonly-upstream.py --host 127.0.0.1 --port 8000",
+    "test:mt5-readonly-upstream": "node scripts/test-mt5-readonly-upstream.mjs",
     "mt5:readonly-diagnose": "node scripts/diagnose-mt5-readonly-bridge.mjs",
     "diagnose:mt5-python": "python scripts/diagnose-mt5-python-connection.py",
     "build": "tsc -b && vite build",

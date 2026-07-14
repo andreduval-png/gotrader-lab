@@ -9,7 +9,6 @@ import {
   isTruthyEnv,
   isPidAlive,
   loadStackState,
-  mt5UpstreamDir,
   mt5UpstreamEnvStatus,
   npmCommand,
   pythonCommand,
@@ -21,6 +20,9 @@ import {
   startProcess,
   sleep
 } from "./local-stack-utils.mjs";
+import { loadLocalEnvironment } from "./local-env.mjs";
+
+await loadLocalEnvironment();
 
 const serviceOrder = ["mt5-upstream", "mt5-wrapper", "llm-bridge", "app", "tradingview-mcp"];
 
@@ -42,16 +44,8 @@ const shouldStartService = async (id) => {
     return enableTradingView;
   }
   if (id === "mt5-upstream") {
-    if (!envStatus.ready) {
-      console.warn(`MT5 upstream not started: ${envStatus.missing.join("/")} missing.`);
-      return false;
-    }
-    if (!(await isAccessible(mt5UpstreamDir))) {
-      console.warn(`MT5 upstream not started: repo directory not found at ${mt5UpstreamDir}.`);
-      return false;
-    }
-    if (!(await isAccessible(process.env.MT5_PATH))) {
-      console.warn("MT5 upstream not started: MT5_PATH does not exist.");
+    if (!(await isAccessible(envStatus.terminalPath))) {
+      console.warn(`MT5 read-only upstream not started: terminal not found at ${envStatus.terminalPath}.`);
       return false;
     }
     return true;
@@ -74,27 +68,20 @@ const startConfigFor = async (id) => {
   if (id === "mt5-upstream") {
     return {
       id,
-      label: "MT5 upstream Python server",
+      label: "MT5 read-only market-data upstream",
       command: pythonCommand,
       args: [
-        "-m",
-        "metatrader_openapi.main",
-        "--login",
-        process.env.LOGIN,
-        "--password",
-        process.env.PASSWORD,
-        "--server",
-        process.env.SERVER,
+        path.join(repoRoot, "scripts/mt5-readonly-upstream.py"),
         "--path",
-        process.env.MT5_PATH,
+        envStatus.terminalPath,
         "--host",
         stackHost,
         "--port",
         "8000"
       ],
-      cwd: path.resolve(mt5UpstreamDir),
+      cwd: repoRoot,
       commandLabel:
-        `python -m metatrader_openapi.main --login ${process.env.LOGIN ? "[set]" : "[missing]"} --password [redacted] --server ${process.env.SERVER ? "[set]" : "[missing]"} --path ${process.env.MT5_PATH ? "[set]" : "[missing]"} --host ${stackHost} --port 8000`,
+        `python scripts/mt5-readonly-upstream.py --path ${envStatus.terminalPath ? "[configured]" : "[missing]"} --host ${stackHost} --port 8000`,
       waitMs: 400
     };
   }

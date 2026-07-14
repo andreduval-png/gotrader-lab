@@ -18,41 +18,29 @@ npm.cmd run restart:local-stack
 | Service | Command | Port | Notes |
 | --- | --- | --- | --- |
 | GoTrader app/Vite | `npm.cmd run dev` | `5173` | Local frontend app. |
+| MT5 read-only market-data upstream | `npm.cmd run mt5:readonly-upstream` | `8000` | Loopback-only symbols, quotes, and candles from the authenticated MT5 Desktop session. |
 | GoTrader MT5 read-only wrapper | `npm.cmd run mt5:readonly-bridge` | `7341` | Safe read-only wrapper. No account/order/position routes. |
 | LLM advisory bridge | `npm.cmd run llm:bridge` | `8787` | Advisory-only local LLM bridge. |
 
-The MT5 upstream Python server is started only when all required MT5 environment variables are present. TradingView MCP is optional and is not started by default.
+The MT5 read-only upstream starts when the MT5 terminal executable is available. TradingView MCP is optional and is not started by default.
 
-## MT5 Upstream
+## MT5 Read-Only Upstream
 
-The stack manager can start the upstream MetaTrader MCP/OpenAPI server from:
+GoTrader owns a narrow loopback-only upstream at `scripts/mt5-readonly-upstream.py`. It attaches to the already authenticated MT5 Desktop terminal and exposes only symbols, quotes, latest candles, and date-range candles. It has no account, order, position, deal, trade, or mutation routes.
 
-```text
-C:/Users/andre/metatrader-mcp-server
-```
-
-Override that directory with:
-
-```powershell
-$env:MT5_MCP_SERVER_DIR="C:\Users\andre\metatrader-mcp-server"
-```
-
-Required environment variables:
+Configuration:
 
 | Variable | Purpose |
 | --- | --- |
-| `LOGIN` | MT5 login. Presence is checked; value is not printed by the stack manager. |
-| `PASSWORD` | MT5 password. Presence is checked; value is never printed or stored by the stack manager. |
-| `SERVER` | MT5 broker server name. |
-| `MT5_PATH` | Local MT5 terminal executable path. |
+| `MT5_PATH` | Optional terminal executable override. Defaults to `C:\Program Files\MetaTrader 5\terminal64.exe`. |
 
-If any are missing, startup continues without the upstream server and prints:
+After a Windows restart, open MT5 Desktop and confirm it is logged in. Then run:
 
-```text
-MT5 upstream not started: LOGIN/PASSWORD/SERVER/MT5_PATH missing.
+```powershell
+npm.cmd run start:local-stack
 ```
 
-The GoTrader MT5 wrapper still starts, and reports planned/degraded status until an upstream endpoint is available.
+No MT5 password is required or stored by this service. If the terminal is closed or logged out, the upstream reports unavailable and the wrapper remains safely degraded.
 
 ## Optional TradingView MCP
 
@@ -72,7 +60,7 @@ TradingView MCP uses port `7331` and still requires its own upstream TradingView
 | Port | Service |
 | --- | --- |
 | `5173` | GoTrader app/Vite |
-| `8000` | MT5 upstream Python server |
+| `8000` | MT5 read-only market-data upstream |
 | `7341` | GoTrader MT5 read-only wrapper |
 | `8787` | LLM advisory bridge |
 | `7331` | TradingView MCP bridge, optional |
@@ -81,7 +69,7 @@ TradingView MCP uses port `7331` and still requires its own upstream TradingView
 
 Startup order:
 
-1. MT5 upstream Python server, if env is complete.
+1. MT5 read-only market-data upstream, if the terminal executable exists.
 2. GoTrader MT5 read-only wrapper.
 3. LLM advisory bridge.
 4. GoTrader app/Vite.
@@ -118,7 +106,7 @@ The diagnostic checks:
 - tracked PIDs
 - port listeners for `5173`, `8000`, `7341`, `8787`, and `7331`
 - app root on `5173`
-- MT5 upstream health/status candidates on `8000`
+- MT5 read-only upstream health/status candidates on `8000`
 - MT5 wrapper `/health` on `7341`
 - LLM bridge `/health` on `8787`
 - TradingView MCP `/health` on `7331`
@@ -148,7 +136,7 @@ If the LLM bridge is offline, the app should continue deterministic research and
 npm.cmd run llm:bridge
 ```
 
-If MT5 upstream is missing env vars, set `LOGIN`, `PASSWORD`, `SERVER`, and `MT5_PATH`, then restart the stack.
+If the MT5 upstream is offline, open and log in to MT5 Desktop, optionally set `MT5_PATH`, then restart the stack. Do not place credentials in the GoTrader repository.
 
 ## Safety
 

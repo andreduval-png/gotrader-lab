@@ -5,8 +5,8 @@ import {
   diagnoseService,
   isTruthyEnv,
   loadStackState,
-  mt5UpstreamDir,
   mt5UpstreamEnvStatus,
+  mt5TerminalPath,
   serviceDefinitions,
   stackStatePath
 } from "./local-stack-utils.mjs";
@@ -26,8 +26,8 @@ const requiredFailures = diagnostics.filter((diagnostic) => {
 });
 
 const optionalNotes = [
-  !envStatus.ready
-    ? `MT5 upstream env incomplete: ${envStatus.missing.join(", ")} missing. Upstream service is optional for stack startup.`
+  diagnostics.find((item) => item.id === "mt5-upstream")?.status !== "healthy"
+    ? "MT5 read-only upstream is offline. Open and log in to MT5 Desktop, then run npm.cmd run start:local-stack. Credentials are not required by the read-only terminal-session service."
     : undefined,
   !tradingViewEnabled
     ? "TradingView MCP is optional and disabled by default. Set ENABLE_TRADINGVIEW_MCP=true to include it."
@@ -45,9 +45,10 @@ const summary = {
     logFile: service.logFile
   })),
   env: {
-    mt5UpstreamDir,
+    mt5TerminalPath: envStatus.terminalPath || mt5TerminalPath,
+    mt5ConnectionMode: envStatus.mode,
     mt5RequiredVariablesPresent: envStatus.present,
-    mt5MissingVariables: envStatus.missing,
+    mt5OptionalCredentialVariablesMissing: envStatus.missing,
     enableTradingViewMcp: tradingViewEnabled
   },
   services: diagnostics.map(compactDiagnostic),

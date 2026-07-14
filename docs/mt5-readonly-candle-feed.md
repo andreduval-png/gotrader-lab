@@ -16,7 +16,14 @@ Implemented now:
 - Canonical candle-source normalization for MT5 candles when a real read-only bridge returns data.
 - Dashboard and Market Data controls for fetch, chart activation, and guarded research-source activation.
 
-The included local wrapper defaults to proxying the local MT5 upstream at `http://127.0.0.1:8000`. It returns `degraded` with explicit upstream errors when that service is unavailable. Set `MT5_READONLY_DISABLE_DEFAULT_UPSTREAM=true` only when you intentionally want the safe contract-stub mode with empty candles.
+The included local wrapper defaults to proxying the GoTrader-owned read-only MT5 upstream at `http://127.0.0.1:8000`. The upstream attaches to an already authenticated MT5 Desktop session and exposes market data only. It returns `degraded` with explicit errors when the terminal session is unavailable. Set `MT5_READONLY_DISABLE_DEFAULT_UPSTREAM=true` only when you intentionally want the safe contract-stub mode with empty candles.
+
+After a Windows restart, open and log in to MT5 Desktop, then start the local stack. The read-only upstream does not require or store the MT5 password:
+
+```powershell
+npm.cmd run start:local-stack
+npm.cmd run diagnose:local-stack
+```
 
 ## Upstream MCP Inspection
 
@@ -92,22 +99,17 @@ npm.cmd run mt5:readonly-bridge
 
 For the default local desktop workflow, `npm.cmd run mt5:readonly-bridge` also uses `http://127.0.0.1:8000` when no upstream variable is set. The older alias `MT5_READONLY_UPSTREAM_URL` is accepted too. The wrapper will not expose arbitrary upstream tools; it only proxies safe market-data endpoints.
 
-For the inspected `ariadng/metatrader-mcp-server` clone, install and start the upstream OpenAPI server locally outside the GoTrader frontend:
+The preferred local upstream is the GoTrader-owned market-data-only service:
 
 ```powershell
-cd C:\Users\andre\metatrader-mcp-server
-python -m pip install -e .
-$env:LOGIN="YOUR_MT5_LOGIN"
-$env:PASSWORD="YOUR_MT5_PASSWORD"
-$env:SERVER="YOUR_MT5_SERVER"
-python -m metatrader_openapi.main --login $env:LOGIN --password $env:PASSWORD --server $env:SERVER --host 127.0.0.1 --port 8000
+npm.cmd run mt5:readonly-upstream
 ```
 
 If your MT5 terminal is not auto-detected, add the terminal path locally:
 
 ```powershell
 $env:MT5_PATH="C:\Path\To\terminal64.exe"
-python -m metatrader_openapi.main --login $env:LOGIN --password $env:PASSWORD --server $env:SERVER --path $env:MT5_PATH --host 127.0.0.1 --port 8000
+npm.cmd run mt5:readonly-upstream
 ```
 
 Do not expose this upstream server directly to the browser UI. GoTrader should talk to `http://127.0.0.1:7341`, and the 7341 wrapper should be the only component that calls the upstream market-data routes.
