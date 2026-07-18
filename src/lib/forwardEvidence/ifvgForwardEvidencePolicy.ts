@@ -70,6 +70,8 @@ export function buildIfvgV3ForwardObservation(
     entryId: deterministicEntryId(setupTimestamp, candidate.side),
     timestamp: options.observedAt,
     sourceFingerprint: options.sourceFingerprint ?? candidate.sourceFingerprint ?? "",
+    evidenceOrigin: "live_closed_candle",
+    causalAtIssue: true,
     setupTimestamp,
     independentDate,
     forwardWindowId: forwardWindowFor(independentDate),

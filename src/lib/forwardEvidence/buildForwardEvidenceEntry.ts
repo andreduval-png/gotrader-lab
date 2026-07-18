@@ -114,6 +114,10 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
     input.authority?.readinessOverrideAuthority !== undefined &&
       input.authority.readinessOverrideAuthority !== "none";
   const sourceFingerprint = compactText(input.sourceFingerprint, 200);
+  const evidenceOrigin = input.evidenceOrigin === "live_closed_candle"
+    ? "live_closed_candle" as const
+    : "legacy_unverified" as const;
+  const causalAtIssue = evidenceOrigin === "live_closed_candle" && input.causalAtIssue === true;
   const invalidIndependentDate = !/^\d{4}-\d{2}-\d{2}$/.test(input.independentDate);
   const forwardWindowId = compactText(input.forwardWindowId, 120);
   const rejectionReasons = [
@@ -148,6 +152,9 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
     brokerSymbol: frozen.brokerSymbol,
     timeframe: frozen.timeframe,
     sourceFingerprint,
+    evidenceOrigin,
+    causalAtIssue,
+    forwardEligible: rejectionReasons.length === 0 && causalAtIssue,
     setupTimestamp,
     independentDate: invalidIndependentDate ? setupTimestamp.slice(0, 10) : input.independentDate,
     forwardWindowId,

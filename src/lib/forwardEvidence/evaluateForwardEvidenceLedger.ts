@@ -39,7 +39,7 @@ export const evaluateForwardEvidenceLedger = (
   entries: ForwardEvidenceEntry[]
 ): ForwardEvidenceLedgerEvaluation => {
   const frozen = ifvgFreshRetestV3FrozenProfile;
-  const forwardEntries = entries
+  const postCutoffEntries = entries
     .filter(
       (entry) =>
         entry.profileId === frozen.profileId &&
@@ -47,9 +47,26 @@ export const evaluateForwardEvidenceLedger = (
         Date.parse(entry.setupTimestamp) > Date.parse(frozen.validationCutoff)
     )
     .sort((left, right) => Date.parse(left.setupTimestamp) - Date.parse(right.setupTimestamp));
+  const causallyVerified = (entry: ForwardEvidenceEntry) => {
+    if (
+      entry.evidenceOrigin !== "live_closed_candle" ||
+      !entry.causalAtIssue ||
+      !entry.forwardEligible
+    ) {
+      return false;
+    }
+    if (entry.outcome === "pending") return true;
+    const issuedAt = Date.parse(entry.timestamp);
+    const resolvedAt = Date.parse(entry.lastCheckedAt ?? "");
+    return Number.isFinite(issuedAt) && Number.isFinite(resolvedAt) && resolvedAt > issuedAt;
+  };
+  const forwardEntries = postCutoffEntries.filter(causallyVerified);
+  const unverified = postCutoffEntries.filter(
+    (entry) => entry.outcome !== "rejected" && !causallyVerified(entry)
+  );
   const completed = forwardEntries.filter((entry) => completedOutcomes.has(entry.outcome));
   const pending = forwardEntries.filter((entry) => entry.outcome === "pending");
-  const rejected = forwardEntries.filter((entry) => entry.outcome === "rejected");
+  const rejected = postCutoffEntries.filter((entry) => entry.outcome === "rejected");
   const independentDates = new Set(completed.map((entry) => entry.independentDate)).size;
   const forwardWindows = new Set(completed.map((entry) => entry.forwardWindowId).filter(Boolean)).size;
   const realized = completed
@@ -98,6 +115,7 @@ export const evaluateForwardEvidenceLedger = (
     completedForwardOutcomes: completed.length,
     pendingOutcomes: pending.length,
     rejectedOutcomes: rejected.length,
+    unverifiedOutcomes: unverified.length,
     independentDates,
     forwardWindows,
     targetFirstRate: completed.length

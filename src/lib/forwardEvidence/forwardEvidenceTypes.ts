@@ -22,6 +22,8 @@ export type ForwardEvidenceRecommendation =
   | "fork_new_profile"
   | "retire_profile";
 
+export type ForwardEvidenceOrigin = "live_closed_candle" | "legacy_unverified";
+
 export interface ForwardEvidencePriceZone {
   lower: number;
   upper: number;
@@ -97,6 +99,9 @@ export interface ForwardEvidenceEntry {
   brokerSymbol: "USTECH";
   timeframe: "5m";
   sourceFingerprint: string;
+  evidenceOrigin: ForwardEvidenceOrigin;
+  causalAtIssue: boolean;
+  forwardEligible: boolean;
   setupTimestamp: string;
   independentDate: string;
   forwardWindowId: string;
@@ -120,6 +125,8 @@ export interface ForwardEvidenceEntryInput {
   entryId?: string;
   timestamp?: string;
   sourceFingerprint: string;
+  evidenceOrigin?: ForwardEvidenceOrigin;
+  causalAtIssue?: boolean;
   setupTimestamp: string;
   independentDate: string;
   forwardWindowId: string;
@@ -151,6 +158,7 @@ export interface ForwardEvidenceLedgerEvaluation {
   completedForwardOutcomes: number;
   pendingOutcomes: number;
   rejectedOutcomes: number;
+  unverifiedOutcomes: number;
   independentDates: number;
   forwardWindows: number;
   targetFirstRate: number | null;
@@ -162,6 +170,31 @@ export interface ForwardEvidenceLedgerEvaluation {
   blockers: string[];
   recommendation: ForwardEvidenceRecommendation;
   autoPromotionAllowed: false;
+  authority: typeof FORWARD_EVIDENCE_AUTHORITY;
+}
+
+export type ForwardEvidenceCycleSampleClassification =
+  | "no_cycle_sample"
+  | "different_profile"
+  | "validation_only_backtest";
+
+export interface ForwardEvidenceCycleSampleInput {
+  cycleId?: string;
+  strategyProfile?: string;
+  totalTrades?: number;
+  metricSource?: string;
+}
+
+export interface ForwardEvidenceCycleSampleAudit {
+  classification: ForwardEvidenceCycleSampleClassification;
+  cycleId?: string;
+  strategyProfile: string;
+  cycleTradeCount: number;
+  creditedForwardOutcomes: 0;
+  completedForwardOutcomes: number;
+  pendingForwardOutcomes: number;
+  reason: string;
+  nextAction: string;
   authority: typeof FORWARD_EVIDENCE_AUTHORITY;
 }
 

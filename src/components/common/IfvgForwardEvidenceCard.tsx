@@ -4,10 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
   FORWARD_EVIDENCE_UPDATED_EVENT,
+  auditForwardEvidenceCycleSample,
   evaluateForwardEvidenceLedger,
   ifvgFreshRetestV3FrozenProfile,
   loadForwardEvidenceLedger
 } from "@/lib/forwardEvidence";
+import {
+  RESEARCH_CYCLE_UPDATED_EVENT,
+  latestResearchCycleRun,
+  loadResearchCycleState
+} from "@/lib/researchCycle";
 
 const readable = (value: string) => value.replace(/_/g, " ");
 const dateTime = (value: string) => new Date(value).toLocaleString();
@@ -18,16 +24,34 @@ export function IfvgForwardEvidenceCard({
   context?: "dashboard" | "self_improvement";
 }) {
   const [entries, setEntries] = useState(() => loadForwardEvidenceLedger());
+  const [latestCycle, setLatestCycle] = useState(() => latestResearchCycleRun(loadResearchCycleState()));
   const evaluation = useMemo(() => evaluateForwardEvidenceLedger(entries), [entries]);
+  const cycleAudit = useMemo(
+    () => auditForwardEvidenceCycleSample(
+      latestCycle
+        ? {
+            cycleId: latestCycle.cycleId,
+            strategyProfile: latestCycle.validationSummary?.provenance?.strategyProfile,
+            totalTrades: latestCycle.backtestSummary?.totalTrades,
+            metricSource: latestCycle.canonicalMetrics?.metricSourceLabel
+          }
+        : undefined,
+      entries
+    ),
+    [entries, latestCycle]
+  );
   const frozen = ifvgFreshRetestV3FrozenProfile;
 
   useEffect(() => {
-    const refresh = () => setEntries(loadForwardEvidenceLedger());
-    window.addEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
+    const refreshEvidence = () => setEntries(loadForwardEvidenceLedger());
+    const refreshCycle = () => setLatestCycle(latestResearchCycleRun(loadResearchCycleState()));
+    window.addEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refreshEvidence);
+    window.addEventListener(RESEARCH_CYCLE_UPDATED_EVENT, refreshCycle);
+    window.addEventListener("storage", refreshEvidence);
     return () => {
-      window.removeEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refresh);
-      window.removeEventListener("storage", refresh);
+      window.removeEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refreshEvidence);
+      window.removeEventListener(RESEARCH_CYCLE_UPDATED_EVENT, refreshCycle);
+      window.removeEventListener("storage", refreshEvidence);
     };
   }, []);
 
@@ -80,10 +104,23 @@ export function IfvgForwardEvidenceCard({
             </span>
           ) : null}
         </div>
+        <div className="rounded-md border border-border bg-background/45 p-3 text-sm" data-testid="ifvg-forward-cycle-audit">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Latest cycle evidence role</p>
+            <Badge variant="secondary">
+              {cycleAudit.cycleTradeCount} validation trade{cycleAudit.cycleTradeCount === 1 ? "" : "s"} / {cycleAudit.creditedForwardOutcomes} forward credit
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">{cycleAudit.reason}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Next: {cycleAudit.nextAction}</p>
+        </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <Badge variant="muted">authority none / none / none</Badge>
           <Badge variant="muted">auto-promotion disabled</Badge>
           <Badge variant="muted">{frozen.mutationPolicy}</Badge>
+          {evaluation.unverifiedOutcomes ? (
+            <Badge variant="warning">{evaluation.unverifiedOutcomes} unverified outcome{evaluation.unverifiedOutcomes === 1 ? "" : "s"} excluded</Badge>
+          ) : null}
         </div>
         {evaluation.blockers.length ? (
           <p className="text-xs text-muted-foreground">Next: {evaluation.blockers[0]}</p>

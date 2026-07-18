@@ -64,11 +64,21 @@ async function main() {
       ["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]
     ]
   );
+  compile(
+    "src/lib/forwardEvidence/auditForwardEvidenceCycleSample.ts",
+    "auditForwardEvidenceCycleSample.mjs",
+    [
+      ["./evaluateForwardEvidenceLedger", "./evaluateForwardEvidenceLedger.mjs"],
+      ["./frozenProfileRegistry", "./frozenProfileRegistry.mjs"],
+      ["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]
+    ]
+  );
 
   const registry = await import(pathToFileURL(path.join(outRoot, "frozenProfileRegistry.mjs")).href);
   const builder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceEntry.mjs")).href);
   const evaluator = await import(pathToFileURL(path.join(outRoot, "evaluateForwardEvidenceLedger.mjs")).href);
   const ifvgPolicy = await import(pathToFileURL(path.join(outRoot, "ifvgForwardEvidencePolicy.mjs")).href);
+  const intakeAudit = await import(pathToFileURL(path.join(outRoot, "auditForwardEvidenceCycleSample.mjs")).href);
   const frozen = registry.ifvgFreshRetestV3FrozenProfile;
 
   assert.equal(frozen.profileId, "ifvg_fresh_retest_v3_research");
@@ -114,6 +124,12 @@ async function main() {
   assert.equal(safeEntry.authority.brokerAuthority, "none");
   assert.equal(safeEntry.authority.readinessOverrideAuthority, "none");
   assert.equal(safeEntry.barsObserved, 0);
+  assert.equal(safeEntry.evidenceOrigin, "legacy_unverified");
+  assert.equal(safeEntry.forwardEligible, false);
+
+  const historicalOnly = evaluator.evaluateForwardEvidenceLedger([safeEntry]);
+  assert.equal(historicalOnly.completedForwardOutcomes, 0);
+  assert.equal(historicalOnly.unverifiedOutcomes, 1);
 
   const pendingObservation = ifvgPolicy.buildIfvgV3ForwardObservation({
     eligible: true,
@@ -135,6 +151,9 @@ async function main() {
   }, { observedAt: afterCutoff(0, 15) });
   assert.ok(pendingObservation);
   assert.equal(pendingObservation.outcome, "pending");
+  assert.equal(pendingObservation.evidenceOrigin, "live_closed_candle");
+  assert.equal(pendingObservation.causalAtIssue, true);
+  assert.equal(pendingObservation.forwardEligible, true);
   assert.equal(pendingObservation.authority.executionAuthority, "none");
   assert.equal(pendingObservation.authority.brokerAuthority, "none");
   assert.equal(pendingObservation.authority.readinessOverrideAuthority, "none");
@@ -215,12 +234,15 @@ async function main() {
       entryId: `forward_${index}`,
       timestamp: afterCutoff(dayIndex, 16),
       sourceFingerprint: `mt5_forward_fp_${Math.floor(index / 20)}`,
+      evidenceOrigin: "live_closed_candle",
+      causalAtIssue: true,
       setupTimestamp: afterCutoff(dayIndex, 14 + (index % 2)),
       independentDate: afterCutoff(dayIndex).slice(0, 10),
       forwardWindowId: index < 20 ? "forward_window_1" : "forward_window_2",
       direction: index % 2 ? "short" : "long",
       outcome: winning ? "target_first" : "invalidation_first",
-      realizedR: winning ? 2.5 : -1
+      realizedR: winning ? 2.5 : -1,
+      lastCheckedAt: afterCutoff(dayIndex, 17)
     });
   });
 
@@ -243,6 +265,30 @@ async function main() {
   assert.equal(eligible.authority.executionAuthority, "none");
   assert.ok((eligible.averageR ?? 0) > 0);
   assert.ok((eligible.profitFactor ?? 0) > 1);
+
+  const threeTradeCycleAudit = intakeAudit.auditForwardEvidenceCycleSample({
+    cycleId: "cycle_ifvg_three_trades",
+    strategyProfile: frozen.profileId,
+    totalTrades: 3,
+    metricSource: "direct_backtest"
+  }, []);
+  assert.equal(threeTradeCycleAudit.classification, "validation_only_backtest");
+  assert.equal(threeTradeCycleAudit.cycleTradeCount, 3);
+  assert.equal(threeTradeCycleAudit.creditedForwardOutcomes, 0);
+  assert.match(threeTradeCycleAudit.reason, /already present when the cycle ran/i);
+  assert.doesNotMatch(
+    JSON.stringify(threeTradeCycleAudit),
+    /"(?:candles|rawCandles|accountData|orderData|positionData)"\s*:/i
+  );
+
+  const otherProfileAudit = intakeAudit.auditForwardEvidenceCycleSample({
+    cycleId: "cycle_other_profile",
+    strategyProfile: "agent_consensus",
+    totalTrades: 12
+  }, eligible.completedForwardOutcomes ? buildOutcomes(40) : []);
+  assert.equal(otherProfileAudit.classification, "different_profile");
+  assert.equal(otherProfileAudit.creditedForwardOutcomes, 0);
+  assert.equal(otherProfileAudit.authority.executionAuthority, "none");
 
   const directMutation = registry.reviewFrozenProfileMutation({
     baseProfileId: frozen.profileId,
@@ -278,6 +324,8 @@ async function main() {
       accountOrderPositionSerialized: false,
       ifvgForwardObservationIssued: true,
       ifvgForwardOutcomeResolved: targetResolution.entries[0].outcome,
+      replayedCycleTradesCreditedForward: threeTradeCycleAudit.creditedForwardOutcomes,
+      unverifiedHistoricalOutcomesExcluded: historicalOnly.unverifiedOutcomes,
       autoPromotionAllowed: false,
       authority: eligible.authority
     }
