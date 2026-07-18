@@ -59,8 +59,8 @@ export const routeBrokerForSymbol = ({
   const routingWarnings: string[] = [];
 
   if (assetClass === "futures" && futuresRoots.has(futureRoot)) {
-    broker = "tradovate";
-    reason = "Futures symbols route to the planned Tradovate execution adapter.";
+    broker = "topstepx";
+    reason = "Futures symbols route to the TopstepX readiness adapter; broker submission remains locked.";
   } else if (mt5ForexCfdSymbols.has(normalizedSymbol)) {
     broker = "mt5";
     reason = "Forex and CFD symbols route to the planned MT5 execution adapter.";
@@ -72,6 +72,9 @@ export const routeBrokerForSymbol = ({
 
   if (accountMode === "research") {
     routingWarnings.push("Research mode blocks all execution intents.");
+  }
+  if (broker === "topstepx") {
+    routingWarnings.push("TopstepX has no sandbox. The independent adapter permits readiness probes only.");
   }
   if (broker === "none") {
     routingWarnings.push("No broker adapter may execute this symbol.");

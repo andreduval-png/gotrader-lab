@@ -43,9 +43,14 @@ flowchart TD
     W --> X["Forward evidence and Results surfaces"]
     X --> F
 
-    Y["Broker adapter"]:::disabled
+    Q -. "separate readiness boundary" .-> BA["Broker adapter readiness probe"]
+    BA --> BB["TopstepX auth + allowlisted account + MNQ contract check"]
+    BB --> BC["Compact readiness status; no credentials or account data persisted"]
+    BC --> BD["Submission locked: TopstepX has no sandbox"]
+
+    Y["TopstepX order adapter"]:::disabled
     Z["Live account"]:::disabled
-    Q -. "not connected" .-> Y
+    BD -. "not connected" .-> Y
     Y -. "disabled" .-> Z
 
     classDef disabled fill:#2b1f25,stroke:#d36b83,color:#f1c5cf,stroke-dasharray: 5 5;
@@ -72,6 +77,8 @@ python shared_scripts/gotrader_paper_gateway.py `
 
 The default policy is disabled with the kill switch active and zero risk capacity. The consumer only issues HTTP GET requests to the MT5 read-only wrapper. Ambiguous candles that touch both stop and target resolve to the stop, and the entry candle is not used to claim an outcome because intrabar ordering is unknown.
 
-## Future Broker-Demo Boundary
+## Broker Adapter Readiness Boundary
 
-A real broker-demo gateway is not implemented by this change. It must be a separately reviewed service that independently revalidates the same deterministic approval, uses demo-only credentials, reconciles acknowledgements and positions, and fails closed on disconnect. Live execution requires a later explicit authorization project; neither the LLM nor this paper gateway can grant it.
+The sibling `go-trader` repository now contains `shared_scripts/gotrader_broker_adapter.py`. It provides a non-network local demo adapter and a TopstepX readiness probe that authenticates, verifies an allowlisted account, and resolves an active MNQ contract. It does not import the existing live adapter and cannot submit, cancel, modify, close, or reconcile broker state.
+
+TopstepX currently has no sandbox, so a real broker-demo submission route cannot be made safe merely by setting `live: false` on contract search. Broker submission remains locked until an account class can be positively verified, the deterministic forward-evidence gate passes, and a separately reviewed gateway can submit protected orders and reconcile acknowledgements independently. Neither the LLM nor the research app can grant that permission.

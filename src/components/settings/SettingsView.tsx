@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { defaultBrokerRiskControls, routeBrokerForSymbol } from "@/lib/brokers";
 import { mt5ExecutionAdapterPlan } from "@/lib/brokers/mt5";
-import { tradovateExecutionAdapterPlan } from "@/lib/brokers/tradovate";
+import { topstepXAdapterPlan } from "@/lib/brokers/topstepx";
 import {
   AUTO_RESEARCH_UPDATED_EVENT,
   latestAutoResearchCycle,
@@ -708,7 +708,7 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
               ["TradingView role", tradingViewMcpAdapterPlan.role],
               ["TradingView chart feed", tradingViewRuntime.chartFeedAvailable ? "active" : "not active"],
               ["TradingView live feed", "not connected"],
-              ["Tradovate", tradovateExecutionAdapterPlan.status],
+              ["TopstepX", topstepXAdapterPlan.status],
               ["MT5 execution", mt5ExecutionAdapterPlan.status],
               ["MT5 read-only data", mt5ReadOnlyStatusLabel],
               ["MT5 broker symbol", mt5BrokerSymbol],

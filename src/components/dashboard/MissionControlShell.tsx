@@ -102,7 +102,7 @@ import {
 } from "@/lib/integrations/mt5";
 import { fetchAndStoreMt5HigherTimeframeSources } from "@/lib/integrations/mt5/mt5MultiTimeframe";
 import { mt5ExecutionAdapterPlan } from "@/lib/brokers/mt5";
-import { tradovateExecutionAdapterPlan } from "@/lib/brokers/tradovate";
+import { topstepXAdapterPlan } from "@/lib/brokers/topstepx";
 import {
   buildVwapOverlay,
   createTradingChartData,
@@ -4025,7 +4025,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
             <div>
               <p className="font-semibold">Future multi-broker gates</p>
               <p className="mt-1 text-slate-400">
-                TradingView MCP is read-only chart evidence when connected. Tradovate and MT5 remain locked execution adapters.
+                TradingView MCP is read-only chart evidence when connected. TopstepX readiness and MT5 execution remain locked.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -4035,7 +4035,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
               <Badge variant={runtimeSnapshot?.tradingViewMcp.chartFeedAvailable ? "success" : "secondary"}>
                 TV chart feed {runtimeSnapshot?.tradingViewMcp.chartFeedAvailable ? "active" : "not active"}
               </Badge>
-              <Badge variant="warning">Tradovate {tradovateExecutionAdapterPlan.status.replace(/_/g, " ")}</Badge>
+              <Badge variant="warning">TopstepX {topstepXAdapterPlan.status.replace(/_/g, " ")}</Badge>
               <Badge variant="warning">MT5 read-only {mt5ReadOnlyStatusLabel}</Badge>
               <Badge variant="warning">MT5 execution {mt5ExecutionAdapterPlan.status.replace(/_/g, " ")}</Badge>
               <Badge variant="danger">execution disabled</Badge>
@@ -4266,11 +4266,11 @@ function buildPipelineStages(
       lastEvent: run?.completedAt
     },
     {
-      id: "tradovate",
-      label: "Tradovate Future Gate",
+      id: "topstepx",
+      label: "TopstepX Readiness Gate",
       status: "locked",
-      task: "Future integration placeholder. No broker connection or API authority exists.",
-      countLabel: "future"
+      task: "Independent readiness probe only. No broker submission or API authority exists in GoTrader.",
+      countLabel: "probe only"
     }
   ];
 }

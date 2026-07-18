@@ -1,7 +1,7 @@
 import type { AgentBridgeCandle } from "@/lib/agentBridge";
 
 export type InstrumentType = "futures" | "forex" | "cfd" | "index" | "crypto" | "unknown";
-export type BrokerName = "tradovate" | "mt5" | "none";
+export type BrokerName = "topstepx" | "tradovate" | "mt5" | "none";
 export type BrokerAccountMode = "research" | "dry_run" | "paper" | "live";
 export type ExecutionAuthorityMode = "none" | "simulated_only" | "paper_gate_required" | "live_gate_required";
 export type BrokerAuthorityMode = "none" | "route_only" | "broker_adapter_required";
