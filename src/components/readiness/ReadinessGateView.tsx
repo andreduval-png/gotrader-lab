@@ -85,6 +85,9 @@ export function ReadinessGateView() {
     [validation, quality, runbook]
   );
   const gate = runtimeSnapshot?.readiness.readinessSnapshot ?? computedGate;
+  const activeFailedRequirements = gate.activeFailedRequirements ?? gate.failedRequirements;
+  const deferredRequirements = gate.deferredRequirements ?? [];
+  const llmAdvisoryDeferred = deferredRequirements.some((item) => item.id === "llm-advisory-review");
   const runtimeWarnings = selectRuntimeWarnings(runtimeSnapshot);
 
   const conservative = validation?.scenarios.find((scenario) => scenario.id === "conservative-confluence");
@@ -252,11 +255,17 @@ export function ReadinessGateView() {
           </div>
           <div>
             <div className="text-xs uppercase opacity-70">Actual blockers</div>
-            <div className="mt-1 font-mono">{runtimeSnapshot?.readiness.actualBlockers.length ?? gate.failedRequirements.length}</div>
+            <div className="mt-1 font-mono">{runtimeSnapshot?.readiness.actualBlockers.length ?? activeFailedRequirements.length}</div>
           </div>
           <div>
             <div className="text-xs uppercase opacity-70">LLM advisory</div>
-            <div className="mt-1 font-mono">{runtimeSnapshot?.llm.advisoryPassed ? "passed" : "missing or not passed"}</div>
+            <div className="mt-1 font-mono">
+              {runtimeSnapshot?.llm.advisoryPassed
+                ? "passed"
+                : llmAdvisoryDeferred
+                  ? "deferred until evidence gates pass"
+                  : "required now"}
+            </div>
           </div>
           <div>
             <div className="text-xs uppercase opacity-70">Run fingerprint</div>
@@ -282,18 +291,24 @@ export function ReadinessGateView() {
                   <div className="mt-1 text-3xl font-semibold">{gate.state}</div>
                   <div className="mt-2 text-sm text-muted-foreground">{gate.recommendedNextStep}</div>
                 </div>
-                <Badge variant={stateVariant(gate.state)}>{gate.failedRequirements.length} failed</Badge>
+                <Badge variant={stateVariant(gate.state)}>
+                  {activeFailedRequirements.length} active / {deferredRequirements.length} deferred
+                </Badge>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-border bg-background/45 p-3">
                 <div className="text-xs text-muted-foreground">Passed requirements</div>
                 <div className="mt-1 font-mono text-2xl">{gate.passedRequirements.length}</div>
               </div>
               <div className="rounded-lg border border-border bg-background/45 p-3">
-                <div className="text-xs text-muted-foreground">Failed requirements</div>
-                <div className="mt-1 font-mono text-2xl">{gate.failedRequirements.length}</div>
+                <div className="text-xs text-muted-foreground">Active blockers</div>
+                <div className="mt-1 font-mono text-2xl">{activeFailedRequirements.length}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/45 p-3">
+                <div className="text-xs text-muted-foreground">Deferred requirements</div>
+                <div className="mt-1 font-mono text-2xl">{deferredRequirements.length}</div>
               </div>
             </div>
 
@@ -401,8 +416,8 @@ export function ReadinessGateView() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {gate.failedRequirements.length ? (
-            gate.failedRequirements.slice(0, 3).map((item) => (
+          {activeFailedRequirements.length ? (
+            activeFailedRequirements.slice(0, 3).map((item) => (
               <div key={item.id} className="rounded-lg border border-border bg-background/45 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -439,13 +454,30 @@ export function ReadinessGateView() {
               Approval is not blocked by gate evidence. Manual approval still does not enable broker execution.
             </div>
           )}
-          {gate.failedRequirements.length > 3 ? (
+          {activeFailedRequirements.length > 3 ? (
             <div className="rounded-lg border border-border bg-background/45 p-3 text-sm text-muted-foreground">
-              {gate.failedRequirements.length - 3} additional blocker(s) are available in advanced readiness details.
+              {activeFailedRequirements.length - 3} additional active blocker(s) are available in advanced readiness details.
             </div>
           ) : null}
         </CardContent>
       </Card>
+
+      {deferredRequirements.length ? (
+        <Card className="border-cyan-300/20 bg-cyan-300/5">
+          <CardHeader>
+            <CardTitle>Later Paper-Demo Requirements</CardTitle>
+            <CardDescription>
+              These gates remain mandatory, but they are not the current root cause. GoTrader will ask for them after
+              the active deterministic evidence blocker is resolved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {deferredRequirements.map((item) => (
+              <Badge key={item.id} variant="muted">{item.label}</Badge>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <TechnicalDetails
         title="View all readiness inputs and audit trail"

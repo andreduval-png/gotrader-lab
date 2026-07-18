@@ -36,6 +36,7 @@ export interface DetectorProfileWalkForwardResult {
   sourceFingerprint: string;
   sourceStart: string;
   sourceEnd: string;
+  provenance: ValidationProvenanceIdentity;
   developmentEnd: string;
   holdoutFraction: number;
   windowDays: number;
@@ -84,6 +85,14 @@ export interface DetectorProfileWalkForwardInput {
   sourceFingerprint: string;
   sourceStart: string;
   sourceEnd: string;
+  proposalId?: string;
+  candidateId?: string;
+  requestedSymbol?: string;
+  brokerSymbol?: string;
+  timeframe?: string;
+  parameterFingerprint?: string;
+  detectorProfileFingerprint?: string;
+  validationRunId?: string;
   trades: DetectorProfileTradeOutcome[];
   holdoutFraction?: number;
   windowDays?: number;
@@ -94,3 +103,4 @@ export interface DetectorProfileWalkForwardInput {
   minimumWindowPassRate?: number;
   maximumSingleDateShare?: number;
 }
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";

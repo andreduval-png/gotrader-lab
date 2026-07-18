@@ -81,6 +81,9 @@ const inferOpenClawPilotStrategyId = (input: { candidateFamilies: string[]; targ
   if (/cameron/.test(text)) {
     return "camerons_model_research_v1";
   }
+  if (/ifvg[_\s-]*fresh[_\s-]*retest[_\s-]*v3|fresh.*ifvg.*retest|ifvg.*v3/.test(text)) {
+    return "ifvg_fresh_retest_v3_research";
+  }
   if (/ifvg[_\s-]*filtered[_\s-]*v2|filtered.*ifvg|ifvg.*v2|clean.*retest.*displacement|clean_retest_displacement/.test(text)) {
     return "ifvg_filtered_v2_research";
   }

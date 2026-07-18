@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Gauge } from "lucide-react";
+import { ArrowRight, Gauge, Play } from "lucide-react";
 
 import { useLatestValidationChainEntry } from "@/components/common/ValidationChainCard";
 import { useSourceStatusSnapshot } from "@/components/common/SourceStatusBanner";
@@ -23,6 +23,7 @@ type DashboardCommandOverviewProps = {
   primarySetupLabel?: string;
   researchReady?: boolean;
   validationNextAction?: string;
+  blockers?: string[];
 };
 
 /**
@@ -36,7 +37,8 @@ export function DashboardCommandOverview({
   primaryBlocker,
   primarySetupLabel = "waiting for Activate Market",
   researchReady,
-  validationNextAction
+  validationNextAction,
+  blockers = []
 }: DashboardCommandOverviewProps) {
   const source = useSourceStatusSnapshot();
   const chain = useLatestValidationChainEntry();
@@ -56,6 +58,14 @@ export function DashboardCommandOverview({
       ? "Activate MT5 read-only research source before queuing validation."
       : primaryBlocker ?? "Open Advisor and run Activate Market.");
 
+  const checklist = [
+    ...blockers.slice(0, 4),
+    ...(primaryBlocker && !blockers.includes(primaryBlocker) ? [primaryBlocker] : []),
+    ...(paperDemoBlocker && paperDemoBlocker !== primaryBlocker && !blockers.includes(paperDemoBlocker)
+      ? [paperDemoBlocker]
+      : [])
+  ].slice(0, 5);
+
   return (
     <section
       data-testid="dashboard-command-overview"
@@ -70,13 +80,23 @@ export function DashboardCommandOverview({
           </div>
           <Badge variant="muted">{AUTHORITY_BADGE_LABEL}</Badge>
         </div>
-        <Link
-          to="/advisor"
-          className={buttonVariants({ variant: "secondary", size: "sm", className: "inline-flex items-center gap-1.5" })}
-        >
-          Open Advisor
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="#research-cycle"
+            data-testid="command-center-primary-cta"
+            className={buttonVariants({ variant: "default", size: "sm", className: "inline-flex items-center gap-1.5" })}
+          >
+            <Play className="h-3.5 w-3.5" aria-hidden="true" />
+            Run Full Research Cycle
+          </a>
+          <Link
+            to="/advisor"
+            className={buttonVariants({ variant: "secondary", size: "sm", className: "inline-flex items-center gap-1.5" })}
+          >
+            Open Advisor
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
       <dl className={`mt-4 ${WORKSPACE_METRIC_GRID}`}>
         <OverviewTile label="Market / source" testId="dashboard-overview-source" value={sourceLabel} />
@@ -94,34 +114,36 @@ export function DashboardCommandOverview({
             paperDemoCandidate === undefined
               ? "loading"
               : paperDemoCandidate
-                ? "yes — review only, no execution"
-                : `blocked — ${paperDemoBlocker ?? "evidence incomplete"}`
+                ? "eligible — review promotion checklist"
+                : paperDemoBlocker ?? "not eligible yet"
           }
         />
-        <OverviewTile label="Next action" testId="dashboard-overview-next-action" value={nextStep} emphasis />
+        <OverviewTile label="Next step" testId="dashboard-overview-next" value={nextStep} />
       </dl>
-      {source?.isMockOrSample ? (
-        <p className="mt-3 text-xs leading-5 text-amber-100" role="alert">
-          Mock/sample data — not research evidence.{" "}
-          <Link to="/advisor" className="font-medium underline underline-offset-2">
-            Activate MT5 Research Mode
-          </Link>{" "}
-          or{" "}
-          <Link to="/market-data" className="font-medium underline underline-offset-2">
-            import historical data
-          </Link>
-          .
-        </p>
+      {checklist.length ? (
+        <div className="mt-4 rounded-lg border border-amber-400/20 bg-amber-950/20 p-3" data-testid="command-center-blocker-checklist">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Blockers</p>
+          <ul className="mt-2 space-y-1.5 text-sm text-amber-50/90">
+            {checklist.map((item) => (
+              <li key={item} className="flex flex-wrap items-center justify-between gap-2">
+                <span>{item}</span>
+                <a href="#research-cycle" className="text-xs text-sky-300 underline underline-offset-2">
+                  Open research cycle
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </section>
   );
 }
 
-function OverviewTile({ emphasis, label, testId, value }: { emphasis?: boolean; label: string; testId: string; value: string }) {
+function OverviewTile({ label, value, testId }: { label: string; value: string; testId: string }) {
   return (
-    <div className={cn("rounded-2xl border border-white/10 bg-black/25 px-4 py-3", emphasis && "border-primary/25 bg-primary/[0.065]")}>
-      <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</dt>
-      <dd className="mt-2 text-sm font-medium leading-5 text-slate-100" data-testid={testId}>
+    <div data-testid={testId} className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+      <dt className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">{label}</dt>
+      <dd className="mt-1 truncate text-sm text-slate-100" title={value}>
         {value}
       </dd>
     </div>

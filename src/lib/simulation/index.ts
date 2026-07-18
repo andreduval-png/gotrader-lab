@@ -130,7 +130,9 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
 
 export function applySimulatedOutcome(state: LabState, thesis: TradeThesis): LabState {
   const direction = thesis.finalBias === "bearish" ? -1 : thesis.finalBias === "bullish" ? 1 : 0;
-  const confidenceMove = Math.round((thesis.confidence * 70 + Math.random() * 18) * (direction || (Math.random() > 0.5 ? 1 : -1)));
+  // Deterministic outcome sizing: random price moves would silently corrupt
+  // agent weights/hit-rate learning with noise that never happened in market data.
+  const confidenceMove = Math.round(thesis.confidence * 70) * direction;
   const outcome: MarketOutcome = {
     id: uid("outcome"),
     symbol: thesis.symbol,

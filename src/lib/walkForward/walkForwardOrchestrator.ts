@@ -6,7 +6,7 @@ import {
 } from "@/lib/marketData";
 import { classifyMarketRegime } from "@/lib/regime";
 import type { RegimeClassification } from "@/lib/regime";
-import { resolveActiveBacktestConfig } from "@/lib/selfImprovement";
+import { resolveActiveBacktestConfig, loadSelfImprovementState } from "@/lib/selfImprovement";
 import type { GrinchActiveProfile } from "@/lib/strategyLibrary";
 import { uid } from "@/lib/utils";
 import {
@@ -16,6 +16,12 @@ import {
 } from "@/lib/walkForward/dataSplitter";
 import { buildWalkForwardPreflight } from "@/lib/walkForward/walkForwardPreflight";
 import { analyzeWalkForwardStability } from "@/lib/walkForward/stabilityAnalyzer";
+import { computeEdgeStatistics, DEFAULT_MINIMUM_EDGE_SAMPLE } from "@/lib/statistics/edgeStatistics";
+import { falsePositiveCountFromTrades } from "@/lib/statistics/tradeMetrics";
+import {
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters
+} from "@/lib/validationProvenance";
 import {
   saveWalkForwardProgress,
   saveWalkForwardRun
@@ -48,8 +54,16 @@ const DEFAULT_MINIMUM_TOTAL_OOS_TRADES = 20;
 const marketContextModeFor = (sourceMode: string) =>
   sourceMode === "imported" ? "imported" as const : sourceMode === "mt5_read_only" ? "future_provider" as const : "mock" as const;
 
-const evidenceQualityScoreFor = (sourceMode: string) =>
-  sourceMode === "imported" ? 82 : sourceMode === "mt5_read_only" ? 52 : 34;
+/**
+ * Evidence quality is computed from the source trust level, data depth, and
+ * how many rolling windows the data supports, instead of a fixed constant.
+ */
+const evidenceQualityScoreFor = (sourceMode: string, processedCandleCount: number, windowCount: number) => {
+  const sourceBase = sourceMode === "imported" ? 55 : sourceMode === "mt5_read_only" ? 45 : 10;
+  const depthScore = Math.min(25, processedCandleCount / 200);
+  const windowScore = Math.min(20, windowCount * 5);
+  return round(Math.min(100, sourceBase + depthScore + windowScore), 0);
+};
 
 const passFailReasonsFor = (metrics: WalkForwardWindowMetrics, split: WalkForwardSplitLabel) => [
   metrics.totalTrades < (split === "out_of_sample" ? DEFAULT_MINIMUM_OOS_TRADES_PER_WINDOW : 2)
@@ -99,7 +113,7 @@ const metricsFromBacktest = (
 ): WalkForwardWindowMetrics => {
   const confidenceCalibration = confidenceCalibrationFor(result);
   const readinessScore = readinessScoreFor(result, confidenceCalibration, evidenceQualityScore);
-  const falsePositiveCount = result.summary.losses + result.trades.filter((trade) => trade.outcome === "expired").length;
+  const falsePositiveCount = falsePositiveCountFromTrades(result.trades);
   const latestGrinchScore = result.summary.grinchSummary?.latestScore;
   const profileProducedTrade = result.summary.grinchSummary?.tradeProfileCounts
     ? ((Object.entries(result.summary.grinchSummary.tradeProfileCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "none") as GrinchActiveProfile)
@@ -201,6 +215,30 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
     requestedLookbackDays: 90
   });
   const activeConfig = resolveActiveBacktestConfig();
+  const proposalConfig =
+    options.configOverride ??
+    (options.proposalId
+      ? loadSelfImprovementState().proposals.find((proposal) => proposal.proposalId === options.proposalId)?.proposedConfig
+      : undefined);
+  const backtestConfig: ResolvedBacktestConfig = proposalConfig ?? activeConfig.config;
+  const firstSourceCandle = source.candles[0];
+  const lastSourceCandle = source.candles.at(-1);
+  const walkForwardProvenance = buildValidationProvenanceIdentity({
+    ...options.validationProvenance,
+    strategyProfile: backtestConfig.strategyProfile,
+    proposalId: options.proposalId ?? options.validationProvenance?.proposalId,
+    candidateId: options.candidateId ?? options.validationProvenance?.candidateId,
+    sourceProvider: source.provider,
+    requestedSymbol: source.metadata?.symbol ?? firstSourceCandle?.symbol ?? backtestConfig.symbol,
+    brokerSymbol: source.brokerSymbol,
+    timeframe: source.appliedSettings.targetTimeframe,
+    sourceFingerprint: source.sourceFingerprint,
+    parameterFingerprint: fingerprintValidationParameters(backtestConfig),
+    validationRunId: options.validationProvenance?.validationRunId,
+    walkForwardRunId: runId,
+    dataRangeStart: firstSourceCandle?.timestamp,
+    dataRangeEnd: lastSourceCandle?.timestamp
+  });
   const ratio = resolveSplitRatio(options.splitRatioPreset ?? "60_20_20", options.customRatio);
   const requestedMaxWindows = Math.max(1, options.maxWindows ?? modeMaxWindows[mode]);
   const maxWindows = Math.max(1, Math.min(requestedMaxWindows, modeMaxWindows[mode]));
@@ -238,7 +276,7 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
     minimumWindows: options.minimumWindows ?? DEFAULT_MINIMUM_WINDOWS,
     minimumOosTrades: options.minimumTotalOosTrades ?? DEFAULT_MINIMUM_TOTAL_OOS_TRADES
   });
-  const evidenceQualityScore = evidenceQualityScoreFor(source.mode);
+  const evidenceQualityScore = evidenceQualityScoreFor(source.mode, source.processedCandleCount, windows.length);
   let run: WalkForwardRun = {
     runId,
     startedAt: now(),
@@ -269,6 +307,7 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
     activeCalibrationId: activeConfig.activeCalibrationId,
     configMergeStatus: activeConfig.mergeStatusLabel,
     proposalId: options.proposalId,
+    provenance: walkForwardProvenance,
     windows: [],
     warnings: [
       source.mode === "mt5_read_only"
@@ -364,6 +403,7 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
       throw new Error("No candles were available for walk-forward validation.");
     }
 
+    const oosRMultiples: number[] = [];
     for (const windowDefinition of windows) {
       if (options.signal?.aborted) {
         run = { ...run, status: "canceled", completedAt: now(), warnings: [...run.warnings, "Walk-forward run canceled by user."] };
@@ -394,7 +434,10 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
           symbol: split.symbol,
           timeframe: split.aggregateTimeframe
         });
-        const result = runBacktest(split.candles, activeConfig.config);
+        const result = runBacktest(split.candles, backtestConfig);
+        if (split.label === "out_of_sample") {
+          oosRMultiples.push(...result.trades.filter((trade) => trade.bias !== "neutral").map((trade) => trade.rMultiple));
+        }
         metricsBySplit[split.label] = metricsFromBacktest(result, evidenceQualityScore, split.label, splitRegime);
       }
 
@@ -421,7 +464,7 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
             totalWindows: windowDefinition.totalWindows,
             splitSummaries,
             metricsBySplit,
-            configUsed: configSummary(activeConfig.config),
+            configUsed: configSummary(backtestConfig),
             calibrationId: activeConfig.activeCalibrationId,
             verdict,
             failReasons,
@@ -442,13 +485,18 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
       windowGenerationNotes
     });
     const regimeSegments = regimeSegmentsFor(run.windows);
+    const edgeStatistics = computeEdgeStatistics(oosRMultiples, {
+      minimumSampleSize: options.minimumTotalOosTrades ?? DEFAULT_MINIMUM_EDGE_SAMPLE,
+      provenance: "out_of_sample"
+    });
     run = {
       ...run,
       status: stability.verdict === "fail" || stability.verdict === "insufficient_evidence" || run.warnings.length ? "completed_with_warnings" : "completed",
       completedAt: now(),
       stability: {
         ...stability,
-        regimeSegments
+        regimeSegments,
+        edgeStatistics
       },
       failureDiagnostics: stability.diagnostics,
       followUpPlan: stability.followUpPlan,

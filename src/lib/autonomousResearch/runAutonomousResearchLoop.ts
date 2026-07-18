@@ -31,6 +31,10 @@ import { resolveResearchRuntimeSnapshot, type ResearchRuntimeSnapshot } from "@/
 import type { CalibrationProposal } from "@/lib/selfImprovement";
 import { safeArray, safeTopN, uid } from "@/lib/utils";
 import { runResearchCycle } from "@/lib/researchCycle";
+import {
+  recordEvidenceUpdateInValidationChain,
+  recordWalkForwardRunInValidationChain
+} from "@/lib/validationChain";
 import { runWalkForwardValidation } from "@/lib/walkForward";
 
 const defaultSettings: AutonomousResearchSettings = {
@@ -66,6 +70,7 @@ const researchStepToProgressStage: Record<string, AutonomousLoopStage> = {
   llm_advisory: "llm_advisory",
   auto_research: "auto_research",
   validation: "backtest",
+  walk_forward: "walk_forward",
   research_quality: "readiness_maturity",
   self_improvement: "self_improvement",
   simulation_verification: "readiness_maturity",
@@ -89,7 +94,8 @@ const statusFromStopReason = (reason?: AutonomousResearchStopReason): Autonomous
       : reason === "regime_mismatch_detected" ||
           reason === "evidence_quality_too_low" ||
           reason === "walk_forward_repeatedly_failed" ||
-          reason === "llm_advisory_offline"
+          reason === "llm_advisory_offline" ||
+          reason === "llm_advisory_unavailable"
         ? "paused"
         : "completed";
 
@@ -224,11 +230,21 @@ const shouldStopAfterIteration = ({
       detail: "Regime mismatch or insufficient regime evidence paused the autonomous loop."
     };
   }
-  if (iteration.llmAdvisoryUnavailable) {
+  const llmUnavailableReason = iteration.llmAdvisoryUnavailableReason;
+  const llmAdvisoryWasIntentionallyDeferred =
+    llmUnavailableReason === "deferred_until_evidence_ready" ||
+    llmUnavailableReason === "skipped_for_autonomous_stability";
+  if (iteration.llmAdvisoryUnavailable && !llmAdvisoryWasIntentionallyDeferred) {
+    const bridgeOffline = llmUnavailableReason === "bridge_offline";
     return {
       stop: true,
-      reason: "llm_advisory_offline",
-      detail: "LLM advisory offline - deterministic cycle completed; autonomous loop paused to avoid repeated bridge retries."
+      reason: bridgeOffline ? "llm_advisory_offline" : "llm_advisory_unavailable",
+      detail:
+        llmUnavailableReason === "config_missing"
+          ? "LLM bridge is online, but the advisory provider is not configured. Autonomous retries are paused until provider configuration is available."
+          : bridgeOffline
+            ? "LLM advisory bridge is offline. Deterministic research completed; autonomous retries are paused."
+            : `LLM advisory is unavailable (${llmUnavailableReason ?? "unknown reason"}). Deterministic research completed; autonomous retries are paused.`
     };
   }
   if (snapshot.evidence.evidenceQualityScore < 45) {
@@ -684,50 +700,8 @@ export async function runAutonomousResearchLoop({
         resolved: true
       });
 
-      if (!settings.advancedFullResearchMode) {
-        const deferredStartedMs = Date.now();
-        recordTiming(
-          "research_cycle",
-          deferredStartedMs,
-          "Deferred in autonomous stability mode; use manual AI Research or enable Advanced full research mode for the full synchronous cycle.",
-          true
-        );
-        iteration = {
-          ...iteration,
-          completedAt: now(),
-          status: "warning",
-          readinessState: snapshotBefore.readiness.readinessState,
-          maturityScore: snapshotBefore.maturity.maturityScore,
-          notes: [
-            ...iteration.notes,
-            "Autonomous stability preflight completed with the canonical MT5 source.",
-            "Full deterministic AI Research Cycle, candidate search, LLM advisory, and walk-forward were deferred to keep the page responsive.",
-            "No mock fallback, auto-apply, broker execution, readiness override, or go-trader handoff was used."
-          ]
-        };
-        run = {
-          ...run,
-          status: "completed_with_warnings",
-          completedAt: now(),
-          stopReason: "completed",
-          stopReasonDetail: "Autonomous stability preflight completed. Run manual AI Research, or enable Advanced full research mode for the full synchronous cycle.",
-          iterations: [...run.iterations.filter((item) => item.iteration !== iterationNumber), iteration],
-          latestBlocker: blockerSummary.topBlocker,
-          readinessTrend: snapshotBefore.readiness.readinessState,
-          maturityTrend: snapshotBefore.maturity.maturitySummary.trendAvailability.message,
-          goTraderHandoffGate: goTraderHandoffGateFor(snapshotBefore)
-        };
-        updateProgress({
-          stage: "completed",
-          status: "completed_with_warnings",
-          title: "Autonomous preflight completed",
-          detail: "Canonical source guard passed; heavy research cycle deferred for page responsiveness."
-        });
-        cancellationStatus = "stopped";
-        publishRun(true);
-        return run;
-      }
-
+      // Slim cycle by default: thesis → backtest → validation → walk-forward → readiness.
+      // Advanced mode adds auto-research depth, LLM advisory, and optional auto-apply.
       await cooperativeYield("research_cycle");
       const researchCycleStartedMs = Date.now();
       const autonomousMaxCandidateCount = settings.advancedFullResearchMode
@@ -737,11 +711,12 @@ export async function runAutonomousResearchLoop({
         state,
         searchMode: scenario.searchMode,
         maxCandidateCount: autonomousMaxCandidateCount,
+        maxResearchCandles: settings.advancedFullResearchMode ? undefined : 500,
         maxAdaptivePasses: settings.advancedFullResearchMode ? undefined : 0,
         autoResearchTimeoutMs: settings.advancedFullResearchMode ? undefined : AUTONOMOUS_RESEARCH_TIMEOUT_MS,
         autoResearchCheckpointPersistence: "memory_only",
         advancedFullResearchMode: settings.advancedFullResearchMode,
-        skipHeavyAudit: settings.safeImportedDataMode,
+        skipHeavyAudit: settings.safeImportedDataMode || !settings.advancedFullResearchMode,
         skipLlmAdvisory: !settings.advancedFullResearchMode,
         skipAutoResearch: !settings.advancedFullResearchMode,
         sourceGuard: {
@@ -817,7 +792,15 @@ export async function runAutonomousResearchLoop({
           ...iteration.notes,
           cycle.resultSummary,
           cycle.llmAdvisoryUnavailable
-            ? "LLM advisory bridge offline. Deterministic research completed; advisory unavailable."
+            ? cycle.llmAdvisoryUnavailableReason === "deferred_until_evidence_ready"
+              ? "LLM advisory deferred until deterministic evidence is ready."
+              : cycle.llmAdvisoryUnavailableReason === "skipped_for_autonomous_stability"
+                ? "LLM advisory intentionally skipped for autonomous stability mode."
+                : cycle.llmAdvisoryUnavailableReason === "config_missing"
+                  ? "LLM bridge online; advisory provider is not configured."
+                  : cycle.llmAdvisoryUnavailableReason === "bridge_offline"
+                    ? "LLM advisory bridge offline. Deterministic research completed; advisory unavailable."
+                    : `LLM advisory unavailable (${cycle.llmAdvisoryUnavailableReason ?? "unknown reason"}).`
             : undefined,
           proposal ? `Proposal ${proposal.proposalId} available for policy review.` : "No proposal was created."
         ].filter((note): note is string => Boolean(note))
@@ -844,6 +827,8 @@ export async function runAutonomousResearchLoop({
           walkForwardStartedMs,
           `Verdict ${walkForwardRun.stability?.verdict ?? "unknown"}; windows ${walkForwardRun.stability?.windowCount ?? 0}.`
         );
+        // Close the validation chain automatically; no manual UI click needed.
+        recordWalkForwardRunInValidationChain(walkForwardRun);
       } else if (proposal) {
         recordTiming(
           "walk_forward",
@@ -974,6 +959,16 @@ export async function runAutonomousResearchLoop({
         stage: "readiness_maturity",
         title: "Updating readiness and maturity",
         detail: `Readiness ${snapshotAfter.readiness.readinessState}; maturity ${snapshotAfter.maturity.maturityScore}/100.`
+      });
+      recordEvidenceUpdateInValidationChain({
+        evidenceQualityScore: snapshotAfter.evidence.evidenceQualityScore,
+        maturityScore: snapshotAfter.maturity.maturityScore,
+        maturityGrade: snapshotAfter.maturity.maturityGrade,
+        selfImprovementStatus: finalEligibility.applied
+          ? `auto_applied:${finalEligibility.proposalId}`
+          : proposal
+            ? "proposal_pending_review"
+            : "no_proposal"
       });
       publishRun();
 

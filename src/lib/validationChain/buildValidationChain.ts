@@ -10,6 +10,12 @@ import {
   type ValidationChainSourceStatus,
   type ValidationChainWalkForwardSummary
 } from "./validationChainTypes";
+import {
+  buildValidationProvenanceIdentity,
+  matchValidationProvenance,
+  validationProvenanceBlockerLabel,
+  type ValidationProvenanceIdentity
+} from "../validationProvenance";
 
 /**
  * Pure recognition-to-validation chain transitions.
@@ -67,10 +73,21 @@ export interface ValidationChainRecognitionInput {
   sourceStatus: ValidationChainSourceStatus;
   hypothesisId?: string;
   generatedAt?: string;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 export const queueValidationChainEntry = (input: ValidationChainRecognitionInput): ValidationChainQueueResult => {
   const now = input.generatedAt ?? new Date().toISOString();
+  const provenance = buildValidationProvenanceIdentity({
+    ...input.provenance,
+    candidateId: input.provenance?.candidateId ?? input.recognitionId,
+    sourceProvider: input.provenance?.sourceProvider ?? input.sourceStatus.sourceProvider,
+    requestedSymbol: input.provenance?.requestedSymbol ?? input.symbol,
+    brokerSymbol: input.provenance?.brokerSymbol ?? input.brokerSymbol,
+    timeframe: input.provenance?.timeframe ?? input.timeframe,
+    sourceFingerprint: input.provenance?.sourceFingerprint ?? input.sourceFingerprint
+  });
+  const provenanceReview = matchValidationProvenance(provenance, provenance);
   const base: ValidationChainEntry = {
     researchOnly: true,
     recognitionId: input.recognitionId,
@@ -83,6 +100,9 @@ export const queueValidationChainEntry = (input: ValidationChainRecognitionInput
     timeframe: input.timeframe,
     htfContext: input.htfContext ?? [],
     sourceFingerprint: input.sourceFingerprint ?? "no fingerprint",
+    provenance,
+    provenanceStatus: provenanceReview.status,
+    provenanceBlockers: provenanceReview.blockers,
     sourceStatus: input.sourceStatus,
     hypothesisStatus: "not_queued",
     hypothesisId: input.hypothesisId,
@@ -161,10 +181,30 @@ export const applyValidationChainReplayResult = (
   entry: ValidationChainEntry,
   replay: ValidationChainReplaySummary
 ): ValidationChainEntry => {
+  const provenanceReview = matchValidationProvenance(entry.provenance, replay.provenance, {
+    purpose: "validation",
+    requireCandidateId: true
+  });
+  if (!provenanceReview.matched) {
+    return {
+      ...entry,
+      provenanceStatus: provenanceReview.status,
+      provenanceBlockers: provenanceReview.blockers,
+      blockers: [
+        ...entry.blockers.filter((blocker) => !blocker.startsWith("Validation provenance")),
+        `Validation provenance blocked: ${provenanceReview.blockers.map(validationProvenanceBlockerLabel).join(", ")}.`
+      ],
+      nextAction: provenanceReview.summary,
+      paperDemoChecklistImpact: "Blocked for Paper-Demo: replay evidence does not match this exact candidate provenance.",
+      updatedAt: replay.generatedAt
+    };
+  }
   const passed = replay.verdict === "passed";
   const failed = replay.verdict === "failed";
   return {
     ...entry,
+    provenanceStatus: "matched",
+    provenanceBlockers: [],
     replayResult: replay,
     hypothesisStatus: passed ? "walk_forward_required" : failed ? "replay_failed" : "needs_more_data",
     nextAction: passed
@@ -206,10 +246,32 @@ export const applyValidationChainWalkForwardResult = (
       updatedAt: walkForward.generatedAt
     };
   }
+  const provenanceReview = matchValidationProvenance(entry.provenance, walkForward.provenance, {
+    purpose: "walk_forward",
+    requireCandidateId: true,
+    requireWalkForwardRunId: true,
+    requireMatchingOosEvidence: true
+  });
+  if (!provenanceReview.matched) {
+    return {
+      ...entry,
+      provenanceStatus: provenanceReview.status,
+      provenanceBlockers: provenanceReview.blockers,
+      blockers: [
+        ...entry.blockers.filter((blocker) => !blocker.startsWith("Walk-forward provenance")),
+        `Walk-forward provenance blocked: ${provenanceReview.blockers.map(validationProvenanceBlockerLabel).join(", ")}.`
+      ],
+      nextAction: provenanceReview.summary,
+      paperDemoChecklistImpact: "Blocked for Paper-Demo: matching proposal/candidate OOS evidence is unavailable.",
+      updatedAt: walkForward.generatedAt
+    };
+  }
   const passed = walkForward.verdict === "passed";
   const failed = walkForward.verdict === "failed";
   return {
     ...entry,
+    provenanceStatus: "matched",
+    provenanceBlockers: [],
     walkForwardResult: walkForward,
     hypothesisStatus: passed ? "walk_forward_passed" : failed ? "walk_forward_failed" : "needs_more_data",
     nextAction: passed
@@ -231,17 +293,36 @@ export const applyValidationChainWalkForwardResult = (
 export const applyValidationChainEvidenceUpdate = (
   entry: ValidationChainEntry,
   evidence: ValidationChainEvidenceSummary
-): ValidationChainEntry => ({
-  ...entry,
-  evidenceQuality: evidence,
-  hypothesisStatus:
-    entry.hypothesisStatus === "walk_forward_passed" ? "evidence_updated" : entry.hypothesisStatus,
-  nextAction:
-    entry.hypothesisStatus === "walk_forward_passed"
-      ? "Evidence/maturity updated. Deterministic readiness gates decide any further progression."
-      : entry.nextAction,
-  updatedAt: evidence.generatedAt
-});
+): ValidationChainEntry => {
+  const provenanceReview = matchValidationProvenance(entry.provenance, evidence.provenance, {
+    purpose: "readiness",
+    requireCandidateId: true,
+    requireMatchingOosEvidence: true
+  });
+  if (!provenanceReview.matched || entry.hypothesisStatus !== "walk_forward_passed") {
+    return {
+      ...entry,
+      provenanceStatus: provenanceReview.status,
+      provenanceBlockers: provenanceReview.blockers,
+      blockers: [
+        ...entry.blockers.filter((blocker) => !blocker.startsWith("Evidence provenance")),
+        `Evidence provenance blocked: ${provenanceReview.blockers.map(validationProvenanceBlockerLabel).join(", ")}.`
+      ],
+      nextAction: provenanceReview.summary,
+      paperDemoChecklistImpact: "Blocked for Paper-Demo: evidence/maturity does not match the validated candidate.",
+      updatedAt: evidence.generatedAt
+    };
+  }
+  return {
+    ...entry,
+    provenanceStatus: "matched",
+    provenanceBlockers: [],
+    evidenceQuality: evidence,
+    hypothesisStatus: "evidence_updated",
+    nextAction: "Evidence/maturity updated. Deterministic readiness gates decide any further progression.",
+    updatedAt: evidence.generatedAt
+  };
+};
 
 export const rejectValidationChainEntry = (
   entry: ValidationChainEntry,

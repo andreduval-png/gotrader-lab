@@ -10,6 +10,11 @@ import type {
   ValidationSuiteReport
 } from "@/lib/validation/validationTypes";
 import type { Candle } from "@/lib/types";
+import {
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters,
+  type ValidationProvenanceIdentity
+} from "@/lib/validationProvenance";
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -239,15 +244,80 @@ const scenarioResultFor = (definition: ValidationScenarioDefinition, result: Bac
   };
 };
 
-export function runValidationSuite(candles: Candle[], baseConfig: BacktestConfig = {}): ValidationSuiteReport {
+export interface ValidationSuiteRunOptions {
+  provenance?: ValidationProvenanceIdentity;
+}
+
+const provenanceFor = (
+  reportId: string,
+  candles: Candle[],
+  baseConfig: BacktestConfig,
+  provided?: ValidationProvenanceIdentity
+) => {
+  const first = candles[0];
+  const last = candles.at(-1);
+  return buildValidationProvenanceIdentity({
+    ...provided,
+    strategyProfile: provided?.strategyProfile ?? baseConfig.strategyProfile,
+    requestedSymbol: provided?.requestedSymbol ?? baseConfig.symbol ?? first?.symbol,
+    timeframe: provided?.timeframe ?? baseConfig.timeframe ?? first?.timeframe,
+    parameterFingerprint:
+      provided?.parameterFingerprint ?? fingerprintValidationParameters(baseConfig),
+    validationRunId: reportId,
+    dataRangeStart: provided?.dataRangeStart ?? first?.timestamp,
+    dataRangeEnd: provided?.dataRangeEnd ?? last?.timestamp
+  });
+};
+
+export function runValidationSuite(
+  candles: Candle[],
+  baseConfig: BacktestConfig = {},
+  options: ValidationSuiteRunOptions = {}
+): ValidationSuiteReport {
   const generatedAt = new Date().toISOString();
+  const id = `validation_${Date.now()}`;
   const scenarios = scenariosFor(baseConfig).map((definition) =>
     scenarioResultFor(definition, runBacktest(candles, definition.config))
   );
 
   return {
-    id: `validation_${Date.now()}`,
+    id,
     generatedAt,
+    provenance: provenanceFor(id, candles, baseConfig, options.provenance),
+    scenarios,
+    calibration: buildCalibrationReport(scenarios, generatedAt),
+    safetyNotice: "Simulation validation only. No broker connection. No real trades."
+  };
+}
+
+export async function runValidationSuiteAsync(
+  candles: Candle[],
+  baseConfig: BacktestConfig = {},
+  options: {
+    signal?: AbortSignal;
+    onScenarioComplete?: (completed: number, total: number, scenario: ValidationScenarioResult) => void;
+    provenance?: ValidationProvenanceIdentity;
+  } = {}
+): Promise<ValidationSuiteReport> {
+  const generatedAt = new Date().toISOString();
+  const id = `validation_${Date.now()}`;
+  const definitions = scenariosFor(baseConfig);
+  const scenarios: ValidationScenarioResult[] = [];
+
+  for (const definition of definitions) {
+    if (options.signal?.aborted) {
+      throw new Error("Validation suite canceled by user.");
+    }
+    const scenario = scenarioResultFor(definition, runBacktest(candles, definition.config));
+    scenarios.push(scenario);
+    options.onScenarioComplete?.(scenarios.length, definitions.length, scenario);
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+  }
+
+  return {
+    id,
+    generatedAt,
+    provenance: provenanceFor(id, candles, baseConfig, options.provenance),
     scenarios,
     calibration: buildCalibrationReport(scenarios, generatedAt),
     safetyNotice: "Simulation validation only. No broker connection. No real trades."

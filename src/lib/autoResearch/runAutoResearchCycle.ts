@@ -5,6 +5,7 @@ import {
 import { createSelfImprovementFromCandidate } from "@/lib/autoResearch/createSelfImprovementFromCandidate";
 import {
   generateAdaptiveCandidateConfigs,
+  generateAgentUsefulnessCandidateConfigs,
   generateCandidateConfigs,
   generateTradeRecoveryCandidateConfigs
 } from "@/lib/autoResearch/generateCandidateConfigs";
@@ -40,7 +41,8 @@ import {
   saveICTScoringWeights
 } from "@/lib/ict";
 import {
-  analyzeValidationResults
+  analyzeValidationResults,
+  loadLatestResearchQualityReview
 } from "@/lib/researchQuality";
 import {
   evaluateReadinessGate
@@ -60,7 +62,7 @@ import type {
   CalibrationProposal,
   CalibrationProposalMetrics
 } from "@/lib/selfImprovement";
-import { mockCandles } from "@/lib/mockData/mockCandles";
+import { computeEdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import { labStorage } from "@/lib/storage";
 import { loadSimulationRunbookState } from "@/lib/simulationRunbook";
 import type { Candle } from "@/lib/types";
@@ -130,6 +132,8 @@ const fallbackReadinessEstimate = (): ReadinessGateSnapshot => ({
   state: "Not Ready",
   passedRequirements: [],
   failedRequirements: [],
+  activeFailedRequirements: [],
+  deferredRequirements: [],
   warnings: ["Readiness estimate was unavailable in this stored compact summary."],
   recommendedNextStep: "Rerun Auto Research to regenerate readiness evidence.",
   brokerExecutionDisabled: true
@@ -199,6 +203,8 @@ const compactReadinessEstimate = (readiness?: AutoResearchCandidateResult["readi
   ...(readiness ?? fallbackReadinessEstimate()),
   passedRequirements: [],
   failedRequirements: safeTopN(readiness?.failedRequirements, 3),
+  activeFailedRequirements: safeTopN(readiness?.activeFailedRequirements, 3),
+  deferredRequirements: safeTopN(readiness?.deferredRequirements, 3),
   warnings: safeTopN(readiness?.warnings, 3)
 });
 
@@ -245,6 +251,7 @@ const compactCandidate = (candidate: AutoResearchCandidateResult): AutoResearchC
     changedParameters: safeArray(source.changedParameters),
     candidateFamily: source.candidateFamily,
     candidateFamilyMetadata: source.candidateFamilyMetadata,
+    profileWalkForward: source.profileWalkForward,
     readinessEstimate: compactReadinessEstimate(source.readinessEstimate),
     metrics: {
       validationId: metrics.validationId,
@@ -276,7 +283,6 @@ const compactCandidate = (candidate: AutoResearchCandidateResult): AutoResearchC
       : undefined,
     grinchComparison: source.grinchComparison,
     comparisonResult: compactComparison(source.comparisonResult),
-    profileWalkForward: source.profileWalkForward,
     resultCategory: source.resultCategory ?? "rejected",
     promotionEligible: Boolean(source.promotionEligible),
     rejectionReasons: safeTopN(source.rejectionReasons, 3)
@@ -669,7 +675,12 @@ export function latestAutoResearchCycle(state = loadAutoResearchState()) {
 }
 
 const isGrinchCandidateFamily = (family?: AutoResearchCandidateResult["candidateFamily"]) =>
-  Boolean(family?.startsWith("grinch_") || family === "reversal_expansion_confirmation");
+  Boolean(
+    family?.startsWith("grinch_") ||
+      family === "reversal_expansion_confirmation" ||
+      family === "model_1_timing_recheck" ||
+      family === "consolidation_range_tightness"
+  );
 
 const buildCalibrationFamilyReport = ({
   backtestResult,
@@ -743,7 +754,44 @@ const buildCalibrationFamilyReport = ({
   };
 };
 
-const detectorSourceFingerprint = (candles: Candle[], provider: string) => {
+const MINIMUM_OOS_CANDLES = 120;
+const OOS_CANDLE_SHARE = 0.3;
+const OOS_MINIMUM_SAMPLE = 20;
+
+/** Train on the leading window; score OOS on the held-out trailing share. */
+const splitTrainHoldout = (candles: Candle[]) => {
+  const oosStartIndex = Math.floor(candles.length * (1 - OOS_CANDLE_SHARE));
+  return {
+    trainCandles: candles.slice(0, oosStartIndex),
+    oosCandles: candles.slice(oosStartIndex)
+  };
+};
+
+/** Held-out OOS backtest so candidate ranking reflects generalization. */
+const evaluateCandidateOutOfSample = (
+  candidateConfig: ReturnType<typeof generateCandidateConfigs>[number]["config"],
+  candles: Candle[]
+) => {
+  const { oosCandles } = splitTrainHoldout(candles);
+  if (oosCandles.length < MINIMUM_OOS_CANDLES) {
+    return undefined;
+  }
+  try {
+    const oosBacktest = runBacktest(oosCandles, candidateConfig);
+    const rMultiples = oosBacktest.trades
+      .filter((trade) => trade.bias !== "neutral")
+      .map((trade) => trade.rMultiple)
+      .filter((value) => Number.isFinite(value));
+    return computeEdgeStatistics(rMultiples, {
+      minimumSampleSize: OOS_MINIMUM_SAMPLE,
+      provenance: "out_of_sample"
+    });
+  } catch {
+    return undefined;
+  }
+};
+
+const sourceFingerprintFor = (candles: Candle[], provider: string) => {
   const first = candles[0];
   const last = candles.at(-1);
   return [
@@ -776,7 +824,8 @@ const detectorMetricsFromBacktest = (
   readinessStatus: "red",
   stabilityScore: Math.round(walkForward.oosWindowPassRate * 100),
   conservativeScenarioStable: false,
-  strongestScenario: walkForward.verdict === "passed" ? "Frozen chronological OOS holdout" : "Detector replay only",
+  strongestScenario:
+    walkForward.verdict === "passed" ? "Frozen chronological OOS holdout" : "Detector replay only",
   weakestScenario: "Untouched forward evidence not collected"
 });
 
@@ -797,15 +846,17 @@ const detectorComparison = (
   improved: walkForward.verdict === "passed",
   stabilityImproved: walkForward.verdict === "passed",
   recommendation: walkForward.verdict === "passed" ? "keep_testing" : "reject",
-  summary: walkForward.verdict === "passed"
-    ? "Frozen detector profile passed chronological OOS validation; untouched forward evidence is still required."
-    : `Frozen detector profile did not pass chronological OOS validation (${walkForward.verdict}).`,
-  positiveChanges: walkForward.verdict === "passed"
-    ? [
-        `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} chronological OOS windows passed.`,
-        `Pooled OOS expectancy ${walkForward.pooledOos.averageR}R across ${walkForward.totalOosTrades} trades.`
-      ]
-    : [],
+  summary:
+    walkForward.verdict === "passed"
+      ? "Frozen detector profile passed chronological OOS validation; untouched forward evidence is still required."
+      : `Frozen detector profile did not pass chronological OOS validation (${walkForward.verdict}).`,
+  positiveChanges:
+    walkForward.verdict === "passed"
+      ? [
+          `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} chronological OOS windows passed.`,
+          `Pooled OOS expectancy ${walkForward.pooledOos.averageR}R across ${walkForward.totalOosTrades} trades.`
+        ]
+      : [],
   negativeChanges: walkForward.blockers,
   neutralChanges: [],
   improvedMetrics: walkForward.verdict === "passed" ? ["out_of_sample_expectancy", "window_stability"] : [],
@@ -828,15 +879,16 @@ const detectorScoreBreakdown = (
   const falsePositiveScore = clamp((1 - falsePositiveRate) * 100);
   const tradeCountScore = clamp((metrics.totalTrades / 60) * 100);
   const oosScore = walkForward.verdict === "passed" ? 100 : clamp(walkForward.oosWindowPassRate * 100);
-  return {
-    totalScore: Math.round(
-      drawdownScore * 0.1 +
+  const totalScore = Math.round(
+    drawdownScore * 0.1 +
       averageRScore * 0.2 +
       winRateScore * 0.1 +
       falsePositiveScore * 0.1 +
       tradeCountScore * 0.15 +
       oosScore * 0.35
-    ),
+  );
+  return {
+    totalScore,
     drawdownScore: Math.round(drawdownScore),
     averageRScore: Math.round(averageRScore),
     winRateScore: Math.round(winRateScore),
@@ -854,7 +906,8 @@ const detectorScoreBreakdown = (
     oosVerdict: walkForward.pooledOos.edgeVerdict,
     stabilityImproved: walkForward.verdict === "passed",
     sufficientSample: walkForward.totalOosTrades >= 40,
-    rationale: "IFVG v3 uses frozen detector-profile OOS scoring. This score cannot create readiness, a proposal, or execution authority."
+    rationale:
+      "IFVG v3 uses frozen detector-profile OOS scoring. This score cannot create readiness, a proposal, or execution authority."
   };
 };
 
@@ -864,10 +917,11 @@ const evaluateFrozenDetectorCandidate = (
   sourceProvider: string
 ): AutoResearchCandidateResult => {
   const backtestResult = runBacktest(candles, candidate.config);
+  const profileId = candidate.config.strategyProfile;
   const profileWalkForward = runDetectorProfileWalkForward({
-    profileId: candidate.config.strategyProfile,
+    profileId,
     sourceProvider,
-    sourceFingerprint: detectorSourceFingerprint(candles, sourceProvider),
+    sourceFingerprint: sourceFingerprintFor(candles, sourceProvider),
     sourceStart: candles[0]?.timestamp ?? "",
     sourceEnd: candles.at(-1)?.timestamp ?? "",
     trades: backtestResult.trades.map((trade) => ({
@@ -895,9 +949,10 @@ const evaluateFrozenDetectorCandidate = (
     profileWalkForward,
     resultCategory: profileWalkForward.verdict === "passed" ? "improved_but_not_ready" : "rejected",
     promotionEligible: false,
-    rejectionReasons: profileWalkForward.verdict === "passed"
-      ? ["Untouched forward evidence, maturity, and readiness gates remain required."]
-      : profileWalkForward.blockers
+    rejectionReasons:
+      profileWalkForward.verdict === "passed"
+        ? ["Untouched forward evidence, maturity, and readiness gates remain required."]
+        : profileWalkForward.blockers
   };
 };
 
@@ -921,13 +976,17 @@ const evaluateCandidate = (
     if (candidate.config.strategyProfile === "ifvg_fresh_retest_v3_research") {
       return evaluateFrozenDetectorCandidate(candidate, candles, sourceProvider);
     }
-    const backtestResult = runBacktest(candles, candidate.config);
-    const validationReport = runValidationSuite(candles, candidate.config);
+    const { trainCandles } = splitTrainHoldout(candles);
+    const scoringCandles = trainCandles.length >= 80 ? trainCandles : candles;
+    const backtestResult = runBacktest(scoringCandles, candidate.config);
+    const validationReport = runValidationSuite(scoringCandles, candidate.config);
     const researchQualityReview = analyzeValidationResults(validationReport);
+    const outOfSample = evaluateCandidateOutOfSample(candidate.config, candles);
     const readinessEstimate = evaluateReadinessGate({
       validation: validationReport,
       quality: researchQualityReview,
-      runbook: loadSimulationRunbookState()
+      runbook: loadSimulationRunbookState(),
+      edgeStatistics: outOfSample
     });
     const metrics = summarizeValidationMetrics(validationReport);
     const comparisonResult = compareProposalToBaseline(baselineMetrics, metrics);
@@ -938,6 +997,7 @@ const evaluateCandidate = (
       validation: validationReport,
       quality: researchQualityReview,
       grinchScore,
+      outOfSample,
       scoringCriteria: defaultAutoResearchScoringCriteria
     });
     const calibrationFamilyReport = buildCalibrationFamilyReport({
@@ -1250,13 +1310,15 @@ const buildGrinchComparison = (
     "reversal_expansion_confirmation",
     "grinch_model_consolidation_only",
     "grinch_reversal_profile_only",
-    "grinch_consolidation_profile_only"
+    "grinch_consolidation_profile_only",
+    "consolidation_range_tightness"
   ));
   const timingCandidate = candidateScoreSummaryFor(findFamily(
     "grinch_require_time_price_alignment",
     "grinch_timing_valid_only",
     "grinch_exclude_expired_timing",
-    "grinch_require_timing_acceptable"
+    "grinch_require_timing_acceptable",
+    "model_1_timing_recheck"
   ));
   const entryCandidate = candidateScoreSummaryFor(findFamily(
     "grinch_require_profile_plus_entry_confirmation",
@@ -1776,7 +1838,12 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
     message: "Preparing Auto Research candidate search."
   });
   try {
-    const activeCandles = options.candles?.length ? options.candles : mockCandles;
+    if (!options.candles?.length) {
+      throw new Error(
+        "Auto Research requires real candles. Activate MT5 read-only research mode or import historical candles; mock fallback is disabled."
+      );
+    }
+    const activeCandles = options.candles;
     const activeResearchConfig = resolveActiveBacktestConfig();
     const baselineConfig = options.baselineConfig ? resolveActiveBacktestConfig(options.baselineConfig).config : activeResearchConfig.config;
     const proposalSnapshotContext = (sourceCandidateId?: string) => ({
@@ -1845,7 +1912,14 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
       const passCandidateConfigs =
         passNumber === 1
           ? prioritizeAutoResearchCandidatesByForwardScenario(
-              generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount),
+              [
+                ...generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount),
+                ...generateAgentUsefulnessCandidateConfigs(
+                  baselineConfig,
+                  safeArray(loadLatestResearchQualityReview()?.agentUsefulness),
+                  2
+                )
+              ],
               options.forwardScenarioMap
             )
           : generateAdaptiveCandidateConfigs({

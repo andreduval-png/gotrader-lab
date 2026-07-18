@@ -15,6 +15,7 @@ const primaryRoutes = [
 ];
 
 const advancedRoutes = [
+  "/research-lab",
   "/ict-lab",
   "/replay",
   "/paper-demo",
@@ -35,15 +36,15 @@ const advancedRoutes = [
   "/prompt-lab"
 ];
 
-// Expected coverage: all 29 routes from src/App.tsx, reachable through the
-// 8 sidebar hubs and their workspace tabs. Excluded: "/" and "*" redirects
+// Expected coverage: every non-redirect route from src/App.tsx. Operator
+// routes use the four-item primary navigation; specialist routes remain
+// directly reachable through Advanced Research. Excluded: "/" and "*" redirects
 // and the "/agents/:id" detail route. Keep this list in sync with
 // scripts/smoke-routes.mjs.
 const allRoutes = [...primaryRoutes, ...advancedRoutes];
-const chartRoutes = ["/dashboard", "/ict-lab", "/replay", "/backtest-lab", "/market-data"];
+const chartRoutes = ["/research-lab", "/ict-lab", "/replay", "/backtest-lab", "/market-data"];
 const sourceStatusRoutes = [
-  "/dashboard",
-  "/advisor",
+  "/research-advisor",
   "/market-data",
   "/ict-lab",
   "/backtest-lab",
@@ -68,9 +69,10 @@ const consoleErrorsByTest = new Map<string, string[]>();
 const routeHeadingTimeoutMs = 30_000;
 
 const expectedHeadings: Record<string, RegExp> = {
-  "/dashboard": /Command Center/i,
-  "/advisor": /Research Advisor/i,
+  "/dashboard": /Operator Console/i,
+  "/advisor": /Decision Inbox/i,
   "/research-advisor": /Research Advisor/i,
+  "/research-lab": /MT5-first research cockpit/i,
   "/market-data": /Market Data/i,
   "/autonomous-research": /Autonomous Research/i,
   "/walk-forward": /Walk-Forward/i,
@@ -140,7 +142,7 @@ test.describe("GoTrader browser route smoke", () => {
     });
     const marker = await page.evaluate(() => (window as Window & { __gotraderSmokeNavigationMarker?: string }).__gotraderSmokeNavigationMarker);
 
-    for (const route of ["/market-data", "/settings", "/dashboard"]) {
+    for (const route of ["/advisor", "/performance", "/settings", "/dashboard"]) {
       await page.locator(`nav a[href="${route}"]`).click();
       await expect(page).toHaveURL(new RegExp(`${route.replace("/", "\\/")}$`));
       await expect(page.locator("main")).toBeVisible();
@@ -150,45 +152,32 @@ test.describe("GoTrader browser route smoke", () => {
     }
   });
 
-  test("dashboard shows command-center safety locks and progress panel", async ({ page }) => {
+  test("dashboard shows the compact operator console and guarded cycle controls", async ({ page }) => {
     await gotoRoute(page, "/dashboard");
-    await expect(page.getByTestId("dashboard-command-overview")).toBeVisible();
-    await expect(page.getByTestId("dashboard-overview-source")).toBeVisible();
-    await expect(page.getByTestId("dashboard-overview-next-action")).toBeVisible();
-    await expect(page.locator("main")).toContainText(/MT5-first research cockpit/i);
-    await expect(page.locator("main")).toContainText(/Composite ICT bias/i);
-    await expect(page.locator("main")).toContainText(/Replay score/i);
-    await expect(page.getByTestId("dashboard-paper-demo-operations-card")).toBeVisible();
-    await expect(page.getByTestId("dashboard-paper-demo-operations-card")).toContainText(/Paper-Demo Operations/i);
-    const autoPaperDemoCard = page.getByTestId("dashboard-auto-paper-demo-cycle-card");
-    await expect(autoPaperDemoCard).toBeVisible();
-    await expect(autoPaperDemoCard).toContainText(/Auto Paper-Demo Cycle/i);
-    await expect(autoPaperDemoCard.getByRole("button", { name: "Run cycle now" })).toBeVisible();
-    await expect(autoPaperDemoCard.getByRole("button", { name: "Stop cycle" })).toBeVisible();
-    await expect(page.locator("main")).toContainText(/Execution disabled/i);
-    await expect(page.locator("main")).toContainText(/Broker gates locked/i);
-    await expect(page.locator("main")).toContainText(/Every action remains research-only|Research only/i);
-    await expect(page.locator("main")).toContainText(/MT5 read-only/i);
-    // Loop progress lives in the collapsed state-and-metrics section.
-    await expandDeferredDetails(page, "dashboard-state-metrics");
-    await expect(page.locator("main")).toContainText(/Loop progress/i);
-    await expect(page.getByRole("button", { name: "Activate Market" }).first()).toBeVisible();
-    await expect(page.getByTestId("activate-market-progress")).toBeVisible();
-    await expect(page.getByTestId("activate-market-progress")).toContainText(/Activate Market Workflow/i);
+    await expect(page.getByTestId("operator-console")).toBeVisible();
+    await expect(page.getByTestId("operator-start-cycle")).toBeVisible();
+    await expect(page.getByTestId("operator-market-brief")).toBeVisible();
+    await expect(page.getByTestId("operator-decision-summary")).toBeVisible();
+    await expect(page.locator("main")).toContainText(/supervised research cycle/i);
+    await expect(page.locator("main")).toContainText(/Research trades/i);
+    await expect(page.locator("main")).toContainText(/Advanced Research Lab/i);
+    await expect(page.locator("main")).toContainText(/authority none/i);
+    await expectNoVisibleExecutionControls(page);
   });
 
-  test("dashboard Results tab and /performance share the upgraded results page", async ({ page }) => {
+  test("dashboard links to the canonical results workspace", async ({ page }) => {
     await gotoRoute(page, "/performance");
     await expectUpgradedResultsPage(page);
 
     await gotoRoute(page, "/dashboard");
-    await page.getByRole("button", { name: "Results", exact: true }).click();
+    await page.locator('a[href="/performance"]').first().click();
+    await expect(page).toHaveURL(/\/performance$/);
     await expectUpgradedResultsPage(page);
     await expectNoVisibleExecutionControls(page);
   });
 
-  test("ICT Strategy Suite advisor panels render in advisor workspace and dashboard", async ({ page }) => {
-    await gotoRoute(page, "/advisor");
+  test("ICT Strategy Suite panels remain available in the advanced advisor workspace", async ({ page }) => {
+    await gotoRoute(page, "/research-advisor");
     await expect(page.locator("main")).toContainText(/Research Advisor/i);
     // Advisor workspace tabs: Chat is the default tab so chat is never buried.
     await expect(page.getByTestId("advisor-workspace-tabs")).toBeVisible();
@@ -309,14 +298,9 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(page.getByTestId("ict-manual-replay-review")).toHaveCount(0);
 
     await gotoRoute(page, "/dashboard");
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Research Advisor/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Packet source/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Model lane/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Paper Sim/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Strategy Calibration/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Execution: Disabled/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Phase 1 \/ Phase 2/i);
-    await expect(page.getByTestId("dashboard-research-advisor-card")).toContainText(/Open Advisor/i);
+    await expect(page.getByTestId("operator-market-brief")).toBeVisible();
+    await expect(page.getByTestId("operator-market-brief")).toContainText(/Current market brief/i);
+    await expect(page.getByRole("link", { name: /Advanced Research Lab/i })).toBeVisible();
     await gotoRoute(page, "/strategy-library");
     await expect(page.getByTestId("strategy-library-view")).toBeVisible();
     await expect(page.getByTestId("strategy-library-cmd-card")).toContainText(/CMD/i);
@@ -369,12 +353,10 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(advisorChain).toContainText(/Validation chain/i);
     await expect(advisorChain).toContainText(/Recognition is not evidence|Recognition only/i);
 
-    // Dashboard shows the compact validation chain summary.
+    // Dashboard keeps validation compact and links to the detailed lab.
     await gotoRoute(page, "/dashboard");
-    const dashboardChain = page.getByTestId("validation-chain-card").first();
-    await expect(dashboardChain).toBeVisible();
-    await expect(dashboardChain.getByTestId("validation-chain-status")).toBeVisible();
-    await expect(dashboardChain).toContainText(/Authority: none/i);
+    await expect(page.getByTestId("operator-console")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Advanced Research Lab/i })).toBeVisible();
   });
 
   test("advisor provider status and OpenClaw pilot clarity surfaces render safely", async ({ page }) => {
@@ -382,8 +364,8 @@ test.describe("GoTrader browser route smoke", () => {
     await gotoRoute(page, "/research-advisor");
 
     // Deterministic chat is labeled as local deterministic guidance on the default Chat tab.
-    await expect(page.getByTestId("research-advisor-chat-mode")).toContainText(/Local deterministic/i);
-    await expect(page.getByTestId("research-advisor-chat-card")).toContainText(/Deterministic Research Helper/i);
+    await expect(page.getByTestId("research-advisor-chat-mode")).toContainText(/Chat ready|Deterministic fallback|LLM online/i);
+    await expect(page.getByTestId("research-advisor-chat-card")).toContainText(/Local deterministic|Deterministic Research Helper/i);
 
     // Validation-chain explanation panel: detailed rows + recognition is not evidence.
     await page.getByTestId("advisor-tab-validation").click();
@@ -440,53 +422,37 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(pilotDrafts).toContainText(/Dismiss draft/i);
     await expect(pilotDrafts).not.toContainText(/rawCandles|"candles"\s*:|accountNumber|orderId|positionId/i);
 
-    // Dashboard compact advisor stays compact: provider status only, no chat input.
+    // Dashboard remains an operator summary and never mounts the advisor chat.
     await gotoRoute(page, "/dashboard");
-    const compactAdvisor = page.getByTestId("dashboard-compact-advisor");
-    await expect(compactAdvisor).toBeVisible();
-    await expect(compactAdvisor.getByTestId("dashboard-advisor-provider-mode")).toContainText(/Provider/i);
-    await expect(compactAdvisor).toContainText(/OpenClaw status/i);
-    await expect(compactAdvisor).toContainText(/Open Advisor/i);
-    expect(await compactAdvisor.locator("input, textarea").count()).toBe(0);
+    await expect(page.getByTestId("operator-console")).toBeVisible();
+    expect(await page.getByTestId("operator-console").locator("input, textarea").count()).toBe(0);
   });
 
-  test("redesigned app shell shows 8 hubs, source bar, workspace tabs, and safety strip", async ({ page }) => {
+  test("operator app shell shows four primary destinations and a static safety strip", async ({ page }) => {
     await gotoRoute(page, "/dashboard");
 
-    // 8 sidebar hubs.
-    for (const hub of ["home", "advisor", "data", "validate", "evidence", "automate", "agents", "settings"]) {
+    for (const hub of ["overview", "decisions", "results", "settings"]) {
       await expect(page.getByTestId(`nav-hub-${hub}`)).toBeVisible();
     }
+    for (const hiddenHub of ["data", "validate", "evidence", "automate", "agents"]) {
+      await expect(page.getByTestId(`nav-hub-${hiddenHub}`)).toHaveCount(0);
+    }
 
-    // Breadcrumb reflects hub + page.
-    await expect(page.getByTestId("app-breadcrumb")).toContainText(/Home/i);
-    await expect(page.getByTestId("app-breadcrumb")).toContainText(/Command Center/i);
+    await expect(page.getByTestId("app-breadcrumb")).toContainText(/Overview/i);
+    await expect(page.getByTestId("app-breadcrumb")).toContainText(/Operator Console/i);
+    await expect(page.getByTestId("workspace-tabs")).toHaveCount(0);
 
-    // Global top source bar with authority none.
-    const sourceBar = page.getByTestId("global-source-bar");
-    await expect(sourceBar).toBeVisible();
-    await expect(sourceBar).toContainText(/Authority: none/i);
-
-    // Footer safety strip.
     const strip = page.getByTestId("footer-safety-strip");
     await expect(strip).toBeVisible();
-    await expect(strip).toContainText(/Research only/i);
+    await expect(strip).toContainText(/Research operations/i);
     await expect(strip).toContainText(/MT5 read-only/i);
     await expect(strip).toContainText(/Execution authority none/i);
     await expect(strip).toContainText(/Broker authority none/i);
     await expect(strip).toContainText(/Readiness override none/i);
+    await expect(strip).toContainText(/Research only/i);
 
-    // Workspace tabs render for multi-route hubs and keep legacy routes reachable.
-    await gotoRoute(page, "/replay");
-    const tabs = page.getByTestId("workspace-tabs");
-    await expect(tabs).toBeVisible();
-    await expect(tabs).toContainText(/Walk-Forward/i);
-    await expect(tabs).toContainText(/Backtest Lab/i);
-    await tabs.locator('a[href="/walk-forward"]').click();
-    await expect(page).toHaveURL(/\/walk-forward$/);
-    await expect(page.locator("main")).toContainText(/Walk-Forward/i);
-
-    // Right-side context panel slot toggles and shows the validation chain.
+    // Detailed context remains available on advanced routes only.
+    await gotoRoute(page, "/research-lab");
     await page.getByTestId("context-panel-toggle").click();
     await expect(page.getByTestId("context-panel")).toBeVisible();
     await expect(page.getByTestId("context-panel-validation-chain")).toBeVisible();
@@ -697,12 +663,13 @@ async function expectNoVisibleExecutionControls(page: Page) {
 async function expectUpgradedResultsPage(page: Page) {
   const main = page.locator("main");
   await expect(page.getByTestId("performance-results-page")).toBeVisible();
+  await expect(page.getByTestId("results-tabs")).toBeVisible();
   await expect(page.getByTestId("results-calendar")).toBeVisible();
   await expect(page.getByTestId("results-calendar")).toContainText(/Monthly P\/L/i);
   await expect(main).toContainText(/Performance Results/i);
   await expect(main).toContainText(/Performance Curve/i);
   await expect(main).toContainText(/Outcome Log/i);
-  await expect(main).toContainText(/Execution authority none/i);
+  await expect(main).toContainText(/Provenance labeled|in_sample/i);
   await expect(main).not.toContainText(/Simulation results cockpit/i);
   await expect(main).not.toContainText(/Monte Carlo Robustness|Run Real Replay Review|Run Market Scorecard/i);
   await expect(main).not.toContainText(/"candles"\s*:|accountNumber|orderId|positionId/i);

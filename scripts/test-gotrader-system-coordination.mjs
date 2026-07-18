@@ -13,6 +13,8 @@ const outRoot = path.join(projectRoot, ".gotrader", "gotrader-system-coordinatio
 
 const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -26,6 +28,14 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictPhase2OrderBlocks.ts" },
   { root: sourceRoot, file: "ictPhase2BreadAndButter.ts" },
   { root: sourceRoot, file: "ictPhase2OneShotOneKill.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContextTypes.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContext.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognitionTypes.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognition.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetectionTypes.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetection.ts" },
+  { root: sourceRoot, file: "ictSelfImprovementTypes.ts" },
+  { root: sourceRoot, file: "ictSelfImprovement.ts" },
   { root: sourceRoot, file: "ictAdvisorEngine.ts" },
   { root: sourceRoot, file: "ictCurrentReadTypes.ts" },
   { root: sourceRoot, file: "ictCurrentRead.ts" },
@@ -41,6 +51,8 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIndexSmt.ts" },
   { root: sourceRoot, file: "ictNewsSessionRiskTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRisk.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictRealReplayRunnerTypes.ts" },
   { root: sourceRoot, file: "ictRealReplayRunner.ts" },
   { root: sourceRoot, file: "ictManualReplayReviewTypes.ts" },
@@ -88,9 +100,19 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    sourceFiles
+      .filter(({ file, root }) => root === sourceRoot && file !== "index.ts")
+      .map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`)
+      .join("\n"),
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -98,6 +120,15 @@ function compileSuiteForNode() {
 }
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__GOTRADER_SYSTEM_COORDINATION_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
 }
 `,
     "utf8"
@@ -435,7 +466,7 @@ function assertStaticUiContracts() {
   assert.match(advisorSummary, /data-testid="dashboard-research-advisor-card"/, "Dashboard card should have a stable test id");
   assert.match(advisorSummary, /Open Advisor/, "Dashboard card should link to the Advisor workspace");
   assert.match(advisor, /data-testid="ict-current-read-panel"/, "Research Advisor should show current read without manual drills");
-  assert.match(advisor, /data-testid="advisor-manual-replay-section"/, "Research Advisor should expose manual replay panel");
+  assert.match(advisor, /(?:data-testid|testId)="advisor-manual-replay-section"/, "Research Advisor should expose manual replay panel");
   assert.match(advisor, /data-testid="ict-monte-carlo-robustness"/, "Research Advisor should expose Monte Carlo panel");
   assert.match(advisor, /Run Monte Carlo Robustness/, "Monte Carlo should be manually triggered");
   assert.doesNotMatch(advisor, /useEffect\([\s\S]{0,900}runMonteCarloRobustness/, "Monte Carlo must not auto-run on page load");
@@ -620,7 +651,7 @@ async function main() {
     approvedProfileDecision: newsBlockedDecision
   }));
   assert.ok(["rejected_candidate", "no_trade"].includes(newsBlockedRead.approvedStatus), "news/session risk should block or reject the current read");
-  assert.match(newsBlockedRead.riskStatus, /reject_candidate|no_trade/);
+  assert.match(newsBlockedRead.riskStatus, /reject_candidate|no_trade|blocked/);
   assert.ok(newsBlockedRead.topReasons.some((reason) => /news|event|risk|session/i.test(reason)), "news/session blocker should be visible");
   assertAuthorityNone(highNewsRisk, "news/session risk");
   assertCompact(highNewsRisk, "news/session risk");

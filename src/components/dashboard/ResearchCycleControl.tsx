@@ -24,6 +24,7 @@ import {
   runResearchCycle
 } from "@/lib/researchCycle";
 import type { ResearchCycleRun, ResearchCycleStepResult, ResearchCycleStepStatus } from "@/lib/researchCycle";
+import { prioritizeReadinessRequirements } from "@/lib/readiness";
 import {
   resolveChartDisplayCandleSource,
   CANDLE_WINDOW_SETTINGS_UPDATED_EVENT,
@@ -240,18 +241,22 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
     ? Math.min(selectedCandidateLimit, DASHBOARD_IMPORTED_CANDIDATE_LIMIT)
     : selectedCandidateLimit;
   const searchDepthCappedBySafeMode = importedGuardedMode && selectedCandidateLimit > effectiveCandidateLimit;
-  const dashboardPreset = activeCandleSource.mode === "imported"
-    ? selectedDataPreset === "custom"
-      ? "Custom"
-      : selectedDataPreset[0].toUpperCase() + selectedDataPreset.slice(1)
-    : "Mock";
-  const effectiveDashboardPreset = activeCandleSource.mode === "imported"
-    ? advancedFullResearchMode || activeCandleSource.appliedSettings.advancedMode
-      ? "Advanced"
-      : activeCandleSource.researchWindowCandles <= DASHBOARD_IMPORTED_SAFE_WINDOW_SIZE
-        ? "Safe"
-        : "Standard"
-    : "Mock";
+  const dashboardPreset = cycleResearchUsesExternal
+    ? "Canonical"
+    : activeCandleSource.mode === "imported"
+      ? selectedDataPreset === "custom"
+        ? "Custom"
+        : selectedDataPreset[0].toUpperCase() + selectedDataPreset.slice(1)
+      : "Mock";
+  const effectiveDashboardPreset = cycleResearchUsesExternal
+    ? "Bounded"
+    : activeCandleSource.mode === "imported"
+      ? advancedFullResearchMode || activeCandleSource.appliedSettings.advancedMode
+        ? "Advanced"
+        : activeCandleSource.researchWindowCandles <= DASHBOARD_IMPORTED_SAFE_WINDOW_SIZE
+          ? "Safe"
+          : "Standard"
+      : "Mock";
   const researchCalibrationAvailable = Boolean(
     latestRun?.createdProposalId && latestRun.autoResearchCycle?.noSafePaperDemoCandidateFound
   );
@@ -263,15 +268,27 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
     if (!latestRun) {
       return [];
     }
+    const readinessRequirements = [
+      ...safeArray(latestRun.readinessSnapshot?.passedRequirements),
+      ...safeArray(latestRun.readinessSnapshot?.failedRequirements)
+    ];
+    const activeRequirements = latestRun.readinessSnapshot?.activeFailedRequirements ??
+      prioritizeReadinessRequirements(readinessRequirements).activeFailedRequirements;
+    const waitingForTradeSample = activeRequirements.some(
+      (requirement) => requirement.id === "simulated-trade-sample"
+    );
+    const llmAdvisoryIsActive = activeRequirements.some(
+      (requirement) => requirement.id === "llm-advisory-review"
+    );
     return uniqueText([
-      ...safeArray(latestRun.readinessSnapshot?.failedRequirements).map(readinessBlockerLabel),
-      ...safeArray(latestRun.blockers).filter((item) => !isPassLikeText(item)),
-      ...(topTradeQualityIssue?.reasonCode === "win_rate_too_low" ? ["Win rate too low."] : []),
-      ...(topTradeQualityIssue?.reasonCode === "average_r_too_low" ? ["Average R too low."] : []),
-      ...(topTradeQualityIssue?.reasonCode === "max_drawdown_too_high" ? ["Drawdown too high."] : []),
-      ...(latestRun.autoResearchCycle?.noSafePaperDemoCandidateFound ? ["No safe Paper-Demo Candidate found."] : []),
+      ...activeRequirements.map(readinessBlockerLabel),
+      ...(!activeRequirements.length ? safeArray(latestRun.blockers).filter((item) => !isPassLikeText(item)) : []),
+      ...(!waitingForTradeSample && topTradeQualityIssue?.reasonCode === "win_rate_too_low" ? ["Win rate too low."] : []),
+      ...(!waitingForTradeSample && topTradeQualityIssue?.reasonCode === "average_r_too_low" ? ["Average R too low."] : []),
+      ...(!waitingForTradeSample && topTradeQualityIssue?.reasonCode === "max_drawdown_too_high" ? ["Drawdown too high."] : []),
+      ...(!waitingForTradeSample && latestRun.autoResearchCycle?.noSafePaperDemoCandidateFound ? ["No safe Paper-Demo Candidate found."] : []),
       ...(latestRun.createdProposalId ? ["Proposal requires review."] : []),
-      ...(!latestRun.llmRun?.advisoryPassed ? ["LLM advisory missing."] : [])
+      ...(llmAdvisoryIsActive && !latestRun.llmRun?.advisoryPassed ? ["LLM advisory missing."] : [])
     ]);
   }, [latestRun, topTradeQualityIssue?.reasonCode]);
   const passedRequirements = useMemo(
@@ -284,6 +301,14 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
         .filter(isPassLikeText)
     ]),
     [latestRun]
+  );
+  const displayedNextRecommendedAction = actualBlockers.some((blocker) =>
+    blocker.toLowerCase().includes("insufficient simulated trades")
+  )
+    ? "Review zero-trade diagnostics and signal conversion. Readiness cannot be evaluated until simulated outcomes exist."
+    : latestRun?.nextRecommendedAction ?? "Start with a research cycle, then review any warnings or proposals.";
+  const waitingForTradeSample = actualBlockers.some((blocker) =>
+    blocker.toLowerCase().includes("insufficient simulated trades")
   );
   const readinessWarnings = useMemo(
     () => [
@@ -467,16 +492,15 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
     );
 
   return (
-    <Card className="border-cyan-400/25 bg-cyan-950/20">
+    <Card id="research-cycle" data-testid="research-cycle-control" className="border-cyan-400/25 bg-cyan-950/20 scroll-mt-24">
       <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-base text-cyan-50">
             <ShieldCheck className="h-4 w-4 text-cyan-300" aria-hidden="true" />
-            AI Research Cycle
+            Full Research Cycle
           </CardTitle>
           <p className="mt-1 text-sm text-cyan-100/70">
-            One safe sequence for thesis generation, backtesting, LLM advisory, Auto Research, validation, quality review,
-            proposals, readiness, and audit logging.
+            One sequence: thesis → backtest → validation → walk-forward OOS → quality → proposal → readiness. LLM advisory is required for promotion, not for research completion.
           </p>
         </div>
         <Badge variant={statusVariant(latestRun?.status)} className="w-fit capitalize">
@@ -733,7 +757,7 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
             <div className="grid gap-2">
               <Button onClick={runCycle} disabled={busy || importedExpectedButMissing} className="h-12 w-full justify-center gap-2">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-                {busy ? "Research cycle running" : importedExpectedButMissing ? "Reactivate imported data first" : "Run AI Research Cycle"}
+                {busy ? "Research cycle running" : importedExpectedButMissing ? "Reactivate imported data first" : "Run Full Research Cycle"}
               </Button>
               {busy ? (
                 <Button variant="destructive" onClick={cancelCycle} className="w-full">
@@ -957,17 +981,28 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
               )}
             </div>
             <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-300">
-              <p className="font-medium text-slate-100">Warnings and next action</p>
+              <p className="font-medium text-slate-100">Edge Auditor / next action</p>
+              {latestRun.edgeAuditorSummary ? (
+                <>
+                  <p className="mt-2 text-slate-100">{latestRun.edgeAuditorSummary.verdict}</p>
+                  <p className="mt-1 text-xs text-slate-400">{latestRun.edgeAuditorSummary.summary}</p>
+                </>
+              ) : (
+                <p className="mt-2 text-slate-500">Run walk-forward inside the cycle to populate OOS edge audit.</p>
+              )}
               {readinessWarnings.length ? (
-                <ul className="mt-2 space-y-1">
-                  {safeTopN(readinessWarnings, 3).map((item) => (
+                <ul className="mt-2 space-y-1 text-xs text-slate-400">
+                  {safeTopN(readinessWarnings, 2).map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
-              ) : (
-                <p className="mt-2 text-slate-400">No readiness warnings recorded.</p>
-              )}
-              <p className="mt-2 text-cyan-100">{latestRun.nextRecommendedAction}</p>
+              ) : null}
+              {!waitingForTradeSample && latestRun.promotionBlockers?.length ? (
+                <p className="mt-2 text-xs text-amber-200">
+                  Promotion blockers: {latestRun.promotionBlockers.slice(0, 2).join("; ")}
+                </p>
+              ) : null}
+              <p className="mt-2 text-cyan-100">{displayedNextRecommendedAction}</p>
             </div>
           </div>
         ) : null}
@@ -1017,6 +1052,9 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
               const recoveryThreshold =
                 recoveryMetadata?.recoveryConfluenceThreshold ??
                 latestRun.autoResearchCycle?.recoveryResult?.config.minimumConfluenceThreshold;
+              const recoveryDeferred =
+                !latestRun.autoResearchCycle &&
+                latestRun.steps.some((step) => step.stepId === "auto_research" && step.status === "skipped");
               return (
                 <>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1036,11 +1074,21 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
               </div>
               <div className="rounded-md border border-amber-200/20 bg-amber-200/5 p-2">
                 <p className="text-xs uppercase tracking-[0.14em] text-amber-100/70">Recovery attempted</p>
-                <p className="mt-1">{latestRun.autoResearchCycle?.recoveryAttempted ? "yes" : "not yet"}</p>
+                <p className="mt-1">
+                  {latestRun.autoResearchCycle?.recoveryAttempted
+                    ? "yes"
+                    : recoveryDeferred
+                      ? "deferred for stability"
+                      : "not run"}
+                </p>
               </div>
               <div className="rounded-md border border-amber-200/20 bg-amber-200/5 p-2">
                 <p className="text-xs uppercase tracking-[0.14em] text-amber-100/70">Trades after recovery</p>
-                <p className="mt-1">{latestRun.autoResearchCycle?.tradesAfterRecovery ?? 0}</p>
+                <p className="mt-1">
+                  {latestRun.autoResearchCycle?.recoveryAttempted
+                    ? latestRun.autoResearchCycle.tradesAfterRecovery ?? 0
+                    : "not evaluated"}
+                </p>
               </div>
               <div className="rounded-md border border-amber-200/20 bg-amber-200/5 p-2">
                 <p className="text-xs uppercase tracking-[0.14em] text-amber-100/70">Active threshold</p>
@@ -1125,7 +1173,7 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
 
         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-300">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Recommended next action</p>
-          <p className="mt-1">{latestRun?.nextRecommendedAction ?? "Start with a research cycle, then review any warnings or proposals."}</p>
+          <p className="mt-1">{displayedNextRecommendedAction}</p>
         </div>
 
         <TechnicalDetails

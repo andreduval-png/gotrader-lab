@@ -68,8 +68,12 @@ export {
   LLM_LOCAL_BRIDGE_HEALTH_URL,
   LLM_LOCAL_BRIDGE_URL,
   resetLocalBridgeCircuitBreaker,
-  runLocalBridgeAdvisory
+  runLocalBridgeAdvisory,
+  runLocalBridgeChat,
+  runLocalBridgeDebate,
+  runLocalBridgeCommittee
 } from "@/lib/llm/localBridgeClient";
+export { runAdvisorChatWithFallback, type AdvisorChatReply } from "@/lib/llm/advisorChat";
 export type {
   LocalBridgeAdvisoryCapabilityStatus,
   LocalBridgeCircuitBreakerStatus,

@@ -58,6 +58,7 @@ export interface ValidationChainReplaySummary {
   averageRr?: number;
   usableOutcomes?: number;
   reason: string;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 export interface ValidationChainWalkForwardSummary {
@@ -71,6 +72,7 @@ export interface ValidationChainWalkForwardSummary {
   oosWindowsPassed?: number;
   warningFlags: string[];
   reason: string;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 export interface ValidationChainEvidenceSummary {
@@ -80,6 +82,7 @@ export interface ValidationChainEvidenceSummary {
   maturityGrade?: string;
   selfImprovementStatus?: string;
   detail: string;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 /**
@@ -99,6 +102,9 @@ export interface ValidationChainEntry {
   timeframe: string;
   htfContext: string[];
   sourceFingerprint: string;
+  provenance?: ValidationProvenanceIdentity;
+  provenanceStatus: "matched" | "blocked" | "legacy_unverified_provenance";
+  provenanceBlockers: ValidationProvenanceBlocker[];
   sourceStatus: ValidationChainSourceStatus;
   hypothesisStatus: ValidationChainHypothesisStatus;
   hypothesisId?: string;
@@ -151,3 +157,7 @@ export const VALIDATION_CHAIN_SAFETY: ValidationChainEntry["safety"] = {
 
 export const validationChainStatusLabel = (status: ValidationChainHypothesisStatus): string =>
   status.replace(/_/g, " ");
+import type {
+  ValidationProvenanceBlocker,
+  ValidationProvenanceIdentity
+} from "@/lib/validationProvenance";

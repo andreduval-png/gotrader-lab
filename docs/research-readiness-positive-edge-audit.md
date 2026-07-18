@@ -1,5 +1,7 @@
 # Research Readiness Positive Edge Audit
 
+> Superseded evidence note (2026-07-13): causal signal-time validation and a non-overlapping prior 90-day test invalidated the original paper-watchlist classification. The executable profile remains useful for research, but its current Strategy Library status is `replay_required`. See `ifvg-filter-variant-audit.md` and `ifvg-filter-variant-independent-oos-audit.md`.
+
 Generated from the live MT5 read-only source and the explicit 90-day IFVG diagnostics on 2026-07-13.
 
 ## Finding

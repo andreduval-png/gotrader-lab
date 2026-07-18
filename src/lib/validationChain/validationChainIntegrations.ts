@@ -40,7 +40,8 @@ export const replaySummaryFromManualReview = (review: IctManualReplayReviewResul
           : "Replay review did not complete."
         : review.totalSignals < REPLAY_MINIMUM_SIGNALS
           ? `Only ${review.totalSignals} replay signal(s); ${REPLAY_MINIMUM_SIGNALS}+ needed for a verdict.`
-          : `Target-first rate ${(review.targetFirstRate * 100).toFixed(0)}% across ${review.totalSignals} signals.`
+          : `Target-first rate ${(review.targetFirstRate * 100).toFixed(0)}% across ${review.totalSignals} signals.`,
+    provenance: review.provenance
   };
 };
 
@@ -79,7 +80,8 @@ export const walkForwardSummaryFromRun = (run: WalkForwardRun): ValidationChainW
     windowsTested: run.actualWindowsGenerated,
     oosWindowsPassed: stability?.outOfSampleWindowsPassed,
     warningFlags: [...run.warnings, ...(stability?.failReasons ?? [])].slice(0, 6),
-    reason: stability?.summary ?? "Walk-forward run has no stability summary yet."
+    reason: stability?.summary ?? "Walk-forward run has no stability summary yet.",
+    provenance: run.provenance
   };
 };
 
@@ -94,16 +96,6 @@ export const recordWalkForwardRunInValidationChain = (run: WalkForwardRun): Vali
   if (latest.walkForwardResult?.runId === run.runId) {
     return latest;
   }
-  if (
-    latest.hypothesisStatus !== "walk_forward_required" &&
-    latest.hypothesisStatus !== "walk_forward_running" &&
-    latest.hypothesisStatus !== "needs_more_data"
-  ) {
-    return latest;
-  }
-  if (run.symbol !== latest.symbol) {
-    return latest;
-  }
   const next = applyValidationChainWalkForwardResult(latest, walkForwardSummaryFromRun(run));
   saveValidationChainEntry(next);
   return next;
@@ -114,10 +106,25 @@ export const recordEvidenceUpdateInValidationChain = (input: {
   maturityScore?: number;
   maturityGrade?: string;
   selfImprovementStatus?: string;
+  provenance?: ValidationChainEntry["provenance"];
 }): ValidationChainEntry | undefined => {
   const latest = latestValidationChainEntry();
-  if (!latest || latest.hypothesisStatus !== "walk_forward_passed") {
-    return latest;
+  if (!latest) {
+    return undefined;
+  }
+  // Allow evidence snapshots after walk-forward progress or when chain is still collecting.
+  const eligibleStatuses = new Set([
+    "walk_forward_passed",
+    "walk_forward_required",
+    "walk_forward_running",
+    "needs_more_data",
+    "replay_passed"
+  ]);
+  if (!eligibleStatuses.has(latest.hypothesisStatus) && latest.hypothesisStatus !== "walk_forward_passed") {
+    // Still record when walk-forward already produced a result on the entry.
+    if (!latest.walkForwardResult) {
+      return latest;
+    }
   }
   return updateLatestValidationChainEntry((entry) =>
     applyValidationChainEvidenceUpdate(entry, {
@@ -126,7 +133,8 @@ export const recordEvidenceUpdateInValidationChain = (input: {
       maturityScore: input.maturityScore,
       maturityGrade: input.maturityGrade,
       selfImprovementStatus: input.selfImprovementStatus,
-      detail: "Evidence/maturity snapshot recorded after walk-forward pass. Readiness gates remain deterministic."
+      provenance: input.provenance,
+      detail: "Evidence/maturity snapshot recorded after research cycle. Readiness gates remain deterministic."
     })
   );
 };

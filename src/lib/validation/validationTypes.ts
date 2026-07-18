@@ -5,6 +5,7 @@ import type {
   ResolvedBacktestConfig,
   SimulatedTradeRecord
 } from "@/lib/backtesting";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type ValidationReadinessStatus = "red" | "yellow" | "green";
 
@@ -100,6 +101,7 @@ export interface CalibrationReport {
 export interface ValidationSuiteReport {
   id: string;
   generatedAt: string;
+  provenance?: ValidationProvenanceIdentity;
   scenarios: ValidationScenarioResult[];
   calibration: CalibrationReport;
   safetyNotice: "Simulation validation only. No broker connection. No real trades.";

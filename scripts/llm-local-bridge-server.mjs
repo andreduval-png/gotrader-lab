@@ -4,6 +4,9 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { loadLocalEnvironment } from "./local-env.mjs";
+
+await loadLocalEnvironment();
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
@@ -12,6 +15,18 @@ const DEFAULT_ADVISORY_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 2_000;
 const PROVIDER_SCRIPT = path.join("scripts", "gpt55-llm-agent-provider.mjs");
 const LATEST_RESPONSE_FILE = path.join("llm", "responses", "latest-llm-response.json");
+const TASK_RESPONSE_FILES = {
+  advisory: LATEST_RESPONSE_FILE,
+  chat: path.join("llm", "responses", "latest-llm-chat-response.json"),
+  debate: path.join("llm", "responses", "latest-llm-debate-response.json"),
+  committee: path.join("llm", "responses", "latest-llm-committee-response.json")
+};
+const TASK_ROUTES = {
+  "/llm/run-advisory": "advisory",
+  "/llm/chat": "chat",
+  "/llm/debate": "debate",
+  "/llm/committee": "committee"
+};
 const allowedOrigins = new Set(
   Array.from({ length: 7 }, (_, index) => 5173 + index).flatMap((port) => [
     `http://127.0.0.1:${port}`,
@@ -46,6 +61,13 @@ function healthPayload() {
     healthTimeoutMs: HEALTH_TIMEOUT_MS,
     modelConfigured,
     model,
+    endpoints: Object.keys(TASK_ROUTES),
+    capabilities: {
+      advisory: true,
+      chat: true,
+      debate: true,
+      committee: true
+    },
     statusMessage:
       advisoryCapabilityStatus === "ready"
         ? "LLM advisory bridge is online and the advisory provider is configured."
@@ -90,6 +112,9 @@ Endpoint:
   GET  http://127.0.0.1:8787/
   GET  http://127.0.0.1:8787/health
   POST http://127.0.0.1:8787/llm/run-advisory
+  POST http://127.0.0.1:8787/llm/chat
+  POST http://127.0.0.1:8787/llm/debate
+  POST http://127.0.0.1:8787/llm/committee
 
 Safety:
   Localhost only. Advisory only. No broker control. No execution authority. No readiness override.
@@ -198,12 +223,13 @@ function parseJson(raw, label) {
   }
 }
 
-function runProviderWithContext(packet) {
+function runProviderWithContext(packet, task = "advisory") {
   return new Promise((resolve, reject) => {
     const timeoutMs = advisoryTimeoutMs();
+    const outputFile = TASK_RESPONSE_FILES[task] ?? LATEST_RESPONSE_FILE;
     const child = spawn(
       process.execPath,
-      [PROVIDER_SCRIPT, "--output-file", LATEST_RESPONSE_FILE],
+      [PROVIDER_SCRIPT, "--task", task, "--output-file", outputFile],
       {
         cwd: process.cwd(),
         env: process.env,
@@ -257,7 +283,7 @@ function runProviderWithContext(packet) {
         }
 
         try {
-          const responseJson = await fs.readFile(LATEST_RESPONSE_FILE, "utf8");
+          const responseJson = await fs.readFile(outputFile, "utf8");
           resolve(parseJson(responseJson, "provider response"));
         } catch (error) {
           error.statusCode = 502;
@@ -270,7 +296,7 @@ function runProviderWithContext(packet) {
   });
 }
 
-async function handleRunAdvisory(request, response, origin) {
+async function handleRunAdvisory(request, response, origin, task = "advisory") {
   if (!process.env.OPENAI_API_KEY) {
     const errorPath = await writeBridgeError({
       statusCode: 503,
@@ -302,16 +328,23 @@ async function handleRunAdvisory(request, response, origin) {
   const raw = await readRequestBody(request);
   const packet = parseJson(raw, "request body");
   validateRequestContext(packet);
-  const responses = await runProviderWithContext(packet);
+  const providerOutput = await runProviderWithContext(packet, task);
+
+  const taskPayload =
+    task === "advisory"
+      ? {
+          responses: providerOutput,
+          advisoryResponseMode: packet.advisoryResponseMode ?? "full_reviewer_set",
+          payloadDiagnostics: packet.payloadDiagnostics
+        }
+      : { task, result: providerOutput };
 
   sendJson(
     response,
     200,
     {
-      responses,
-      responseFile: LATEST_RESPONSE_FILE,
-      advisoryResponseMode: packet.advisoryResponseMode ?? "full_reviewer_set",
-      payloadDiagnostics: packet.payloadDiagnostics,
+      ...taskPayload,
+      responseFile: TASK_RESPONSE_FILES[task] ?? LATEST_RESPONSE_FILE,
       model: advisoryModel(),
       advisoryTimeoutMs: advisoryTimeoutMs(),
       mode: "advisory_only",
@@ -380,13 +413,15 @@ async function handleRequest(request, response) {
     return;
   }
 
-  if (request.method !== "POST" || request.url !== "/llm/run-advisory") {
+  const task = request.method === "POST" ? TASK_ROUTES[requestUrl.pathname] : undefined;
+  if (!task) {
     sendJson(
       response,
       404,
       {
         error: "Not found",
-        message: "Opening / in browser is not the advisory endpoint. Use /health to verify bridge status, or POST /llm/run-advisory from GoTrader AI Lab."
+        message:
+          "Opening / in browser is not an advisory endpoint. Use /health to verify bridge status, or POST /llm/run-advisory, /llm/chat, /llm/debate, or /llm/committee from GoTrader AI Lab."
       },
       origin
     );
@@ -394,7 +429,7 @@ async function handleRequest(request, response) {
   }
 
   try {
-    await handleRunAdvisory(request, response, origin);
+    await handleRunAdvisory(request, response, origin, task);
   } catch (error) {
     const statusCode = error.statusCode ?? 500;
     const errorPath = await writeBridgeError({

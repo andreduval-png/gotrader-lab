@@ -61,6 +61,8 @@ export * from "./ictCmdPaperTrackingTypes";
 export * from "./ictCmdPaperTracking";
 export * from "./ictCmdTelemetryTypes";
 export * from "./ictCmdTelemetry";
+export * from "./ictCmdHighDisplacementV2Types";
+export * from "./ictCmdHighDisplacementV2";
 export * from "./ictReferenceAccuracyTypes";
 export * from "./ictReferenceAccuracy";
 export * from "./ictSilverBulletTypes";

@@ -34,7 +34,11 @@ import { aggregatePortfolioMetrics, identifyWeakestAgent } from "@/lib/scoring";
 import type { LabState, MarketOutcome } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
+import { latestWalkForwardRun } from "@/lib/walkForward";
+import { loadSelfImprovementState } from "@/lib/selfImprovement";
 import { WORKSPACE_PAGE, WORKSPACE_SECTION_LABEL } from "@/components/common/workspaceStyles";
+
+type ResultsTab = "backtest" | "walk_forward" | "calibration";
 
 const money = new Intl.NumberFormat(undefined, {
   currency: "USD",
@@ -72,11 +76,17 @@ interface CalendarCell {
 
 export function PerformanceView({ state }: { state: LabState }) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
+  const [resultsTab, setResultsTab] = useState<ResultsTab>("backtest");
+  const [monthOffset, setMonthOffset] = useState(0);
 
   const legacyMetrics = aggregatePortfolioMetrics(state);
   const weakest = identifyWeakestAgent(state);
   const latestCycle = latestResearchCycleRun(loadResearchCycleState());
   const latestValidation = loadLatestValidationReport();
+  const walkForward = latestWalkForwardRun();
+  const oosEdge = walkForward?.stability?.edgeStatistics?.provenance === "out_of_sample" ? walkForward.stability.edgeStatistics : undefined;
+  const selfImprovement = loadSelfImprovementState();
+  const latestProposal = selfImprovement.proposals?.[0];
   const canonicalMetrics = runtimeSnapshot?.performance.canonicalPerformanceMetrics ?? normalizeCycleMetricsForDisplay(latestCycle, latestValidation);
   const derivedCanonicalMetrics = normalizeCycleMetricsForDisplay(latestCycle, latestValidation);
   const canonicalMismatchWarnings = detectCanonicalMetricsMismatch(latestCycle?.canonicalMetrics, derivedCanonicalMetrics);
@@ -85,12 +95,14 @@ export function PerformanceView({ state }: { state: LabState }) {
     [canonicalMetrics, runtimeSnapshot]
   );
   const calendar = useMemo(
-    () => buildResultsCalendar({
-      account: simulatedAccount,
-      metrics: canonicalMetrics,
-      outcomes: state.outcomes
-    }),
-    [canonicalMetrics, simulatedAccount, state.outcomes]
+    () =>
+      buildResultsCalendar({
+        account: simulatedAccount,
+        metrics: canonicalMetrics,
+        outcomes: state.outcomes,
+        monthOffset
+      }),
+    [canonicalMetrics, simulatedAccount, state.outcomes, monthOffset]
   );
   const equityCurve = useMemo(() => buildEquityCurve(canonicalMetrics, simulatedAccount, calendar.cells), [canonicalMetrics, simulatedAccount, calendar.cells]);
   const tradeBars = useMemo(() => buildTradeBars(calendar.cells), [calendar.cells]);
@@ -119,17 +131,78 @@ export function PerformanceView({ state }: { state: LabState }) {
           <p className={WORKSPACE_SECTION_LABEL}>Research Results</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-normal text-slate-50">Performance Results</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-            Simulation and research-cycle results only. The calendar and metrics are derived from local GoTrader evidence, never broker account/order/position data.
+            Backtest, walk-forward, and calibration results stay separately labeled by evidence source.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="warning">Simulation only</Badge>
-          <Badge variant="danger">Execution authority none</Badge>
+          <Badge variant="warning">Provenance labeled</Badge>
           <Badge variant="secondary">{canonicalMetrics?.symbol ?? runtimeSnapshot?.marketData.symbol ?? "NQ"} / {canonicalMetrics?.timeframe ?? runtimeSnapshot?.marketData.timeframe ?? "5m"}</Badge>
         </div>
       </header>
 
-      <ResultsCalendar calendar={calendar} pnlPositive={pnlPositive} />
+      <div className="flex flex-wrap gap-2" data-testid="results-tabs" role="tablist" aria-label="Results series">
+        {(
+          [
+            ["backtest", "Backtest"],
+            ["walk_forward", "Walk-Forward OOS"],
+            ["calibration", "Calibration"]
+          ] as const
+        ).map(([id, label]) => (
+          <Button
+            key={id}
+            role="tab"
+            aria-selected={resultsTab === id}
+            size="sm"
+            variant={resultsTab === id ? "default" : "outline"}
+            onClick={() => setResultsTab(id)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      {resultsTab === "walk_forward" ? (
+        <section className="premium-surface space-y-4 rounded-[24px] p-4 sm:p-5" data-testid="results-tab-walk-forward">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">provenance: out_of_sample</Badge>
+            <Badge variant={oosEdge ? "secondary" : "warning"}>{oosEdge ? "OOS edge present" : "Run walk-forward first"}</Badge>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="OOS expectancy" value={rValue(oosEdge?.meanR)} detail={`${oosEdge?.sampleSize ?? 0} OOS trades`} />
+            <ResultMetricCard label="OOS win rate" value={pct(oosEdge?.winRate)} detail={`Lower 95 ${rValue(oosEdge?.expectancyLower95)}`} />
+            <ResultMetricCard
+              label="OOS profit factor"
+              value="n/a"
+              detail={`Stability ${walkForward?.stability?.stabilityScore ?? "n/a"} · use expectancy CI`}
+            />
+            <ResultMetricCard label="Verdict" value={walkForward?.stability?.verdict ?? "pending"} detail={walkForward?.runId ?? "no WF run"} />
+          </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "calibration" ? (
+        <section className="premium-surface space-y-4 rounded-[24px] p-4 sm:p-5" data-testid="results-tab-calibration">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <ResultMetricCard label="Latest proposal" value={latestProposal?.proposalId ?? "none"} detail={latestProposal?.status ?? "no proposals"} />
+            <ResultMetricCard label="Intent" value={latestProposal?.proposalIntent ?? "n/a"} detail={latestProposal?.source ?? "self-improvement"} />
+            <ResultMetricCard
+              label="Active calibration"
+              value={selfImprovement.activeResearchCalibration?.sourceProposalId ?? "none"}
+              detail={selfImprovement.lastAcceptedProposalId ? `Last accepted ${selfImprovement.lastAcceptedProposalId}` : "No accepted calibration"}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "backtest" ? (
+        <>
+      <ResultsCalendar
+        calendar={calendar}
+        pnlPositive={pnlPositive}
+        onPreviousMonth={() => setMonthOffset((value) => value - 1)}
+        onNextMonth={() => setMonthOffset((value) => value + 1)}
+        onToday={() => setMonthOffset(0)}
+      />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <ResultMetricCard
@@ -153,7 +226,7 @@ export function PerformanceView({ state }: { state: LabState }) {
         <ResultMetricCard
           label="Profit Factor"
           value={canonicalMetrics?.profitFactor === null || canonicalMetrics?.profitFactor === undefined ? "n/a" : canonicalMetrics.profitFactor.toFixed(2)}
-          detail="Canonical latest-cycle metric"
+          detail="Canonical latest-cycle metric · in_sample"
         />
         <ResultMetricCard
           label="Max Drawdown"
@@ -177,7 +250,7 @@ export function PerformanceView({ state }: { state: LabState }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">{canonicalMetrics?.sourceCycleId ?? "no cycle"}</Badge>
-              <Badge variant="warning">Research only</Badge>
+              <Badge variant="warning">in_sample</Badge>
             </div>
           </div>
           <div className="mt-5 h-[320px]">
@@ -224,7 +297,7 @@ export function PerformanceView({ state }: { state: LabState }) {
           </div>
           <div className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
             <ShieldAlert className="mr-2 inline h-4 w-4" aria-hidden="true" />
-            No broker connection. No real trades. Results are simulated research evidence.
+            Backtest tab is in-sample only. Use Walk-Forward OOS for promotion evidence.
           </div>
         </ResultPanel>
       </section>
@@ -254,7 +327,7 @@ export function PerformanceView({ state }: { state: LabState }) {
               <h3 className="text-lg font-semibold text-slate-50">Source & Safety</h3>
               <p className="mt-1 text-sm text-slate-400">Compact provenance for this results view.</p>
             </div>
-            <Badge variant="danger">authority none/none/none</Badge>
+            <Badge variant="danger">in_sample · authority gated</Badge>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2">
             <StatTile label="Metric source" value={canonicalMetrics?.metricSourceLabel ?? "no completed research cycle"} />
@@ -334,11 +407,25 @@ export function PerformanceView({ state }: { state: LabState }) {
           </div>
         </ResultPanel>
       ) : null}
+        </>
+      ) : null}
     </div>
   );
 }
 
-function ResultsCalendar({ calendar, pnlPositive }: { calendar: ReturnType<typeof buildResultsCalendar>; pnlPositive: boolean }) {
+function ResultsCalendar({
+  calendar,
+  pnlPositive,
+  onPreviousMonth,
+  onNextMonth,
+  onToday
+}: {
+  calendar: ReturnType<typeof buildResultsCalendar>;
+  pnlPositive: boolean;
+  onPreviousMonth: () => void;
+  onNextMonth: () => void;
+  onToday: () => void;
+}) {
   return (
     <section data-testid="results-calendar" className="premium-surface overflow-hidden rounded-[24px]">
       <div className="flex flex-col gap-4 border-b border-white/10 px-4 py-5 md:px-6">
@@ -348,21 +435,23 @@ function ResultsCalendar({ calendar, pnlPositive }: { calendar: ReturnType<typeo
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Button variant="secondary" size="sm" aria-label="Previous month">
+            <Button variant="secondary" size="sm" aria-label="Previous month" onClick={onPreviousMonth}>
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
             <div>
               <p className="text-lg font-semibold text-slate-200">{compactDate.format(calendar.anchorDate)}</p>
               <p className="text-xs text-slate-500">Derived simulated results calendar</p>
             </div>
-            <Button variant="ghost" size="sm" aria-label="Next month">
+            <Button variant="ghost" size="sm" aria-label="Next month" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{calendar.monthTrades.toLocaleString()} trades</Badge>
             <Badge variant="warning">Simulation only</Badge>
-            <Button variant="secondary" size="sm">Today</Button>
+            <Button variant="secondary" size="sm" onClick={onToday}>
+              Today
+            </Button>
           </div>
         </div>
       </div>
@@ -487,13 +576,16 @@ function StatTile({ label, value }: { label: string; value: string }) {
 function buildResultsCalendar({
   account,
   metrics,
-  outcomes
+  outcomes,
+  monthOffset = 0
 }: {
   account?: SimulatedAccount;
   metrics?: CanonicalPerformanceMetrics;
   outcomes: MarketOutcome[];
+  monthOffset?: number;
 }) {
-  const anchorDate = new Date(metrics?.generatedAt ?? outcomes[0]?.resolvedAt ?? Date.now());
+  const base = new Date(metrics?.generatedAt ?? outcomes[0]?.resolvedAt ?? Date.now());
+  const anchorDate = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
   const firstOfMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
   const calendarStart = new Date(firstOfMonth);
   calendarStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());

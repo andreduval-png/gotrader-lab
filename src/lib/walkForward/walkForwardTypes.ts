@@ -3,7 +3,9 @@ import type { WalkForwardDataPreset } from "@/lib/marketData";
 import type { RuntimeDataPreset } from "@/lib/runtime/researchRuntimeTypes";
 import type { GrinchActiveProfile, GrinchSmtState } from "@/lib/strategyLibrary";
 import type { CompositeRegimeLabel } from "@/lib/regime";
+import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import type { Candle, FuturesSymbol, Timeframe } from "@/lib/types";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type WalkForwardSplitLabel = "in_sample" | "validation" | "out_of_sample";
 export type WalkForwardSplitRatioPreset = "60_20_20" | "70_15_15" | "50_25_25" | "custom";
@@ -290,6 +292,8 @@ export interface WalkForwardStabilitySummary {
     outOfSampleWindowsPassed: number;
   }>;
   evidenceSummary?: WalkForwardEvidenceSummary;
+  /** Bootstrap expectancy statistics computed from pooled out-of-sample trades. */
+  edgeStatistics?: EdgeStatistics;
   diagnostics?: WalkForwardFailureDiagnostics;
   followUpPlan?: WalkForwardFollowUpSearchPlan;
 }
@@ -335,6 +339,7 @@ export interface WalkForwardRun {
   activeCalibrationId?: string;
   configMergeStatus: string;
   proposalId?: string;
+  provenance?: ValidationProvenanceIdentity;
   windows: WalkForwardWindowResult[];
   stability?: WalkForwardStabilitySummary;
   failureDiagnostics?: WalkForwardFailureDiagnostics;
@@ -364,6 +369,10 @@ export interface WalkForwardRunOptions {
   minimumReplayPassedCandidates?: number;
   minimumUniqueTradingDates?: number;
   proposalId?: string;
+  candidateId?: string;
+  validationProvenance?: ValidationProvenanceIdentity;
+  /** When set, walk-forward backtests use this config instead of the active baseline. */
+  configOverride?: ResolvedBacktestConfig;
   requireReplayHandoff?: boolean;
   useDeepMt5History?: boolean;
   validationChainEntry?: {

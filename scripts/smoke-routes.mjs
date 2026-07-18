@@ -6,8 +6,9 @@ import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 
-// Expected coverage: all 29 routes from src/App.tsx, reachable through the
-// 8 sidebar hubs and their workspace tabs. Excluded: "/" and "*" redirects
+// Expected coverage: every non-redirect route from src/App.tsx. Four routes
+// are operator-facing; detailed workspaces remain directly addressable under
+// Advanced Research. Excluded: "/" and "*" redirects
 // and the "/agents/:id" detail route. Keep this list in sync with
 // tests/smoke/routes.spec.ts.
 const primaryRoutes = [
@@ -25,6 +26,7 @@ const primaryRoutes = [
 ];
 
 const advancedRoutes = [
+  "/research-lab",
   "/ict-lab",
   "/replay",
   "/paper-demo",
@@ -45,7 +47,7 @@ const advancedRoutes = [
   "/prompt-lab"
 ];
 
-const chartRoutes = new Set(["/dashboard", "/market-data", "/ict-lab", "/replay", "/backtest-lab"]);
+const chartRoutes = new Set(["/research-lab", "/market-data", "/ict-lab", "/replay", "/backtest-lab"]);
 const allRoutes = [...primaryRoutes, ...advancedRoutes];
 const routeTimeoutMs = Number(process.env.SMOKE_ROUTE_TIMEOUT_MS ?? 15000);
 
@@ -296,8 +298,8 @@ async function runBrowserSmoke(baseUrl, playwright) {
       if (consoleErrors.length || pageErrors.length) {
         failures.push(`${route}: console/page errors: ${[...consoleErrors, ...pageErrors].slice(0, 3).join(" | ")}`);
       }
-      if (route === "/dashboard" && !/Broker execution disabled|No live trading/i.test(detail.bodyText)) {
-        failures.push("/dashboard: broker execution disabled safety state was not visible.");
+      if (route === "/dashboard" && !/Research only|Execution authority none|authority none/i.test(detail.bodyText)) {
+        failures.push("/dashboard: research-only safety state was not visible.");
       }
       if (chartRoutes.has(route) && detail.canvasCount === 0 && !detail.chartFallback) {
         failures.push(`${route}: expected a chart canvas or chart fallback.`);

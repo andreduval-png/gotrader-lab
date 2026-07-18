@@ -31,8 +31,13 @@ const optionalNotes = [
     : undefined,
   !tradingViewEnabled
     ? "TradingView MCP is optional and disabled by default. Set ENABLE_TRADINGVIEW_MCP=true to include it."
+    : undefined,
+  diagnostics.find((item) => item.id === "llm-bridge")?.status === "provider_config_missing"
+    ? "LLM bridge is online, but OPENAI_API_KEY is not configured. Add it to ignored .env.local or the shell environment, then restart the local stack."
     : undefined
 ].filter(Boolean);
+
+const llmProviderMissing = diagnostics.find((item) => item.id === "llm-bridge")?.status === "provider_config_missing";
 
 const summary = {
   status: requiredFailures.length ? "degraded" : "healthy_or_optional_only",
@@ -54,7 +59,9 @@ const summary = {
   services: diagnostics.map(compactDiagnostic),
   optionalNotes,
   nextRecommendedAction: requiredFailures.length
-    ? "Run npm.cmd run start:local-stack, then rerun npm.cmd run diagnose:local-stack. If ports are occupied by untracked processes, inspect them before stopping anything."
+    ? llmProviderMissing
+      ? "Configure OPENAI_API_KEY outside version control, run npm.cmd run restart:local-stack, then rerun npm.cmd run diagnose:local-stack."
+      : "Run npm.cmd run start:local-stack, then rerun npm.cmd run diagnose:local-stack. If ports are occupied by untracked processes, inspect them before stopping anything."
     : "Core local stack checks are healthy or only optional services are offline."
 };
 

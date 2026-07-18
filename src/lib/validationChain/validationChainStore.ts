@@ -3,6 +3,7 @@ import {
   type ValidationChainEntry,
   type ValidationChainState
 } from "./validationChainTypes";
+import { matchValidationProvenance } from "../validationProvenance";
 
 export const VALIDATION_CHAIN_STORAGE_KEY = "gotrader.validation-chain.v1";
 export const VALIDATION_CHAIN_UPDATED_EVENT = "gotrader:validation-chain-updated";
@@ -28,7 +29,19 @@ export const readValidationChainState = (): ValidationChainState => {
     if (!Array.isArray(parsed.entries)) {
       return emptyState();
     }
-    return { ...parsed, authority: VALIDATION_CHAIN_AUTHORITY, researchOnly: true };
+    return {
+      ...parsed,
+      entries: parsed.entries.map((entry) => {
+        const review = matchValidationProvenance(entry.provenance, entry.provenance);
+        return {
+          ...entry,
+          provenanceStatus: review.status,
+          provenanceBlockers: review.blockers
+        };
+      }),
+      authority: VALIDATION_CHAIN_AUTHORITY,
+      researchOnly: true
+    };
   } catch {
     return emptyState();
   }

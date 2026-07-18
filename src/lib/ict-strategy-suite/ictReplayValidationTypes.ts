@@ -44,6 +44,7 @@ export interface IctReplayInput {
   replayWindowSize: number;
   lookaheadCandles: number;
   maxReplayWindows?: number;
+  windowSampling?: "latest" | "stratified";
   requestedLookbackDays?: number;
   availableLookbackDays?: number;
   dataDepthStatus?: IctDataDepthStatus;
@@ -76,6 +77,13 @@ export interface IctReplayResult {
   confidence: number;
   htfAligned?: boolean;
   dealingRangeLocation?: "premium" | "discount" | "equilibrium";
+  signalDisplacement?: {
+    direction: "bullish" | "bearish";
+    bodySize: number;
+    impulseRange: number;
+    createdFvg: boolean;
+  };
+  signalFvgPresent?: boolean;
   liquidityTargetType?: string;
   orderBlockVariant?: string;
   approvedProfileStatus?: IctApprovedCandidateStatus;

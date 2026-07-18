@@ -49,6 +49,8 @@ const familyTitle: Record<GrinchCalibrationCandidateFamily, string> = {
 };
 
 export const executableAutoResearchCandidateFamilies: AutoResearchCandidateFamily[] = [
+  "model_1_timing_recheck",
+  "consolidation_range_tightness",
   "grinch_model_model1_only",
   "grinch_model_reversal_only",
   "reversal_expansion_confirmation",
@@ -78,17 +80,17 @@ export const grinchCalibrationCandidateFamilyRegistry: Record<
 > = {
   model_1_timing_recheck: {
     calibrationFamily: "model_1_timing_recheck",
-    status: "planned_not_implemented",
-    executableAutoResearchFamilies: [],
+    status: "executable",
+    executableAutoResearchFamilies: ["model_1_timing_recheck"],
     closestAutoResearchFamilies: [
       "grinch_model_model1_only",
       "grinch_timing_valid_only",
       "grinch_require_timing_acceptable"
     ],
     reason:
-      "Model 1 timing recheck is a calibration-report family; Auto Research does not yet have an exact executable candidate for it.",
+      "Model 1 timing recheck now maps to research-only Auto Research candidates (strict and tolerant variants) that vary Model 1 timing sensitivity without touching production thresholds.",
     nextImplementationStep:
-      "Implement a concrete Auto Research candidate that varies Model 1 timing sensitivity without changing production thresholds."
+      "Run the Model 1 timing recheck candidates through AI Research, walk-forward, evidence, maturity, and regime consistency checks before any concrete proposal can be considered."
   },
   reversal_expansion_confirmation: {
     calibrationFamily: "reversal_expansion_confirmation",
@@ -102,23 +104,29 @@ export const grinchCalibrationCandidateFamilyRegistry: Record<
   },
   consolidation_range_tightness: {
     calibrationFamily: "consolidation_range_tightness",
-    status: "planned_not_implemented",
-    executableAutoResearchFamilies: [],
+    status: "executable",
+    executableAutoResearchFamilies: ["consolidation_range_tightness"],
     closestAutoResearchFamilies: ["grinch_consolidation_profile_only", "grinch_model_consolidation_only"],
     reason:
-      "Consolidation range tightness is reported by diagnostics, but no exact Auto Research candidate changes only that criterion yet.",
+      "Consolidation range tightness now maps to research-only Auto Research candidates (strict and relaxed variants) that vary range-tightness sensitivity without loosening production gates.",
     nextImplementationStep:
-      "Add a controlled consolidation-range candidate that tests range tightness sensitivity without loosening production gates."
+      "Run the consolidation range tightness candidates through AI Research, walk-forward, evidence, maturity, and regime consistency checks before any concrete proposal can be considered."
   },
   liquidity_raid_detection: {
     calibrationFamily: "liquidity_raid_detection",
-    status: "diagnostic_only",
-    executableAutoResearchFamilies: [],
+    status: "executable",
+    executableAutoResearchFamilies: [
+      "session_raid_displacement_strict",
+      "session_raid_displacement_relaxed",
+      "session_raid_retrace_strict",
+      "session_raid_retrace_relaxed",
+      "session_raid_session_filter_ny_am"
+    ],
     closestAutoResearchFamilies: ["grinch_consolidation_profile_only"],
     reason:
-      "Liquidity raid detection is evidence diagnostics only; Auto Research has no safe executable candidate for this detector yet.",
+      "Liquidity raid detection now maps to session-raid reversal v2 threshold candidates that vary displacement, retrace depth, and session filters.",
     nextImplementationStep:
-      "Implement a diagnostic-to-candidate adapter for liquidity raid evidence before running calibration tests."
+      "Run the session raid threshold candidates through AI Research, walk-forward, evidence, maturity, and regime consistency checks."
   },
   timing_window_sensitivity: {
     calibrationFamily: "timing_window_sensitivity",

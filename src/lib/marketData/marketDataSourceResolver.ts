@@ -23,14 +23,14 @@ export const resolveLiveMarketDataStatus = (
   mt5Feed?: ActiveMt5ReadOnlyCandleFeed,
   tradingViewFeed?: ActiveTradingViewMcpChartFeed
 ): LiveMarketDataStatus => {
-  if (mt5Feed?.activeForChart && mt5Feed.candleCount > 0) {
+  if ((mt5Feed?.activeForChart || mt5Feed?.activeForResearch) && mt5Feed.candleCount > 0) {
     return createDisconnectedLiveMarketDataStatus({
       dataMode: "mt5_read_only",
       lastCandleTimestamp: mt5Feed.lastTimestamp,
       sourceLabel: mt5Feed.sourceLabel
     });
   }
-  if (tradingViewFeed?.activeForChart && tradingViewFeed.candleCount > 0) {
+  if ((tradingViewFeed?.activeForChart || tradingViewFeed?.activeForResearch) && tradingViewFeed.candleCount > 0) {
     return createDisconnectedLiveMarketDataStatus({
       dataMode: "tradingview_mcp_chart",
       lastCandleTimestamp: tradingViewFeed.lastTimestamp,

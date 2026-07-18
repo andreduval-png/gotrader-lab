@@ -88,6 +88,7 @@ export interface IctRealReplayRunOptions {
   includeDiagnostics?: boolean;
   includeReplayResults?: boolean;
   maxReplayWindows?: number;
+  windowSampling?: "latest" | "stratified";
   newsSessionRiskContext?: IctNewsSessionRiskContextInput;
 }
 
@@ -429,6 +430,7 @@ export async function runIctRealReplay(configInput: Partial<IctRealReplayRunConf
             replayWindowSize: config.replayWindowSize,
             lookaheadCandles: config.lookaheadCandles,
             maxReplayWindows: options.maxReplayWindows,
+            windowSampling: options.windowSampling,
             appendJournal: options.appendJournal,
             researchOnly: true
           })

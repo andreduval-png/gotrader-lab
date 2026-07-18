@@ -1,7 +1,14 @@
-import type { BacktestDecisionPoint, SimulatedTradeAgentAttribution, SimulatedTradeRecord } from "@/lib/backtesting/backtestTypes";
+import type {
+  BacktestDecisionPoint,
+  BacktestFillFrictions,
+  SimulatedTradeAgentAttribution,
+  SimulatedTradeRecord
+} from "@/lib/backtesting/backtestTypes";
 import type { Candle, MarketBias } from "@/lib/types";
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
+
+const NO_FRICTIONS: BacktestFillFrictions = { tickSize: 0.25, spreadTicks: 0, slippageTicks: 0, commissionTicks: 0 };
 
 const directionFor = (bias: MarketBias) => {
   if (bias === "bullish") {
@@ -52,12 +59,19 @@ const attributionFor = (decision: BacktestDecisionPoint): SimulatedTradeAgentAtt
 export function scoreSimulatedTradeOutcome(
   decision: BacktestDecisionPoint,
   candles: Candle[],
-  lookaheadCandles: number
+  lookaheadCandles: number,
+  frictions: BacktestFillFrictions = NO_FRICTIONS
 ): SimulatedTradeRecord {
   const thesis = decision.thesis;
   const plan = thesis.simulatedTradePlan;
   const direction = directionFor(thesis.finalBias);
-  const entryPrice = round((plan.entryZone[0] + plan.entryZone[1]) / 2);
+  // Fill model: pay half the spread plus adverse slippage on entry, adverse
+  // slippage again on stop exits, and a round-trip commission in price terms.
+  const entryFrictionPrice = (frictions.spreadTicks / 2 + frictions.slippageTicks) * frictions.tickSize;
+  const stopSlippagePrice = frictions.slippageTicks * frictions.tickSize;
+  const commissionPrice = frictions.commissionTicks * frictions.tickSize;
+  const rawEntryPrice = round((plan.entryZone[0] + plan.entryZone[1]) / 2);
+  const entryPrice = round(rawEntryPrice + direction * entryFrictionPrice, 4);
   const endIndex = Math.min(candles.length - 1, decision.decisionIndex + lookaheadCandles);
   const futureCandles = candles.slice(decision.decisionIndex + 1, endIndex + 1);
   const fallbackResolvedAt = candles[endIndex]?.timestamp ?? decision.candle.timestamp;
@@ -145,15 +159,17 @@ export function scoreSimulatedTradeOutcome(
   const scoredWindow =
     entryIndex === undefined ? [] : candles.slice(entryIndex, Math.min(candles.length, exitIndex + 1));
   const { mfe, mae } = excursionFor(scoredWindow, entryPrice, direction);
-  const risk = Math.max(0.25, Math.abs(entryPrice - plan.invalidation));
+  const risk = Math.max(frictions.tickSize, 0.25, Math.abs(entryPrice - plan.invalidation));
   const terminalClose = candles[exitIndex]?.close ?? entryPrice;
-  const unresolvedR =
-    entryIndex === undefined ? 0 : ((terminalClose - entryPrice) * direction) / risk;
-  const rMultiple = targetHit
-    ? Math.abs(plan.targetLiquidity - entryPrice) / risk
-    : stopHit
-      ? -1
-      : unresolvedR;
+  // PnL in price terms per fill scenario. Targets are limit fills (no extra
+  // slippage); stop and market exits pay slippage; every round trip pays commission.
+  const targetPnl = (plan.targetLiquidity - entryPrice) * direction - commissionPrice;
+  const stopPnl = (plan.invalidation - entryPrice) * direction - stopSlippagePrice - commissionPrice;
+  const unresolvedPnl =
+    entryIndex === undefined
+      ? 0
+      : (terminalClose - entryPrice) * direction - stopSlippagePrice - commissionPrice;
+  const rMultiple = targetHit ? targetPnl / risk : stopHit ? stopPnl / risk : unresolvedPnl / risk;
 
   return {
     id: `bt_trade_${decision.decisionIndex}`,

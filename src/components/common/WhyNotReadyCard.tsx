@@ -18,18 +18,25 @@ export function WhyNotReadyCard({
   const winRate = metrics?.winRate;
   const readinessState = snapshot?.readiness.readinessState ?? "Not Ready";
   const goodWinRate = typeof winRate === "number" && winRate >= 0.45;
+  const hasOutcomeSample = Boolean(metrics && metrics.totalTrades > 0);
   const blockers = unique([
     ...(snapshot?.readiness.actualBlockers ?? []),
-    metrics && metrics.totalTrades < 30 ? `Sample size is still small: ${metrics.totalTrades} simulated trade(s).` : "",
-    snapshot?.walkForward.verdict === "insufficient_evidence"
+    metrics && metrics.totalTrades > 0 && metrics.totalTrades < 30
+      ? `Sample size is still small: ${metrics.totalTrades} simulated trade(s).`
+      : "",
+    hasOutcomeSample && snapshot?.walkForward.verdict === "insufficient_evidence"
       ? `Walk-forward evidence is insufficient: ${snapshot.walkForward.windowsTested} window(s) tested.`
       : "",
-    snapshot?.walkForward.verdict === "fail" ? "Walk-forward validation failed or showed unstable out-of-sample behavior." : "",
-    snapshot && !snapshot.walkForward.latestRun ? "Walk-forward validation has not produced a current passing result." : "",
-    snapshot && snapshot.evidence.evidenceQualityScore < 70
+    hasOutcomeSample && snapshot?.walkForward.verdict === "fail"
+      ? "Walk-forward validation failed or showed unstable out-of-sample behavior."
+      : "",
+    hasOutcomeSample && snapshot && !snapshot.walkForward.latestRun
+      ? "Walk-forward validation has not produced a current passing result."
+      : "",
+    hasOutcomeSample && snapshot && snapshot.evidence.evidenceQualityScore < 70
       ? `Evidence quality is limited: ${snapshot.evidence.evidenceQualityScore}/100.`
       : "",
-    snapshot && snapshot.maturity.maturityScore < 70
+    hasOutcomeSample && snapshot && snapshot.maturity.maturityScore < 70
       ? `Research maturity is still building: ${snapshot.maturity.maturityGrade.replace(/_/g, " ")} / ${snapshot.maturity.maturityScore}.`
       : ""
   ]);

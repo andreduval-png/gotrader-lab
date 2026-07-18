@@ -16,6 +16,7 @@ const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || "http://127.0.0.1:7341
 const requestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
 const brokerSymbol = process.env.MT5_READONLY_BROKER_SYMBOL || process.env.MT5_READONLY_DEFAULT_SYMBOL || "USTECH";
 const requestedLookbackDays = Number(process.env.IFVG_LOOKBACK_DAYS || 90);
+const historyEndOffsetDays = Math.max(0, Number(process.env.IFVG_END_OFFSET_DAYS || 0));
 const entryTimeframes = (process.env.IFVG_TIMEFRAMES || "5m,15m").split(",").map((value) => value.trim()).filter(Boolean);
 const fetchTimeframes = [...new Set([...entryTimeframes, "1h"])];
 const chunkDays = Number(process.env.IFVG_CHUNK_DAYS || 14);
@@ -30,8 +31,8 @@ const lookaheadByTimeframe = {
   "15m": Number(process.env.IFVG_15M_LOOKAHEAD_CANDLES || 48)
 };
 const evalStrideByTimeframe = {
-  "5m": Math.max(1, Number(process.env.IFVG_5M_EVAL_STRIDE || 6)),
-  "15m": Math.max(1, Number(process.env.IFVG_15M_EVAL_STRIDE || 3))
+  "5m": Math.max(1, Number(process.env.IFVG_5M_EVAL_STRIDE || 1)),
+  "15m": Math.max(1, Number(process.env.IFVG_15M_EVAL_STRIDE || 1))
 };
 
 const authority = {
@@ -192,7 +193,7 @@ async function fetchLatestAnchorTimestamp() {
   const latestCandles = Array.isArray(latest.payload?.candles) ? latest.payload.candles : [];
   const lastTimestamp = latest.payload?.lastTimestamp ?? latestCandles.at(-1)?.timestamp;
   if (!lastTimestamp) throw new Error("Latest MT5 anchor candles did not include a last timestamp.");
-  return lastTimestamp;
+  return new Date(Date.parse(lastTimestamp) - historyEndOffsetDays * 86_400_000).toISOString();
 }
 
 async function fetchChunkedCandles(timeframe, anchorTimestamp) {
@@ -350,16 +351,17 @@ const cleanRetest = (candidate) => {
   return retest.high >= bounds.midpoint && retest.high <= bounds.high && retest.close <= bounds.midpoint;
 };
 
-const postInversionDeliveryConfirmed = ({ candidate, candles, sliceStartIndex }) => {
+const postInversionDeliveryConfirmed = ({ candidate, slice }) => {
   const inversionIndex = candidate.inversionCandle?.candleIndex;
-  if (!Number.isFinite(inversionIndex) || candidate.side === "flat") return false;
-  const absoluteIndex = sliceStartIndex + inversionIndex;
-  const future = candles.slice(absoluteIndex + 1, absoluteIndex + 4);
-  if (future.length < 2) return false;
+  const retestIndex = candidate.retestCandle?.candleIndex;
+  if (!Number.isFinite(inversionIndex) || !Number.isFinite(retestIndex) || candidate.side === "flat") return false;
+  if (retestIndex <= inversionIndex) return false;
+  const confirmation = slice.slice(inversionIndex + 1, Math.min(retestIndex, inversionIndex + 4));
+  if (confirmation.length < 2) return false;
   if (candidate.side === "long") {
-    return future.at(-1).close > candidate.inversionCandle.close && future.filter((candle) => candle.close >= candle.open).length >= 2;
+    return confirmation.at(-1).close > candidate.inversionCandle.close && confirmation.filter((candle) => candle.close >= candle.open).length >= 2;
   }
-  return future.at(-1).close < candidate.inversionCandle.close && future.filter((candle) => candle.close <= candle.open).length >= 2;
+  return confirmation.at(-1).close < candidate.inversionCandle.close && confirmation.filter((candle) => candle.close <= candle.open).length >= 2;
 };
 
 const premiumDiscountAlignment = ({ candidate, slice }) => {
@@ -391,8 +393,8 @@ const compactCandidate = ({ candidate, timeframe, signalIndex, outcome, tradingD
   premiumDiscountAligned: premiumDiscountAlignment({ candidate, slice }),
   cleanRetest: cleanRetest(candidate),
   inversionStrongBody: hasStrongBody(candidate.inversionCandle),
-  postInversionDeliveryConfirmed: postInversionDeliveryConfirmed({ candidate, candles, sliceStartIndex }),
-  displacementConfirmed: hasStrongBody(candidate.inversionCandle) && postInversionDeliveryConfirmed({ candidate, candles, sliceStartIndex }),
+  postInversionDeliveryConfirmed: postInversionDeliveryConfirmed({ candidate, slice }),
+  displacementConfirmed: hasStrongBody(candidate.inversionCandle) && postInversionDeliveryConfirmed({ candidate, slice }),
   firstIfvgUse: candidate.presentConditions.includes("unused_ifvg_zone"),
   blocker: candidate.blockers[0],
   canCreateValidationChainEntry: candidate.canCreateValidationChainEntry,
@@ -876,6 +878,11 @@ async function collectCandidates() {
         blockerDistribution[reason] = (blockerDistribution[reason] ?? 0) + 1;
         continue;
       }
+      if (candidate.retestCandle?.timestamp !== candle.timestamp) {
+        blockedCandidates += 1;
+        blockerDistribution.stale_retest_signal = (blockerDistribution.stale_retest_signal ?? 0) + 1;
+        continue;
+      }
       const outcome = simulateOutcome({ candles: depth.candles, candidate, signalIndex: index, timeframe });
       const compact = compactCandidate({
         candidate,
@@ -956,6 +963,7 @@ async function main() {
       requestedSymbol,
       brokerSymbol,
       requestedLookbackDays,
+      historyEndOffsetDays,
       timeframes: sourceDepth,
       cfdProxyWarning: "USTECH is MT5 read-only CFD/proxy data for requested MNQ, not CME futures truth."
     },

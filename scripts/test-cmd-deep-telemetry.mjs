@@ -10,7 +10,10 @@ const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const mt5Root = path.join(projectRoot, "src", "lib", "integrations", "mt5");
 const outRoot = path.join(projectRoot, ".gotrader", "cmd-deep-telemetry-test");
-const reportPath = path.join(projectRoot, "docs", "cmd-deep-telemetry-audit.md");
+const reportPath = path.join(
+  projectRoot,
+  process.env.ICT_CMD_TELEMETRY_REPORT_PATH || "docs/cmd-deep-telemetry-audit.md"
+);
 const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || "http://127.0.0.1:7341").replace(/\/$/, "");
 const requestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
 const brokerSymbol = process.env.MT5_READONLY_BROKER_SYMBOL || process.env.MT5_READONLY_DEFAULT_SYMBOL || "USTECH";
@@ -19,6 +22,7 @@ const requestedLookbackDays = Number(process.env.ICT_CMD_TELEMETRY_DAYS || 90);
 const chunkDays = Number(process.env.ICT_CMD_TELEMETRY_CHUNK_DAYS || 10);
 const limitPerChunk = Math.max(1, Math.min(5000, Number(process.env.ICT_CMD_TELEMETRY_LIMIT || 5000)));
 const maxReplayWindows = Math.max(1, Number(process.env.ICT_CMD_TELEMETRY_MAX_WINDOWS || 240));
+const endOffsetDays = Math.max(0, Number(process.env.ICT_CMD_TELEMETRY_END_OFFSET_DAYS || 0));
 const timeoutMs = Number(process.env.MT5_READONLY_TEST_TIMEOUT_MS || 10000);
 
 const authority = {
@@ -37,6 +41,10 @@ const safety = {
 };
 
 const sourceFiles = [
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
@@ -108,8 +116,7 @@ const sourceFiles = [
   { root: mt5Root, file: "mt5SymbolSettings.ts" },
   { root: mt5Root, file: "mt5ReadOnlyNormalizer.ts" },
   { root: mt5Root, file: "mt5ReadOnlyDepth.ts" },
-  { root: mt5Root, file: "mt5ReadOnlyClient.ts" },
-  { root: sourceRoot, file: "index.ts" }
+  { root: mt5Root, file: "mt5ReadOnlyClient.ts" }
 ];
 
 function compileSuiteForNode() {
@@ -135,7 +142,9 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -145,6 +154,15 @@ function compileSuiteForNode() {
 }
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_CMD_TELEMETRY_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { status: "not_evaluated_in_cmd_telemetry", opportunityCount: 0 } };
 }
 `,
     "utf8"
@@ -255,8 +273,9 @@ async function fetchChunkedCandles() {
   );
   if (!latest.ok) throw new Error(`Latest MT5 candles returned HTTP ${latest.status}`);
   const latestCandles = Array.isArray(latest.payload?.candles) ? latest.payload.candles : [];
-  const lastTimestamp = latest.payload?.lastTimestamp ?? latestCandles.at(-1)?.timestamp;
-  if (!lastTimestamp) throw new Error("Latest MT5 candles did not include a last timestamp.");
+  const latestTimestamp = latest.payload?.lastTimestamp ?? latestCandles.at(-1)?.timestamp;
+  if (!latestTimestamp) throw new Error("Latest MT5 candles did not include a last timestamp.");
+  const lastTimestamp = new Date(Date.parse(latestTimestamp) - endOffsetDays * 86_400_000).toISOString();
 
   const rawCandles = [];
   const chunks = [];
@@ -361,7 +380,8 @@ const safeTelemetrySample = (items, limit = 10) =>
     htfAlignment: item.htfAlignment,
     displacementScore: item.displacementScore,
     manipulationDepthBucket: item.manipulationDepthBucket,
-    fvgRespected: item.fvgRespected,
+    fvgPresentAtSignal: item.fvgPresent,
+    fvgOutcomeRespected: item.fvgRespected,
     externalLiquidityTargetPresent: item.externalLiquidityTargetPresent,
     sweepQuality: item.sweepQuality,
     blockers: item.blockerReasons.slice(0, 3)
@@ -548,7 +568,11 @@ const assertSafeReport = (payload) => {
 
 async function main() {
   compileSuiteForNode();
-  const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")).href);
+  const suite = {
+    ...(await import(pathToFileURL(path.join(outRoot, "ictReplayValidation.mjs")).href)),
+    ...(await import(pathToFileURL(path.join(outRoot, "ictApprovedSetupProfile.mjs")).href)),
+    ...(await import(pathToFileURL(path.join(outRoot, "ictCmdTelemetry.mjs")).href))
+  };
   let depth;
   try {
     depth = await fetchChunkedCandles();
@@ -576,48 +600,38 @@ async function main() {
   const source = makeSource(depth);
   globalThis.__ICT_CMD_TELEMETRY_SOURCES = new Map([[source.sourceId, source]]);
 
-  const replay = await suite.runIctRealReplay(
-    {
-      requestedSymbols: [requestedSymbol],
-      brokerSymbols: [brokerSymbol],
-      primaryTimeframes: [primaryTimeframe],
-      htfTimeframes: [],
-      candleLimit: depth.candles.length,
-      replayWindowSize: 80,
-      lookaheadCandles: 24,
-      requestedLookbackDays,
-      appendJournal: false
-    },
-    {
-      includeReplayResults: true,
-      maxReplayWindows,
-      fetchCandles: async () => ({
-        requestedSymbol,
-        brokerSymbol,
-        timeframe: primaryTimeframe,
-        candles: depth.candles,
-        candleCount: depth.candles.length,
-        connectionStatus: depth.candles.length ? "connected" : "disconnected",
-        depthStatus: depth.availableLookbackDays >= requestedLookbackDays * 0.8 ? "full" : "partial",
-        firstTimestamp: depth.firstTimestamp,
-        lastTimestamp: depth.lastTimestamp,
-        warnings: ["CMD telemetry diagnostic used explicit read-only MT5 range chunks; raw candles stayed internal."],
-        missingEvidence: depth.candles.length ? [] : ["No MT5 candles were available."]
-      }),
-      newsSessionRiskContext: { syntheticNoRisk: true, provider: "historical_replay" }
-    }
-  );
+  const replay = suite.runIctReplayValidation({
+    symbol: requestedSymbol,
+    requestedSymbol,
+    brokerSymbol,
+    primaryTimeframe,
+    htfTimeframes: [],
+    candles: depth.candles,
+    htfCandles: {},
+    indexComparisonCandles: { [brokerSymbol]: depth.candles },
+    newsSessionRiskContext: { syntheticNoRisk: true, provider: "historical_replay" },
+    replayWindowSize: 80,
+    lookaheadCandles: 24,
+    maxReplayWindows,
+    windowSampling: "stratified",
+    requestedLookbackDays,
+    availableLookbackDays: depth.availableLookbackDays,
+    dataDepthStatus: depth.availableLookbackDays >= requestedLookbackDays * 0.8 ? "sufficient" : "limited",
+    appendJournal: false,
+    researchOnly: true
+  });
 
-  assert.equal(suite.assertIctRealReplayRunOutputIsCompact(replay).ok, true, "real replay output must stay compact");
-  const pairs = decisionPairsFor(suite, replay.replayResults ?? []);
+  assert.equal(suite.assertIctReplayOutputIsCompact(replay).ok, true, "replay output must stay compact");
+  const pairs = decisionPairsFor(suite, replay.results ?? []);
   const cmdPairs = pairs.filter(({ result }) => isCmd(result));
-  const cmdTelemetry = cmdPairs.map(({ result, decision }) =>
+  const rawCmdTelemetry = cmdPairs.map(({ result, decision }) =>
     suite.buildIctCmdCandidateTelemetry({
       result,
       decision,
       sourceFingerprint: source.fingerprint
     })
   );
+  const cmdTelemetry = [...new Map(rawCmdTelemetry.map((item) => [item.candidateId, item])).values()];
   const cmdResearchTelemetry = cmdTelemetry.filter((item) => item.candidateLane !== "no_trade");
   const paperTelemetry = cmdTelemetry.filter((item) => item.candidateLane === "paper_watchlist_candidate");
   const winningPaperTelemetry = paperTelemetry.filter((item) => item.outcome === "target_first");
@@ -658,6 +672,7 @@ async function main() {
       sourceFingerprint: source.fingerprint,
       candleCount: depth.candleCount,
       availableLookbackDays: depth.availableLookbackDays,
+      endOffsetDays,
       chunkCount: depth.chunks.length,
       cfdProxyWarning: "USTECH is MT5 CFD/proxy research data for requested MNQ, not CME futures truth."
     },
@@ -666,7 +681,7 @@ async function main() {
       replayWindowSize: 80,
       lookaheadCandles: 24,
       note:
-        "The diagnostic fetches explicit 90-day MT5 range history, then evaluates the capped latest replay-window budget for interactive safety. Increase ICT_CMD_TELEMETRY_MAX_WINDOWS for a slower deeper sweep."
+        "The diagnostic fetches explicit 90-day MT5 range history, then evaluates a deterministic stratified replay-window budget across the full period. Increase ICT_CMD_TELEMETRY_MAX_WINDOWS for a slower denser sweep."
     },
     counts: {
       allReplayResults: pairs.length,

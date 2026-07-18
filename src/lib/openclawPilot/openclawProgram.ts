@@ -115,7 +115,8 @@ export const openClawPilotProgram: OpenClawPilotProgram = {
     "turtle_soup_v1",
     "cisd_v1",
     "ifvg_v1",
-    "ifvg_filtered_v2_research"
+    "ifvg_filtered_v2_research",
+    "ifvg_fresh_retest_v3_research"
   ],
   permissions: openClawPilotPermissions,
   safetyBoundary: openClawPilotSafetyBoundary,

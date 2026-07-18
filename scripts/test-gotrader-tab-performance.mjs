@@ -86,6 +86,8 @@ async function measureRoute(page, baseUrl, route, label) {
   await page.goto(`${baseUrl}${route}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(450);
   await expect(page.locator("main")).toBeVisible();
+  if (route === "/dashboard") await expect(page.getByTestId("operator-console")).toBeVisible();
+  if (route === "/advisor") await expect(page.getByTestId("operator-decisions")).toBeVisible();
   const loadMs = Math.round(performance.now() - startedAt);
   const bodyText = await page.locator("main").innerText();
   const renderedCharacters = bodyText.length;
@@ -106,16 +108,25 @@ async function measureRoute(page, baseUrl, route, label) {
 }
 
 async function assertAdvisorHeavyPanelsDeferred(page, baseUrl) {
-  await page.goto(`${baseUrl}/advisor`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${baseUrl}/research-advisor`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(600);
-  await expect(page.getByTestId("advisor-manual-replay-section")).toContainText(/deferred/i);
-  await expect(page.getByTestId("advisor-market-scorecard-section")).toContainText(/deferred/i);
-  await expect(page.getByTestId("advisor-profile-optimizer-section")).toContainText(/deferred/i);
-  await expect(page.getByTestId("advisor-saved-reports-section")).toContainText(/deferred/i);
   await expect(page.getByTestId("ict-manual-replay-review")).toHaveCount(0);
   await expect(page.getByTestId("ict-monte-carlo-robustness")).toHaveCount(0);
   await expect(page.getByTestId("ict-market-scorecard")).toHaveCount(0);
   await expect(page.getByTestId("ict-approved-profile-optimizer")).toHaveCount(0);
+  await expect(page.getByTestId("ict-saved-research-reports")).toHaveCount(0);
+
+  await page.getByTestId("advisor-tab-validation").click();
+  await expect(page.getByTestId("advisor-manual-replay-section")).toContainText(/deferred/i);
+  await expect(page.getByTestId("advisor-market-scorecard-section")).toContainText(/deferred/i);
+  await expect(page.getByTestId("advisor-profile-optimizer-section")).toContainText(/deferred/i);
+  await expect(page.getByTestId("ict-manual-replay-review")).toHaveCount(0);
+  await expect(page.getByTestId("ict-monte-carlo-robustness")).toHaveCount(0);
+  await expect(page.getByTestId("ict-market-scorecard")).toHaveCount(0);
+  await expect(page.getByTestId("ict-approved-profile-optimizer")).toHaveCount(0);
+
+  await page.getByTestId("advisor-tab-notes").click();
+  await expect(page.getByTestId("advisor-saved-reports-section")).toContainText(/deferred/i);
   await expect(page.getByTestId("ict-saved-research-reports")).toHaveCount(0);
 }
 
@@ -126,7 +137,8 @@ async function assertDashboardAdvancedDeferred(page, baseUrl) {
   if (/Timing \/ Expansion Replay|Grinch Profile Diagnostics|Chart Stability Diagnostics/i.test(mainText)) {
     throw new Error("Dashboard advanced diagnostics mounted before Advanced Details was opened.");
   }
-  await expect(page.locator("main")).toContainText(/Advanced diagnostics are deferred until opened/i);
+  await expect(page.getByTestId("operator-console")).toBeVisible();
+  await expect(page.locator('a[href="/research-lab"]')).toBeVisible();
 }
 
 const port = baseUrlFromEnv ? undefined : await findFreePort(requestedPort);
@@ -147,9 +159,9 @@ try {
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const results = [];
-  results.push(await measureRoute(page, baseUrl, "/dashboard", "Command Center"));
+  results.push(await measureRoute(page, baseUrl, "/dashboard", "Operator Console"));
   results.push(await measureRoute(page, baseUrl, "/autonomous-research", "Autonomous Workflow"));
-  results.push(await measureRoute(page, baseUrl, "/advisor", "Advanced/Advisor"));
+  results.push(await measureRoute(page, baseUrl, "/advisor", "Decision Inbox"));
   results.push(await measureRoute(page, baseUrl, "/agent-debate", "Diagnostics"));
   await assertAdvisorHeavyPanelsDeferred(page, baseUrl);
   await assertDashboardAdvancedDeferred(page, baseUrl);

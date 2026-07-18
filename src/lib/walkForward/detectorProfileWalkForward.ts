@@ -5,6 +5,11 @@ import type {
   DetectorProfileWalkForwardResult,
   DetectorProfileWalkForwardWindow
 } from "@/lib/walkForward/detectorProfileWalkForwardTypes";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
+import {
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters
+} from "@/lib/validationProvenance";
 
 const DAY_MS = 86_400_000;
 const AUTHORITY_NONE = {
@@ -72,13 +77,21 @@ export function runDetectorProfileWalkForward(
   const minimumWindowPassRate = Math.min(1, Math.max(0.5, input.minimumWindowPassRate ?? 0.6));
   const maximumSingleDateShare = Math.min(0.5, Math.max(0.05, input.maximumSingleDateShare ?? 0.15));
   const start = Date.parse(input.sourceStart);
-  const end = Date.parse(input.sourceEnd);
+  const requestedEnd = Date.parse(input.sourceEnd);
+  const frozenProfile = getFrozenResearchProfile(input.profileId);
+  const frozenCutoff = frozenProfile ? Date.parse(frozenProfile.validationCutoff) : Number.NaN;
+  const end = Number.isFinite(frozenCutoff) && Number.isFinite(requestedEnd)
+    ? Math.min(requestedEnd, frozenCutoff)
+    : requestedEnd;
   const sourceValid = Number.isFinite(start) && Number.isFinite(end) && end > start;
   const sourceBlocked =
     !input.sourceFingerprint || /mock|sample|unavailable/i.test(input.sourceProvider || "") || !sourceValid;
   const developmentEnd = sourceValid ? start + (end - start) * (1 - holdoutFraction) : 0;
   const sortedTrades = input.trades
-    .filter((trade) => Number.isFinite(Date.parse(trade.openedAt)) && Number.isFinite(trade.rMultiple))
+    .filter((trade) => {
+      const openedAt = Date.parse(trade.openedAt);
+      return Number.isFinite(openedAt) && openedAt <= end && Number.isFinite(trade.rMultiple);
+    })
     .sort((left, right) => Date.parse(left.openedAt) - Date.parse(right.openedAt));
   const windows: DetectorProfileWalkForwardWindow[] = [];
   const windowMs = windowDays * DAY_MS;
@@ -173,15 +186,50 @@ export function runDetectorProfileWalkForward(
         ? "failed"
         : "passed";
 
+  const generatedAt = new Date().toISOString();
+  const effectiveEnd = Number.isFinite(end) ? new Date(end).toISOString() : input.sourceEnd;
+  const validationRunId = input.validationRunId ??
+    `detector_validation_${fingerprintValidationParameters({
+      profileId: input.profileId,
+      sourceFingerprint: input.sourceFingerprint,
+      sourceStart: input.sourceStart,
+      sourceEnd: effectiveEnd
+    }).replace("params_", "")}`;
+  const walkForwardRunId = `detector_walk_forward_${fingerprintValidationParameters({
+    validationRunId,
+    holdoutFraction,
+    windowDays
+  }).replace("params_", "")}`;
+  const provenance = buildValidationProvenanceIdentity({
+    strategyProfile: input.profileId,
+    strategyProfileVersion: frozenProfile?.profileVersion,
+    proposalId: input.proposalId,
+    candidateId: input.candidateId,
+    sourceProvider: input.sourceProvider,
+    requestedSymbol: input.requestedSymbol ?? frozenProfile?.requestedSymbol,
+    brokerSymbol: input.brokerSymbol ?? frozenProfile?.brokerSymbol,
+    timeframe: input.timeframe ?? frozenProfile?.timeframe,
+    sourceFingerprint: input.sourceFingerprint,
+    parameterFingerprint: input.parameterFingerprint ??
+      (frozenProfile ? fingerprintValidationParameters(frozenProfile.frozenParameters) : undefined),
+    detectorProfileFingerprint: input.detectorProfileFingerprint ??
+      (frozenProfile ? fingerprintValidationParameters(frozenProfile.frozenParameters) : undefined),
+    validationRunId,
+    walkForwardRunId,
+    validationCutoff: frozenProfile?.validationCutoff,
+    dataRangeStart: input.sourceStart,
+    dataRangeEnd: effectiveEnd
+  });
   return {
     profileId: input.profileId,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     method: "frozen_profile_chronological_holdout",
     verdict,
     sourceProvider: input.sourceProvider,
     sourceFingerprint: input.sourceFingerprint,
     sourceStart: input.sourceStart,
-    sourceEnd: input.sourceEnd,
+    sourceEnd: provenance.dataRangeEnd ?? input.sourceEnd,
+    provenance,
     developmentEnd: developmentEnd ? new Date(developmentEnd).toISOString() : "unavailable",
     holdoutFraction: round(holdoutFraction, 4),
     windowDays,

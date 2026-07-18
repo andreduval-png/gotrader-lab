@@ -161,7 +161,7 @@ async function main() {
   const evidence = await import(pathToFileURL(path.join(outRoot, "strategyEvidence.mjs")).href);
 
   const definitions = registry.listStrategyDefinitions();
-  assert.equal(definitions.length, 20);
+  assert.equal(definitions.length, 21);
   const newStrategyIds = [
     "silver_bullet_v1",
     "silver_bullet_v2_refined_research",
@@ -171,6 +171,7 @@ async function main() {
     "ifvg_v1",
     "ifvg_filtered_v2_research",
     "ifvg_fresh_retest_v3_research",
+    "cmd_high_displacement_v2_research",
     "turtle_soup_v1",
     "crt_research_v1",
     "ote_research_v1",
@@ -218,10 +219,17 @@ async function main() {
       `ifvg filtered v2 should forbid promotion reason ${reason}`
     );
   }
-  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research"].includes(id))) {
+  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research", "cmd_high_displacement_v2_research"].includes(id))) {
     assert.equal(registry.getStrategyDefinition(strategyId).detectorStatus, "research_only_placeholder");
   }
   assert.ok(registry.getStrategyDefinition("ict_cmd_short_paper_watchlist_v1"));
+  assert.equal(registry.getStrategyDefinition("ict_cmd_short_paper_watchlist_v1").status, "replay_required");
+  assert.equal(registry.getStrategyDefinition("cmd_high_displacement_v2_research").detectorStatus, "executable_research");
+  assert.equal(registry.getStrategyDefinition("cmd_high_displacement_v2_research").status, "replay_required");
+  assert.equal(
+    registry.suggestStrategyIdForRecognition({ candidateFamilies: ["cmd_high_displacement_v2_research"] }),
+    "cmd_high_displacement_v2_research"
+  );
   assert.ok(registry.getStrategyDefinition("market_map_only_diagnostic_v1"));
   assert.equal(
     registry.suggestStrategyIdForRecognition({ modelName: "Silver Bullet" }),
@@ -318,9 +326,35 @@ async function main() {
   });
   const threeDateEligibility = eligibility.evaluateStrategyEligibility(threeDateCmd);
   assert.equal(threeDateEligibility.eligible, true);
-  assert.equal(threeDateEligibility.status, "paper_watchlist_candidate");
+  assert.equal(threeDateEligibility.status, "evidence_building");
   assertSafeRecord(threeDateCmd);
   assertSafeRecord(threeDateEligibility);
+
+  const cmdV2Definition = registry.getStrategyDefinition("cmd_high_displacement_v2_research");
+  const cmdV2Record = intake.createStrategyIntakeRecord({
+    strategyId: "cmd_high_displacement_v2_research",
+    sourceStatus: mt5Source,
+    validationChainEntry: passedChain,
+    recognition: {
+      modelName: "CMD high displacement v2",
+      family: "ict_cmd",
+      side: "short",
+      presentConditions: cmdV2Definition.requiredConditions.map((condition) => condition.id)
+    },
+    evidenceSummary: {
+      ...threeDateCmd.evidenceSummary,
+      sampleCount: 32,
+      uniqueTradingDates: 13,
+      activeRollingWindows: 6,
+      oosVerdict: "passed",
+      robustnessClassification: "repeatable_variant_candidate"
+    }
+  });
+  const cmdV2Eligibility = eligibility.evaluateStrategyEligibility(cmdV2Record);
+  assert.equal(cmdV2Eligibility.eligible, true);
+  assert.equal(cmdV2Eligibility.status, "evidence_building");
+  assertSafeRecord(cmdV2Record);
+  assertSafeRecord(cmdV2Eligibility);
 
   const mockCmd = intake.createStrategyIntakeRecord({
     strategyId: "ict_cmd_short_paper_watchlist_v1",

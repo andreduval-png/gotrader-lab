@@ -126,6 +126,7 @@ import {
 import { RESEARCH_CYCLE_UPDATED_EVENT } from "@/lib/researchCycle";
 import { loadAutoPaperDemoCycleState } from "@/lib/paperDemoOperations";
 import { resolveResearchRuntimeSnapshot, type ResearchRuntimeSnapshot } from "@/lib/runtime";
+import { runAdvisorChatWithFallback } from "@/lib/llm/advisorChat";
 import type { Timeframe } from "@/lib/types";
 import {
   describeValidationChainStage,
@@ -497,6 +498,8 @@ export function ResearchAdvisorView() {
   );
   const [advisorCandleLimit, setAdvisorCandleLimit] = useState(() => String(Math.max(1000, loadMt5ReadOnlySettings().candleLimit ?? 1000)));
   const [chatInput, setChatInput] = useState("");
+  const [chatReplySource, setChatReplySource] = useState<"llm-online" | "deterministic-fallback" | "idle">("idle");
+  const [chatReplyModel, setChatReplyModel] = useState<string | undefined>();
   const [chatMessages, setChatMessages] = useState<AdvisorChatMessage[]>([
     createAdvisorMessage(
       "assistant",
@@ -1094,24 +1097,54 @@ export function ResearchAdvisorView() {
       });
     }
   };
-  const submitAdvisorMessage = (content: string) => {
+  const submitAdvisorMessage = async (content: string) => {
     const normalized = content.trim();
     if (!normalized) return;
-    const reply = buildLocalAdvisorReply(normalized, activeAdvisorPacket, currentRead, snapshot, manualReplayStatus, marketScorecardStatus, profileOptimizationStatus);
-    const packetSourceStatus = activeAdvisorPacket?.activeSource.sourceStatus;
-    const disclosedReply = packetSourceStatus?.isMockOrSample
-      ? `Source notice: ${packetSourceStatus.statusLabel}; sample-only, not research evidence. ${reply}`
-      : reply;
+    setChatMessages((messages) => [...messages, createAdvisorMessage("user", normalized)]);
+    setChatInput("");
+
+    const fallbackReply = () => {
+      const reply = buildLocalAdvisorReply(
+        normalized,
+        activeAdvisorPacket,
+        currentRead,
+        snapshot,
+        manualReplayStatus,
+        marketScorecardStatus,
+        profileOptimizationStatus
+      );
+      const packetSourceStatus = activeAdvisorPacket?.activeSource.sourceStatus;
+      return packetSourceStatus?.isMockOrSample
+        ? `Source notice: ${packetSourceStatus.statusLabel}; sample-only, not research evidence. ${reply}`
+        : reply;
+    };
+
+    const chatResult = await runAdvisorChatWithFallback(
+      {
+        prompt: normalized,
+        packet: activeAdvisorPacket,
+        currentRead,
+        snapshot,
+        manualReplayStatus,
+        marketScorecardStatus,
+        profileOptimizationStatus
+      },
+      fallbackReply
+    );
+    const sourceNote =
+      chatResult.source === "llm-online"
+        ? `[LLM online${chatResult.model ? ` · ${chatResult.model}` : ""}] `
+        : "[Deterministic fallback] ";
+    setChatReplySource(chatResult.source);
+    setChatReplyModel(chatResult.model);
     setChatMessages((messages) => [
       ...messages,
-      createAdvisorMessage("user", normalized),
-      createAdvisorMessage("assistant", disclosedReply)
+      createAdvisorMessage("assistant", `${sourceNote}${chatResult.text}`)
     ]);
-    setChatInput("");
   };
   const handleChatSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submitAdvisorMessage(chatInput);
+    void submitAdvisorMessage(chatInput);
   };
   const handleQuickAction = (action: string) => {
     if (action === "Run Replay Review") {
@@ -1296,6 +1329,8 @@ export function ResearchAdvisorView() {
           snapshot={snapshot}
           messages={chatMessages}
           inputValue={chatInput}
+          chatReplySource={chatReplySource}
+          chatReplyModel={chatReplyModel}
           onInputChange={setChatInput}
           onSubmit={handleChatSubmit}
           onQuickAction={handleQuickAction}
@@ -2763,6 +2798,8 @@ function CurrentReadDataFlowPanel({ currentRead }: { currentRead: IctCurrentRead
 }
 
 function ResearchAdvisorChatCard({
+  chatReplyModel,
+  chatReplySource,
   currentRead,
   inputValue,
   manualReplayStatus,
@@ -2776,6 +2813,8 @@ function ResearchAdvisorChatCard({
   profileOptimizationStatus,
   snapshot
 }: {
+  chatReplyModel?: string;
+  chatReplySource: "llm-online" | "deterministic-fallback" | "idle";
   currentRead: IctCurrentRead;
   inputValue: string;
   manualReplayStatus: IctManualReplayReviewStatus;
@@ -2803,6 +2842,13 @@ function ResearchAdvisorChatCard({
     packetError ??
     currentRead.topReasons[0] ??
     "Current setup summary is shown in the cards below. Advisor packet is still hydrating.";
+  const modeLabel =
+    chatReplySource === "llm-online"
+      ? `LLM online${chatReplyModel ? ` · ${chatReplyModel}` : ""}`
+      : chatReplySource === "deterministic-fallback"
+        ? "Deterministic fallback"
+        : "Chat ready";
+  const modeVariant = chatReplySource === "llm-online" ? ("success" as const) : ("muted" as const);
 
   return (
     <section
@@ -2814,16 +2860,15 @@ function ResearchAdvisorChatCard({
           <div className="min-w-0">
             <p className={`flex items-center gap-2 ${WORKSPACE_SECTION_LABEL}`}>
               <Sparkles className="h-4 w-4" aria-hidden="true" />
-              Deterministic Research Helper
+              Research Advisor Chat
             </p>
             <h2 className="mt-2 text-xl font-semibold text-slate-50">Ask about this market read</h2>
             <p className="mt-1 text-xs text-slate-400">
-              Replies here are local deterministic guidance, not an LLM or OpenClaw. Use the LLM Advisory / OpenClaw
-              panel below for provider-routed advisory.
+              Tries the local LLM bridge first; falls back to deterministic guidance when offline. Every reply is labeled.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="muted" data-testid="research-advisor-chat-mode">Local deterministic</Badge>
+            <Badge variant={modeVariant} data-testid="research-advisor-chat-mode">{modeLabel}</Badge>
             <Badge variant="danger">Authority: None</Badge>
           </div>
         </div>
@@ -2865,7 +2910,8 @@ function ResearchAdvisorChatCard({
           </Button>
         </form>
         <p className="mt-3 text-xs text-slate-500">
-          Replay {formatToken(manualReplayStatus)} / scorecard {formatToken(marketScorecardStatus)} / optimizer {formatToken(profileOptimizationStatus)}. Chat replies are deterministic until OpenClaw advisory is explicitly configured.
+          Replay {formatToken(manualReplayStatus)} / scorecard {formatToken(marketScorecardStatus)} / optimizer{" "}
+          {formatToken(profileOptimizationStatus)}. Reply provenance: {modeLabel}.
         </p>
       </div>
     </section>

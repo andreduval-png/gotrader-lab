@@ -146,15 +146,17 @@ const marketStateFor = (
   mt5Feed?: ReturnType<typeof loadActiveMt5ReadOnlyCandleFeed>
 ): RuntimeMarketDataState => {
   const metadata = source.metadata;
-  const fallbackToMock = source.mode === "mock";
   const liveMarketDataStatus = resolveLiveMarketDataStatus(source, mt5Feed, chartFeed);
   const displaySource = resolveChartDisplayCandleSource(source, chartFeed, mt5Feed);
   const activeResearchSummary = displaySource.activeResearchSource;
+  const activeResearchMode = displaySource.activeResearchSourceMode;
+  const activeResearchCandleCount = displaySource.researchIdentity.candleCount;
+  const fallbackToMock = activeResearchMode === "mock";
   const symbol = (activeResearchSummary.symbol ?? metadata?.symbol ?? source.candles[0]?.symbol ?? fallbackSymbol ?? "NQ") as FuturesSymbol;
   const timeframe = (activeResearchSummary.timeframe ?? source.appliedSettings.targetTimeframe ?? metadata?.timeframe ?? source.candles[0]?.timeframe ?? fallbackTimeframe ?? "5m") as Timeframe;
 
   return {
-    activeDataSource: source.mode,
+    activeDataSource: activeResearchMode,
     activeChartSource: displaySource.activeChartSource,
     activeResearchSource: displaySource.activeResearchSource,
     activeWalkForwardSource: displaySource.activeWalkForwardSource,
@@ -180,16 +182,21 @@ const marketStateFor = (
     tradingViewMcpDataFingerprint: displaySource.tradingViewMcpIdentity.dataFingerprint,
     mt5ReadOnlyDataFingerprint: displaySource.mt5ReadOnlyIdentity.dataFingerprint,
     activeImportId: importActivation.activeImportId,
-    sourceLabel: source.label,
+    sourceLabel: displaySource.activeResearchSourceLabel,
     symbol,
-    contract: metadata?.contract,
+    contract: activeResearchSummary.provenance.providerSymbol ?? metadata?.contract,
     timeframe,
-    rawCandleCount: source.rawCandleCount,
-    researchWindow: source.researchWindowCandles,
-    processedCandleCount: source.processedCandleCount,
-    dataPreset: dataPresetFor(source),
-    isImportedDataActive: source.mode === "imported",
-    isMockDataActive: source.mode === "mock",
+    rawCandleCount: activeResearchCandleCount,
+    researchWindow: activeResearchCandleCount,
+    processedCandleCount: activeResearchCandleCount,
+    dataPreset:
+      activeResearchMode === "imported"
+        ? dataPresetFor(source)
+        : activeResearchMode === "mock"
+          ? "mock"
+          : "standard",
+    isImportedDataActive: activeResearchMode === "imported",
+    isMockDataActive: activeResearchMode === "mock",
     importedDatasetCount: importActivation.importedDatasetCount,
     importedDataStatus: importActivation.status,
     importedDataMessage: importActivation.message,
@@ -459,7 +466,7 @@ const buildCurrentActionItems = ({
   maturityScore,
   proposalCurrency,
   readinessBlockers,
-  snapshotLLMPassed,
+  llmAdvisoryIsActiveBlocker,
   walkForwardRecommendedNextAction,
   walkForwardVerdict
 }: {
@@ -468,12 +475,12 @@ const buildCurrentActionItems = ({
   maturityScore: number;
   proposalCurrency: ReturnType<typeof proposalCurrencyFor>;
   readinessBlockers: string[];
-  snapshotLLMPassed: boolean;
+  llmAdvisoryIsActiveBlocker: boolean;
   walkForwardRecommendedNextAction: string;
   walkForwardVerdict?: string;
 }) => {
   const items: ResearchRuntimeSnapshot["proposal"]["currentActionItems"] = [];
-  if (!snapshotLLMPassed) {
+  if (llmAdvisoryIsActiveBlocker) {
     items.push({
       id: "llm-advisory",
       title: "LLM advisory not passed",
@@ -815,7 +822,11 @@ export async function resolveResearchRuntimeSnapshot(
   const readinessSnapshot = evaluateReadinessGate({
     validation,
     quality: researchQuality,
-    runbook
+    runbook,
+    edgeStatistics: (() => {
+      const oos = latestWalkForwardRun(loadWalkForwardState())?.stability?.edgeStatistics;
+      return oos?.provenance === "out_of_sample" ? oos : undefined;
+    })()
   });
   const canonicalPerformanceMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
   const derivedMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
@@ -1019,7 +1030,7 @@ export async function resolveResearchRuntimeSnapshot(
   const proposalSnapshotProvenance = proposalSnapshotFingerprint
     ? createMetricProvenance(proposalSnapshotFingerprint, "proposal snapshot", latestCycleFingerprint)
     : undefined;
-  const actualBlockers = safeArray(readinessSnapshot.failedRequirements)
+  const actualBlockers = safeArray(readinessSnapshot.activeFailedRequirements)
     .map((item) => displayLabelForRequirement(item))
     .filter((label) => Boolean(label?.trim()));
   const passedRequirements = safeArray(readinessSnapshot.passedRequirements)
@@ -1051,7 +1062,9 @@ export async function resolveResearchRuntimeSnapshot(
     maturityScore: researchMaturitySummary.score,
     proposalCurrency,
     readinessBlockers: actualBlockers,
-    snapshotLLMPassed: Boolean(latestLLMRun?.advisoryPassed),
+    llmAdvisoryIsActiveBlocker: safeArray(readinessSnapshot.activeFailedRequirements).some(
+      (item) => item.id === "llm-advisory-review"
+    ),
     walkForwardRecommendedNextAction:
       latestWalkForward?.stability?.recommendedNextAction ?? "Run walk-forward validation on imported data before trusting a calibration.",
     walkForwardVerdict: latestWalkForward?.stability?.verdict
@@ -1107,8 +1120,9 @@ export async function resolveResearchRuntimeSnapshot(
       missingReviewers: missingReviewersFor(latestLLMRun),
       unsafeRejections: llmState.unsafeResponseRejections ?? 0,
       advisoryPassed: Boolean(latestLLMRun?.advisoryPassed),
-      readinessImpact:
-        llmBridgeSnapshot.status === "offline"
+      readinessImpact: readinessSnapshot.deferredRequirements.some((item) => item.id === "llm-advisory-review")
+        ? "LLM advisory is deferred until deterministic evidence and outcome-sample gates pass."
+        : llmBridgeSnapshot.status === "offline"
           ? "LLM advisory bridge offline. Deterministic research continued; advisory unavailable."
           : getLLMReadinessImpact(llmState),
       bridgeOfflineReason: llmBridgeSnapshot.reason,

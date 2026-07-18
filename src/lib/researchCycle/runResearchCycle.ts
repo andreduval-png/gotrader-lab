@@ -49,7 +49,9 @@ import {
 } from "@/lib/marketData";
 import { hydrateActiveTradingViewMcpChartFeed } from "@/lib/integrations/tradingview";
 import { hydrateActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5";
-import { mockCandles } from "@/lib/mockData/mockCandles";
+import { buildIctAdvisorPacketFromRuntime } from "@/lib/ict-strategy-suite";
+import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite";
+import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import { buildCanonicalPerformanceMetricsFromRun, canonicalMetricsForRun } from "@/lib/performance/canonicalMetrics";
 import { calculateResearchMaturity } from "@/lib/maturity";
 import { evaluateReadinessGate } from "@/lib/readiness";
@@ -83,9 +85,19 @@ import {
 import { labStorage } from "@/lib/storage";
 import type { LabState, ThesisInput, TradeThesis } from "@/lib/types";
 import { safeArray, safeTopN, uid } from "@/lib/utils";
-import { runValidationSuite, saveLatestValidationReport } from "@/lib/validation";
+import { runValidationSuiteAsync, saveLatestValidationReport } from "@/lib/validation";
 import type { ValidationSuiteReport } from "@/lib/validation";
-import { latestWalkForwardRun, loadWalkForwardState } from "@/lib/walkForward";
+import {
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters
+} from "@/lib/validationProvenance";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
+import { reviewEdgeStatistics } from "@/lib/agents/edgeAuditorAgent";
+import { runWalkForwardValidation, walkForwardProvenanceReview } from "@/lib/walkForward";
+import {
+  recordEvidenceUpdateInValidationChain,
+  recordWalkForwardRunInValidationChain
+} from "@/lib/validationChain";
 import { buildForwardScenarioMap } from "@/lib/forwardScenario";
 
 export const RESEARCH_CYCLE_STORAGE_KEY = "gotrader_ai_lab_research_cycle_state";
@@ -105,11 +117,6 @@ const stepDefinitions: Array<Pick<ResearchCycleStepResult, "stepId" | "label" | 
     summary: "Waiting to run the active research-source backtest."
   },
   {
-    stepId: "llm_advisory",
-    label: "LLM advisory review",
-    summary: "Waiting to check the local LLM bridge."
-  },
-  {
     stepId: "auto_research",
     label: "Auto research cycle",
     summary: "Waiting to search bounded research configurations."
@@ -118,6 +125,11 @@ const stepDefinitions: Array<Pick<ResearchCycleStepResult, "stepId" | "label" | 
     stepId: "validation",
     label: "Validation suite",
     summary: "Waiting to run scenario validation."
+  },
+  {
+    stepId: "walk_forward",
+    label: "Walk-forward OOS",
+    summary: "Waiting to run walk-forward out-of-sample validation."
   },
   {
     stepId: "research_quality",
@@ -138,6 +150,11 @@ const stepDefinitions: Array<Pick<ResearchCycleStepResult, "stepId" | "label" | 
     stepId: "readiness_gate",
     label: "Readiness gate update",
     summary: "Waiting to recompute readiness without overrides."
+  },
+  {
+    stepId: "llm_advisory",
+    label: "LLM advisory review (post-validation)",
+    summary: "Waiting to review completed validation results via the local LLM bridge."
   },
   {
     stepId: "communications_audit",
@@ -403,7 +420,8 @@ const summarizeBacktest = (result: BacktestResult): ResearchCycleBacktestSummary
   skippedSignals: result.summary.skippedSignals,
   grinchSummary: result.summary.grinchSummary,
   bestTradeR: result.summary.bestTrade?.rMultiple,
-  worstTradeR: result.summary.worstTrade?.rMultiple
+  worstTradeR: result.summary.worstTrade?.rMultiple,
+  edgeStatistics: result.summary.edgeStatistics
 });
 
 const summarizeValidation = (report: ValidationSuiteReport): ResearchCycleValidationSummary => ({
@@ -456,6 +474,27 @@ const compactLLMRun = (run?: LLMAdvisoryRun): LLMAdvisoryRun | undefined =>
       }
     : undefined;
 
+const llmUnavailableSummary = (reason: string) => {
+  switch (reason) {
+    case "bridge_offline":
+      return "LLM advisory bridge offline. Deterministic research continued; advisory unavailable.";
+    case "config_missing":
+      return "LLM advisory bridge is online, but the advisory provider is not configured. Deterministic research continued.";
+    case "timeout":
+      return "LLM advisory bridge is online, but the provider timed out. Deterministic research continued.";
+    case "circuit_open":
+      return "LLM advisory retry is cooling down after a provider failure. Deterministic research continued.";
+    case "deferred_until_evidence_ready":
+      return "LLM advisory was deferred until deterministic evidence is ready.";
+    case "skipped_for_autonomous_stability":
+      return "LLM advisory was intentionally skipped for autonomous stability mode.";
+    default:
+      return "LLM advisory request was unavailable. Deterministic research continued.";
+  }
+};
+
+const llmBridgeProcessAvailable = (reason: string) => reason !== "bridge_offline";
+
 const unavailableLLMRun = ({
   contextPacketId,
   reason,
@@ -478,7 +517,7 @@ const unavailableLLMRun = ({
   validationResults: {},
   unsafeResponseRejections: 0,
   readinessImpact: [
-    warnings[0] ?? "LLM advisory bridge offline. Deterministic research continued; advisory unavailable.",
+    warnings[0] ?? llmUnavailableSummary(reason),
     `Reason: ${reason}.`
   ].join(" "),
   safetyNotice: "LLM agents are advisory only. They cannot execute trades or override readiness gates."
@@ -501,11 +540,17 @@ const nextActionFor = (run: ResearchCycleRun) => {
   if (run.status === "failed") {
     return "Open the failed step details, fix the blocker, then rerun the research cycle.";
   }
-  if (!run.llmRun?.advisoryPassed) {
-    return "Start the local LLM bridge and rerun GPT advisory review before expecting Paper-Demo Candidate readiness.";
-  }
   if (run.backtestSummary?.totalTrades === 0) {
     return "Review zero-trade diagnostics and recovery results. Strategy cannot be evaluated until simulated trades exist.";
+  }
+  const activeReadinessRequirements = run.readinessSnapshot?.activeFailedRequirements ??
+    run.readinessSnapshot?.failedRequirements ??
+    [];
+  if (
+    !run.llmRun?.advisoryPassed &&
+    activeReadinessRequirements.some((requirement) => requirement.id === "llm-advisory-review")
+  ) {
+    return "Start the local LLM bridge and rerun GPT advisory review before expecting Paper-Demo Candidate readiness.";
   }
   if (run.createdProposalId) {
     return "Review the new self-improvement proposal. Approval is still required before settings change.";
@@ -588,6 +633,7 @@ export async function runResearchCycle({
   state,
   searchMode = "standard",
   maxCandidateCount = 10,
+  maxResearchCandles,
   backtestConfig,
   candleWindowSettings,
   advancedFullResearchMode = false,
@@ -613,24 +659,28 @@ export async function runResearchCycle({
   const baseActiveConfig = activeResearchConfig.config;
   const requestedCandleWindowSettings = candleWindowSettings ?? loadCandleWindowSettings();
   const importActivation = await resolveImportedCandleActivationState().catch(() => undefined);
-  const activeCandleSource: PreparedCandleSource = await loadPreparedCandleSource(requestedCandleWindowSettings).catch(() => ({
+  // Fail closed: a failed source load must not silently fall back to mock
+  // candles, because mock-based results would masquerade as research evidence.
+  const activeCandleSource: PreparedCandleSource = await loadPreparedCandleSource(requestedCandleWindowSettings).catch((error) => ({
     mode: "mock" as const,
-    label: "Mock candles",
-    candles: mockCandles,
-    rawCandleCount: mockCandles.length,
-    researchWindowCandles: mockCandles.length,
-    processedCandleCount: mockCandles.length,
-    estimatedProcessedCandles: mockCandles.length,
+    label: "No research data source (load failed)",
+    candles: [],
+    rawCandleCount: 0,
+    researchWindowCandles: 0,
+    processedCandleCount: 0,
+    estimatedProcessedCandles: 0,
     appliedSettings: {
       windowMode: "latest",
-      windowSize: mockCandles.length,
+      windowSize: 0,
       targetTimeframe: "5m" as const,
       sessionFilter: "all" as const,
       advancedMode: false
     },
     aggregationApplied: false,
     performanceMode: "safe" as const,
-    warnings: []
+    warnings: [
+      `Candle source failed to load: ${error instanceof Error ? error.message : "unknown error"}. Research is blocked until a real source is active.`
+    ]
   }));
   const importedPreset = activeCandleSource.mode === "imported" ? getImportedDataPreset(activeCandleSource.appliedSettings) : "mock";
   const tradingViewChartFeed = await hydrateActiveTradingViewMcpChartFeed().catch(() => undefined);
@@ -679,11 +729,21 @@ export async function runResearchCycle({
           : undefined
       ].filter(Boolean) as string[]
     : [];
-  const researchCandles = activeResearchCandleSource.candles.length
-    ? activeResearchCandleSource.candles
-    : sourceGuard?.requireEligibleResearchSource
-      ? []
-      : mockCandles;
+  const sourceResearchCandles = activeResearchCandleSource.candles;
+  const boundedResearchCandleCount = maxResearchCandles
+    ? Math.max(100, Math.min(sourceResearchCandles.length, Math.round(maxResearchCandles)))
+    : sourceResearchCandles.length;
+  const researchCandles = sourceResearchCandles.slice(
+    Math.max(0, sourceResearchCandles.length - boundedResearchCandleCount)
+  );
+  // Recognition on mock/sample candles is not research evidence. Any cycle
+  // that would run on mock data fails closed with an actionable blocker.
+  const mockDataBlockedReason =
+    activeResearchCandleSource.sourceMode === "mock" || researchCandles.length === 0
+      ? researchCandles.length === 0
+        ? "No research candles are available from the active source."
+        : "The active research source is mock/sample data, which cannot produce research evidence."
+      : undefined;
   const dataSourceLabel = activeResearchCandleSource.sourceLabel;
   const evidenceDataMode = evidenceDataModeFor(activeResearchCandleSource.sourceMode, activeCandleSource.mode);
   const latestResearchCandle = researchCandles[researchCandles.length - 1];
@@ -721,8 +781,8 @@ export async function runResearchCycle({
     dataSourceMode: activeResearchCandleSource.sourceMode,
     dataSourceLabel,
     rawCandleCount: activeResearchUsesExternalReadOnly ? activeResearchCandleSource.identity.candleCount : activeCandleSource.rawCandleCount,
-    researchWindowCandles: activeResearchCandleSource.identity.candleCount,
-    processedCandleCount: activeResearchCandleSource.identity.candleCount,
+    researchWindowCandles: researchCandles.length,
+    processedCandleCount: researchCandles.length,
     researchTimeframe: activeConfig.timeframe,
     performanceMode: activeCandleSource.performanceMode,
     researchPreset,
@@ -733,6 +793,9 @@ export async function runResearchCycle({
     candleWindowSettings: activeCandleSource.appliedSettings,
     candleWindowWarnings: [
       ...activeCandleSource.warnings,
+      ...(researchCandles.length < sourceResearchCandles.length
+        ? [`Responsive cycle window: latest ${researchCandles.length.toLocaleString()} of ${sourceResearchCandles.length.toLocaleString()} active-source candles.`]
+        : []),
       ...(activeResearchUsesExternalReadOnly
         ? [
             `Research source is ${activeResearchCandleSource.sourceMode.replace(/_/g, " ")} read-only candles. First ${activeResearchCandleSource.identity.firstTimestamp ?? "n/a"} / ${activeResearchCandleSource.identity.firstClose ?? "n/a"}; last ${activeResearchCandleSource.identity.lastTimestamp ?? "n/a"} / ${activeResearchCandleSource.identity.lastClose ?? "n/a"}. Not broker truth and no execution authority.`
@@ -787,6 +850,7 @@ export async function runResearchCycle({
     skipStep("llm_advisory", "LLM advisory skipped because the active research source did not pass the source guard.");
     skipStep("auto_research", "Auto Research skipped because the active research source did not pass the source guard.");
     skipStep("validation", "Validation skipped because the active research source did not pass the source guard.");
+    skipStep("walk_forward", "Walk-forward skipped because the active research source did not pass the source guard.");
     skipStep("research_quality", "Research quality skipped because the active research source did not pass the source guard.");
     skipStep("self_improvement", "Self-improvement skipped because the active research source did not pass the source guard.");
     skipStep("simulation_verification", "Simulation runbook update skipped because the active research source did not pass the source guard.");
@@ -809,6 +873,7 @@ export async function runResearchCycle({
     skipStep("llm_advisory", "LLM advisory skipped because imported data is not active.");
     skipStep("auto_research", "Auto Research skipped because imported data is not active.");
     skipStep("validation", "Validation skipped because imported data is not active.");
+    skipStep("walk_forward", "Walk-forward skipped because imported data is not active.");
     skipStep("research_quality", "Research quality skipped because imported data is not active.");
     skipStep("self_improvement", "Self-improvement skipped because imported data is not active.");
     skipStep("simulation_verification", "Simulation runbook update skipped because imported data is not active.");
@@ -831,6 +896,7 @@ export async function runResearchCycle({
     skipStep("llm_advisory", "LLM advisory skipped because imported-data limits were exceeded.");
     skipStep("auto_research", "Auto Research skipped because imported-data limits were exceeded.");
     skipStep("validation", "Validation skipped because imported-data limits were exceeded.");
+    skipStep("walk_forward", "Walk-forward skipped because imported-data limits were exceeded.");
     skipStep("research_quality", "Research quality skipped because imported-data limits were exceeded.");
     skipStep("self_improvement", "Self-improvement skipped because imported-data limits were exceeded.");
     skipStep("simulation_verification", "Simulation runbook update skipped because imported-data limits were exceeded.");
@@ -840,6 +906,28 @@ export async function runResearchCycle({
     run.completedAt = now();
     run.nextRecommendedAction =
       "Use the dashboard Safe preset or enable Advanced full research mode only when intentionally stress-testing large imported datasets.";
+    run.resultSummary = resultSummaryFor(run);
+    saveResearchCycleRun(snapshot());
+    return snapshot();
+  }
+
+  if (mockDataBlockedReason) {
+    const message = `Research cycle blocked: ${mockDataBlockedReason} Activate MT5 read-only research mode or import historical candles, then rerun.`;
+    failStep("thesis_generation", message);
+    skipStep("backtest", "Backtest skipped because mock/sample data cannot produce research evidence.");
+    skipStep("llm_advisory", "LLM advisory skipped because mock/sample data cannot produce research evidence.");
+    skipStep("auto_research", "Auto Research skipped because mock/sample data cannot produce research evidence.");
+    skipStep("validation", "Validation skipped because mock/sample data cannot produce research evidence.");
+    skipStep("walk_forward", "Walk-forward skipped because mock/sample data cannot produce research evidence.");
+    skipStep("research_quality", "Research quality skipped because mock/sample data cannot produce research evidence.");
+    skipStep("self_improvement", "Self-improvement skipped because mock/sample data cannot produce research evidence.");
+    skipStep("simulation_verification", "Simulation runbook update skipped because mock/sample data cannot produce research evidence.");
+    skipStep("readiness_gate", "Readiness skipped because mock/sample data cannot produce research evidence.");
+    skipStep("communications_audit", "Communications audit skipped because mock/sample data cannot produce research evidence.");
+    run.status = "failed";
+    run.completedAt = now();
+    run.nextRecommendedAction =
+      "Activate MT5 read-only research mode (Advisor > Activate Market) or import historical candles on Market Data, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
     saveResearchCycleRun(snapshot());
     return snapshot();
@@ -888,9 +976,60 @@ export async function runResearchCycle({
         };
       }
       run.agentDebateConsensus = summarizeAgentDebateConsensus(structuredDebateSession);
+
+      // Unified recognition path: run the ICT Strategy Suite advisor engine on
+      // the same runtime source so the Lab cycle and the Advisor reason about
+      // the same setups (signal, approved profile decision, recognition).
+      if (!mockDataBlockedReason) {
+        try {
+          const runtimeSnapshot = await resolveResearchRuntimeSnapshot({ labState: workingState });
+          const advisorPacket: IctAdvisorPacket = await buildIctAdvisorPacketFromRuntime(runtimeSnapshot);
+          const recommended = advisorPacket.recommendedSignal;
+          run.ictAdvisorSignalSummary = {
+            packetId: advisorPacket.packetId,
+            generatedAt: advisorPacket.generatedAt,
+            strategyId: recommended.strategyId,
+            setup: recommended.setup,
+            side: recommended.side,
+            decision: recommended.decision,
+            confidence: recommended.confidence,
+            compositeBias: recommended.bias.composite,
+            approvedProfileStatus: advisorPacket.compactSummary?.approvedProfileStatus,
+            approvalScore: advisorPacket.compactSummary?.approvalScore,
+            entryZoneMidpoint: recommended.entryZone?.midpoint,
+            target: recommended.target,
+            invalidation: recommended.invalidation,
+            rrEstimate: recommended.rrEstimate,
+            summary: recommended.summary,
+            noTradeReasons: safeTopN(recommended.noTradeReasons, 6),
+            universalRecognitionLabel: advisorPacket.universalRecognition
+              ? `${advisorPacket.universalRecognition.tier.replace(/_/g, " ")}: ${advisorPacket.universalRecognition.opportunitySummary}`
+              : undefined,
+            alignsWithThesis:
+              recommended.side === "flat"
+                ? generatedThesis.thesis.finalBias === "neutral"
+                : (recommended.side === "long" && generatedThesis.thesis.finalBias === "bullish") ||
+                  (recommended.side === "short" && generatedThesis.thesis.finalBias === "bearish"),
+            sourceFingerprint: advisorPacket.activeSource?.sourceFingerprint
+          };
+        } catch (advisorError) {
+          run.candleWindowWarnings = [
+            ...(run.candleWindowWarnings ?? []),
+            `ICT advisor signal engine could not run on the research source: ${
+              advisorError instanceof Error ? advisorError.message : "unknown error"
+            }`
+          ];
+        }
+      }
+
+      const advisorAlignmentNote = run.ictAdvisorSignalSummary
+        ? ` Advisor engine: ${run.ictAdvisorSignalSummary.setup} ${run.ictAdvisorSignalSummary.side} (${run.ictAdvisorSignalSummary.decision}), ${
+            run.ictAdvisorSignalSummary.alignsWithThesis ? "aligned with" : "diverging from"
+          } the CIO thesis.`
+        : "";
       passStep("thesis_generation", {
         summary: `${generatedThesis.thesis.symbol} ${generatedThesis.thesis.timeframe} thesis generated: ${generatedThesis.thesis.finalBias}.`,
-        detail: `ICT ${generatedThesis.thesis.ictContext.bias}, confluence ${Math.round(generatedThesis.thesis.ictContext.confluenceScore * 100)}%, CIO confidence ${Math.round(generatedThesis.thesis.confidence * 100)}%. Debate consensus ${structuredDebateSession.moderatorOutput.consensusReached ? structuredDebateSession.moderatorOutput.position : "flat/no consensus"}. Active confluence threshold ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%. Data source: ${dataSourceLabel}.`
+        detail: `ICT ${generatedThesis.thesis.ictContext.bias}, confluence ${Math.round(generatedThesis.thesis.ictContext.confluenceScore * 100)}%, CIO confidence ${Math.round(generatedThesis.thesis.confidence * 100)}%. Debate consensus ${structuredDebateSession.moderatorOutput.consensusReached ? structuredDebateSession.moderatorOutput.position : "flat/no consensus"}. Active confluence threshold ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%. Data source: ${dataSourceLabel}.${advisorAlignmentNote}`
       });
     } catch (error) {
       failStep("thesis_generation", error instanceof Error ? error.message : "Research thesis generation failed.");
@@ -901,6 +1040,7 @@ export async function runResearchCycle({
       skipStep("llm_advisory", "LLM advisory skipped because thesis generation failed.");
       skipStep("auto_research", "Auto Research skipped because thesis generation failed.");
       skipStep("validation", "Validation skipped because thesis generation failed.");
+      skipStep("walk_forward", "Walk-forward skipped because thesis generation failed.");
       skipStep("research_quality", "Research quality skipped because thesis generation failed.");
       skipStep("self_improvement", "Self-improvement skipped because thesis generation failed.");
       skipStep("simulation_verification", "Simulation runbook update skipped because thesis generation failed.");
@@ -920,6 +1060,7 @@ export async function runResearchCycle({
     try {
       backtestResult = runBacktest(researchCandles, activeConfig);
       run.backtestSummary = summarizeBacktest(backtestResult);
+      // Edge auditor waits for walk-forward OOS; do not use in-sample backtest edge here.
       if (backtestResult.summary.totalTrades === 0) {
         run.backtestDiagnostics = diagnoseTradeGeneration({
           candles: researchCandles,
@@ -932,10 +1073,12 @@ export async function runResearchCycle({
           summary: "No trades generated. Strategy cannot be evaluated from this backtest yet.",
           warning:
             topDiagnostic?.explanation ??
-            "No simulated trades were generated. Auto Research will try bounded trade-generation recovery.",
+            (skipAutoResearch
+              ? "No simulated trades were generated. Candidate recovery is deferred in the crash-safe cycle mode."
+              : "No simulated trades were generated. Auto Research will try bounded trade-generation recovery."),
           detail: topDiagnostic
-            ? `${topDiagnostic.reasonCode.replace(/_/g, " ")}: ${topDiagnostic.suggestedFix} Active threshold used ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%; data source: ${dataSourceLabel}; config merge: ${activeResearchConfig.mergeStatusLabel}. ${activeResearchConfig.mergeError ?? ""}`.trim()
-            : `Auto Research will try threshold, session, direction, stop-model, and resolution-window recovery candidates. Active threshold used ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%; data source: ${dataSourceLabel}; config merge: ${activeResearchConfig.mergeStatusLabel}. ${activeResearchConfig.mergeError ?? ""}`.trim()
+            ? `${topDiagnostic.reasonCode.replace(/_/g, " ")}: ${topDiagnostic.suggestedFix} ${skipAutoResearch ? "Recovery search was deferred for cycle stability." : "Bounded recovery remains available in Auto Research."} Active threshold used ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%; data source: ${dataSourceLabel}; config merge: ${activeResearchConfig.mergeStatusLabel}. ${activeResearchConfig.mergeError ?? ""}`.trim()
+            : `${skipAutoResearch ? "Recovery search was deferred for cycle stability." : "Auto Research will try threshold, session, direction, stop-model, and resolution-window recovery candidates."} Active threshold used ${(activeConfig.minimumConfluenceThreshold * 100).toFixed(0)}%; data source: ${dataSourceLabel}; config merge: ${activeResearchConfig.mergeStatusLabel}. ${activeResearchConfig.mergeError ?? ""}`.trim()
         });
       } else {
         run.tradeQualityDiagnostics = diagnoseTradeQuality({ result: backtestResult });
@@ -962,6 +1105,7 @@ export async function runResearchCycle({
       skipStep("llm_advisory", "LLM advisory skipped because backtest failed.");
       skipStep("auto_research", "Auto Research skipped because backtest failed; candidate scoring stopped.");
       skipStep("validation", "Validation skipped because backtest failed.");
+      skipStep("walk_forward", "Walk-forward skipped because backtest failed.");
       skipStep("research_quality", "Research quality skipped because validation did not run.");
       skipStep("self_improvement", "Self-improvement skipped because Auto Research did not run.");
       skipStep("simulation_verification", "Simulation runbook update skipped because pipeline failed before validation.");
@@ -974,110 +1118,8 @@ export async function runResearchCycle({
       return snapshot();
     }
 
-    startStep("llm_advisory");
-    await yieldToBrowser();
-    throwIfCanceled();
-    if (skipLlmAdvisory) {
-      run.llmBridgeAvailable = false;
-      run.llmAdvisoryUnavailable = true;
-      run.llmAdvisoryUnavailableReason = "skipped_for_autonomous_stability";
-      skipStep(
-        "llm_advisory",
-        "LLM advisory skipped for autonomous stability mode; deterministic research continued."
-      );
-    } else {
-    const startingRunbook = loadSimulationRunbookState();
-    const llmMarketContext = buildMarketContext({
-      symbol: activeConfig.symbol,
-      timeframe: activeConfig.timeframe,
-      mode: evidenceDataMode,
-      candles: researchCandles
-    });
-    const llmEvidenceQualitySummary = buildEvidenceLedger({
-      dataMode: evidenceDataMode,
-      sourceLabel: dataSourceLabel,
-      rawCandleCount: run.rawCandleCount ?? researchCandles.length,
-      processedCandleCount: run.processedCandleCount ?? researchCandles.length,
-      researchWindow: run.researchWindowCandles ?? researchCandles.length,
-      latestCycleId: run.cycleId,
-      latestCycleTimestamp: run.startedAt,
-      debateSessionId: run.agentDebateConsensus?.sessionId,
-      readinessState: run.readinessSnapshot?.state
-    });
-    const llmPacket = buildLLMResearchContextPacket({
-      state: workingState,
-      validation: undefined,
-      quality: undefined,
-      readiness: undefined,
-      runbook: startingRunbook,
-      providerMode: "local_command",
-      marketContext: llmMarketContext,
-      evidenceQualitySummary: llmEvidenceQualitySummary
-    });
-    const contextValidation = validateLLMContextPacket(llmPacket);
-
-    if (!contextValidation.valid) {
-      warnStep("llm_advisory", {
-        summary: "LLM advisory review was skipped because the context packet failed validation.",
-        warning: contextValidation.errors.join(" ")
-      });
-    } else {
-      try {
-        const bridgeResult = await runLocalBridgeAdvisory(llmPacket);
-        if (bridgeResult.advisoryStatus === "unavailable") {
-          const advisoryUnavailableSummary =
-            bridgeResult.reason === "bridge_offline"
-              ? "LLM advisory bridge offline. Deterministic research continued; advisory unavailable."
-              : "LLM advisory unavailable. Deterministic research continued.";
-          run.llmBridgeAvailable = false;
-          run.llmAdvisoryUnavailable = true;
-          run.llmAdvisoryUnavailableReason = bridgeResult.reason;
-          run.llmRun = unavailableLLMRun({
-            contextPacketId: llmPacket.packetId,
-            reason: bridgeResult.reason,
-            warnings: bridgeResult.warnings
-          });
-          warnStep("llm_advisory", {
-            summary: advisoryUnavailableSummary,
-            warning: bridgeResult.warnings.join(" ")
-          });
-        } else {
-          run.llmBridgeAvailable = true;
-          const importResult = importLLMAgentResponse(JSON.stringify(safeArray(bridgeResult.responses)), llmPacket.packetId);
-          if (!importResult.run || !importResult.valid) {
-            recordLLMUnsafeResponseRejection(Math.max(1, importResult.unsafeResponseRejections));
-            warnStep("llm_advisory", {
-              summary: "Local LLM bridge responded, but advisory validation failed.",
-              warning: importResult.errors.join(" ") || "Unsafe or incomplete advisory response."
-            });
-          } else {
-            run.llmRun = importResult.run;
-            recordLLMResponseImport(importResult.run, importResult.run.timestamp);
-            passStep("llm_advisory", {
-              summary: "Configured LLM advisory review passed and was imported.",
-              detail: bridgeResult.responseFile ? `Response file: ${bridgeResult.responseFile}` : undefined
-            });
-          }
-        }
-      } catch (error) {
-        run.llmBridgeAvailable = false;
-        run.llmAdvisoryUnavailable = true;
-        run.llmAdvisoryUnavailableReason = "request_failed";
-        run.llmRun = unavailableLLMRun({
-          contextPacketId: llmPacket.packetId,
-          reason: "request_failed",
-          warnings: [
-            "LLM advisory bridge offline. Deterministic research continued; advisory unavailable.",
-            error instanceof Error ? error.message : "Local LLM bridge request failed."
-          ]
-        });
-        warnStep("llm_advisory", {
-          summary: "LLM advisory bridge offline. Deterministic research continued; advisory unavailable.",
-          warning: error instanceof Error ? error.message : "Local LLM bridge request failed."
-        });
-      }
-    }
-    }
+    // LLM advisory review now runs after validation/quality/readiness so the
+    // packet carries real results instead of undefined placeholders.
 
     startStep("auto_research");
     await yieldToBrowser();
@@ -1213,7 +1255,35 @@ export async function runResearchCycle({
     throwIfCanceled();
     let validationReport: ValidationSuiteReport | undefined;
     try {
-      validationReport = runValidationSuite(researchCandles, activeConfig);
+      const frozenProfile = getFrozenResearchProfile(activeConfig.strategyProfile);
+      const cycleValidationProvenance = buildValidationProvenanceIdentity({
+        strategyProfile: activeConfig.strategyProfile,
+        strategyProfileVersion: frozenProfile?.profileVersion,
+        proposalId: run.createdProposalId,
+        candidateId: run.latestGeneratedProposal?.sourceCandidateId,
+        sourceProvider: activeResearchCandleSource.sourceMode,
+        requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? activeConfig.symbol,
+        brokerSymbol: mt5ReadOnlyFeed?.brokerSymbol,
+        timeframe: activeConfig.timeframe,
+        sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint,
+        parameterFingerprint: fingerprintValidationParameters(activeConfig),
+        detectorProfileFingerprint: frozenProfile
+          ? fingerprintValidationParameters(frozenProfile.frozenParameters)
+          : undefined,
+        validationCutoff: frozenProfile?.validationCutoff,
+        dataRangeStart: researchCandles[0]?.timestamp,
+        dataRangeEnd: researchCandles.at(-1)?.timestamp
+      });
+      validationReport = await runValidationSuiteAsync(researchCandles, activeConfig, {
+        signal,
+        provenance: cycleValidationProvenance,
+        onScenarioComplete: (completed, total, scenario) => {
+          setStep("validation", {
+            status: "running",
+            summary: `Validation scenario ${completed}/${total}: ${scenario.name}.`
+          });
+        }
+      });
       saveLatestValidationReport(validationReport);
       run.validationReport = validationReport;
       run.validationSummary = summarizeValidation(validationReport);
@@ -1226,6 +1296,59 @@ export async function runResearchCycle({
       });
     } catch (error) {
       failStep("validation", error instanceof Error ? error.message : "Validation suite failed.");
+    }
+
+    startStep("walk_forward");
+    await yieldToBrowser();
+    throwIfCanceled();
+    let cycleWalkForwardRun: Awaited<ReturnType<typeof runWalkForwardValidation>> | undefined;
+    try {
+      cycleWalkForwardRun = await runWalkForwardValidation({
+        mode: advancedFullResearchMode ? "standard" : "safe",
+        maxWindows: advancedFullResearchMode ? 5 : 3,
+        proposalId: run.createdProposalId,
+        candidateId: run.latestGeneratedProposal?.sourceCandidateId,
+        validationProvenance: validationReport?.provenance,
+        configOverride: run.createdProposalId ? run.latestGeneratedProposal?.proposedConfig : activeConfig,
+        signal,
+        onProgress: (wfRun) => {
+          setStep("walk_forward", {
+            status: "running",
+            summary: wfRun.progress?.message ?? `Walk-forward window ${wfRun.progress?.currentWindow ?? 0}/${wfRun.progress?.totalWindows ?? 0}.`,
+            detail: wfRun.stability?.summary
+          });
+        }
+      });
+      recordWalkForwardRunInValidationChain(cycleWalkForwardRun);
+      const oosEdge = cycleWalkForwardRun.stability?.edgeStatistics;
+      run.edgeAuditorSummary = reviewEdgeStatistics(
+        oosEdge?.provenance === "out_of_sample" ? oosEdge : undefined,
+        cycleWalkForwardRun.stability?.verdict === "robust_research" ||
+          cycleWalkForwardRun.stability?.verdict === "promising" ||
+          cycleWalkForwardRun.stability?.verdict === "paper_demo_review_candidate"
+      );
+      if (
+        cycleWalkForwardRun.status === "failed" ||
+        cycleWalkForwardRun.preflight?.status === "blocked"
+      ) {
+        warnStep("walk_forward", {
+          summary: "Walk-forward did not produce usable OOS edge evidence.",
+          warning:
+            cycleWalkForwardRun.preflight?.blockers?.[0]?.message ??
+            cycleWalkForwardRun.stability?.summary ??
+            "Walk-forward blocked or failed; readiness OOS gate will remain closed."
+        });
+      } else {
+        passStep("walk_forward", {
+          summary: `Walk-forward ${cycleWalkForwardRun.stability?.verdict?.replace(/_/g, " ") ?? cycleWalkForwardRun.status}.`,
+          detail: oosEdge?.summary ?? cycleWalkForwardRun.stability?.summary ?? "OOS edge statistics recorded."
+        });
+      }
+    } catch (error) {
+      warnStep("walk_forward", {
+        summary: "Walk-forward failed safely; readiness will require a successful OOS run.",
+        warning: error instanceof Error ? error.message : "Walk-forward validation failed."
+      });
     }
 
     startStep("research_quality");
@@ -1316,32 +1439,180 @@ export async function runResearchCycle({
       ].filter(Boolean).join("\n"),
       checklist: {
         ...runbookBefore.checklist,
-        aiLabThesisGenerated: true
+        aiLabThesisGenerated: true,
+        brokerExecutionSkipped: true
       }
     };
     saveSimulationRunbookState(runbookAfter);
     passStep("simulation_verification", {
       summary: "Simulation runbook recorded research pipeline completion.",
-      detail: "Scheduler verification, signal logged, positions 0, trades 0, and shutdown checks were preserved; they were not auto-marked."
+      detail: "Marked research-safe checklist items (thesis generated, broker execution skipped). Positions/trades/shutdown remain operator-verified."
     });
 
     startStep("readiness_gate");
     await yieldToBrowser();
     throwIfCanceled();
-    const readinessSnapshot = evaluateReadinessGate({
+    const matchedCycleWalkForward =
+      validationReport?.provenance && cycleWalkForwardRun &&
+      walkForwardProvenanceReview(validationReport.provenance, cycleWalkForwardRun).matched
+        ? cycleWalkForwardRun
+        : undefined;
+    const readinessEdgeStatistics = (() => {
+      const oos = matchedCycleWalkForward?.stability?.edgeStatistics;
+      return oos?.provenance === "out_of_sample" ? oos : undefined;
+    })();
+    let readinessSnapshot = evaluateReadinessGate({
       validation: validationReport,
       quality: researchQualityReview,
-      runbook: runbookAfter
+      runbook: runbookAfter,
+      edgeStatistics: readinessEdgeStatistics,
+      provenanceExpectation: validationReport?.provenance,
+      walkForwardRun: matchedCycleWalkForward
     });
     run.readinessSnapshot = readinessSnapshot;
-    run.blockers = uniqueText([
-      ...safeArray(readinessSnapshot.failedRequirements).map(readinessBlockerLabel),
-      ...(!run.llmRun?.advisoryPassed ? ["LLM advisory missing."] : [])
-    ]);
     passStep("readiness_gate", {
       summary: `Readiness remains ${readinessSnapshot.state}.`,
-      detail: `${safeArray(readinessSnapshot.failedRequirements).length} failed requirement${safeArray(readinessSnapshot.failedRequirements).length === 1 ? "" : "s"}; no override applied.`
+      detail: `${safeArray(readinessSnapshot.activeFailedRequirements).length} active blocker(s); ${safeArray(readinessSnapshot.deferredRequirements).length} later requirement(s); no override applied.`
     });
+
+    startStep("llm_advisory");
+    await yieldToBrowser();
+    throwIfCanceled();
+    const llmAdvisoryRequiredNow = safeArray(readinessSnapshot.activeFailedRequirements).some(
+      (item) => item.id === "llm-advisory-review"
+    );
+    if (skipLlmAdvisory) {
+      run.llmBridgeAvailable = false;
+      run.llmAdvisoryUnavailable = true;
+      run.llmAdvisoryUnavailableReason = "skipped_for_autonomous_stability";
+      skipStep(
+        "llm_advisory",
+        "LLM advisory skipped for autonomous stability mode; deterministic research continued."
+      );
+    } else if (!llmAdvisoryRequiredNow) {
+      run.llmBridgeAvailable = false;
+      run.llmAdvisoryUnavailable = true;
+      run.llmAdvisoryUnavailableReason = "deferred_until_evidence_ready";
+      skipStep(
+        "llm_advisory",
+        "LLM advisory deferred until the active deterministic evidence blockers pass."
+      );
+    } else {
+    const llmMarketContext = buildMarketContext({
+      symbol: activeConfig.symbol,
+      timeframe: activeConfig.timeframe,
+      mode: evidenceDataMode,
+      candles: researchCandles
+    });
+    const llmEvidenceQualitySummary = buildEvidenceLedger({
+      dataMode: evidenceDataMode,
+      sourceLabel: dataSourceLabel,
+      rawCandleCount: run.rawCandleCount ?? researchCandles.length,
+      processedCandleCount: run.processedCandleCount ?? researchCandles.length,
+      researchWindow: run.researchWindowCandles ?? researchCandles.length,
+      latestCycleId: run.cycleId,
+      latestCycleTimestamp: run.startedAt,
+      debateSessionId: run.agentDebateConsensus?.sessionId,
+      validationId: run.validationSummary?.validationId,
+      researchQualityId: run.researchQualitySummary?.reviewId,
+      readinessState: readinessSnapshot.state
+    });
+    // Post-validation review: the packet now includes the completed
+    // validation report, research-quality review, and readiness snapshot.
+    const llmPacket = buildLLMResearchContextPacket({
+      state: workingState,
+      validation: validationReport,
+      quality: researchQualityReview,
+      readiness: readinessSnapshot,
+      runbook: runbookAfter,
+      providerMode: "local_command",
+      marketContext: llmMarketContext,
+      evidenceQualitySummary: llmEvidenceQualitySummary
+    });
+    const contextValidation = validateLLMContextPacket(llmPacket);
+
+    if (!contextValidation.valid) {
+      warnStep("llm_advisory", {
+        summary: "LLM advisory review was skipped because the context packet failed validation.",
+        warning: contextValidation.errors.join(" ")
+      });
+    } else {
+      try {
+        const bridgeResult = await runLocalBridgeAdvisory(llmPacket);
+        if (bridgeResult.advisoryStatus === "unavailable") {
+          const advisoryUnavailableSummary = llmUnavailableSummary(bridgeResult.reason);
+          run.llmBridgeAvailable = llmBridgeProcessAvailable(bridgeResult.reason);
+          run.llmAdvisoryUnavailable = true;
+          run.llmAdvisoryUnavailableReason = bridgeResult.reason;
+          run.llmRun = unavailableLLMRun({
+            contextPacketId: llmPacket.packetId,
+            reason: bridgeResult.reason,
+            warnings: bridgeResult.warnings
+          });
+          warnStep("llm_advisory", {
+            summary: advisoryUnavailableSummary,
+            warning: bridgeResult.warnings.join(" ")
+          });
+        } else {
+          run.llmBridgeAvailable = true;
+          const importResult = importLLMAgentResponse(JSON.stringify(safeArray(bridgeResult.responses)), llmPacket.packetId);
+          if (!importResult.run || !importResult.valid) {
+            recordLLMUnsafeResponseRejection(Math.max(1, importResult.unsafeResponseRejections));
+            warnStep("llm_advisory", {
+              summary: "Local LLM bridge responded, but advisory validation failed.",
+              warning: importResult.errors.join(" ") || "Unsafe or incomplete advisory response."
+            });
+          } else {
+            run.llmRun = importResult.run;
+            recordLLMResponseImport(importResult.run, importResult.run.timestamp);
+            passStep("llm_advisory", {
+              summary: "Post-validation LLM advisory review passed with the full validation/quality/readiness packet.",
+              detail: bridgeResult.responseFile ? `Response file: ${bridgeResult.responseFile}` : undefined
+            });
+          }
+        }
+      } catch (error) {
+        run.llmBridgeAvailable = false;
+        run.llmAdvisoryUnavailable = true;
+        run.llmAdvisoryUnavailableReason = "request_failed";
+        run.llmRun = unavailableLLMRun({
+          contextPacketId: llmPacket.packetId,
+          reason: "request_failed",
+          warnings: [
+            llmUnavailableSummary("request_failed"),
+            error instanceof Error ? error.message : "Local LLM bridge request failed."
+          ]
+        });
+        warnStep("llm_advisory", {
+          summary: llmUnavailableSummary("request_failed"),
+          warning: error instanceof Error ? error.message : "Local LLM bridge request failed."
+        });
+      }
+    }
+    }
+
+    readinessSnapshot = evaluateReadinessGate({
+      validation: validationReport,
+      quality: researchQualityReview,
+      runbook: runbookAfter,
+      edgeStatistics: readinessEdgeStatistics,
+      provenanceExpectation: validationReport?.provenance,
+      walkForwardRun: matchedCycleWalkForward
+    });
+    run.readinessSnapshot = readinessSnapshot;
+    passStep("readiness_gate", {
+      summary: `Readiness remains ${readinessSnapshot.state}.`,
+      detail: `${safeArray(readinessSnapshot.activeFailedRequirements).length} active blocker(s); ${safeArray(readinessSnapshot.deferredRequirements).length} later requirement(s); no override applied.`
+    });
+
+    // LLM advisory is a promotion/readiness concern, not a research-cycle failure.
+    run.blockers = uniqueText([
+      ...safeArray(readinessSnapshot.activeFailedRequirements).map(readinessBlockerLabel)
+    ]);
+    run.promotionBlockers = uniqueText([
+      ...safeArray(readinessSnapshot.failedRequirements).map(readinessBlockerLabel),
+      ...(!run.llmRun?.advisoryPassed ? ["LLM advisory missing for Paper-Demo Candidate promotion."] : [])
+    ]);
 
     run.canonicalMetrics = buildCanonicalPerformanceMetricsFromRun(run, validationReport);
     const cycleEvidenceSummary = buildEvidenceLedger({
@@ -1401,7 +1672,7 @@ export async function runResearchCycle({
       evidenceQualityScore: cycleEvidenceSummary.overallScore,
       proposals: loadSelfImprovementState().proposals,
       latestReadinessState: readinessSnapshot.state,
-      latestWalkForwardRun: latestWalkForwardRun(loadWalkForwardState())
+      latestWalkForwardRun: matchedCycleWalkForward
     });
     run.maturitySummary = {
       maturityScore: maturitySummary.score,
@@ -1410,6 +1681,17 @@ export async function runResearchCycle({
       maturityWarnings: safeTopN(maturitySummary.maturityWarnings, 5),
       nextMaturityRequirement: maturitySummary.nextMaturityRequirement
     };
+
+    if (matchedCycleWalkForward) {
+      recordWalkForwardRunInValidationChain(matchedCycleWalkForward);
+    }
+    recordEvidenceUpdateInValidationChain({
+      evidenceQualityScore: cycleEvidenceSummary.overallScore,
+      maturityScore: maturitySummary.score,
+      maturityGrade: maturitySummary.grade,
+      selfImprovementStatus: run.createdProposalId ? "proposal_created" : "none",
+      provenance: matchedCycleWalkForward?.provenance
+    });
 
     let auditWarning: string | undefined;
     if (heavyAuditSkipped) {

@@ -4,6 +4,7 @@ import {
   runIctRealReplay
 } from "./ictRealReplayRunner";
 import type { IctReplayBreakdownMetric } from "./ictReplayDiagnosticsTypes";
+import type { IctReplayResult } from "./ictReplayValidationTypes";
 import type { IctRealReplayRunConfig, IctRealReplayRunResult } from "./ictRealReplayRunnerTypes";
 import { extractMonteCarloOutcomesFromReplayResults } from "./ictMonteCarlo";
 import type {
@@ -18,7 +19,7 @@ import type {
 const MANUAL_REPLAY_REVIEW_JOURNAL_STORAGE_KEY = "gotrader.ict-manual-replay-review.journal.v1";
 const MAX_MANUAL_REPLAY_REVIEW_JOURNAL_EVENTS = 100;
 const MAX_MANUAL_REPLAY_MONTE_CARLO_OUTCOMES = 300;
-const MAX_MANUAL_REPLAY_RESULT_ROWS = 300;
+const MAX_MANUAL_REPLAY_RESULT_ROWS = 90;
 
 const authority = {
   executionAuthority: "none" as const,
@@ -38,6 +39,37 @@ const safety = {
 const createId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 const round = (value: number, decimals = 4) => Number(value.toFixed(decimals));
+
+const compactReplayResult = (result: IctReplayResult): IctReplayResult => ({
+  strategyId: result.strategyId,
+  phase: result.phase,
+  symbol: result.symbol,
+  requestedSymbol: result.requestedSymbol,
+  brokerSymbol: result.brokerSymbol,
+  primaryTimeframe: result.primaryTimeframe,
+  side: result.side,
+  setup: result.setup,
+  decision: result.decision,
+  confidence: result.confidence,
+  htfAligned: result.htfAligned,
+  dealingRangeLocation: result.dealingRangeLocation,
+  liquidityTargetType: result.liquidityTargetType,
+  approvedProfileStatus: result.approvedProfileStatus,
+  approvedProfileId: result.approvedProfileId,
+  sessionName: result.sessionName,
+  sessionNarrativeProfile: result.sessionNarrativeProfile,
+  modelName: result.modelName,
+  modelState: result.modelState,
+  rrEstimate: result.rrEstimate,
+  outcome: result.outcome,
+  fvgStatus: result.fvgStatus,
+  tradePath: { ...result.tradePath },
+  noTradeReasons: result.noTradeReasons.slice(0, 4),
+  riskNotes: result.riskNotes.slice(0, 4),
+  summary: result.summary.slice(0, 300),
+  researchOnly: true,
+  provenance: { ...result.provenance, researchOnly: true }
+});
 
 export const defaultIctManualReplayReviewRequest = (): IctManualReplayReviewRequest => {
   const defaults = defaultIctRealReplayConfig();
@@ -184,10 +216,11 @@ export const buildIctManualReplayReviewResult = (
     monteCarloOutcomes: extractMonteCarloOutcomesFromReplayResults(result.replayResults ?? []).slice(0, MAX_MANUAL_REPLAY_MONTE_CARLO_OUTCOMES),
     // Audit B5: preserve compact replay rows so hypothesis validation can
     // match occurrences instead of dropping replay evidence.
-    replayResults: (result.replayResults ?? []).slice(0, MAX_MANUAL_REPLAY_RESULT_ROWS),
+    replayResults: (result.replayResults ?? []).slice(0, MAX_MANUAL_REPLAY_RESULT_ROWS).map(compactReplayResult),
     unavailableReason: status === "unavailable" ? firstReason(result) : undefined,
     errors,
     warnings,
+    provenance: request.provenance,
     researchOnly: true,
     authority,
     safety
@@ -239,6 +272,7 @@ export const buildFailedIctManualReplayReviewResult = (
     unavailableReason: "manual_replay_review_failed",
     errors: [error instanceof Error ? error.message : String(error)],
     warnings: [],
+    provenance: request.provenance,
     researchOnly: true,
     authority,
     safety
@@ -336,7 +370,7 @@ export const sanitizeIctManualReplayReviewResult = (
   sanitized.authority = authority;
   sanitized.safety = safety;
   sanitized.monteCarloOutcomes = sanitized.monteCarloOutcomes?.slice(0, MAX_MANUAL_REPLAY_MONTE_CARLO_OUTCOMES);
-  sanitized.replayResults = sanitized.replayResults?.slice(0, MAX_MANUAL_REPLAY_RESULT_ROWS);
+  sanitized.replayResults = sanitized.replayResults?.slice(0, MAX_MANUAL_REPLAY_RESULT_ROWS).map(compactReplayResult);
   sanitized.targetFirstRate = round(sanitized.targetFirstRate);
   sanitized.invalidationFirstRate = round(sanitized.invalidationFirstRate);
   sanitized.averageRrAchieved = round(sanitized.averageRrAchieved, 2);

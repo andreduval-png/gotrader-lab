@@ -2170,7 +2170,11 @@ export function MissionControlShell({ state }: { state: LabState }) {
           paperDemoBlocker={paperDemoChecklist?.primaryBlocker ?? primaryBlockerDetail}
           primaryBlocker={primaryBlocker}
           validationNextAction={paperDemoChecklist?.nextAction}
+          blockers={runtimeSnapshot?.readiness.actualBlockers ?? []}
         />
+        <div className="mt-3" id="research-cycle-anchor">
+          <ResearchCycleControl state={state} />
+        </div>
         <Mt5PushFeedStatusCard className="mt-3" />
         <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {statusChips.map((chip) => (
@@ -4058,7 +4062,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
           ))}
         </div>
         <div className="mt-4">
-          <ResearchCycleControl state={state} />
+          {/* Research cycle also lives near the Command Center hero for the primary CTA. */}
         </div>
         {runtimeSnapshot ? (
           <div className="mt-4 rounded-lg border border-white/10 bg-slate-950/55 p-3 text-xs text-slate-400">
@@ -4292,15 +4296,13 @@ function buildActionItems(snapshot?: ResearchRuntimeSnapshot, run?: AutonomousRe
     Boolean(canonicalMt5Source);
   const tradingViewIsSelected =
     snapshot.marketData.chartDisplayUsesTradingViewMcp || snapshot.marketData.researchUsesTradingViewMcp;
-  if (!snapshot.marketData.isImportedDataActive) {
+  if (!snapshot.marketData.isImportedDataActive && !mt5IsActive && !tradingViewIsSelected) {
     items.push({
       id: "imported-data",
       title: "Imported source inactive",
-      detail: mt5IsActive
-        ? "Imported historical source inactive; not required for MT5 read-only research unless you are running imported MNQ comparison or deep historical walk-forward."
-        : `Not valid for imported MNQ comparison. ${snapshot.marketData.importedDataMessage}`,
+      detail: `No eligible canonical research source is active. ${snapshot.marketData.importedDataMessage}`,
       href: "/market-data",
-      severity: mt5IsActive ? "info" : "warning"
+      severity: "warning"
     });
   }
   if (!canonicalMt5Source && snapshot.marketData.activeDataSource === "mock") {
@@ -4369,7 +4371,12 @@ function buildActionItems(snapshot?: ResearchRuntimeSnapshot, run?: AutonomousRe
       severity: "warning"
     });
   }
-  if (!snapshot.llm.advisoryPassed) {
+  if (
+    !snapshot.llm.advisoryPassed &&
+    snapshot.readiness.readinessSnapshot.activeFailedRequirements.some(
+      (requirement) => requirement.id === "llm-advisory-review"
+    )
+  ) {
     items.push({
       id: "llm-advisory-missing",
       title: "LLM advisory missing",

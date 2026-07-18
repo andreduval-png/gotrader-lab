@@ -17,7 +17,7 @@ export interface ReadinessRequirementResult {
   requiredValue: string;
   explanation: string;
   suggestedFix: string;
-  runPage?: "/validation" | "/research-quality" | "/simulation-runbook" | "/backtest-lab" | "/readiness-gate" | "/llm-agents";
+  runPage?: "/validation" | "/research-quality" | "/simulation-runbook" | "/backtest-lab" | "/readiness-gate" | "/llm-agents" | "/walk-forward";
 }
 
 export interface ReadinessGateSnapshot {
@@ -26,6 +26,8 @@ export interface ReadinessGateSnapshot {
   state: ReadinessState;
   passedRequirements: ReadinessRequirementResult[];
   failedRequirements: ReadinessRequirementResult[];
+  activeFailedRequirements: ReadinessRequirementResult[];
+  deferredRequirements: ReadinessRequirementResult[];
   warnings: string[];
   recommendedNextStep: string;
   brokerExecutionDisabled: true;

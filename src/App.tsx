@@ -11,11 +11,13 @@ const AgentAuditView = lazy(() => import("@/components/agent-audit/AgentAuditVie
 const AgentDebateView = lazy(() => import("@/components/agent-debate/AgentDebateView").then((m) => ({ default: m.AgentDebateView })));
 const AdvisoryAgentsView = lazy(() => import("@/components/advisory/AdvisoryAgentsView").then((m) => ({ default: m.AdvisoryAgentsView })));
 const ResearchAdvisorView = lazy(() => import("@/components/advisor/ResearchAdvisorView").then((m) => ({ default: m.ResearchAdvisorView })));
+const OperatorDecisionsView = lazy(() => import("@/components/operator/OperatorDecisionsView").then((m) => ({ default: m.OperatorDecisionsView })));
 const AutoResearchView = lazy(() => import("@/components/auto-research/AutoResearchView").then((m) => ({ default: m.AutoResearchView })));
 const AutonomousResearchView = lazy(() => import("@/components/autonomous-research/AutonomousResearchView").then((m) => ({ default: m.AutonomousResearchView })));
 const BacktestLab = lazy(() => import("@/components/backtest-lab/BacktestLab").then((m) => ({ default: m.BacktestLab })));
 const AICommunicationsView = lazy(() => import("@/components/communications/AICommunicationsView").then((m) => ({ default: m.AICommunicationsView })));
 const ResearchCommandCenter = lazy(() => import("@/components/dashboard/ResearchCommandCenter").then((m) => ({ default: m.ResearchCommandCenter })));
+const MissionControlShell = lazy(() => import("@/components/dashboard/MissionControlShell").then((m) => ({ default: m.MissionControlShell })));
 const EvidenceQualityView = lazy(() => import("@/components/evidence/EvidenceQualityView").then((m) => ({ default: m.EvidenceQualityView })));
 const ICTLab = lazy(() => import("@/components/ict-lab/ICTLab").then((m) => ({ default: m.ICTLab })));
 const LLMAgentsView = lazy(() => import("@/components/llm-agents/LLMAgentsView").then((m) => ({ default: m.LLMAgentsView })));
@@ -52,8 +54,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ResearchCommandCenter state={state} />} />
-          <Route path="/advisor" element={<ResearchAdvisorView />} />
+          <Route path="/advisor" element={<OperatorDecisionsView />} />
           <Route path="/research-advisor" element={<ResearchAdvisorView />} />
+          <Route path="/research-lab" element={<MissionControlShell state={state} />} />
           <Route path="/communications" element={<AICommunicationsView />} />
           <Route path="/agent-audit" element={<AgentAuditView />} />
           <Route path="/agent-debate" element={<AgentDebateView />} />

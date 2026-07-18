@@ -23,6 +23,7 @@ export type AutonomousResearchStopReason =
   | "walk_forward_repeatedly_failed"
   | "regime_mismatch_detected"
   | "llm_advisory_offline"
+  | "llm_advisory_unavailable"
   | "user_canceled"
   | "failed"
   | "completed";

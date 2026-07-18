@@ -1,5 +1,10 @@
 import { safeArray, safeTopN } from "@/lib/utils";
 import type { WalkForwardRun, WalkForwardState } from "@/lib/walkForward/walkForwardTypes";
+import {
+  matchValidationProvenance,
+  selectMatchingValidationEvidence,
+  type ValidationProvenanceIdentity
+} from "@/lib/validationProvenance";
 
 export const WALK_FORWARD_STORAGE_KEY = "gotrader_ai_lab_walk_forward_state";
 export const WALK_FORWARD_UPDATED_EVENT = "gotrader-ai-lab-walk-forward-updated";
@@ -78,6 +83,27 @@ export function saveWalkForwardProgress(run: WalkForwardRun) {
 
 export function latestWalkForwardRun(state = loadWalkForwardState()) {
   return state.runs.find((run) => run.runId === state.latestRunId) ?? state.runs[0];
+}
+
+export function matchingWalkForwardRun(
+  expected: ValidationProvenanceIdentity,
+  state = loadWalkForwardState()
+) {
+  return selectMatchingValidationEvidence(expected, state.runs, {
+    purpose: "walk_forward",
+    requireMatchingOosEvidence: true
+  });
+}
+
+export function walkForwardProvenanceReview(
+  expected: ValidationProvenanceIdentity,
+  run?: WalkForwardRun
+) {
+  return matchValidationProvenance(expected, run?.provenance, {
+    purpose: "walk_forward",
+    requireMatchingOosEvidence: true,
+    requireWalkForwardRunId: Boolean(run)
+  });
 }
 
 export function clearWalkForwardHistory() {

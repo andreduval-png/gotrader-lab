@@ -1,3 +1,4 @@
+import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import type { ResearchQualityReview } from "@/lib/researchQuality";
 import {
   getLLMReadinessImpact,
@@ -9,6 +10,13 @@ import { countCompletedRunbookItems, simulationRunbookChecklist } from "@/lib/si
 import type { SimulationRunbookState } from "@/lib/simulationRunbook";
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
 import type { ReadinessGateSnapshot, ReadinessRequirementResult, ReadinessState } from "@/lib/readiness/readinessTypes";
+import { prioritizeReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
+import type { WalkForwardRun } from "@/lib/walkForward";
+import {
+  MATCHING_OOS_UNAVAILABLE_MESSAGE,
+  matchValidationProvenance,
+  type ValidationProvenanceIdentity
+} from "@/lib/validationProvenance";
 
 const nowId = (prefix: string) => `${prefix}_${Date.now()}`;
 
@@ -85,7 +93,8 @@ const stateFor = (requirements: ReadinessRequirementResult[], validation?: Valid
   if (requirements.every((item) => item.passed)) {
     return "Paper-Demo Candidate";
   }
-  if (validation && quality && quality.readinessGrade !== "Not Ready") {
+  const matchingProvenance = requirements.find((item) => item.id === "matching-validation-provenance")?.passed;
+  if (validation && quality && quality.readinessGrade !== "Not Ready" && matchingProvenance) {
     return "Research Ready";
   }
   return "Not Ready";
@@ -165,11 +174,17 @@ const llmSnapshotFor = () => {
 export function evaluateReadinessGate({
   validation,
   quality,
-  runbook
+  runbook,
+  edgeStatistics,
+  provenanceExpectation,
+  walkForwardRun
 }: {
   validation?: ValidationSuiteReport;
   quality?: ResearchQualityReview;
   runbook?: SimulationRunbookState;
+  edgeStatistics?: EdgeStatistics;
+  provenanceExpectation?: ValidationProvenanceIdentity;
+  walkForwardRun?: WalkForwardRun;
 }): ReadinessGateSnapshot {
   const conservative = conservativeScenarioFor(validation);
   const maxDrawdown = maxDrawdownFor(validation);
@@ -178,6 +193,26 @@ export function evaluateReadinessGate({
   const falsePositives = falsePositiveTotal(quality);
   const redClusters = redDrawdownClusters(quality);
   const llmSnapshot = llmSnapshotFor();
+  const validationProvenanceReview = matchValidationProvenance(
+    provenanceExpectation,
+    validation?.provenance,
+    {
+      purpose: "readiness",
+      requireValidationRunId: true
+    }
+  );
+  const walkForwardProvenanceReview = matchValidationProvenance(
+    validation?.provenance ?? provenanceExpectation,
+    walkForwardRun?.provenance,
+    {
+      purpose: "readiness",
+      requireValidationRunId: true,
+      requireWalkForwardRunId: true,
+      requireMatchingOosEvidence: true
+    }
+  );
+  const matchedEvidenceProvenance =
+    validationProvenanceReview.matched && walkForwardProvenanceReview.matched;
   const requirements: ReadinessRequirementResult[] = [
     requirement(
       "validation-exists",
@@ -191,6 +226,24 @@ export function evaluateReadinessGate({
         explanation: "The gate needs a current validation suite before it can judge strategy stability.",
         suggestedFix: "Run the validation suite on /validation.",
         runPage: "/validation"
+      }
+    ),
+    requirement(
+      "matching-validation-provenance",
+      "Validation and OOS evidence match the active research identity",
+      matchedEvidenceProvenance,
+      matchedEvidenceProvenance
+        ? "Validation and walk-forward provenance match exactly."
+        : MATCHING_OOS_UNAVAILABLE_MESSAGE,
+      "blocker",
+      {
+        currentValue: matchedEvidenceProvenance
+          ? "exact profile/source/parameter/run match"
+          : [...validationProvenanceReview.blockers, ...walkForwardProvenanceReview.blockers].join(", "),
+        requiredValue: "exact strategy profile, version, proposal/candidate, source, timeframe, parameters, and validation run",
+        explanation: "Evidence from another profile, parameter set, source window, or legacy record cannot promote readiness.",
+        suggestedFix: "Run replay and walk-forward validation for this exact active research identity.",
+        runPage: "/walk-forward"
       }
     ),
     requirement(
@@ -355,11 +408,41 @@ export function evaluateReadinessGate({
         suggestedFix: "Use conservative thresholds as the benchmark and rerun /validation.",
         runPage: "/validation"
       }
+    ),
+    requirement(
+      "oos-edge-evidence",
+      "Out-of-sample edge lower bound is positive with sufficient sample",
+      Boolean(
+        matchedEvidenceProvenance &&
+          edgeStatistics &&
+          edgeStatistics.provenance === "out_of_sample" &&
+          edgeStatistics.sampleSize >= edgeStatistics.minimumSampleSize &&
+          edgeStatistics.expectancyLower95 > 0
+      ),
+      edgeStatistics?.provenance === "out_of_sample"
+        ? `${edgeStatistics.summary} Verdict: ${edgeStatistics.verdict.replace(/_/g, " ")}.`
+        : edgeStatistics
+          ? "In-sample edge statistics cannot satisfy the out-of-sample readiness gate. Run walk-forward validation."
+          : "No walk-forward out-of-sample edge statistics are available yet.",
+      "blocker",
+      {
+        currentValue: edgeStatistics?.provenance === "out_of_sample"
+          ? `${edgeStatistics.sampleSize} OOS trades; lower 95% ${edgeStatistics.expectancyLower95.toFixed(2)}R`
+          : edgeStatistics
+            ? `in_sample only (${edgeStatistics.sampleSize} trades)`
+            : "missing",
+        requiredValue: `walk-forward OOS provenance; >= ${edgeStatistics?.minimumSampleSize ?? 20} trades and positive expectancy lower 95% bound`,
+        explanation:
+          "Paper-demo candidate status requires proven out-of-sample edge from walk-forward, not in-sample backtest fit.",
+        suggestedFix: "Run walk-forward validation (or a full research cycle that includes it) on the active source.",
+        runPage: "/walk-forward"
+      }
     )
   ];
 
   const failedRequirements = requirements.filter((item) => !item.passed);
   const passedRequirements = requirements.filter((item) => item.passed);
+  const { activeFailedRequirements, deferredRequirements } = prioritizeReadinessRequirements(requirements);
   const state = stateFor(requirements, validation, quality);
   const warnings = [
     "Simulation-only readiness gating. Broker execution remains disabled.",
@@ -375,8 +458,10 @@ export function evaluateReadinessGate({
     state,
     passedRequirements,
     failedRequirements,
+    activeFailedRequirements,
+    deferredRequirements,
     warnings,
-    recommendedNextStep: nextStepFor(state, failedRequirements),
+    recommendedNextStep: nextStepFor(state, activeFailedRequirements),
     brokerExecutionDisabled: true,
     validationSnapshot: validationSnapshotFor(validation),
     researchQualitySnapshot: researchQualitySnapshotFor(quality),

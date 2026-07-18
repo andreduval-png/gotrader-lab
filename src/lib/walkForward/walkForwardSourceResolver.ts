@@ -38,6 +38,26 @@ export interface LoadWalkForwardCandleSourceOptions {
   requestedLookbackDays?: number;
 }
 
+const SOURCE_RESOLUTION_TIMEOUT_MS = 8_000;
+
+const withSourceTimeout = <T>(promise: Promise<T>, label: string) =>
+  new Promise<T>((resolve, reject) => {
+    const timeoutId = globalThis.setTimeout(
+      () => reject(new Error(`${label} exceeded ${SOURCE_RESOLUTION_TIMEOUT_MS / 1000} seconds.`)),
+      SOURCE_RESOLUTION_TIMEOUT_MS
+    );
+    promise.then(
+      (value) => {
+        globalThis.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        globalThis.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+
 const asWalkForwardSource = (
   source: PreparedCandleSource,
   canonical: CanonicalCandleSource,
@@ -163,16 +183,13 @@ export async function loadPreparedCanonicalWalkForwardCandleSource(
   settingsInput: Partial<CandleWindowSettings> = loadWalkForwardCandleWindowSettings(),
   options: LoadWalkForwardCandleSourceOptions = {}
 ): Promise<ResolvedWalkForwardCandleSource> {
-  const importedOrMockSource = await loadPreparedWalkForwardCandleSource(settingsInput);
-  const preparedCanonical = canonicalSourceFromPreparedSource(importedOrMockSource);
-
-  if (preparedCanonical.provider === "imported_historical") {
-    return asWalkForwardSource(importedOrMockSource, preparedCanonical);
-  }
-
-  const mt5Feed = await hydrateActiveMt5ReadOnlyCandleFeed().catch(() => loadActiveMt5ReadOnlyCandleFeed());
+  const cachedMt5Feed = loadActiveMt5ReadOnlyCandleFeed();
+  const mt5Feed = cachedMt5Feed?.candles.length
+    ? cachedMt5Feed
+    : await withSourceTimeout(hydrateActiveMt5ReadOnlyCandleFeed(), "MT5 walk-forward source hydration")
+        .catch(() => cachedMt5Feed);
   const mt5Canonical = canonicalSourceFromMt5ReadOnlyFeed(mt5Feed);
-  if (mt5Canonical?.eligibility.walkForward) {
+  if (mt5Feed?.activeForResearch && mt5Canonical?.eligibility.walkForward) {
     if (options.allowMt5DeepHistory && mt5Feed) {
       const deepSource = await preparedDeepMt5Source(mt5Feed, settingsInput, options).catch(() => undefined);
       if (deepSource) {
@@ -187,6 +204,16 @@ export async function loadPreparedCanonicalWalkForwardCandleSource(
         "MT5 read-only has no execution authority, broker authority, or readiness override authority."
       ]
     );
+  }
+
+  const importedOrMockSource = await withSourceTimeout(
+    loadPreparedWalkForwardCandleSource(settingsInput),
+    "Historical walk-forward source resolution"
+  );
+  const preparedCanonical = canonicalSourceFromPreparedSource(importedOrMockSource);
+
+  if (preparedCanonical.provider === "imported_historical") {
+    return asWalkForwardSource(importedOrMockSource, preparedCanonical);
   }
 
   const mt5Reasons = mt5Feed

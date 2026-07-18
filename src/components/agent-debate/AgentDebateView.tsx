@@ -20,7 +20,7 @@ import {
   clearAgentDebateHistory,
   latestAgentDebateSession,
   loadAgentDebateState,
-  runAgentDebateSession,
+  runLlmAgentDebateSession,
   saveAgentDebateSession,
   summarizeAgentDebate
 } from "@/lib/agentDebate";
@@ -52,7 +52,11 @@ const biasVariant = (bias: MarketBias | "no_opinion") => {
   return "warning" as const;
 };
 
-function debateForLatestThesis(state: LabState): AgentDebateSession | undefined {
+async function debateForLatestThesis(state: LabState): Promise<{
+  session: AgentDebateSession;
+  llmDebateUsed: boolean;
+  fallbackReason?: string;
+} | undefined> {
   const thesis = state.tradeTheses[0];
   if (!thesis) {
     return undefined;
@@ -63,15 +67,14 @@ function debateForLatestThesis(state: LabState): AgentDebateSession | undefined 
     return undefined;
   }
 
-  const session = runAgentDebateSession({
+  const result = await runLlmAgentDebateSession({
     thesis,
     sourceDebate,
-    mode: "deterministic_fallback",
     roundCount: 2,
     consensusThreshold: 3
   });
-  saveAgentDebateSession(session);
-  return session;
+  saveAgentDebateSession(result.session);
+  return result;
 }
 
 export function AgentDebateView() {
@@ -81,6 +84,7 @@ export function AgentDebateView() {
     () => latestAgentDebateSession(debateState)?.sessionId
   );
   const [statusMessage, setStatusMessage] = useState("");
+  const [debateModeLabel, setDebateModeLabel] = useState("Deterministic fallback");
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
 
   useEffect(() => {
@@ -126,18 +130,23 @@ export function AgentDebateView() {
   );
 
   const runDebate = () => {
-    const session = debateForLatestThesis(labState);
-    if (!session) {
-      setStatusMessage("Generate a research thesis first so the debate layer has deterministic facts and agent opinions.");
-      return;
-    }
-    setDebateState(loadAgentDebateState());
-    setSelectedSessionId(session.sessionId);
-    setStatusMessage(
-      session.moderatorOutput.consensusReached
-        ? `Consensus produced: ${session.moderatorOutput.position} at ${formatPercent(session.moderatorOutput.probability)}.`
-        : "No consensus produced; moderator kept the research position flat."
-    );
+    void (async () => {
+      const result = await debateForLatestThesis(labState);
+      if (!result) {
+        setStatusMessage("Generate a research thesis first so the debate layer has deterministic facts and agent opinions.");
+        return;
+      }
+      setDebateState(loadAgentDebateState());
+      setSelectedSessionId(result.session.sessionId);
+      setDebateModeLabel(result.llmDebateUsed ? "LLM online" : `Deterministic fallback${result.fallbackReason ? ` (${result.fallbackReason})` : ""}`);
+      setStatusMessage(
+        `${result.llmDebateUsed ? "[LLM online] " : "[Deterministic fallback] "}${
+          result.session.moderatorOutput.consensusReached
+            ? `Consensus produced: ${result.session.moderatorOutput.position} at ${formatPercent(result.session.moderatorOutput.probability)}.`
+            : "No consensus produced; moderator kept the research position flat."
+        }`
+      );
+    })();
   };
 
   const clearHistory = () => {
@@ -151,14 +160,14 @@ export function AgentDebateView() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <p className="text-sm uppercase text-primary">LLM agent debate layer</p>
+          <p className="text-sm uppercase text-primary">Research committee debate</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-normal">Agent Debate Consensus</h2>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Agents analyze independently, challenge or support each other, update confidence, and let the moderator
-            declare consensus or flat/no thesis. Deterministic facts remain immutable.
+            Tries the local LLM bridge for Bull/Bear/Risk rounds, then a deterministic moderator resolves consensus.
+            Every run is labeled LLM online or deterministic fallback.
           </p>
         </div>
-        <Badge variant="warning">Advisory only</Badge>
+        <Badge variant="warning" data-testid="agent-debate-mode">{debateModeLabel}</Badge>
       </div>
 
       <SourceStatusBanner />
@@ -276,7 +285,7 @@ export function AgentDebateView() {
               Debate Control
             </CardTitle>
             <CardDescription>
-              Runs a bounded deterministic debate now; future local-command LLM debate can replace the round writer.
+              Runs LLM debate rounds when the bridge is online; otherwise uses the deterministic fallback writer. Moderator consensus stays rule-based.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

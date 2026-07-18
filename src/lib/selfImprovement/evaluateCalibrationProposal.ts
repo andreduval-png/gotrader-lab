@@ -4,7 +4,7 @@ import {
   sanitizeBacktestConfig
 } from "@/lib/backtesting";
 import type { BacktestConfig, ResolvedBacktestConfig } from "@/lib/backtesting";
-import { mockCandles } from "@/lib/mockData/mockCandles";
+import type { Candle } from "@/lib/types";
 import { compareProposalToBaseline } from "@/lib/selfImprovement/compareProposalToBaseline";
 import type {
   CalibrationProposal,
@@ -13,6 +13,11 @@ import type {
 } from "@/lib/selfImprovement/selfImprovementTypes";
 import { runValidationSuite } from "@/lib/validation";
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
+import {
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters
+} from "@/lib/validationProvenance";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
@@ -25,13 +30,10 @@ const profitFactorAverage = (scenarios: ValidationScenarioResult[]) => {
   return values.length ? round(average(values), 2) : null;
 };
 
-const estimateFalsePositives = (scenarios: ValidationScenarioResult[]) =>
+/** Approximate stop-hit count from scenario win rate (resolved trades only). */
+export const estimateFalsePositives = (scenarios: ValidationScenarioResult[]) =>
   Math.round(
-    scenarios.reduce((sum, scenario) => {
-      const overconfidenceGap = Math.max(0, scenario.confidenceCalibration.averageConfidence - scenario.winRate);
-      const losingShare = 1 - scenario.winRate;
-      return sum + scenario.totalTrades * overconfidenceGap * losingShare;
-    }, 0)
+    scenarios.reduce((sum, scenario) => sum + scenario.totalTrades * Math.max(0, 1 - scenario.winRate), 0)
   );
 
 export function summarizeValidationMetrics(report: ValidationSuiteReport): CalibrationProposalMetrics {
@@ -70,7 +72,8 @@ export function summarizeValidationMetrics(report: ValidationSuiteReport): Calib
     stabilityScore: round(stabilityScore, 0),
     conservativeScenarioStable: conservative?.readiness === "green",
     strongestScenario: report.calibration.strongestScenario,
-    weakestScenario: report.calibration.weakestScenario
+    weakestScenario: report.calibration.weakestScenario,
+    provenance: report.provenance
   };
 }
 
@@ -91,10 +94,34 @@ export function applyProposalChangesToConfig(
   return sanitizeBacktestConfig(next);
 }
 
-export function evaluateCalibrationProposal(proposal: CalibrationProposal): CalibrationProposal {
+export function evaluateCalibrationProposal(proposal: CalibrationProposal, candles: Candle[]): CalibrationProposal {
+  if (!candles.length) {
+    throw new Error(
+      "Cannot test a calibration proposal without real candles. Activate MT5 read-only research mode or import historical candles first."
+    );
+  }
   const baselineConfig = proposal.baselineConfig ?? loadBacktestConfig();
   const proposedConfig = applyProposalChangesToConfig(baselineConfig ?? defaultBacktestConfig, proposal.proposedChanges);
-  const validationReport = runValidationSuite(mockCandles, proposedConfig);
+  const frozenProfile = getFrozenResearchProfile(proposedConfig.strategyProfile);
+  const sourceContext = proposal.proposalIntentDetails?.sourceContext;
+  const validationReport = runValidationSuite(candles, proposedConfig, {
+    provenance: buildValidationProvenanceIdentity({
+      strategyProfile: proposedConfig.strategyProfile,
+      strategyProfileVersion: frozenProfile?.profileVersion,
+      proposalId: proposal.proposalId,
+      candidateId: proposal.sourceCandidateId,
+      sourceProvider: sourceContext?.provider,
+      requestedSymbol: sourceContext?.requestedSymbol ?? proposedConfig.symbol,
+      brokerSymbol: sourceContext?.brokerSymbol,
+      timeframe: sourceContext?.timeframe ?? proposedConfig.timeframe,
+      sourceFingerprint: sourceContext?.sourceFingerprint,
+      parameterFingerprint: fingerprintValidationParameters(proposedConfig),
+      detectorProfileFingerprint: frozenProfile
+        ? fingerprintValidationParameters(frozenProfile.frozenParameters)
+        : undefined,
+      validationCutoff: frozenProfile?.validationCutoff
+    })
+  });
   const afterMetrics = summarizeValidationMetrics(validationReport);
   const comparisonResult = compareProposalToBaseline(proposal.beforeMetrics, afterMetrics);
 

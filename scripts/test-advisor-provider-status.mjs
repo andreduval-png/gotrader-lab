@@ -163,12 +163,42 @@ async function main() {
   );
   assert.equal(openClawHealthUrlFor("not a url"), undefined);
 
+  // 12. Research/autonomous status propagation must distinguish an online,
+  // unconfigured provider from an offline bridge. Intentional deferrals must
+  // not pause the autonomous loop as an outage.
+  const autonomousSource = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "autonomousResearch", "runAutonomousResearchLoop.ts"),
+    "utf8"
+  );
+  const autonomousTypes = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "autonomousResearch", "autonomousResearchTypes.ts"),
+    "utf8"
+  );
+  const researchCycleSource = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "researchCycle", "runResearchCycle.ts"),
+    "utf8"
+  );
+  const bridgeSource = fs.readFileSync(
+    path.join(projectRoot, "scripts", "llm-local-bridge-server.mjs"),
+    "utf8"
+  );
+  assert.ok(autonomousSource.includes("llmAdvisoryWasIntentionallyDeferred"));
+  assert.ok(autonomousSource.includes('llmUnavailableReason === "deferred_until_evidence_ready"'));
+  assert.ok(autonomousSource.includes('llmUnavailableReason === "skipped_for_autonomous_stability"'));
+  assert.ok(autonomousSource.includes('reason: bridgeOffline ? "llm_advisory_offline" : "llm_advisory_unavailable"'));
+  assert.ok(autonomousTypes.includes('"llm_advisory_unavailable"'));
+  assert.ok(researchCycleSource.includes('case "config_missing":'));
+  assert.ok(researchCycleSource.includes("LLM advisory bridge is online, but the advisory provider is not configured."));
+  assert.ok(researchCycleSource.includes("llmBridgeProcessAvailable"));
+  assert.ok(bridgeSource.includes('import { loadLocalEnvironment } from "./local-env.mjs"'));
+
   console.log("test-advisor-provider-status: all assertions passed.");
   console.log("- unset URL -> openclaw_not_configured");
   console.log("- bridge stub markers/health -> openclaw_bridge_stub (not ordinary success)");
   console.log("- skill-routed response -> openclaw_skill_routed");
   console.log("- timeout -> openclaw_timeout; offline/invalid/request_failed -> openclaw_bridge_offline");
   console.log("- unsafe authority -> unsafe_response_rejected (blocked from proposal/validation state)");
+  console.log("- provider configuration, bridge outage, and intentional deferral remain distinct");
   console.log("- authority remains none/none/none");
 }
 

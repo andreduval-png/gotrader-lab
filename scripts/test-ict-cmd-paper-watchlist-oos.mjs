@@ -17,7 +17,7 @@ const primaryTimeframe = process.env.MT5_READONLY_TIMEFRAME || "5m";
 const requestedLookbackDays = Number(process.env.ICT_CMD_OOS_DAYS || 90);
 const chunkDays = Number(process.env.ICT_CMD_OOS_CHUNK_DAYS || 10);
 const limitPerChunk = Math.max(1, Math.min(5000, Number(process.env.ICT_CMD_OOS_LIMIT || 5000)));
-const maxReplayWindows = Math.max(1, Number(process.env.ICT_CMD_OOS_MAX_WINDOWS || 240));
+const maxReplayWindows = Math.max(1, Number(process.env.ICT_CMD_OOS_MAX_WINDOWS || 1200));
 const currentEvidenceReplayWindows = Math.max(maxReplayWindows, Number(process.env.ICT_CMD_OOS_CURRENT_EVIDENCE_WINDOWS || maxReplayWindows));
 const timeoutMs = Number(process.env.MT5_READONLY_TEST_TIMEOUT_MS || 10000);
 const rollingWindowDays = Number(process.env.ICT_CMD_OOS_ROLLING_WINDOW_DAYS || 30);
@@ -39,6 +39,10 @@ const safety = {
 };
 
 const sourceFiles = [
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
@@ -106,8 +110,7 @@ const sourceFiles = [
   { root: mt5Root, file: "mt5SymbolSettings.ts" },
   { root: mt5Root, file: "mt5ReadOnlyNormalizer.ts" },
   { root: mt5Root, file: "mt5ReadOnlyDepth.ts" },
-  { root: mt5Root, file: "mt5ReadOnlyClient.ts" },
-  { root: sourceRoot, file: "index.ts" }
+  { root: mt5Root, file: "mt5ReadOnlyClient.ts" }
 ];
 
 function compileSuiteForNode() {
@@ -133,7 +136,9 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -143,6 +148,15 @@ function compileSuiteForNode() {
 }
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_CMD_OOS_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { status: "not_evaluated_in_cmd_oos", opportunityCount: 0 } };
 }
 `,
     "utf8"
@@ -540,6 +554,7 @@ const runReplayPairsForWindow = (suite, depth, htfDepths, window, maxWindowsForS
     replayWindowSize: 80,
     lookaheadCandles: 12,
     maxReplayWindows: maxWindowsForSegment,
+    windowSampling: "stratified",
     requestedLookbackDays,
     availableLookbackDays: availableLookbackDaysFor(depth),
     dataDepthStatus: depth.depthStatus,
@@ -565,6 +580,29 @@ const uniquePairs = (pairs) => {
   const byKey = new Map();
   for (const pair of pairs) {
     byKey.set(pairKeyFor(pair), pair);
+  }
+  return [...byKey.values()];
+};
+
+const uniqueCmdPairs = (pairs) => {
+  const byKey = new Map();
+  for (const pair of pairs) {
+    const key = [
+      pair.result.tradePath?.signalTime,
+      pair.result.side,
+      pair.result.tradePath?.entryReference,
+      pair.result.tradePath?.target,
+      pair.result.tradePath?.invalidation
+    ].join("|");
+    const current = byKey.get(key);
+    if (
+      !current ||
+      statusWeight(pair.decision?.status) > statusWeight(current.decision?.status) ||
+      (statusWeight(pair.decision?.status) === statusWeight(current.decision?.status) &&
+        (pair.decision?.approvalScore ?? 0) > (current.decision?.approvalScore ?? 0))
+    ) {
+      byKey.set(key, pair);
+    }
   }
   return [...byKey.values()];
 };
@@ -654,11 +692,17 @@ const independentDateGateFor = ({ overallMetrics, robustness, activeRollingWindo
     blockerReason:
       sourceStatus === "passed"
         ? undefined
-        : "CMD lane is promising but date-concentrated; needs independent-date validation.",
+        : sourceStatus === "insufficient_sample"
+          ? `CMD lane has independent dates but only ${candidateCount} candidates; at least ${options.minCandidateCount} are required.`
+          : sourceStatus === "oos_degraded"
+            ? "CMD out-of-sample behavior degraded and remains blocked."
+            : "CMD lane is promising but date-concentrated; needs independent-date validation.",
     nextAction:
       sourceStatus === "passed"
         ? "Continue normal deterministic Paper-Demo checklist review."
-        : "Run independent-date CMD validation over 90-day history.",
+        : sourceStatus === "insufficient_sample"
+          ? "Run a denser causal CMD validation scan and collect forward paper-only outcomes."
+          : "Run independent-date CMD validation over 90-day history.",
     metrics: {
       candidateCount,
       uniqueTradingDates,
@@ -683,7 +727,35 @@ const assertSafeReport = (report) => {
 
 async function main() {
   compileSuiteForNode();
-  const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")));
+  const suite = {
+    ...(await import(pathToFileURL(path.join(outRoot, "ictReplayValidation.mjs")).href)),
+    ...(await import(pathToFileURL(path.join(outRoot, "ictApprovedSetupProfile.mjs")).href)),
+    ...(await import(pathToFileURL(path.join(outRoot, "ictMonteCarlo.mjs")).href))
+  };
+  const samplingFixture = Array.from({ length: 20 }, (_, index) => ({
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, index * 5)).toISOString(),
+    open: 100 + index,
+    high: 101 + index,
+    low: 99 + index,
+    close: 100.5 + index,
+    volume: 1
+  }));
+  const stratifiedWindows = suite.sliceReplayWindows({
+    symbol: requestedSymbol,
+    requestedSymbol,
+    brokerSymbol,
+    primaryTimeframe,
+    htfTimeframes: [],
+    candles: samplingFixture,
+    replayWindowSize: 3,
+    lookaheadCandles: 1,
+    maxReplayWindows: 4,
+    windowSampling: "stratified",
+    researchOnly: true
+  });
+  assert.equal(stratifiedWindows.length, 4, "Stratified replay should respect the bounded window count.");
+  assert.equal(stratifiedWindows[0].signalCandle.timestamp, samplingFixture[2].timestamp, "Stratified replay should retain early history.");
+  assert.equal(stratifiedWindows.at(-1).signalCandle.timestamp, samplingFixture.at(-1).timestamp, "Stratified replay should retain recent history.");
   const depth = await fetchChunkedReplayCandles({
     requestedSymbol,
     brokerSymbol,
@@ -702,7 +774,7 @@ async function main() {
     to: new Date(Date.parse(depth.lastTimestamp) + 1).toISOString()
   };
   const pairs = uniquePairs(runReplayPairsForWindow(suite, depth, htfDepths, fullWindow, currentEvidenceReplayWindows));
-  const cmdPairs = pairs.filter((pair) => isCmd(pair.result));
+  const cmdPairs = uniqueCmdPairs(pairs.filter((pair) => isCmd(pair.result)));
   const cmdResearchPairs = cmdPairs.filter((pair) => pair.result.decision === "research_only");
   const cmdPaperResults = cmdResearchPairs.filter((pair) => pair.decision?.status === "paper_watchlist_candidate").map((pair) => pair.result);
   const cmdApprovedResults = cmdResearchPairs.filter((pair) => pair.decision?.status === "approved_research_candidate").map((pair) => pair.result);
@@ -710,14 +782,15 @@ async function main() {
   const cmdRejectedResults = cmdResearchPairs.filter((pair) => pair.decision?.status === "rejected_candidate").map((pair) => pair.result);
   const cmdNoTradeResults = cmdPairs.filter((pair) => pair.decision?.status === "no_trade" || pair.result.decision === "no_trade").map((pair) => pair.result);
 
-  const rollingReports = rollingWindows.map((window, index) => windowReportFor(suite, pairs, window, 1200 + index * 17));
-  const halfReports = halfWindows.map((window, index) => windowReportFor(suite, pairs, window, 2400 + index * 29));
+  const rollingReports = rollingWindows.map((window, index) => windowReportFor(suite, cmdPairs, window, 1200 + index * 17));
+  const halfReports = halfWindows.map((window, index) => windowReportFor(suite, cmdPairs, window, 2400 + index * 29));
   const overallMetrics = metricsFor(cmdPaperResults);
   const overallMonteCarlo = monteCarloFor(suite, cmdPaperResults, 909);
   const robustness = classifyCmdRobustness({ overallMetrics, rollingReports });
   const activeRollingWindows = rollingReports.filter((report) => report.cmdPaperWatchlistCandidates > 0);
   const independentDateGate = independentDateGateFor({ overallMetrics, robustness, activeRollingWindows });
   const stableHighTargetFirst =
+    cmdPaperResults.length >= 20 &&
     activeRollingWindows.length >= 2 &&
     activeRollingWindows.every((report) => report.targetFirstRate >= 0.65) &&
     overallMetrics.dateConcentrationShare < 0.6;
@@ -740,12 +813,12 @@ async function main() {
       cfdProxyWarning: "USTECH is MT5 read-only CFD/proxy data for requested MNQ, not CME futures truth."
     },
     scanMode: {
-      mode: "bounded_aggregate_replay_filtered_oos",
+      mode: "stratified_aggregate_replay_filtered_oos",
       rollingWindowDays,
       rollingStepDays,
       maxReplayWindows,
       currentEvidenceReplayWindows,
-      note: "One bounded 90-day replay scan is filtered into rolling and half-period reports; raw candles remain internal. Increase ICT_CMD_OOS_CURRENT_EVIDENCE_WINDOWS for deeper CLI-only scans."
+      note: "A deterministic stratified replay sample spans the full 90-day period, then feeds rolling and half-period reports. Raw candles remain internal. Increase ICT_CMD_OOS_CURRENT_EVIDENCE_WINDOWS for denser CLI-only coverage."
     },
     counts: {
       totalReplaySignals: pairs.length,

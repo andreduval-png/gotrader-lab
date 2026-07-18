@@ -230,8 +230,15 @@ export async function diagnoseService(service, state) {
   const port = await getPortSummary(service.port);
   const health = await probeFirst(service.healthUrls);
   const trackedAlive = tracked ? isPidAlive(tracked.pid) : false;
+  const advisoryCapabilityStatus = health.result?.payload?.advisoryCapabilityStatus;
+  const semanticHealthStatus =
+    service.id === "llm-bridge" && advisoryCapabilityStatus === "config_missing"
+      ? "provider_config_missing"
+      : service.id === "llm-bridge" && advisoryCapabilityStatus && advisoryCapabilityStatus !== "ready"
+        ? "provider_unavailable"
+        : "healthy";
   const status = health.ok
-    ? "healthy"
+    ? semanticHealthStatus
     : trackedAlive
       ? "tracked_process_running_health_failed"
       : port.open
@@ -273,6 +280,10 @@ function summarizePayload(payload) {
     service: payload.service,
     connectionStatus: payload.connectionStatus,
     wrapperStatus: payload.wrapperStatus,
+    bridgeProcessStatus: payload.bridgeProcessStatus,
+    advisoryCapabilityStatus: payload.advisoryCapabilityStatus,
+    advisoryProviderConfigured: payload.advisoryProviderConfigured,
+    modelConfigured: payload.modelConfigured,
     executionAuthority: payload.executionAuthority,
     brokerAuthority: payload.brokerAuthority,
     readinessOverrideAuthority: payload.readinessOverrideAuthority

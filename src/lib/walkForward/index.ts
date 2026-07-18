@@ -13,9 +13,11 @@ export type { ResolvedWalkForwardCandleSource } from "@/lib/walkForward/walkForw
 export {
   clearWalkForwardHistory,
   latestWalkForwardRun,
+  matchingWalkForwardRun,
   loadWalkForwardState,
   saveWalkForwardProgress,
   saveWalkForwardRun,
+  walkForwardProvenanceReview,
   WALK_FORWARD_STORAGE_KEY,
   WALK_FORWARD_UPDATED_EVENT
 } from "@/lib/walkForward/walkForwardStorage";

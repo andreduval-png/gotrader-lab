@@ -86,7 +86,7 @@ export function evaluateStrategyEligibility(record: StrategyIntakeRecord): Strat
   if (typeof evidenceScore === "number" && evidenceScore < 50) blockers.push(`Evidence score ${evidenceScore} is below strategy-library minimum 50.`);
   if (typeof maturityScore === "number" && maturityScore < 50) blockers.push(`Maturity score ${maturityScore} is below strategy-library minimum 50.`);
 
-  if (definition.id === "ict_cmd_short_paper_watchlist_v1") {
+  if (["ict_cmd_short_paper_watchlist_v1", "cmd_high_displacement_v2_research"].includes(definition.id)) {
     const sampleCount = evidenceNumber(record.evidenceSummary, "sampleCount") ?? 0;
     const uniqueTradingDates = evidenceNumber(record.evidenceSummary, "uniqueTradingDates") ?? 0;
     const activeRollingWindows = evidenceNumber(record.evidenceSummary, "activeRollingWindows") ?? 0;
@@ -119,7 +119,7 @@ export function evaluateStrategyEligibility(record: StrategyIntakeRecord): Strat
     definition.status === "paper_watchlist_candidate" ? "paper_watchlist_candidate" : "evidence_building",
     [],
     warnings,
-    definition.id === "ict_cmd_short_paper_watchlist_v1"
+    ["ict_cmd_short_paper_watchlist_v1", "cmd_high_displacement_v2_research"].includes(definition.id)
       ? "Keep CMD in paper-watchlist evidence building; Paper-Demo still requires the normal checklist."
       : definition.status === "paper_watchlist_candidate"
         ? "Keep this strategy in paper-watchlist evidence building; Paper-Demo still requires the normal checklist."

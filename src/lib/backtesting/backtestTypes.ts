@@ -1,6 +1,7 @@
 import type { CIOSynthesisResult, InternalAgentOpinion } from "@/lib/agents";
 import type { InternalAgentId } from "@/lib/agents";
 import type { GrinchActiveProfile, GrinchFalsePositiveBlocker, GrinchStrategyScore } from "@/lib/strategyLibrary";
+import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import type {
   Candle,
   ICTContext,
@@ -20,7 +21,8 @@ export type BacktestStopModel = "latest swing" | "fixed ticks" | "FVG invalidati
 export type BacktestStrategyProfile =
   | "agent_consensus"
   | "ifvg_filtered_v2_research"
-  | "ifvg_fresh_retest_v3_research";
+  | "ifvg_fresh_retest_v3_research"
+  | "cmd_high_displacement_v2_research";
 export type BacktestAgentWeightId = Exclude<InternalAgentId, "cio-agent">;
 export type BacktestAgentWeights = Record<BacktestAgentWeightId, number>;
 
@@ -44,6 +46,12 @@ export interface BacktestConfig {
   decisionInterval?: number;
   lookaheadCandles?: number;
   visibleWindow?: number;
+  /** Bid/ask spread paid on entry, in ticks. */
+  spreadTicks?: number;
+  /** Adverse slippage applied to market entries and stop exits, in ticks. */
+  slippageTicks?: number;
+  /** Round-trip commission expressed in ticks of price. */
+  commissionTicks?: number;
 }
 
 export interface ResolvedBacktestConfig {
@@ -66,6 +74,17 @@ export interface ResolvedBacktestConfig {
   decisionInterval: number;
   lookaheadCandles: number;
   visibleWindow: number;
+  spreadTicks: number;
+  slippageTicks: number;
+  commissionTicks: number;
+}
+
+/** Per-symbol trading friction inputs used by the fill model. */
+export interface BacktestFillFrictions {
+  tickSize: number;
+  spreadTicks: number;
+  slippageTicks: number;
+  commissionTicks: number;
 }
 
 export interface BacktestDecisionPoint {
@@ -178,6 +197,8 @@ export interface BacktestSummary {
   equityCurve: EquityCurvePoint[];
   agentAttribution: BacktestAgentAttributionSummary[];
   grinchSummary?: BacktestGrinchSummary;
+  /** Bootstrap edge statistics from realized R-multiples in this backtest. */
+  edgeStatistics?: EdgeStatistics;
   strategyProfileSummary?: {
     strategyProfile: BacktestStrategyProfile;
     evaluatedWindows: number;

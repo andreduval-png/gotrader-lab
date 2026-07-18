@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  Bot,
-  ChartCandlestick,
-  ClipboardCheck,
-  DatabaseZap,
+  BarChart3,
   Gauge,
   LayoutDashboard,
   MessageSquareText,
@@ -14,10 +11,8 @@ import {
   PanelRightOpen,
   Settings,
   ShieldCheck,
-  SlidersHorizontal,
   type LucideIcon
 } from "lucide-react";
-import { GlobalSourceBar } from "@/components/common/SourceStatusBanner";
 import { ValidationChainCard } from "@/components/common/ValidationChainCard";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -34,96 +29,72 @@ interface NavigationHub {
   label: string;
   icon: LucideIcon;
   items: HubItem[];
+  /** Advanced routes remain addressable without crowding primary navigation. */
+  hidden?: boolean;
 }
 
 /**
- * Information architecture: 8 sidebar hubs. Every legacy route stays mapped
- * to a hub so old URLs keep working; the hub link navigates to the hub's
- * primary route and the remaining destinations render as workspace tabs.
+ * Operator-facing information architecture. Detailed research routes remain
+ * mapped under the hidden Advanced hub so old URLs keep working.
  */
 const navigationHubs: NavigationHub[] = [
   {
-    id: "home",
-    label: "Home",
+    id: "overview",
+    label: "Overview",
     icon: LayoutDashboard,
-    items: [
-      { href: "/dashboard", label: "Command Center" },
-      { href: "/performance", label: "Results" }
-    ]
+    items: [{ href: "/dashboard", label: "Operator Console" }]
   },
   {
-    id: "advisor",
-    label: "Advisor",
+    id: "decisions",
+    label: "Decisions",
     icon: MessageSquareText,
-    items: [
-      { href: "/advisor", label: "Research Advisor" },
-      { href: "/research-advisor", label: "Research Advisor", hidden: true }
-    ]
+    items: [{ href: "/advisor", label: "Decision Inbox" }]
   },
   {
-    id: "data",
-    label: "Data",
-    icon: DatabaseZap,
-    items: [
-      { href: "/market-data", label: "Market Data" },
-      { href: "/ict-lab", label: "ICT Lab" },
-      { href: "/research", label: "Research Workbench" }
-    ]
-  },
-  {
-    id: "validate",
-    label: "Validate",
-    icon: ClipboardCheck,
-    items: [
-      { href: "/replay", label: "Replay" },
-      { href: "/walk-forward", label: "Walk-Forward" },
-      { href: "/backtest-lab", label: "Backtest Lab" },
-      { href: "/validation", label: "Validation Suite" },
-      { href: "/research-quality", label: "Research Quality" },
-      { href: "/paper-demo", label: "Paper-Demo Ops" }
-    ]
-  },
-  {
-    id: "evidence",
-    label: "Evidence",
-    icon: Gauge,
-    items: [
-      { href: "/evidence-quality", label: "Evidence Quality" },
-      { href: "/research-maturity", label: "Research Maturity" },
-      { href: "/readiness-gate", label: "Readiness Gate" },
-      { href: "/strategy-library", label: "Strategy Library" },
-      { href: "/agent-audit", label: "Agent Audit" },
-      { href: "/simulation-runbook", label: "Simulation Runbook" }
-    ]
-  },
-  {
-    id: "automate",
-    label: "Automate",
-    icon: SlidersHorizontal,
-    items: [
-      { href: "/self-improvement", label: "Self-Improvement" },
-      { href: "/autonomous-research", label: "Autonomous Research" },
-      { href: "/auto-research", label: "Parameter Search" },
-      { href: "/prompt-lab", label: "Prompt Lab" }
-    ]
-  },
-  {
-    id: "agents",
-    label: "Agents",
-    icon: Bot,
-    items: [
-      { href: "/agent-debate", label: "Research Committee" },
-      { href: "/advisory-agents", label: "OpenClaw Bridge" },
-      { href: "/agents", label: "Agent Roster" },
-      { href: "/llm-agents", label: "LLM Agents" },
-      { href: "/communications", label: "Communications" }
-    ]
+    id: "results",
+    label: "Results",
+    icon: BarChart3,
+    items: [{ href: "/performance", label: "Results" }]
   },
   {
     id: "settings",
     label: "Settings",
     icon: Settings,
     items: [{ href: "/settings", label: "Settings" }]
+  },
+  {
+    id: "advanced",
+    label: "Advanced Research",
+    icon: Gauge,
+    hidden: true,
+    items: [
+      { href: "/research-lab", label: "Mission Control" },
+      { href: "/research-advisor", label: "Research Advisor" },
+      { href: "/market-data", label: "Market Data" },
+      { href: "/ict-lab", label: "ICT Lab" },
+      { href: "/research", label: "Research Workbench" },
+      { href: "/replay", label: "Replay" },
+      { href: "/walk-forward", label: "Walk-Forward" },
+      { href: "/backtest-lab", label: "Backtest Lab" },
+      { href: "/validation", label: "Validation Suite" },
+      { href: "/research-quality", label: "Research Quality" },
+      { href: "/paper-demo", label: "Paper-Demo Ops" },
+      { href: "/evidence-quality", label: "Evidence Quality" },
+      { href: "/research-maturity", label: "Research Maturity" },
+      { href: "/readiness-gate", label: "Readiness Gate" },
+      { href: "/strategy-library", label: "Strategy Library" },
+      { href: "/agent-audit", label: "Agent Audit" },
+      { href: "/simulation-runbook", label: "Simulation Runbook" },
+      { href: "/self-improvement", label: "Self-Improvement" },
+      { href: "/autonomous-research", label: "Autonomous Research" },
+      { href: "/auto-research", label: "Parameter Search" },
+      { href: "/prompt-lab", label: "Prompt Lab" },
+      { href: "/agent-debate", label: "Research Committee" },
+      { href: "/advisory-agents", label: "OpenClaw Bridge" },
+      { href: "/agents", label: "Agent Roster" },
+      { href: "/llm-agents", label: "LLM Agents" },
+      { href: "/communications", label: "Communications" }
+    ]
   }
 ];
 
@@ -159,7 +130,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const { hub: activeHub, item: activeItem } = resolveActiveContext(location.pathname);
   const visibleTabs = activeHub.items.filter((item) => !item.hidden);
-  const showWorkspaceTabs = visibleTabs.length > 1;
+  const showWorkspaceTabs = !activeHub.hidden && visibleTabs.length > 1;
+  const showAdvancedContext = Boolean(activeHub.hidden);
 
   useEffect(() => {
     window.localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, String(navCollapsed));
@@ -252,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
             aria-label="Primary navigation"
           >
-            {navigationHubs.map((hub) => {
+            {navigationHubs.filter((hub) => !hub.hidden).map((hub) => {
               const hubActive = hub.id === activeHub.id;
               return (
                 <Link
@@ -281,7 +253,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <ShieldCheck className="h-4 w-4 text-emerald-300" aria-hidden="true" />
                 Research only
               </div>
-              No live trading. MT5 stays read-only and all research state stays in browser storage.
+              One supervised research cycle at a time. MT5 stays read-only and operator authority remains none.
             </div>
           </div>
         </aside>
@@ -297,10 +269,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="shrink-0 text-muted-foreground/50">/</span>
                 <span className="truncate font-semibold text-foreground">{activeItem.label}</span>
               </div>
-              <div className="min-w-0 flex-1">
-                <GlobalSourceBar className="justify-start lg:justify-end" />
-              </div>
-              <button
+              <div className="min-w-0 flex-1" />
+              {showAdvancedContext ? <button
                 type="button"
                 data-testid="context-panel-toggle"
                 className="hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/[0.10] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:inline-flex"
@@ -310,7 +280,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {contextOpen ? <PanelRightClose className="h-3.5 w-3.5" aria-hidden="true" /> : <PanelRightOpen className="h-3.5 w-3.5" aria-hidden="true" />}
                 Context
-              </button>
+              </button> : null}
             </div>
             {showWorkspaceTabs ? (
               <nav
@@ -345,7 +315,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <div className="min-w-0">{children}</div>
             </main>
-            {contextOpen ? (
+            {contextOpen && showAdvancedContext ? (
               <aside
                 data-testid="context-panel"
                 className="scrollbar-thin hidden w-[340px] shrink-0 space-y-3 overflow-y-auto border-l border-white/10 bg-black/30 p-4 backdrop-blur-2xl xl:block"
@@ -357,7 +327,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="premium-surface-soft rounded-2xl px-4 py-3 text-xs leading-5 text-slate-400">
                   <p className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Quick links</p>
                   <div className="mt-2 flex flex-col gap-1.5">
-                    <Link className="text-sky-300 underline underline-offset-2" to="/advisor">
+                    <Link className="text-sky-300 underline underline-offset-2" to="/research-advisor">
                       Research Advisor
                     </Link>
                     <Link className="text-sky-300 underline underline-offset-2" to="/replay">
@@ -381,9 +351,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.7rem] text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden="true" />
-              <span>Research only</span>
+              <span>Research operations</span>
               <span aria-hidden="true">·</span>
-              <span>MT5 read-only</span>
+              <span>MT5 read-only :7341</span>
               <span aria-hidden="true">·</span>
               <span>Execution authority none</span>
               <span aria-hidden="true">·</span>
@@ -391,7 +361,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span aria-hidden="true">·</span>
               <span>Readiness override none</span>
               <Badge variant="warning" className="ml-auto hidden sm:inline-flex">
-                No live trading
+                Research only
               </Badge>
             </div>
           </footer>

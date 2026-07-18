@@ -31,14 +31,30 @@ function compileForNode() {
     }).outputText;
     const rewritten = transpiled
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
+      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+"\.\.\/currentOpportunity"/g, 'from "./currentOpportunity.mjs"')
+      .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
-  fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return {}; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return { compactSummary: {} }; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictCurrentRead.mjs"), "export function buildIctCurrentReadFromPacket() { return globalThis.__ACTIVATE_MARKET_TEST_READ; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictMarketAnalysisContext.mjs"), "export async function buildIctMarketAnalysisContextBundle() { return globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictSignalContract.mjs"), "export function buildIctResearchSignalFromCurrentRead() { return globalThis.__ACTIVATE_MARKET_TEST_SIGNAL; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictCmdPaperTracking.mjs"), "export function evaluateCmdPaperTrackingEligibility() { return globalThis.__ACTIVATE_MARKET_TEST_CMD_ELIGIBILITY; }\n", "utf8");
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunity.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities(input) {
+  return {
+    generatedAt: new Date().toISOString(),
+    summary: input.currentRead?.currentOpportunitySummary,
+    opportunities: input.currentRead?.currentOpportunities ?? []
+  };
+}
+export function saveCurrentOpportunityScan() { return { ok: true, storage: "memory" }; }
+`,
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "ictSelfImprovement.mjs"),
     `export function queueIctResearchHypothesis(hypothesis) {
@@ -279,6 +295,7 @@ async function main() {
       "build_multi_timeframe_context",
       "build_current_read",
       "detect_session_model",
+      "run_universal_recognition",
       "detect_market_opportunity",
       "queue_research_hypothesis",
       "run_phase_one",
@@ -352,6 +369,9 @@ async function main() {
     { onStepUpdate: (step, allSteps) => updates.push({ step, allSteps }) },
     { saveLatestSummary: (summary) => savedSummaries.push(summary) }
   );
+  if (success.status !== "completed") {
+    console.error(JSON.stringify({ status: success.status, error: success.error, steps: success.steps.filter((step) => step.status === "failed") }, null, 2));
+  }
   assert.equal(success.status, "completed", "successful pipeline should complete");
   assert.ok(success.steps.every((step) => step.status === "completed"), "successful pipeline should mark all steps completed");
   assert.ok(updates.length >= success.steps.length, "progress updates should be emitted");

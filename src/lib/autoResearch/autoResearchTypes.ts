@@ -74,6 +74,7 @@ export type AutoResearchCandidateFamily =
   | "baseline"
   | "ifvg_filtered_v2_research"
   | "ifvg_fresh_retest_v3_research"
+  | "cmd_high_displacement_v2_research"
   | "grinch_model_balanced"
   | "grinch_model_strict"
   | "grinch_model_model1_only"
@@ -82,6 +83,8 @@ export type AutoResearchCandidateFamily =
   | "grinch_reversal_profile_only"
   | "grinch_consolidation_profile_only"
   | "reversal_expansion_confirmation"
+  | "model_1_timing_recheck"
+  | "consolidation_range_tightness"
   | "grinch_timing_valid_only"
   | "grinch_ny_930_1000_only"
   | "grinch_1000_1015_confirmation_only"
@@ -96,7 +99,12 @@ export type AutoResearchCandidateFamily =
   | "grinch_require_profile_plus_entry_confirmation"
   | "grinch_smt_unavailable_penalty"
   | "grinch_penalize_missing_smt"
-  | "grinch_allow_smt_unavailable_but_discount_confidence";
+  | "grinch_allow_smt_unavailable_but_discount_confidence"
+  | "session_raid_displacement_strict"
+  | "session_raid_displacement_relaxed"
+  | "session_raid_retrace_strict"
+  | "session_raid_retrace_relaxed"
+  | "session_raid_session_filter_ny_am";
 
 export interface AutoResearchCandidateFamilyMetadata {
   id: AutoResearchCandidateFamily;
@@ -158,9 +166,11 @@ export interface AutoResearchScoreBreakdown {
   grinchModelScore?: number;
   grinchFalsePositiveRisk?: number;
   grinchProfileValidity?: number;
+  /** Score from the held-out out-of-sample window, when evaluated. */
   oosScore?: number;
   oosTradeCount?: number;
   oosAverageR?: number;
+  oosWinRate?: number;
   oosExpectancyLower95?: number;
   oosVerdict?: string;
   stabilityImproved: boolean;

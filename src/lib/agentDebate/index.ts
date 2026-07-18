@@ -9,6 +9,7 @@ export {
   summarizeAgentDebate
 } from "@/lib/agentDebate/runAgentDebateSession";
 export { createOpeningStatements } from "@/lib/agentDebate/createOpeningStatements";
+export { runLlmAgentDebateSession } from "@/lib/agentDebate/runLlmAgentDebateSession";
 export { moderateDebateConsensus } from "@/lib/agentDebate/moderateDebateConsensus";
 export { runDebateRound } from "@/lib/agentDebate/runDebateRound";
 export { validateDebateMessage } from "@/lib/agentDebate/validateDebateMessage";

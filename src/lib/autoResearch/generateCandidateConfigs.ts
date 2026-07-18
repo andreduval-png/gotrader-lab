@@ -21,6 +21,14 @@ const candidateFamilyMetadataFor = (family?: AutoResearchCandidateFamily) =>
         researchOnly: true as const,
         autoApplyAllowed: false as const
       }
+    : family === "cmd_high_displacement_v2_research"
+    ? {
+        id: "cmd_high_displacement_v2_research" as const,
+        label: "CMD High Displacement v2 Research",
+        target: "Causal CMD short with fresh displacement, FVG, external target, and valid RR",
+        researchOnly: true as const,
+        autoApplyAllowed: false as const
+      }
     : family === "ifvg_filtered_v2_research"
     ? {
         id: "ifvg_filtered_v2_research" as const,
@@ -37,7 +45,35 @@ const candidateFamilyMetadataFor = (family?: AutoResearchCandidateFamily) =>
         researchOnly: true as const,
         autoApplyAllowed: false as const
       }
-    : undefined;
+    : family === "model_1_timing_recheck"
+      ? {
+          id: "model_1_timing_recheck" as const,
+          label: "Model 1 Timing Recheck",
+          target: "Grinch Model 1 timing sensitivity",
+          researchOnly: true as const,
+          autoApplyAllowed: false as const
+        }
+      : family === "consolidation_range_tightness"
+        ? {
+            id: "consolidation_range_tightness" as const,
+            label: "Consolidation Range Tightness",
+            target: "Grinch consolidation range criteria",
+            researchOnly: true as const,
+            autoApplyAllowed: false as const
+          }
+        : family === "session_raid_displacement_strict" ||
+            family === "session_raid_displacement_relaxed" ||
+            family === "session_raid_retrace_strict" ||
+            family === "session_raid_retrace_relaxed" ||
+            family === "session_raid_session_filter_ny_am"
+          ? {
+              id: family,
+              label: family.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()),
+              target: "Session raid reversal v2 recognition thresholds",
+              researchOnly: true as const,
+              autoApplyAllowed: false as const
+            }
+        : undefined;
 
 const candidate = (
   baseline: ResolvedBacktestConfig,
@@ -103,7 +139,13 @@ const dedupeCandidates = (candidates: AutoResearchCandidateConfig[]) => {
 };
 
 const isGrinchCandidateFamily = (family?: AutoResearchCandidateFamily) =>
-  Boolean(family?.startsWith("grinch_") || family === "reversal_expansion_confirmation");
+  Boolean(
+    family?.startsWith("grinch_") ||
+      family?.startsWith("session_raid_") ||
+      family === "reversal_expansion_confirmation" ||
+      family === "model_1_timing_recheck" ||
+      family === "consolidation_range_tightness"
+  );
 
 export function generateCandidateConfigs(
   baseline: ResolvedBacktestConfig,
@@ -130,16 +172,40 @@ export function generateCandidateConfigs(
         },
         ["strategyProfile", "warmupCandles", "decisionInterval", "maxBarsToResolveTrade", "allowLong", "allowShort"],
         "ifvg_fresh_retest_v3_research"
+      )
+    );
+  }
+
+  // Profiles that failed independent-period validation remain available to an
+  // explicit deep diagnostic, but normal searches should not prioritize them.
+  if (isAnyMode(searchMode, ["deep"])) {
+    candidates.push(
+      candidate(
+        baseline,
+        searchMode,
+        "CMD v2 fresh displacement + FVG + external target",
+        "Retain the rejected CMD v2 profile for explicit regression diagnostics only.",
+        {
+          strategyProfile: "cmd_high_displacement_v2_research",
+          warmupCandles: 100,
+          decisionInterval: 1,
+          maxBarsToResolveTrade: 24,
+          visibleWindow: 80,
+          allowLong: false,
+          allowShort: true
+        },
+        ["strategyProfile", "warmupCandles", "decisionInterval", "maxBarsToResolveTrade", "allowLong", "allowShort"],
+        "cmd_high_displacement_v2_research"
       ),
       candidate(
         baseline,
         searchMode,
         "IFVG v2 clean retest + displacement",
-        "Evaluate the registered IFVG filtered v2 detector instead of treating strategy metadata as a tested result.",
+        "Retain the independently degraded IFVG v2 profile for explicit regression diagnostics only.",
         {
           strategyProfile: "ifvg_filtered_v2_research",
           warmupCandles: 100,
-          decisionInterval: 6,
+          decisionInterval: 1,
           maxBarsToResolveTrade: 72,
           visibleWindow: 80
         },
@@ -870,6 +936,166 @@ export function generateCandidateConfigs(
       candidate(
         baseline,
         searchMode,
+        "Model 1 timing recheck - strict",
+        "Research-only Model 1 timing sensitivity test: restrict decisions to the NY AM kill zone at the finest decision interval, weight Model 1 Power 3 and time-price alignment evidence, and require expired-timing setups to clear a higher confidence bar.",
+        {
+          sessionFilter: "NY AM Kill Zone",
+          decisionInterval: 1,
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfidenceThreshold + 0.06)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "grinch-model-one-power-three-agent": 0.16,
+            "grinch-time-price-alignment-agent": 0.12,
+            "grinch-opening-price-equilibrium-agent": 0.06,
+            "grinch-reversal-profile-agent": -0.03,
+            "grinch-consolidation-profile-agent": -0.03
+          })
+        },
+        ["model1TimingRecheckStrict", "sessionFilter", "decisionInterval", "confidenceThreshold", "agentWeights"],
+        "model_1_timing_recheck"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Model 1 timing recheck - tolerant",
+        "Research-only Model 1 timing sensitivity test: keep the NY AM window but tolerate slightly late timing, so timing-window width itself is the variable under study.",
+        {
+          sessionFilter: "NY AM Kill Zone",
+          decisionInterval: Math.max(1, Math.min(baseline.decisionInterval, 2)),
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.4, baseline.minimumConfidenceThreshold - 0.02)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "grinch-model-one-power-three-agent": 0.14,
+            "grinch-time-price-alignment-agent": 0.06,
+            "grinch-entry-confirmation-agent": 0.06,
+            "grinch-reversal-profile-agent": -0.02,
+            "grinch-consolidation-profile-agent": -0.02
+          })
+        },
+        ["model1TimingRecheckTolerant", "sessionFilter", "decisionInterval", "confidenceThreshold", "agentWeights"],
+        "model_1_timing_recheck"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Consolidation range tightness - strict",
+        "Research-only consolidation range tightness test: demand tighter 12AM consolidation evidence by raising confluence/confidence and weighting the consolidation and dealing-range agents.",
+        {
+          minimumConfluenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfluenceThreshold + 0.07)), 2),
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfidenceThreshold + 0.05)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "grinch-consolidation-profile-agent": 0.16,
+            "grinch-dealing-range-agent": 0.1,
+            "grinch-opening-price-equilibrium-agent": 0.06,
+            "grinch-model-one-power-three-agent": -0.03,
+            "grinch-reversal-profile-agent": -0.03
+          })
+        },
+        ["consolidationRangeTightnessStrict", "confluenceThreshold", "confidenceThreshold", "agentWeights"],
+        "consolidation_range_tightness"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Consolidation range tightness - relaxed",
+        "Research-only consolidation range tightness test: relax the range-tightness requirement slightly to measure whether looser consolidations still produce valid raid-and-expansion setups.",
+        {
+          minimumConfluenceThreshold: round(clamp01(Math.max(0.3, baseline.minimumConfluenceThreshold - 0.04)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "grinch-consolidation-profile-agent": 0.12,
+            "grinch-dealing-range-agent": 0.06,
+            "grinch-model-one-power-three-agent": -0.02,
+            "grinch-reversal-profile-agent": -0.02
+          })
+        },
+        ["consolidationRangeTightnessRelaxed", "confluenceThreshold", "agentWeights"],
+        "consolidation_range_tightness"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Session raid displacement - strict",
+        "Research-only session raid v2 threshold test: raise confluence/confidence to require stronger displacement evidence before a raid-reversal setup qualifies.",
+        {
+          sessionFilter: "NY AM Kill Zone",
+          minimumConfluenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfluenceThreshold + 0.08)), 2),
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.48, baseline.minimumConfidenceThreshold + 0.06)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "ict-liquidity-agent": 0.1,
+            "session-timing-agent": 0.08,
+            "ict-structure-agent": 0.06
+          })
+        },
+        ["sessionRaidDisplacementStrict", "sessionFilter", "confluenceThreshold", "confidenceThreshold", "agentWeights"],
+        "session_raid_displacement_strict"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Session raid displacement - relaxed",
+        "Research-only session raid v2 threshold test: relax confluence slightly to study whether more displacement-tagged raids improve OOS expectancy.",
+        {
+          sessionFilter: "all",
+          minimumConfluenceThreshold: round(clamp01(Math.max(0.28, baseline.minimumConfluenceThreshold - 0.04)), 2),
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.34, baseline.minimumConfidenceThreshold - 0.03)), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "ict-liquidity-agent": 0.08,
+            "session-timing-agent": 0.06
+          })
+        },
+        ["sessionRaidDisplacementRelaxed", "confluenceThreshold", "confidenceThreshold", "agentWeights"],
+        "session_raid_displacement_relaxed"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Session raid retrace - strict",
+        "Research-only session raid v2 retrace-depth test: tighten confidence and session timing to favor shallow retrace entries only.",
+        {
+          sessionFilter: "NY AM Kill Zone",
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfidenceThreshold + 0.07)), 2),
+          targetRMultiple: round(Math.max(1.5, baseline.targetRMultiple), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "risk-reward-agent": 0.1,
+            "session-timing-agent": 0.08,
+            "ict-structure-agent": 0.05
+          })
+        },
+        ["sessionRaidRetraceStrict", "sessionFilter", "confidenceThreshold", "targetRMultiple", "agentWeights"],
+        "session_raid_retrace_strict"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Session raid retrace - relaxed",
+        "Research-only session raid v2 retrace-depth test: allow deeper retrace tolerance by lowering confidence slightly while keeping confluence stable.",
+        {
+          minimumConfidenceThreshold: round(clamp01(Math.max(0.36, baseline.minimumConfidenceThreshold - 0.04)), 2),
+          targetRMultiple: round(Math.max(1.25, baseline.targetRMultiple - 0.25), 2),
+          agentWeights: nudgeAgents(baseline, {
+            "risk-reward-agent": 0.06,
+            "session-timing-agent": 0.04
+          })
+        },
+        ["sessionRaidRetraceRelaxed", "confidenceThreshold", "targetRMultiple", "agentWeights"],
+        "session_raid_retrace_relaxed"
+      ),
+      candidate(
+        baseline,
+        searchMode,
+        "Session raid NY AM filter only",
+        "Research-only session raid session filter test: restrict to NY AM kill zone while holding confluence/confidence near baseline.",
+        {
+          sessionFilter: "NY AM Kill Zone",
+          agentWeights: nudgeAgents(baseline, {
+            "session-timing-agent": 0.12,
+            "session-levels-agent": 0.08
+          })
+        },
+        ["sessionRaidNyAmFilter", "sessionFilter", "agentWeights"],
+        "session_raid_session_filter_ny_am"
+      ),
+      candidate(
+        baseline,
+        searchMode,
         "Grinch consolidation profile only",
         "Test whether 12AM consolidation, side raid, and expansion profile evidence improves setup selection.",
         {
@@ -965,7 +1191,14 @@ export function generateCandidateConfigs(
   const maxCount = Math.max(1, Math.min(25, maxCandidateCount));
   const deduped = dedupeCandidates(candidates);
   const grinchPriority: AutoResearchCandidateFamily[] = [
+    "session_raid_displacement_strict",
+    "session_raid_displacement_relaxed",
+    "session_raid_retrace_strict",
+    "session_raid_retrace_relaxed",
+    "session_raid_session_filter_ny_am",
     "reversal_expansion_confirmation",
+    "model_1_timing_recheck",
+    "consolidation_range_tightness",
     "grinch_exclude_expired_timing",
     "grinch_no_trade_when_no_valid_profile",
     "grinch_timing_valid_only",
@@ -1409,4 +1642,82 @@ export function generateTradeRecoveryCandidateConfigs(
   );
 
   return dedupeCandidates(candidates).slice(0, Math.max(1, Math.min(8, maxCandidateCount)));
+}
+
+const AGENT_WEIGHT_NUDGE = 0.04;
+const AGENT_WEIGHT_MIN = 0.01;
+const AGENT_WEIGHT_MAX = 0.4;
+
+/**
+ * Per-agent usefulness feedback: turns AgentUsefulnessReview increase/decrease
+ * recommendations into bounded weight-nudge candidates so auto-research can
+ * test whether following the usefulness evidence actually improves results.
+ */
+export function generateAgentUsefulnessCandidateConfigs(
+  baseline: ResolvedBacktestConfig,
+  agentUsefulness: Array<{
+    agentId: string;
+    name: string;
+    usefulnessScore: number;
+    recommendation: "increase" | "decrease" | "hold";
+  }>,
+  maxCandidates = 3
+): AutoResearchCandidateConfig[] {
+  const actionable = agentUsefulness
+    .filter((review) => review.recommendation !== "hold")
+    .filter((review) => typeof baseline.agentWeights[review.agentId as BacktestAgentWeightId] === "number")
+    // Strongest evidence first: highest-usefulness increases, lowest-usefulness decreases.
+    .sort((left, right) => {
+      const leftStrength = left.recommendation === "increase" ? left.usefulnessScore : 100 - left.usefulnessScore;
+      const rightStrength = right.recommendation === "increase" ? right.usefulnessScore : 100 - right.usefulnessScore;
+      return rightStrength - leftStrength;
+    })
+    .slice(0, Math.max(1, maxCandidates));
+
+  const candidates: AutoResearchCandidateConfig[] = actionable.map((review) => {
+    const agentId = review.agentId as BacktestAgentWeightId;
+    const current = baseline.agentWeights[agentId];
+    const next = round(
+      Math.min(
+        AGENT_WEIGHT_MAX,
+        Math.max(AGENT_WEIGHT_MIN, current + (review.recommendation === "increase" ? AGENT_WEIGHT_NUDGE : -AGENT_WEIGHT_NUDGE))
+      ),
+      3
+    );
+    return candidate(
+      baseline,
+      "standard",
+      `Usefulness nudge: ${review.name} ${review.recommendation === "increase" ? "+" : "-"}${AGENT_WEIGHT_NUDGE}`,
+      `${review.name} usefulness review recommended "${review.recommendation}" (score ${review.usefulnessScore}/100); this bounded weight nudge tests that recommendation.`,
+      { agentWeights: { [agentId]: next } },
+      [`agentWeights.${agentId}`]
+    );
+  });
+
+  if (actionable.length >= 2) {
+    const combinedWeights: Partial<Record<BacktestAgentWeightId, number>> = {};
+    for (const review of actionable) {
+      const agentId = review.agentId as BacktestAgentWeightId;
+      const current = baseline.agentWeights[agentId];
+      combinedWeights[agentId] = round(
+        Math.min(
+          AGENT_WEIGHT_MAX,
+          Math.max(AGENT_WEIGHT_MIN, current + (review.recommendation === "increase" ? AGENT_WEIGHT_NUDGE : -AGENT_WEIGHT_NUDGE))
+        ),
+        3
+      );
+    }
+    candidates.push(
+      candidate(
+        baseline,
+        "standard",
+        "Usefulness nudge: combined agent feedback",
+        "Applies all top usefulness-review weight nudges together to test the combined recommendation.",
+        { agentWeights: combinedWeights },
+        Object.keys(combinedWeights).map((agentId) => `agentWeights.${agentId}`)
+      )
+    );
+  }
+
+  return candidates;
 }

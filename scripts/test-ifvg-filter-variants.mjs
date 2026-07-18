@@ -17,7 +17,10 @@ import {
 } from "./test-ifvg-expectancy-classifier.mjs";
 
 const projectRoot = process.cwd();
-const reportPath = path.join(projectRoot, "docs", "ifvg-filter-variant-audit.md");
+const reportPath = path.resolve(
+  projectRoot,
+  process.env.IFVG_VARIANT_REPORT_PATH || "docs/ifvg-filter-variant-audit.md"
+);
 
 const variantGateSummary = {
   minimumCandidates: 20,
@@ -360,6 +363,7 @@ Generated from \`npm.cmd run test:ifvg-filter-variants\` on explicit MT5 read-on
 - Source: MT5 read-only CFD/proxy candles
 - Requested symbol: \`${report.source.requestedSymbol}\`
 - Broker symbol: \`${report.source.brokerSymbol}\`
+- History end offset: \`${report.source.historyEndOffsetDays ?? 0}\` days
 - Authority: \`executionAuthority none\`, \`brokerAuthority none\`, \`readinessOverrideAuthority none\`
 - Data policy: raw candles stayed internal to the CLI diagnostic; this report stores compact metrics only.
 
@@ -447,6 +451,7 @@ async function main() {
       requestedSymbol: process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ",
       brokerSymbol: process.env.MT5_READONLY_BROKER_SYMBOL || process.env.MT5_READONLY_DEFAULT_SYMBOL || "USTECH",
       timeframes: sourceDepth,
+      historyEndOffsetDays: Number(process.env.IFVG_END_OFFSET_DAYS || 0),
       cfdProxyWarning: "USTECH is MT5 read-only CFD/proxy data for requested MNQ, not CME futures truth."
     },
     detectorFunnel,

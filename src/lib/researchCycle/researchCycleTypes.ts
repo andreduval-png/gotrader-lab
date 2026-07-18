@@ -7,6 +7,8 @@ import type {
   TradeGenerationDiagnostic,
   TradeQualityDiagnostic
 } from "@/lib/backtesting";
+import type { EdgeAuditorReview } from "@/lib/agents/edgeAuditorAgent";
+import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import type { LLMAdvisoryRun } from "@/lib/llm";
 import type { CandleWindowSettings, CandleDataSourceMode, ResearchPerformanceMode } from "@/lib/marketData";
 import type { CanonicalPerformanceMetrics } from "@/lib/performance/canonicalMetrics";
@@ -34,6 +36,7 @@ export type ResearchCycleStepId =
   | "llm_advisory"
   | "auto_research"
   | "validation"
+  | "walk_forward"
   | "research_quality"
   | "self_improvement"
   | "simulation_verification"
@@ -94,6 +97,7 @@ export interface ResearchCycleBacktestSummary
   >;
   bestTradeR?: number;
   worstTradeR?: number;
+  edgeStatistics?: EdgeStatistics;
 }
 
 export interface ResearchCycleValidationSummary {
@@ -163,6 +167,33 @@ export interface ResearchCycleMaturitySummary {
   missingRequirements: string[];
   maturityWarnings: string[];
   nextMaturityRequirement: string;
+}
+
+/**
+ * Compact summary of the ICT Strategy Suite advisor recognition that ran on
+ * the same candles as the research cycle. Unifies the Lab pipeline with the
+ * Advisor signal engine so both surfaces reason about the same setups.
+ */
+export interface ResearchCycleAdvisorSignalSummary {
+  packetId: string;
+  generatedAt: string;
+  strategyId: string;
+  setup: string;
+  side: string;
+  decision: string;
+  confidence: number;
+  compositeBias: string;
+  approvedProfileStatus?: string;
+  approvalScore?: number;
+  entryZoneMidpoint?: number;
+  target?: number;
+  invalidation?: number;
+  rrEstimate?: number;
+  summary: string;
+  noTradeReasons: string[];
+  universalRecognitionLabel?: string;
+  alignsWithThesis?: boolean;
+  sourceFingerprint?: string;
 }
 
 export interface ResearchCycleSourceMetadata {
@@ -235,12 +266,16 @@ export interface ResearchCycleRun {
   researchQualitySummary?: ResearchCycleQualitySummary;
   bestCandidateSummary?: ResearchCycleCandidateSummary;
   agentDebateConsensus?: ResearchCycleAgentDebateSummary;
+  ictAdvisorSignalSummary?: ResearchCycleAdvisorSignalSummary;
+  edgeAuditorSummary?: EdgeAuditorReview;
   regimeSummary?: ResearchCycleRegimeSummary;
   evidenceSummary?: ResearchCycleEvidenceSummary;
   maturitySummary?: ResearchCycleMaturitySummary;
   sourceMetadata?: ResearchCycleSourceMetadata;
   proposalStatus?: string;
   blockers?: string[];
+  /** Promotion/readiness blockers (includes LLM advisory); separate from research completion blockers. */
+  promotionBlockers?: string[];
   createdProposalId?: string;
   latestGeneratedProposal?: CalibrationProposal;
   failedStepId?: ResearchCycleStepId;
@@ -260,6 +295,7 @@ export interface ResearchCycleRunOptions {
   state: import("@/lib/types").LabState;
   searchMode?: AutoResearchSearchMode;
   maxCandidateCount?: number;
+  maxResearchCandles?: number;
   backtestConfig?: BacktestConfig;
   candleWindowSettings?: Partial<CandleWindowSettings>;
   advancedFullResearchMode?: boolean;

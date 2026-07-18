@@ -152,15 +152,13 @@ export const buildIctCmdCandidateTelemetry = (input: IctCmdTelemetryBuildInput):
     finite(targetDistance) && finite(invalidationDistance) && invalidationDistance > 0
       ? targetDistance / invalidationDistance
       : undefined;
-  const rr = round(result.rrEstimate ?? result.tradePath?.rrAchieved ?? plannedRr, 4);
-  const favorable = Math.abs(result.tradePath?.maxFavorableExcursion ?? 0);
-  const adverse = Math.abs(result.tradePath?.maxAdverseExcursion ?? 0);
-  const expansionDistance = favorable || targetDistance;
-  const manipulationDepth = adverse || invalidationDistance;
+  const rr = round(plannedRr ?? result.rrEstimate, 4);
+  const expansionDistance = result.signalDisplacement?.impulseRange ?? result.signalDisplacement?.bodySize;
+  const manipulationDepth = invalidationDistance;
   const displacementScore =
     finite(expansionDistance) && finite(invalidationDistance) && invalidationDistance > 0
       ? round(expansionDistance / invalidationDistance, 4)
-      : round((result.modelConfidence ?? result.confidence ?? 0) / 100, 4);
+      : 0;
   const htfContext = htfContextFor(input);
   const blockerReasons = [
     ...(decision?.rejectionReasons ?? []),
@@ -182,7 +180,7 @@ export const buildIctCmdCandidateTelemetry = (input: IctCmdTelemetryBuildInput):
     htfContext,
     sourceFingerprint: input.sourceFingerprint,
     consolidationRangeSize: round((targetDistance ?? 0) + (invalidationDistance ?? 0), 4),
-    consolidationDuration: result.tradePath?.candlesToTarget ?? result.tradePath?.candlesToInvalidation,
+    consolidationDuration: undefined,
     manipulationSide: result.side === "short" ? "buy_side" : result.side === "long" ? "sell_side" : "unknown",
     manipulationDepth: round(manipulationDepth, 4),
     manipulationDepthBucket: manipulationDepthBucket(manipulationDepth),
@@ -191,7 +189,7 @@ export const buildIctCmdCandidateTelemetry = (input: IctCmdTelemetryBuildInput):
     expansionDistance: round(expansionDistance, 4),
     displacementScore: displacementScore ?? 0,
     displacementScoreBucket: displacementBucket(displacementScore),
-    fvgPresent: result.fvgStatus !== "not_applicable" || result.fvgTargetDetected === true,
+    fvgPresent: result.signalFvgPresent === true || result.signalDisplacement?.createdFvg === true || result.fvgTargetDetected === true,
     fvgRespected: result.fvgStatus === "respected" || result.fvgStatus === "partially_mitigated",
     externalLiquidityTargetPresent: Boolean(result.liquidityTargetType || result.fvgTargetDetected),
     targetDistance: round(targetDistance, 4),
@@ -279,10 +277,10 @@ export const compareIctCmdTelemetryFeatures = (
     loserCount: losers.length,
     differentiators: [
       {
-        feature: "fvg_respected",
-        winnerValue: share(winners, (item) => item.fvgRespected),
-        loserValue: share(losers, (item) => item.fvgRespected),
-        note: "Compares whether FVG return/respect is actually differentiating winners from filtered or losing CMD candidates."
+        feature: "fvg_present_at_signal",
+        winnerValue: share(winners, (item) => item.fvgPresent),
+        loserValue: share(losers, (item) => item.fvgPresent),
+        note: "Compares signal-time FVG presence only; post-entry FVG respect is excluded from variant selection."
       },
       {
         feature: "external_liquidity_target_present",
@@ -395,9 +393,25 @@ export const discoverIctCmdVariantCandidates = (
   const short = telemetry.filter((item) => item.side === "short");
   return [
     metricsForVariant(
-      "cmd_short_high_displacement_fvg_respected",
-      "Short CMD with high displacement score and FVG respected.",
-      short.filter((item) => item.displacementScoreBucket === "high" || item.displacementScoreBucket === "extreme").filter((item) => item.fvgRespected)
+      "cmd_short_high_displacement_fvg_present",
+      "Short CMD with high signal-time displacement score and FVG present before the decision.",
+      short.filter((item) => item.displacementScoreBucket === "high" || item.displacementScoreBucket === "extreme").filter((item) => item.fvgPresent)
+    ),
+    metricsForVariant(
+      "cmd_short_high_displacement_fvg_valid_rr",
+      "Short CMD with high signal-time displacement, FVG present, external liquidity target, valid invalidation, and at least 2R.",
+      short.filter(
+        (item) =>
+          (item.displacementScoreBucket === "high" || item.displacementScoreBucket === "extreme") &&
+          item.fvgPresent &&
+          item.externalLiquidityTargetPresent &&
+          finite(item.targetDistance) &&
+          item.targetDistance > 0 &&
+          finite(item.invalidationDistance) &&
+          item.invalidationDistance > 0 &&
+          finite(item.rr) &&
+          item.rr >= 2
+      )
     ),
     metricsForVariant(
       "cmd_short_external_liquidity_target",

@@ -9,7 +9,6 @@ import type {
   BacktestSessionFilter,
   ResolvedBacktestConfig
 } from "@/lib/backtesting/backtestTypes";
-import { mockCandles } from "@/lib/mockData/mockCandles";
 import {
   applyProposalChangesToConfig,
   summarizeValidationMetrics
@@ -23,7 +22,7 @@ import type {
 } from "@/lib/selfImprovement/selfImprovementTypes";
 import { uid } from "@/lib/utils";
 import { loadLatestResearchQualityReview } from "@/lib/researchQuality";
-import { loadLatestValidationReport, runValidationSuite } from "@/lib/validation";
+import { loadLatestValidationReport } from "@/lib/validation";
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
@@ -172,7 +171,14 @@ const reasonFor = (targetProblem: CalibrationTargetProblem) => {
 
 export function createCalibrationProposal(source: CalibrationProposalSource = "openclaw"): CalibrationProposal {
   const currentConfig = safeConfig(resolveActiveBacktestConfig().config ?? loadBacktestConfig() ?? defaultBacktestConfig);
-  const validationReport = loadLatestValidationReport() ?? runValidationSuite(mockCandles, currentConfig);
+  // Fail closed: proposals must be grounded in a real validation report, never
+  // in a mock-candle validation suite that fabricates baseline metrics.
+  const validationReport = loadLatestValidationReport();
+  if (!validationReport) {
+    throw new Error(
+      "Cannot create a calibration proposal without a validation report from real data. Run a research cycle on an eligible source first."
+    );
+  }
   const beforeMetrics = summarizeValidationMetrics(validationReport);
   const targetProblem = detectTargetProblem();
   const proposedChanges = proposedChangesFor(targetProblem, currentConfig);

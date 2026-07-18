@@ -69,7 +69,10 @@ export const defaultBacktestConfig: ResolvedBacktestConfig = {
   warmupCandles: 14,
   decisionInterval: 4,
   lookaheadCandles: 8,
-  visibleWindow: 18
+  visibleWindow: 18,
+  spreadTicks: 1,
+  slippageTicks: 1,
+  commissionTicks: 1
 };
 
 const validSymbols: FuturesSymbol[] = ["ES", "NQ", "MES", "MNQ"];
@@ -78,7 +81,8 @@ const validRegimes: MarketRegime[] = ["trend", "balanced", "volatile", "range", 
 const validStrategyProfiles: BacktestStrategyProfile[] = [
   "agent_consensus",
   "ifvg_filtered_v2_research",
-  "ifvg_fresh_retest_v3_research"
+  "ifvg_fresh_retest_v3_research",
+  "cmd_high_displacement_v2_research"
 ];
 
 const coerceChoice = <T extends string>(value: unknown, choices: T[], fallback: T): T =>
@@ -125,7 +129,10 @@ export function sanitizeBacktestConfig(config: BacktestConfig = {}): ResolvedBac
     warmupCandles: Math.round(numberOr(config.warmupCandles, fallback.warmupCandles, 6, 100)),
     decisionInterval: Math.round(numberOr(config.decisionInterval, fallback.decisionInterval, 1, 24)),
     lookaheadCandles: maxBarsToResolveTrade,
-    visibleWindow: Math.round(numberOr(config.visibleWindow, fallback.visibleWindow, 8, 80))
+    visibleWindow: Math.round(numberOr(config.visibleWindow, fallback.visibleWindow, 8, 80)),
+    spreadTicks: numberOr(config.spreadTicks, fallback.spreadTicks, 0, 20),
+    slippageTicks: numberOr(config.slippageTicks, fallback.slippageTicks, 0, 20),
+    commissionTicks: numberOr(config.commissionTicks, fallback.commissionTicks, 0, 20)
   };
 }
 

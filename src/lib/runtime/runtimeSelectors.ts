@@ -35,6 +35,12 @@ export const selectRuntimeDataBadge = (snapshot?: ResearchRuntimeSnapshot) => {
   if (!snapshot) {
     return "Snapshot loading";
   }
+  if (snapshot.marketData.researchUsesMt5ReadOnly) {
+    return "MT5 read-only active";
+  }
+  if (snapshot.marketData.researchUsesTradingViewMcp) {
+    return "TradingView MCP active";
+  }
   return snapshot.marketData.isImportedDataActive ? "Imported data active" : "Mock data active";
 };
 

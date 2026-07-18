@@ -17,8 +17,12 @@ import type {
 } from "@/lib/backtesting/backtestTypes";
 import { scoreSimulatedTradeOutcome } from "@/lib/backtesting/outcomeScoring";
 import { buildICTContext, tagSession } from "@/lib/ict";
+import { assessIctCmdHighDisplacementV2 } from "@/lib/ict-strategy-suite/ictCmdHighDisplacementV2";
 import { assessIctIfvgFilteredV2 } from "@/lib/ict-strategy-suite/ictIfvgFilteredV2";
 import { assessIctIfvgFreshRetestV3 } from "@/lib/ict-strategy-suite/ictIfvgFreshRetestV3";
+import { buildMarketContext } from "@/lib/marketData";
+import { classifyMarketRegime } from "@/lib/regime";
+import { summarizeTradeOutcomes } from "@/lib/statistics/tradeMetrics";
 import { calculateGrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { Candle, FairValueGap, FuturesSymbol, MarketBias, SimulatedTradePlan, ThesisInput, TradingSession } from "@/lib/types";
 
@@ -155,6 +159,26 @@ const skipReasonFor = (decision: BacktestDecisionPoint, config: ResolvedBacktest
   if (decision.thesis.finalBias === "neutral") {
     return "CIO thesis was neutral.";
   }
+  const htfBias = decision.ictContext.higherTimeframeBias;
+  const htfSource = decision.ictContext.higherTimeframeBiasSource ?? "synthetic";
+  // Hard skip only when a real HTF feed disagrees. Synthetic HTF (aggregated LTF)
+  // is advisory — conflict is recorded as a soft skip reason for diagnostics only
+  // when confidence is already marginal.
+  if (
+    htfSource === "real" &&
+    htfBias !== "neutral" &&
+    decision.thesis.finalBias !== htfBias
+  ) {
+    return `Higher-timeframe bias ${htfBias} conflicts with CIO thesis ${decision.thesis.finalBias}.`;
+  }
+  if (
+    htfSource !== "real" &&
+    htfBias !== "neutral" &&
+    decision.thesis.finalBias !== htfBias &&
+    decision.thesis.confidence < config.minimumConfidenceThreshold + 0.08
+  ) {
+    return `Synthetic HTF bias ${htfBias} conflicts with low-confidence CIO thesis ${decision.thesis.finalBias}.`;
+  }
   return undefined;
 };
 
@@ -164,18 +188,39 @@ function buildDecision(
   config: ResolvedBacktestConfig
 ): BacktestDecisionPoint {
   const candle = candles[decisionIndex];
-  // Bound per-decision context so deep research remains linear enough for the
-  // browser while retaining more than one complete 5m session cycle.
+  // A decision only needs the recent market/session context. Reprocessing the
+  // entire history for every decision made deep research quadratic and could
+  // freeze the browser. Three hundred 5m candles cover more than one session
+  // cycle while keeping every decision bounded and deterministic.
   const decisionContextWindow = Math.max(300, config.visibleWindow);
   const historicalCandles = candles.slice(
     Math.max(0, decisionIndex + 1 - decisionContextWindow),
     decisionIndex + 1
   );
+  const marketContext = buildMarketContext({
+    symbol: config.symbol,
+    timeframe: config.timeframe,
+    mode: "imported",
+    candles: historicalCandles
+  });
+  const regimeClassification = classifyMarketRegime({
+    candles: historicalCandles,
+    marketContext,
+    symbol: config.symbol,
+    timeframe: config.timeframe
+  });
+  const regimeToMarket = (label: string): ThesisInput["marketRegime"] => {
+    if (label.startsWith("trend")) return "trend";
+    if (label.startsWith("range_low")) return "range";
+    if (label.startsWith("range_high") || label.startsWith("event")) return "volatile";
+    if (label.startsWith("risk_off")) return "risk-off";
+    return config.marketRegime;
+  };
   const input: ThesisInput = {
     symbol: config.symbol,
     timeframe: config.timeframe,
     session: config.session ?? sessionFromCandle(candle),
-    marketRegime: config.marketRegime,
+    marketRegime: regimeToMarket(regimeClassification.stableLabel),
     notes: `Replay decision at candle ${decisionIndex + 1} using local simulation OHLC only.`
   };
   const ictContext = buildICTContext(historicalCandles, input);
@@ -393,35 +438,30 @@ const summarizeBacktest = (
   skippedSignals: BacktestSkippedSignal[],
   decisions: BacktestDecisionPoint[]
 ): BacktestSummary => {
-  const totalTrades = trades.length;
-  const directionalTrades = trades.filter((trade) => trade.bias !== "neutral").length;
-  const wins = trades.filter((trade) => trade.outcome === "target_hit").length;
-  const losses = trades.filter((trade) => trade.outcome === "stop_hit").length;
-  const unresolved = trades.filter((trade) => trade.outcome === "expired" || trade.outcome === "neutral").length;
-  const realizedR = trades.reduce((sum, trade) => sum + trade.rMultiple, 0);
-  const averageR = realizedR / Math.max(1, totalTrades);
+  const canonical = summarizeTradeOutcomes(trades, "in_sample");
   const equityCurve = equityCurveFor(trades);
   const bestTrade = [...trades].sort((a, b) => b.rMultiple - a.rMultiple)[0];
   const worstTrade = [...trades].sort((a, b) => a.rMultiple - b.rMultiple)[0];
 
   return {
-    totalTrades,
-    directionalTrades,
+    totalTrades: canonical.totalTrades,
+    directionalTrades: canonical.directionalTrades,
     skippedSignals: skippedSignals.length,
     skipReasons: skipReasonsFor(skippedSignals),
-    wins,
-    losses,
-    unresolved,
-    winRate: wins / Math.max(1, directionalTrades),
-    realizedR: round(realizedR, 2),
-    averageR: round(averageR, 2),
+    wins: canonical.wins,
+    losses: canonical.losses,
+    unresolved: canonical.unresolved,
+    winRate: canonical.winRate,
+    realizedR: canonical.realizedR,
+    averageR: canonical.averageR,
     maxDrawdown: maxDrawdownFor(equityCurve),
     profitFactor: profitFactorFor(trades),
     bestTrade,
     worstTrade,
     equityCurve,
     agentAttribution: agentAttributionFor(trades),
-    grinchSummary: grinchSummaryFor(trades, skippedSignals, decisions)
+    grinchSummary: grinchSummaryFor(trades, skippedSignals, decisions),
+    edgeStatistics: { ...canonical.edgeStatistics, provenance: "in_sample" }
   };
 };
 
@@ -658,6 +698,197 @@ const runIfvgResearchBacktest = (
   return { config: resolved, candles: sample, decisions: [], skippedSignals, trades, summary };
 };
 
+const brokerSymbolForResearch = (symbol: FuturesSymbol) =>
+  symbol === "NQ" || symbol === "MNQ"
+    ? "USTECH"
+    : symbol === "ES" || symbol === "MES"
+      ? "US500"
+      : symbol === "YM"
+        ? "US30"
+        : symbol;
+
+const scoreCmdHighDisplacementTrade = ({
+  candidate,
+  decisionIndex,
+  candles,
+  config
+}: {
+  candidate: ReturnType<typeof assessIctCmdHighDisplacementV2>;
+  decisionIndex: number;
+  candles: Candle[];
+  config: ResolvedBacktestConfig;
+}): SimulatedTradeRecord | undefined => {
+  if (
+    !candidate.eligible ||
+    candidate.side !== "short" ||
+    !Number.isFinite(candidate.entry) ||
+    !Number.isFinite(candidate.stop) ||
+    !Number.isFinite(candidate.target)
+  ) return undefined;
+  const entry = candidate.entry!;
+  const stop = candidate.stop!;
+  const target = candidate.target!;
+  const risk = stop - entry;
+  if (!(risk > 0) || !(target < entry)) return undefined;
+  const future = candles.slice(decisionIndex + 1, decisionIndex + 1 + config.maxBarsToResolveTrade);
+  if (!future.length) return undefined;
+
+  let outcome: SimulatedTradeRecord["outcome"] = "expired";
+  let exitIndex = decisionIndex + future.length;
+  let exitCandle = future.at(-1)!;
+  for (let offset = 0; offset < future.length; offset += 1) {
+    const candle = future[offset];
+    const stopHit = candle.high >= stop;
+    const targetHit = candle.low <= target;
+    if (stopHit || targetHit) {
+      outcome = stopHit ? "stop_hit" : "target_hit";
+      exitIndex = decisionIndex + offset + 1;
+      exitCandle = candle;
+      break;
+    }
+  }
+
+  const tickSize = tickSizeBySymbol[config.symbol] ?? 0.25;
+  const frictionTicks = config.spreadTicks + config.slippageTicks + config.commissionTicks;
+  const frictionR = (frictionTicks * tickSize) / risk;
+  const targetR = (entry - target) / risk;
+  const markR = (entry - exitCandle.close) / risk;
+  const rMultiple = round(
+    outcome === "target_hit"
+      ? targetR - frictionR
+      : outcome === "stop_hit"
+        ? -1 - frictionR
+        : Math.max(-1, Math.min(targetR, markR)) - frictionR,
+    3
+  );
+  const favorable = future.map((candle) => entry - candle.low);
+  const adverse = future.map((candle) => candle.high - entry);
+
+  return {
+    id: `bt_cmd_v2_${decisionIndex}_short`,
+    decisionId: `bt_cmd_v2_decision_${decisionIndex}`,
+    thesisId: `bt_cmd_v2_thesis_${decisionIndex}`,
+    symbol: config.symbol,
+    timeframe: config.timeframe,
+    session: config.session ?? sessionFromCandle(candles[decisionIndex]),
+    marketRegime: config.marketRegime,
+    bias: "bearish",
+    confidence: 0.75,
+    decisionIndex,
+    entryIndex: decisionIndex,
+    exitIndex,
+    openedAt: candidate.signalTime ?? candles[decisionIndex].timestamp,
+    resolvedAt: exitCandle.timestamp,
+    entryZone: [entry, entry],
+    entryPrice: entry,
+    invalidation: stop,
+    target,
+    targetHit: outcome === "target_hit",
+    stopHit: outcome === "stop_hit",
+    expired: outcome === "expired",
+    outcome,
+    maxFavorableExcursion: round(Math.max(0, ...favorable), 3),
+    maxAdverseExcursion: round(Math.max(0, ...adverse), 3),
+    rMultiple,
+    riskReward: round(targetR, 3),
+    reason: `CMD v2 fresh displacement + FVG + external target; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
+    simulatedTradePlan: {
+      id: `bt_cmd_v2_plan_${decisionIndex}`,
+      symbol: config.symbol,
+      timeframe: config.timeframe,
+      bias: "bearish",
+      entryZone: [entry, entry],
+      invalidation: stop,
+      targetLiquidity: target,
+      stopRiskNotes: "Research-only CMD v2 simulation. Same-bar target/stop ambiguity resolves stop-first; execution authority remains none.",
+      riskReward: round(targetR, 3),
+      mode: "simulation"
+    },
+    agentAttribution: []
+  };
+};
+
+const runCmdHighDisplacementV2Backtest = (
+  sample: Candle[],
+  resolved: ResolvedBacktestConfig
+): BacktestResult => {
+  const skippedSignals: BacktestSkippedSignal[] = [];
+  const trades: SimulatedTradeRecord[] = [];
+  const blockerCounts: Record<string, number> = {};
+  let evaluatedWindows = 0;
+  let detectedCandidates = 0;
+  let eligibleCandidates = 0;
+  let overlappingCandidates = 0;
+  let activeUntilIndex = -1;
+  const sourceProvider = sourceProviderFor(sample);
+  const brokerSymbol = brokerSymbolForResearch(resolved.symbol);
+  const scanWindow = 800;
+
+  for (
+    let decisionIndex = Math.max(resolved.warmupCandles, 160);
+    decisionIndex < sample.length - 1;
+    decisionIndex += 1
+  ) {
+    evaluatedWindows += 1;
+    const window = sample.slice(Math.max(0, decisionIndex + 1 - scanWindow), decisionIndex + 1);
+    const assessment = assessIctCmdHighDisplacementV2({
+      candles: window,
+      sourceProvider,
+      sourceFingerprint: `${sourceProvider}|${resolved.symbol}|${brokerSymbol}|${resolved.timeframe}|${sample.length}|${sample[0]?.timestamp}|${sample.at(-1)?.timestamp}`,
+      requestedSymbol: resolved.symbol,
+      brokerSymbol,
+      timeframe: resolved.timeframe,
+      requestedLookbackDays: 90,
+      availableLookbackDays: sample.length > 1
+        ? (Date.parse(sample.at(-1)!.timestamp) - Date.parse(sample[0].timestamp)) / 86_400_000
+        : 0
+    });
+    const formationBlocked = assessment.blockers.some((blocker) =>
+      /confirmed consolidation-manipulation-distribution|short-only|bearish displacement|stale|displacement score|FVG/i.test(blocker)
+    );
+    if (!formationBlocked) {
+      detectedCandidates += 1;
+    }
+    const sessionAllowed = sessionMatchesFilter(sample[decisionIndex], resolved);
+    const blockers = [
+      ...assessment.blockers,
+      sessionAllowed ? undefined : `session_filter_${resolved.sessionFilter.replace(/\s+/g, "_").toLowerCase()}`,
+      resolved.allowShort ? undefined : "short_disabled"
+    ].filter((item): item is string => Boolean(item));
+    if (!assessment.eligible || blockers.length) {
+      for (const blocker of blockers.length ? blockers : ["cmd_v2_not_eligible"]) {
+        blockerCounts[blocker] = (blockerCounts[blocker] ?? 0) + 1;
+      }
+      continue;
+    }
+    if (decisionIndex <= activeUntilIndex) {
+      overlappingCandidates += 1;
+      blockerCounts.overlapping_research_position = (blockerCounts.overlapping_research_position ?? 0) + 1;
+      continue;
+    }
+    const trade = scoreCmdHighDisplacementTrade({ candidate: assessment, decisionIndex, candles: sample, config: resolved });
+    if (!trade) {
+      blockerCounts.insufficient_outcome_window = (blockerCounts.insufficient_outcome_window ?? 0) + 1;
+      continue;
+    }
+    eligibleCandidates += 1;
+    trades.push(trade);
+    activeUntilIndex = trade.exitIndex;
+  }
+
+  const summary = summarizeBacktest(trades, skippedSignals, []);
+  summary.strategyProfileSummary = {
+    strategyProfile: "cmd_high_displacement_v2_research",
+    evaluatedWindows,
+    detectedCandidates,
+    eligibleCandidates,
+    duplicateCandidates: 0,
+    overlappingCandidates,
+    blockerCounts
+  };
+  return { config: resolved, candles: sample, decisions: [], skippedSignals, trades, summary };
+};
+
 export function runBacktest(candles: Candle[], config: BacktestConfig = {}): BacktestResult {
   const resolved = resolveConfig(candles, config);
   const scopedCandles = candles.filter(
@@ -668,6 +899,9 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
     : candles.map((candle) => ({ ...candle, symbol: resolved.symbol, timeframe: resolved.timeframe }));
   if (resolved.strategyProfile === "ifvg_filtered_v2_research" || resolved.strategyProfile === "ifvg_fresh_retest_v3_research") {
     return runIfvgResearchBacktest(sample, resolved);
+  }
+  if (resolved.strategyProfile === "cmd_high_displacement_v2_research") {
+    return runCmdHighDisplacementV2Backtest(sample, resolved);
   }
   const decisions: BacktestDecisionPoint[] = [];
   const skippedSignals: BacktestSkippedSignal[] = [];
@@ -700,8 +934,14 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
     }
   }
 
+  const fillFrictions = {
+    tickSize: tickSizeBySymbol[resolved.symbol] ?? 0.25,
+    spreadTicks: resolved.spreadTicks,
+    slippageTicks: resolved.slippageTicks,
+    commissionTicks: resolved.commissionTicks
+  };
   const trades = eligibleDecisions.map((decision) => ({
-    ...scoreSimulatedTradeOutcome(decision, sample, resolved.maxBarsToResolveTrade),
+    ...scoreSimulatedTradeOutcome(decision, sample, resolved.maxBarsToResolveTrade, fillFrictions),
     grinchScore: decision.grinchScore
   }));
 

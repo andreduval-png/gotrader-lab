@@ -3,6 +3,7 @@ import type { IctMonteCarloTradeOutcome } from "./ictMonteCarloTypes";
 import type { IctReplayBreakdownMetric, IctReplayCalibrationResult } from "./ictReplayDiagnosticsTypes";
 import type { IctRealReplayRunConfig, IctRealReplayRunResult } from "./ictRealReplayRunnerTypes";
 import type { IctReplayResult } from "./ictReplayValidationTypes";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type IctManualReplayReviewStatus = "idle" | "running" | "completed" | "unavailable" | "failed";
 
@@ -13,6 +14,7 @@ export interface IctManualReplayReviewRequest {
   candleLimit: number;
   replayWindowSize: number;
   lookaheadCandles: number;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 export interface IctManualReplayBreakdownRow {
@@ -97,6 +99,7 @@ export interface IctManualReplayReviewResult {
   unavailableReason?: string;
   errors: string[];
   warnings: string[];
+  provenance?: ValidationProvenanceIdentity;
   researchOnly: true;
   authority: IctRealReplayRunResult["authority"];
   safety: IctRealReplayRunResult["safety"];

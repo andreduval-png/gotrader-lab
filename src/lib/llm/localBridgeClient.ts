@@ -3,6 +3,9 @@ import type { LLMAgentResponse, LLMResearchContextPacket } from "@/lib/llm/llmTy
 export const LLM_LOCAL_BRIDGE_BASE_URL = "http://127.0.0.1:8787";
 export const LLM_LOCAL_BRIDGE_HEALTH_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/health`;
 export const LLM_LOCAL_BRIDGE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/run-advisory`;
+export const LLM_LOCAL_BRIDGE_CHAT_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/chat`;
+export const LLM_LOCAL_BRIDGE_DEBATE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/debate`;
+export const LLM_LOCAL_BRIDGE_COMMITTEE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/committee`;
 const DEFAULT_LLM_ADVISORY_TIMEOUT_MS = 30_000;
 const readAdvisoryTimeoutMs = () => {
   const raw = import.meta.env?.LLM_ADVISORY_TIMEOUT_MS ?? import.meta.env?.VITE_LLM_ADVISORY_TIMEOUT_MS;
@@ -404,3 +407,123 @@ export async function runLocalBridgeAdvisory(
     advisoryResponseMode: bridgePayload.advisoryResponseMode
   };
 }
+
+export interface LocalBridgeChatResult {
+  reply: string;
+  bias: "bullish" | "bearish" | "neutral" | "no_opinion";
+  confidence: number;
+  riskWarnings: string[];
+  missingEvidence: string[];
+  suggestedCalibration: string[];
+  safetyNotes: string[];
+}
+
+export interface LocalBridgeDebateTurn {
+  role: "bull" | "bear" | "risk";
+  argument: string;
+  keyPoints: string[];
+  citedFacts: string[];
+  confidence: number;
+}
+
+export interface LocalBridgeDebateResult {
+  turns: LocalBridgeDebateTurn[];
+}
+
+export interface LocalBridgeCommitteeMember {
+  memberId: string;
+  memberName: string;
+  stance: "support_more_research" | "needs_more_evidence" | "do_not_proceed";
+  rationale: string;
+  evidenceGaps: string[];
+  confidence: number;
+}
+
+export interface LocalBridgeCommitteeResult {
+  members: LocalBridgeCommitteeMember[];
+}
+
+export interface LocalBridgeTaskSuccessResult<TResult> {
+  advisoryStatus: "available";
+  result: TResult;
+  model?: string;
+}
+
+export type LocalBridgeTaskResult<TResult> =
+  | LocalBridgeTaskSuccessResult<TResult>
+  | LocalBridgeRunUnavailableResult;
+
+async function runLocalBridgeTask<TResult>(
+  packet: Record<string, unknown>,
+  endpoint: string
+): Promise<LocalBridgeTaskResult<TResult>> {
+  if (isCircuitOpen()) {
+    return unavailableResult(
+      "circuit_open",
+      `Local LLM bridge is in offline cooldown until ${isoOrUndefined(offlineUntilMs) ?? "the cooldown expires"}.`,
+      Math.max(1, offlineUntilMs - nowMs())
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(packet)
+    }, LLM_LOCAL_BRIDGE_ADVISORY_TIMEOUT_MS);
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === abortErrorName;
+    return unavailableResult(
+      timedOut ? "timeout" : "bridge_offline",
+      timedOut
+        ? `Local LLM bridge request timed out after ${Math.round(LLM_LOCAL_BRIDGE_ADVISORY_TIMEOUT_MS / 1000)} seconds.`
+        : "Local LLM bridge server is not running. Start it with npm.cmd run llm:bridge when LLM review is needed.",
+      LLM_LOCAL_BRIDGE_OFFLINE_COOLDOWN_MS,
+      timedOut ? { timeoutMs: LLM_LOCAL_BRIDGE_ADVISORY_TIMEOUT_MS } : {}
+    );
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return unavailableResult("invalid_response", "Local LLM bridge returned a non-JSON response.", 0);
+  }
+
+  if (!response.ok) {
+    const errorPayload = payload as { error?: string; message?: string; advisoryCapabilityStatus?: string };
+    const message = errorPayload.message ?? errorPayload.error ?? "Local LLM bridge request failed.";
+    const reason: LocalBridgeUnavailableReason =
+      response.status === 504 || errorPayload.advisoryCapabilityStatus === "timeout"
+        ? "timeout"
+        : response.status === 503 && /OPENAI_API_KEY|provider|model|configured/i.test(message)
+          ? "config_missing"
+          : "request_failed";
+    return unavailableResult(reason, message, reason === "timeout" ? LLM_LOCAL_BRIDGE_OFFLINE_COOLDOWN_MS : 0);
+  }
+
+  const bridgePayload = payload as { result?: TResult; model?: string };
+  if (!bridgePayload.result) {
+    return unavailableResult("invalid_response", "Local LLM bridge response did not include a result.", 0);
+  }
+
+  resetLocalBridgeCircuitBreaker();
+  lastKnownBridgeProcessStatus = "online";
+  lastKnownAdvisoryCapabilityStatus = "ready";
+  lastCheckedAt = new Date().toISOString();
+  return {
+    advisoryStatus: "available",
+    result: bridgePayload.result,
+    model: bridgePayload.model
+  };
+}
+
+export const runLocalBridgeChat = (packet: Record<string, unknown>) =>
+  runLocalBridgeTask<LocalBridgeChatResult>(packet, LLM_LOCAL_BRIDGE_CHAT_URL);
+
+export const runLocalBridgeDebate = (packet: Record<string, unknown>) =>
+  runLocalBridgeTask<LocalBridgeDebateResult>(packet, LLM_LOCAL_BRIDGE_DEBATE_URL);
+
+export const runLocalBridgeCommittee = (packet: Record<string, unknown>) =>
+  runLocalBridgeTask<LocalBridgeCommitteeResult>(packet, LLM_LOCAL_BRIDGE_COMMITTEE_URL);

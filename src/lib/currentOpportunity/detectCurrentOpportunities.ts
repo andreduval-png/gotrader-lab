@@ -366,7 +366,7 @@ const ifvgFreshRetestV3Opportunity = (context: CurrentOpportunityContext): Curre
               ? "near_miss"
               : assessment.cleanRetest && assessment.signalFresh
                 ? "near_miss"
-                : "forming";
+              : "forming";
   const missingConditions = unique([
     assessment ? undefined : "ifvg_v3_assessment_unavailable",
     assessment && !assessment.inversionDetected ? "no_inverted_fvg" : undefined,

@@ -544,7 +544,13 @@ export function LLMAdvisoryReviewPanel({
       role: "system",
       text: snapshot?.llm.advisoryPassed
         ? "Latest advisory review passed. Ask for a plain-language explanation of the current deterministic research state."
-        : "LLM advisory bridge offline or not yet checked. Deterministic research remains available.",
+        : snapshot?.readiness.readinessSnapshot.deferredRequirements.some(
+              (item) => item.id === "llm-advisory-review"
+            )
+          ? "LLM advisory is deferred until deterministic evidence and outcome-sample gates pass."
+        : initialAdvisoryCapabilityStatus === "config_missing"
+          ? "LLM bridge is online, but the advisory provider is not configured. Deterministic research remains available."
+          : "LLM advisory has not been checked yet. Deterministic research remains available.",
       timestamp: new Date().toISOString()
     }
   ]);
@@ -568,8 +574,8 @@ export function LLMAdvisoryReviewPanel({
     snapshot?.llm.latestLLMRun?.readinessImpact ??
     "No completed research cycle is available yet.";
   const nextSuggestedAction =
-    latestRun?.nextRecommendedAction ??
     snapshot?.readiness.nextAction ??
+    latestRun?.nextRecommendedAction ??
     "Run an AI Research Cycle after MT5 read-only candles are loaded.";
 
   const appendMessage = (role: AdvisoryMessage["role"], text: string) => {
@@ -909,7 +915,13 @@ export function LLMAdvisoryReviewPanel({
           timeoutMs: result.timeoutMs ?? diagnostics?.timeoutMs ?? LLM_LOCAL_BRIDGE_ADVISORY_TIMEOUT_MS,
           providerStatus: result.reason === "timeout" ? "local_llm_timeout" : "local_llm_config_missing"
         });
-        const message = `[Offline/not configured] ${advisoryMessageForUnavailable(result.reason, result.warnings, nextBridgeProcessStatus)}`;
+        const stateLabel =
+          result.reason === "bridge_offline"
+            ? "Bridge offline"
+            : result.reason === "config_missing"
+              ? "Provider not configured"
+              : "Advisory unavailable";
+        const message = `[${stateLabel}] ${advisoryMessageForUnavailable(result.reason, result.warnings, nextBridgeProcessStatus)}`;
         appendMessage("assistant", message);
         onAdvisoryEvent?.(
           result.reason === "bridge_offline" ? "LLM advisory bridge offline" : "LLM advisory unavailable",

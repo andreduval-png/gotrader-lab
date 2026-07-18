@@ -97,6 +97,8 @@ const strategyImprovementText = (candidate: AutoResearchCandidateResult) =>
     ? "IFVG fresh-retest v3 profile; causal replay, rolling-window, independent-period, evidence, maturity, and readiness gates remain required."
     : candidate.candidateFamily === "ifvg_filtered_v2_research"
     ? "IFVG filtered v2 clean-retest and displacement profile; replay, walk-forward, evidence, maturity, and readiness gates remain required."
+    : candidate.candidateFamily === "cmd_high_displacement_v2_research"
+      ? "CMD high-displacement v2 short profile; causal replay, modeled costs, independent dates, walk-forward, evidence, maturity, and readiness gates remain required."
     : undefined;
 
 export function createSelfImprovementFromCandidate({

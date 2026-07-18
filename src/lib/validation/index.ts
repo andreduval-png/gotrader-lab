@@ -5,7 +5,11 @@ export {
   VALIDATION_REPORT_STORAGE_KEY,
   VALIDATION_REPORT_UPDATED_EVENT
 } from "@/lib/validation/calibrationReport";
-export { getValidationScenarioDefinitions, runValidationSuite } from "@/lib/validation/runValidationSuite";
+export {
+  getValidationScenarioDefinitions,
+  runValidationSuite,
+  runValidationSuiteAsync
+} from "@/lib/validation/runValidationSuite";
 export type {
   CalibrationReport,
   ValidationAgentContribution,

@@ -1,4 +1,6 @@
 export { evaluateReadinessGate, summarizeScenarioForGate } from "@/lib/readiness/readinessGate";
+export { prioritizeReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
+export type { PrioritizedReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
 export { buildPaperDemoChecklist } from "@/lib/readiness/buildPaperDemoChecklist";
 export {
   allowResearchOverride,

@@ -814,9 +814,9 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
     id: "ict_cmd_short_paper_watchlist_v1",
     name: "CMD Paper-Watchlist Short",
     family: "ict_cmd",
-    status: "paper_watchlist_candidate",
+    status: "replay_required",
     description:
-      "Strict consolidation-manipulation-distribution short research lane. Promising behavior is paper-only until independent dates and rolling windows validate it.",
+      "Legacy broad consolidation-manipulation-distribution short research lane. Dense causal replay was unstable, so it is replay-required and cannot retain paper-watchlist status.",
     side: "short",
     supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES"],
     primaryTimeframes: ["5m", "15m"],
@@ -922,6 +922,112 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
       "missing invalidation",
       "missing RR",
       "failed OOS"
+    ],
+    authority: STRATEGY_LIBRARY_AUTHORITY
+  },
+  {
+    id: "cmd_high_displacement_v2_research",
+    name: "CMD High Displacement v2 Research",
+    family: "ict_cmd",
+    status: "replay_required",
+    detectorStatus: "executable_research",
+    description:
+      "Narrow research-only CMD short detector requiring a confirmed causal model, fresh high displacement, signal-time bearish FVG, external liquidity target, structural invalidation, and at least 2R. It repeated on two non-overlapping 90-day windows but remains replay/OOS gated.",
+    side: "short",
+    supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES"],
+    primaryTimeframes: ["5m"],
+    higherTimeframes: ["15m", "1h", "4h", "1d", "1w"],
+    sourceRequirements: mt5ResearchSource,
+    requiredConditions: [
+      {
+        id: "consolidation_manipulation_distribution",
+        label: "Confirmed CMD model",
+        description: "Causal session narrative must confirm bearish consolidation-manipulation-distribution.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "fresh_high_displacement",
+        label: "Fresh high displacement",
+        description: "Bearish displacement must be no more than two bars old and score at least 1.25 versus structural risk.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "signal_time_bearish_fvg",
+        label: "Signal-time bearish FVG",
+        description: "A bearish FVG must exist at decision time and be no more than six bars old.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "external_liquidity_target",
+        label: "External liquidity target",
+        description: "Target must be an unswept external liquidity pool or causal discount FVG draw.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "valid_structural_invalidation",
+        label: "Valid structural invalidation",
+        description: "Invalidation must be above entry at a causal session/sweep structure level.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "minimum_rr_2",
+        label: "Minimum 2R",
+        description: "Planned target-to-invalidation reward/risk must be at least 2R.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      }
+    ],
+    invalidationRules: [
+      "Invalidation must remain above short entry and use causal mitigation, session, range, or sweep structure.",
+      "Stale displacement and post-entry confirmation are forbidden."
+    ],
+    targetRules: [
+      "Use unswept external liquidity or a causal discount FVG draw below entry.",
+      "Minimum reward/risk is 2R; maximum research sanity cap is 20R."
+    ],
+    minimumRR: 2,
+    sessionRules: ["America/New_York session narrative must confirm CMD before candidate creation."],
+    regimeRules: ["HTF alignment remains a separate validation dimension and is never inferred from the 5m detector."],
+    validationRequirements: [
+      ...compactValidation,
+      {
+        id: "independent_dates",
+        label: "Independent dates",
+        required: true,
+        minimum: 3,
+        detail: "At least three unique dates must remain positive in dedicated executable-profile replay."
+      },
+      {
+        id: "active_rolling_windows",
+        label: "Active rolling windows",
+        required: true,
+        minimum: 2,
+        detail: "At least two active rolling windows are required."
+      },
+      {
+        id: "minimum_cmd_sample",
+        label: "Minimum CMD sample",
+        required: true,
+        minimum: 20,
+        detail: "At least 20 non-overlapping modeled-cost candidates are required."
+      }
+    ],
+    paperDemoRequirements: [
+      {
+        id: "dedicated_profile_walk_forward",
+        label: "Dedicated profile walk-forward",
+        required: true,
+        detail: "The executable profile must pass replay, modeled costs, walk-forward/OOS, evidence, maturity, and the normal Paper-Demo checklist."
+      }
+    ],
+    forbiddenPromotionReasons: [
+      "stale displacement",
+      "post-entry confirmation",
+      "missing signal-time FVG",
+      "missing external liquidity target",
+      "RR below 2",
+      "single-date cluster",
+      "failed or degraded OOS",
+      "mock/sample source"
     ],
     authority: STRATEGY_LIBRARY_AUTHORITY
   },
@@ -1321,7 +1427,9 @@ export const suggestStrategyIdForRecognition = (input: {
     return "amd_power_of_three_research_v1";
   }
   if (input.family === "ict_cmd" || /cmd|consolidation[_\s-]*manipulation[_\s-]*distribution/.test(text)) {
-    return "ict_cmd_short_paper_watchlist_v1";
+    return /high[_\s-]*displacement|cmd.*v2|fresh.*fvg/.test(text)
+      ? "cmd_high_displacement_v2_research"
+      : "ict_cmd_short_paper_watchlist_v1";
   }
   if (/reversal[_\s-]*expansion|expansion[_\s-]*confirmation/.test(text)) {
     return "grinch_reversal_expansion_confirmation_v1";

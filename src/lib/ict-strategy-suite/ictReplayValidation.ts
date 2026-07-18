@@ -28,6 +28,7 @@ import type {
 
 const REPLAY_JOURNAL_STORAGE_KEY = "gotrader.ict-replay-validation.journal.v1";
 const MAX_REPLAY_JOURNAL_EVENTS = 500;
+const MAX_CAUSAL_SESSION_CONTEXT_CANDLES = 2500;
 
 const createId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const round = (value: number, decimals = 2) => Number(value.toFixed(decimals));
@@ -133,7 +134,14 @@ export const sliceReplayWindows = (input: IctReplayInput) => {
       windows.push({ historicalCandles, futureCandles, signalCandle, windowIndex: windows.length });
     }
   }
-  return maxReplayWindows > 0 && windows.length > maxReplayWindows ? windows.slice(-maxReplayWindows) : windows;
+  if (maxReplayWindows <= 0 || windows.length <= maxReplayWindows) return windows;
+  if (input.windowSampling !== "stratified" || maxReplayWindows === 1) return windows.slice(-maxReplayWindows);
+
+  const sampled = Array.from({ length: maxReplayWindows }, (_, index) => {
+    const sourceIndex = Math.round((index * (windows.length - 1)) / (maxReplayWindows - 1));
+    return windows[sourceIndex];
+  });
+  return [...new Map(sampled.map((window) => [window.windowIndex, window])).values()];
 };
 
 export const calculateCandlesToTarget = (futureCandles: Candle[], side: IctAdvisorSignal["side"], target?: number) => {
@@ -271,6 +279,15 @@ export const evaluateSignalOutcome = ({
       ? Object.values(signal.bias.htf).every((bias) => bias === signal.bias.composite || bias === "neutral")
       : undefined,
     dealingRangeLocation: signal.dealingRange?.currentLocation,
+    signalDisplacement: signal.displacement
+      ? {
+          direction: signal.displacement.direction,
+          bodySize: signal.displacement.bodySize,
+          impulseRange: Math.abs(signal.displacement.impulseHigh - signal.displacement.impulseLow),
+          createdFvg: signal.displacement.createdFvg
+        }
+      : undefined,
+    signalFvgPresent: Boolean(signal.fairValueGap),
     liquidityTargetType: signal.drawOnLiquidity?.type,
     orderBlockVariant: signal.orderBlock?.variant,
     approvedProfileStatus: signal.approvedProfileDecision?.status,
@@ -502,13 +519,19 @@ export const runIctReplayValidation = (input: IctReplayInput): IctReplayValidati
   const windows = sliceReplayWindows(input);
   const sourceSummary = compactSourceSummary(input, candles.length);
   const sessionNarrativeCache = new Map<string, ReturnType<typeof buildIctSessionNarrative>>();
+  const candleIndexByTimestamp = new Map(candles.map((candle, index) => [candle.timestamp, index]));
   const sessionNarrativeForSignal = (signalTimestamp: string) => {
     if (!candles.length) return undefined;
     const tradingDate = tradingDateFor(signalTimestamp);
-    const cacheKey = `${tradingDate}|${input.requestedLookbackDays ?? 90}|${input.availableLookbackDays ?? "unknown"}`;
+    const cacheKey = `${signalTimestamp}|${input.requestedLookbackDays ?? 90}|${input.availableLookbackDays ?? "unknown"}`;
     const cached = sessionNarrativeCache.get(cacheKey);
     if (cached) return cached;
-    const sessionNarrative = buildIctSessionNarrative(candles, {
+    const signalIndex = candleIndexByTimestamp.get(signalTimestamp);
+    const causalCandles =
+      signalIndex === undefined
+        ? candles.filter((candle) => Date.parse(candle.timestamp) <= Date.parse(signalTimestamp))
+        : candles.slice(0, signalIndex + 1);
+    const sessionNarrative = buildIctSessionNarrative(causalCandles.slice(-MAX_CAUSAL_SESSION_CONTEXT_CANDLES), {
       requestedSymbol: input.requestedSymbol,
       brokerSymbol: input.brokerSymbol,
       primaryTimeframe: input.primaryTimeframe,
@@ -565,6 +588,7 @@ export const runIctReplayValidation = (input: IctReplayInput): IctReplayValidati
       replayWindowSize: input.replayWindowSize,
       lookaheadCandles: input.lookaheadCandles,
       maxReplayWindows: input.maxReplayWindows,
+      windowSampling: input.windowSampling,
       requestedLookbackDays: input.requestedLookbackDays,
       availableLookbackDays: input.availableLookbackDays,
       dataDepthStatus: input.dataDepthStatus,

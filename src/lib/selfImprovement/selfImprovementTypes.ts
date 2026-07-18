@@ -6,6 +6,7 @@ import type {
 } from "@/lib/backtesting/backtestTypes";
 import type { ICTScoringWeights } from "@/lib/types";
 import type { ValidationReadinessStatus } from "@/lib/validation";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type CalibrationProposalSource = "openclaw" | "hermes" | "internal";
 export type CalibrationProposalStatus = "proposed" | "testing" | "accepted" | "rejected" | "reverted";
@@ -134,6 +135,7 @@ export interface CalibrationProposalMetrics {
   conservativeScenarioStable: boolean;
   strongestScenario?: string;
   weakestScenario?: string;
+  provenance?: ValidationProvenanceIdentity;
 }
 
 export interface CalibrationComparisonResult {

@@ -288,6 +288,8 @@ export interface ICTContext {
   premiumDiscount: "premium" | "discount" | "equilibrium";
   sessionTiming: TradingSession;
   higherTimeframeBias: MarketBias;
+  /** synthetic = aggregated from LTF; real = dedicated HTF candle feed. */
+  higherTimeframeBiasSource?: "synthetic" | "real" | "fallback";
   killZoneTag: ICTKillZone;
 }
 

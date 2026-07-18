@@ -84,6 +84,18 @@ export const requiredLLMAgents: LLMAgentDefinition[] = [
     agentName: "LLM Order Flow Planning Reviewer",
     required: true,
     role: "Review missing DOM, footprint, delta, cumulative delta, and large-print evidence as planned later context only."
+  },
+  {
+    agentId: "llm-edge-auditor",
+    agentName: "LLM Edge Auditor",
+    required: true,
+    role: "Review out-of-sample edge statistics, bootstrap expectancy, sample size, and overfitting flags before any calibration is trusted."
+  },
+  {
+    agentId: "llm-execution-risk-reviewer",
+    agentName: "LLM Execution Risk Reviewer",
+    required: true,
+    role: "Review staged execution readiness, risk limits, kill switch state, and pre-trade checklist blockers without approving live orders."
   }
 ];
 

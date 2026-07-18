@@ -37,9 +37,14 @@ import {
   summarizeValidationMetrics,
   upsertCalibrationProposal
 } from "@/lib/selfImprovement";
-import type { CalibrationProposal, CalibrationProposalMetrics, SelfImprovementState } from "@/lib/selfImprovement";
+import type {
+  CalibrationProposal,
+  CalibrationProposalMetrics,
+  SelfImprovementState
+} from "@/lib/selfImprovement";
 import type { AutoResearchCandidateResult } from "@/lib/autoResearch";
 import { describeBacktestConfig } from "@/lib/backtesting";
+import { loadResolvedBacktestCandleSource } from "@/lib/backtesting/backtestSourceResolver";
 import { evidenceScoreVariant, selectEvidenceReadinessImpact, selectWeakestEvidenceLabel } from "@/lib/evidence";
 import { maturityGradeLabel, maturityGradeVariant, selectMaturityNextRequirement } from "@/lib/maturity";
 import { canonicalMetricsForRun, type CanonicalPerformanceMetrics } from "@/lib/performance/canonicalMetrics";
@@ -875,9 +880,13 @@ export function SelfImprovementView() {
   }, []);
 
   const createProposal = () => {
-    const proposal = createCalibrationProposal(latestAdvisory?.advisoryAgent === "Hermes" ? "hermes" : "openclaw");
-    setState(upsertCalibrationProposal(proposal, "created", "Created calibration proposal from latest validation weakness data."));
-    setActionMessage("");
+    try {
+      const proposal = createCalibrationProposal(latestAdvisory?.advisoryAgent === "Hermes" ? "hermes" : "openclaw");
+      setState(upsertCalibrationProposal(proposal, "created", "Created calibration proposal from latest validation weakness data."));
+      setActionMessage("");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Calibration proposal creation failed.");
+    }
   };
 
   const createGrinchDraftProposal = () => {
@@ -969,7 +978,7 @@ export function SelfImprovementView() {
     setActionMessage("Rebuilt proposal snapshot from source candidate.");
   };
 
-  const testProposal = () => {
+  const testProposal = async () => {
     if (!latestProposal) {
       return;
     }
@@ -977,9 +986,26 @@ export function SelfImprovementView() {
       setActionMessage("Import proposal from latest research cycle before testing it.");
       return;
     }
-    const tested = evaluateCalibrationProposal(latestProposal);
-    setState(upsertCalibrationProposal(tested, "tested", "Ran deterministic mock-data validation against proposed settings."));
-    setActionMessage("");
+    try {
+      const source = await loadResolvedBacktestCandleSource({ preference: "active_research" });
+      if (source.provider === "mock") {
+        setActionMessage(
+          "Cannot test proposal on mock/demo candles. Activate MT5 read-only research mode or import historical candles first."
+        );
+        return;
+      }
+      const tested = evaluateCalibrationProposal(latestProposal, source.candles);
+      setState(
+        upsertCalibrationProposal(
+          tested,
+          "tested",
+          `Ran deterministic validation against proposed settings using ${source.label}.`
+        )
+      );
+      setActionMessage("");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Proposal validation test failed.");
+    }
   };
 
   const acceptProposal = () => {

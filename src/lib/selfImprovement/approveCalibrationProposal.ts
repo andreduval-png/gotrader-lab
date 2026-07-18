@@ -30,6 +30,11 @@ import {
   reviewFrozenProfileMutation,
   type FrozenProfileMutationReview
 } from "@/lib/forwardEvidence";
+import { matchingWalkForwardRun, loadWalkForwardState } from "@/lib/walkForward";
+import {
+  matchValidationProvenance,
+  validationProvenanceBlockerLabel
+} from "@/lib/validationProvenance";
 
 export const SELF_IMPROVEMENT_STORAGE_KEY = "gotrader_ai_lab_self_improvement_state";
 export const ACTIVE_RESEARCH_CALIBRATION_STORAGE_KEY = "gotrader_ai_lab_active_research_calibration";
@@ -408,6 +413,45 @@ export function canApproveProposal(proposal?: CalibrationProposal): ProposalAppr
     effectiveComparison?.promotionVerdict === "no_material_change"
   ) {
     reasons.push(`Promotion verdict is ${effectiveComparison.promotionVerdict.replace(/_/g, " ")}.`);
+  }
+
+  const expectedProvenance = proposal.afterMetrics?.provenance;
+  const validationProvenanceReview = matchValidationProvenance(expectedProvenance, expectedProvenance, {
+    purpose: "calibration_approval",
+    requireProposalId: true,
+    requireCandidateId: Boolean(proposal.sourceCandidateId),
+    requireValidationRunId: true
+  });
+  if (!validationProvenanceReview.matched) {
+    reasons.push(
+      `Validation provenance blocked: ${validationProvenanceReview.blockers.map(validationProvenanceBlockerLabel).join(", ")}.`
+    );
+  }
+  const matchingWalkForward = expectedProvenance
+    ? matchingWalkForwardRun(expectedProvenance, loadWalkForwardState())
+    : undefined;
+  const walkForwardReview = matchValidationProvenance(expectedProvenance, matchingWalkForward?.provenance, {
+    purpose: "calibration_approval",
+    requireProposalId: true,
+    requireCandidateId: Boolean(proposal.sourceCandidateId),
+    requireValidationRunId: true,
+    requireWalkForwardRunId: true,
+    requireMatchingOosEvidence: true
+  });
+  if (!walkForwardReview.matched) {
+    reasons.push(
+      `Matching OOS evidence blocked: ${walkForwardReview.blockers.map(validationProvenanceBlockerLabel).join(", ")}.`
+    );
+  }
+  const walkForwardEdge = matchingWalkForward?.stability?.edgeStatistics;
+  if (
+    walkForwardEdge &&
+    walkForwardEdge.sampleSize >= walkForwardEdge.minimumSampleSize &&
+    walkForwardEdge.expectancyLower95 <= 0
+  ) {
+    reasons.push(
+      `Walk-forward OOS expectancy lower bound ${walkForwardEdge.expectancyLower95.toFixed(2)}R is not positive; calibration may be overfit.`
+    );
   }
 
   return {

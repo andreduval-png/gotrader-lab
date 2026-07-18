@@ -5,11 +5,18 @@ import type {
 } from "@/lib/autoResearch/autoResearchTypes";
 import type { CalibrationProposalMetrics } from "@/lib/selfImprovement";
 import type { ResearchQualityReview } from "@/lib/researchQuality";
+import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
 import type { GrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { ValidationSuiteReport } from "@/lib/validation";
 
 const round = (value: number, digits = 0) => Number(value.toFixed(digits));
 const clamp = (value: number, min = 0, max = 100) => Math.min(max, Math.max(min, value));
+
+/**
+ * Minimum trade sample before a candidate can be treated as statistically
+ * meaningful. Two trades (the previous minimum) is pure noise.
+ */
+export const AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES = 20;
 
 const scoreProfitFactor = (profitFactor: number | null) => {
   if (profitFactor === null) {
@@ -28,6 +35,24 @@ const sessionConsistencyScore = (quality: ResearchQualityReview) => {
   return clamp((usable / quality.sessionComparison.length) * 100);
 };
 
+/**
+ * Weight of held-out out-of-sample evidence in the blended total score. OOS
+ * results dominate ranking direction so proposals are ranked by generalization
+ * rather than in-sample fit.
+ */
+const OOS_BLEND_WEIGHT = 0.45;
+
+const scoreOutOfSample = (oos: EdgeStatistics) => {
+  if (oos.sampleSize === 0) {
+    return 0;
+  }
+  // Expectancy lower bound is the primary OOS signal: -0.5R -> 0, +0.5R -> 100.
+  const expectancyComponent = clamp(((oos.expectancyLower95 + 0.5) / 1) * 100);
+  const winRateComponent = clamp(oos.winRate * 100);
+  const sampleComponent = clamp((oos.sampleSize / oos.minimumSampleSize) * 100);
+  return clamp(expectancyComponent * 0.6 + winRateComponent * 0.2 + sampleComponent * 0.2);
+};
+
 const robustnessScore = (validation: ValidationSuiteReport) => {
   const nonRed = validation.scenarios.filter((scenario) => scenario.readiness !== "red").length;
   const averageScenarioScore =
@@ -41,6 +66,7 @@ export function scoreCandidateConfig({
   validation,
   quality,
   grinchScore,
+  outOfSample,
   scoringCriteria = defaultAutoResearchScoringCriteria
 }: {
   baselineMetrics: CalibrationProposalMetrics;
@@ -48,6 +74,8 @@ export function scoreCandidateConfig({
   validation: ValidationSuiteReport;
   quality: ResearchQualityReview;
   grinchScore?: GrinchStrategyScore;
+  /** Edge statistics from a held-out out-of-sample window, when available. */
+  outOfSample?: EdgeStatistics;
   scoringCriteria?: AutoResearchScoringCriteria;
 }): AutoResearchScoreBreakdown {
   const drawdownScore = clamp(100 - metrics.maxDrawdown * 14);
@@ -56,7 +84,7 @@ export function scoreCandidateConfig({
   const falsePositiveScore = clamp(100 - metrics.falsePositiveCount * 12);
   const confidenceCalibrationScore = clamp(metrics.confidenceCalibration * 100);
   const sessionScore = sessionConsistencyScore(quality);
-  const tradeCountScore = clamp((metrics.totalTrades / 8) * 100);
+  const tradeCountScore = clamp((metrics.totalTrades / AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES) * 100);
   const skippedSignalBalanceScore = clamp(
     (metrics.totalTrades / Math.max(1, metrics.totalTrades + metrics.skippedSignals)) * 100
   );
@@ -72,25 +100,32 @@ export function scoreCandidateConfig({
       )
     : 0;
   const weights = scoringCriteria.weights;
-  const totalScore = round(
+  const inSampleTotal =
     drawdownScore * weights.lowerMaxDrawdown +
-      averageRScore * weights.betterAverageR +
-      winRateScore * weights.acceptableWinRate +
-      falsePositiveScore * weights.lowerFalsePositives +
-      confidenceCalibrationScore * weights.confidenceCalibration +
-      sessionScore * weights.sessionConsistency +
-      tradeCountScore * weights.sufficientTradeCount +
-      skippedSignalBalanceScore * weights.skippedSignalBalance +
-      profitFactorScore * weights.profitFactor +
-      robustScore * weights.robustnessAcrossScenarios +
-      grinchModelScore * weights.grinchModelSupport -
-      grinchPenalty
+    averageRScore * weights.betterAverageR +
+    winRateScore * weights.acceptableWinRate +
+    falsePositiveScore * weights.lowerFalsePositives +
+    confidenceCalibrationScore * weights.confidenceCalibration +
+    sessionScore * weights.sessionConsistency +
+    tradeCountScore * weights.sufficientTradeCount +
+    skippedSignalBalanceScore * weights.skippedSignalBalance +
+    profitFactorScore * weights.profitFactor +
+    robustScore * weights.robustnessAcrossScenarios +
+    grinchModelScore * weights.grinchModelSupport -
+    grinchPenalty;
+  const oosScore = outOfSample ? scoreOutOfSample(outOfSample) : undefined;
+  const totalScore = round(
+    typeof oosScore === "number"
+      ? inSampleTotal * (1 - OOS_BLEND_WEIGHT) + oosScore * OOS_BLEND_WEIGHT
+      : inSampleTotal
   );
   const stabilityImproved =
     metrics.maxDrawdown <= baselineMetrics.maxDrawdown &&
     metrics.confidenceCalibration >= baselineMetrics.confidenceCalibration - 0.03 &&
     metrics.falsePositiveCount <= baselineMetrics.falsePositiveCount + 1;
-  const sufficientSample = metrics.totalTrades >= 2 && metrics.totalTrades >= Math.max(2, baselineMetrics.totalTrades * 0.35);
+  const sufficientSample =
+    metrics.totalTrades >= AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES &&
+    metrics.totalTrades >= Math.max(AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES, baselineMetrics.totalTrades * 0.35);
 
   return {
     totalScore,
@@ -107,6 +142,12 @@ export function scoreCandidateConfig({
     grinchModelScore: grinchScore ? round(grinchModelScore) : undefined,
     grinchFalsePositiveRisk: grinchScore ? round(grinchScore.falsePositiveRisk) : undefined,
     grinchProfileValidity: grinchScore ? round(grinchScore.profileValidity) : undefined,
+    oosScore: typeof oosScore === "number" ? round(oosScore) : undefined,
+    oosTradeCount: outOfSample?.sampleSize,
+    oosAverageR: outOfSample?.meanR,
+    oosWinRate: outOfSample?.winRate,
+    oosExpectancyLower95: outOfSample?.expectancyLower95,
+    oosVerdict: outOfSample?.verdict,
     stabilityImproved,
     sufficientSample,
     rationale: stabilityImproved

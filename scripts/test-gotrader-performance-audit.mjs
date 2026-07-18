@@ -13,6 +13,8 @@ const outRoot = path.join(projectRoot, ".gotrader", "gotrader-performance-audit-
 
 const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -25,6 +27,8 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIndexSmtTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRiskTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRisk.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictRealReplayRunnerTypes.ts" },
   { root: sourceRoot, file: "ictManualReplayReviewTypes.ts" },
   { root: sourceRoot, file: "ictMarketScorecardTypes.ts" },
@@ -108,9 +112,19 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    sourceFiles
+      .filter(({ file, root }) => root === sourceRoot && file !== "index.ts")
+      .map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`)
+      .join("\n"),
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -118,6 +132,15 @@ function compileSuiteForNode() {
 }
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__GOTRADER_PERFORMANCE_AUDIT_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
 }
 `,
     "utf8"

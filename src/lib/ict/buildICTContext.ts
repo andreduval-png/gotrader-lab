@@ -10,12 +10,91 @@ import {
   scoreICTConfluence,
   sanitizeICTScoringWeights
 } from "@/lib/ict/confluenceScoring";
-import type { Candle, ICTContext, ICTScoringWeights, ThesisInput } from "@/lib/types";
+import type { Candle, ICTContext, ICTScoringWeights, MarketBias, ThesisInput, Timeframe } from "@/lib/types";
 
 type ICTContextInput = Pick<ThesisInput, "symbol" | "timeframe" | "session">;
 
 const latestByIndex = <T extends { index: number }>(items: T[]) =>
   [...items].sort((a, b) => b.index - a.index)[0];
+
+const HTF_AGGREGATION: Partial<Record<Timeframe, { factor: number; timeframe: Timeframe }>> = {
+  "1m": { factor: 15, timeframe: "15m" },
+  "5m": { factor: 12, timeframe: "1h" },
+  "15m": { factor: 4, timeframe: "1h" },
+  "1h": { factor: 4, timeframe: "4h" },
+  "4h": { factor: 6, timeframe: "1d" }
+};
+
+const MIN_HTF_CANDLES = 10;
+
+/** Aggregates consecutive lower-timeframe candles into higher-timeframe buckets. */
+export function aggregateCandlesToHigherTimeframe(candles: Candle[], factor: number, timeframe: Timeframe): Candle[] {
+  const aggregated: Candle[] = [];
+  for (let start = 0; start < candles.length; start += factor) {
+    const bucket = candles.slice(start, start + factor);
+    if (bucket.length < factor) {
+      break;
+    }
+    const first = bucket[0];
+    const last = bucket[bucket.length - 1];
+    aggregated.push({
+      ...first,
+      id: `htf_${timeframe}_${first.id}`,
+      timeframe,
+      timestamp: first.timestamp,
+      open: first.open,
+      close: last.close,
+      high: Math.max(...bucket.map((candle) => candle.high)),
+      low: Math.min(...bucket.map((candle) => candle.low)),
+      volume: bucket.reduce((sum, candle) => sum + (candle.volume ?? 0), 0)
+    });
+  }
+  return aggregated;
+}
+
+export type HtfBiasResolution = {
+  bias: MarketBias;
+  source: "synthetic" | "real" | "fallback";
+};
+
+/**
+ * Derives a structural higher-timeframe bias from aggregated HTF candles:
+ * recent MSS/BOS direction plus premium/discount location. Falls back to the
+ * same-timeframe bias only when there is not enough HTF history.
+ * Source is "synthetic" when LTF candles are aggregated (not a true HTF feed).
+ */
+function resolveStructuralHtfBias(candles: Candle[], timeframe: Timeframe, fallback: MarketBias): HtfBiasResolution {
+  const aggregation = HTF_AGGREGATION[timeframe];
+  if (!aggregation) {
+    return { bias: fallback, source: "fallback" };
+  }
+  const htfCandles = aggregateCandlesToHigherTimeframe(candles, aggregation.factor, aggregation.timeframe);
+  if (htfCandles.length < MIN_HTF_CANDLES) {
+    return { bias: fallback, source: "fallback" };
+  }
+  const htfSwings = detectSwings(htfCandles, 2);
+  const htfMss = detectMSS(htfCandles, htfSwings);
+  const htfBos = detectBOS(htfCandles, htfSwings);
+  const structureEvents = [...htfMss, ...htfBos].sort((a, b) => b.index - a.index).slice(0, 5);
+  const bullishEvents = structureEvents.filter((event) => event.direction === "bullish").length;
+  const bearishEvents = structureEvents.filter((event) => event.direction === "bearish").length;
+  const htfZone = detectPremiumDiscount(htfCandles, htfSwings);
+
+  if (bullishEvents > bearishEvents) {
+    // Extended into premium weakens a bullish structural read.
+    return {
+      bias: htfZone.currentZone === "premium" && bullishEvents - bearishEvents === 1 ? "neutral" : "bullish",
+      source: "synthetic"
+    };
+  }
+  if (bearishEvents > bullishEvents) {
+    return {
+      bias: htfZone.currentZone === "discount" && bearishEvents - bullishEvents === 1 ? "neutral" : "bearish",
+      source: "synthetic"
+    };
+  }
+  return { bias: "neutral", source: "synthetic" };
+}
 
 const riskRewardQualityFor = (
   currentPrice: number,
@@ -95,6 +174,7 @@ export function buildICTContext(
   });
   const bias = confluenceBreakdown.finalBias;
   const confluenceScore = confluenceBreakdown.totalScore;
+  const htfResolution = resolveStructuralHtfBias(sample, input.timeframe, bias);
 
   const swingHighText = latestSwingHigh ? latestSwingHigh.price : "n/a";
   const swingLowText = latestSwingLow ? latestSwingLow.price : "n/a";
@@ -125,7 +205,8 @@ export function buildICTContext(
     fairValueGap,
     premiumDiscount: premiumDiscountZone.currentZone,
     sessionTiming: input.session,
-    higherTimeframeBias: bias,
+    higherTimeframeBias: htfResolution.bias,
+    higherTimeframeBiasSource: htfResolution.source,
     killZoneTag: killZone
   };
 }
