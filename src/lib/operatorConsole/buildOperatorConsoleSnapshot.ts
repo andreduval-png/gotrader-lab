@@ -8,7 +8,8 @@ import {
   type OperatorConsoleSnapshot,
   type OperatorCycleState,
   type OperatorDecision,
-  type OperatorInsightSummary
+  type OperatorInsightSummary,
+  type OperatorPredictionSummary
 } from "./operatorConsoleTypes";
 
 export interface BuildOperatorConsoleSnapshotInput {
@@ -16,6 +17,7 @@ export interface BuildOperatorConsoleSnapshotInput {
   activation?: IctActivateMarketLatestSummary;
   autonomousRun?: AutonomousResearchRun;
   validation?: ValidationChainEntry;
+  prediction?: OperatorPredictionSummary;
   cycle?: OperatorCycleState;
   now?: string;
 }
@@ -159,6 +161,7 @@ export const buildOperatorConsoleSnapshot = ({
   activation,
   autonomousRun,
   validation,
+  prediction,
   cycle = idleCycle(),
   now = new Date().toISOString()
 }: BuildOperatorConsoleSnapshotInput): OperatorConsoleSnapshot => {
@@ -218,6 +221,14 @@ export const buildOperatorConsoleSnapshot = ({
       setupLabel: clean(validation?.setupLabel, "No active validation"),
       nextAction: clean(validation?.nextAction, "The autonomous cycle will queue validation when a qualified setup appears."),
       updatedAt: validation?.updatedAt
+    },
+    prediction: prediction ?? {
+      latestFamily: "No forecast issued",
+      latestState: "not started",
+      pendingForecasts: 0,
+      completedForecasts: 0,
+      classification: "uncalibrated",
+      nextAction: "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
     },
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,

@@ -195,6 +195,24 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               <p className="mt-1 text-sm leading-6 text-slate-300">{snapshot.insight.nextAction}</p>
             </div>
           </div>
+          <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 sm:grid-cols-2" data-testid="operator-prediction-summary">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Forward watch</p>
+              <p className="mt-1 text-sm font-medium capitalize text-slate-200">{snapshot.prediction.latestFamily}</p>
+              <p className="mt-1 text-xs capitalize text-slate-500">
+                {snapshot.prediction.latestState} / {snapshot.prediction.pendingForecasts} pending
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Forecast calibration</p>
+              <p className="mt-1 text-sm font-medium capitalize text-slate-200">{snapshot.prediction.classification}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {snapshot.prediction.completedForecasts} causal outcomes
+                {typeof snapshot.prediction.averageRealizedR === "number" ? ` / ${number(snapshot.prediction.averageRealizedR, "R")} avg` : ""}
+              </p>
+            </div>
+            <p className="text-xs leading-5 text-slate-500 sm:col-span-2">{snapshot.prediction.nextAction}</p>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-[#0d1420] p-5 sm:p-6" data-testid="operator-decision-summary">

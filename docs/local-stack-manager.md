@@ -2,9 +2,59 @@
 
 The local stack manager starts, stops, restarts, and diagnoses the local developer services used by GoTrader AI Lab. It is process management only. It does not add broker execution, live trading, order placement, account mutation, position mutation, or readiness override.
 
+## One-Click Launch
+
+Double-click `Start-GoTrader.cmd` in the repository root. The launcher:
+
+1. Reuses an existing GoTrader supervisor when one is already running.
+2. Opens MT5 Desktop when it is installed but not running.
+3. Starts the MT5 read-only upstream, safe wrapper, LLM bridge, and GoTrader app in dependency order.
+4. Waits for core health checks and opens `http://127.0.0.1:5173/dashboard`.
+5. Checks service health every 15 seconds and restarts tracked services that have stopped.
+
+A second launch does not create duplicate services; it opens the Dashboard through the existing supervisor. Double-click `Stop-GoTrader.cmd` to stop the supervisor and only the child services tracked by GoTrader.
+
+MT5 Desktop still requires an authenticated terminal session. The launcher can open the terminal, but it does not store or submit MT5 credentials.
+
+The equivalent PowerShell commands are:
+
+```powershell
+Set-Location "C:\Users\andre\OneDrive\Documents\gotrader"
+npm.cmd run gotrader:start
+```
+
+Status and shutdown:
+
+```powershell
+npm.cmd run gotrader:status
+npm.cmd run gotrader:stop
+```
+
+Supervisor logs and compact state are written under `.gotrader/`, which is ignored by Git.
+
+### Launcher Options
+
+Options may be placed in ignored `.env.local`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GOTRADER_OPEN_BROWSER` | `true` | Open the Dashboard after the app health check passes. |
+| `GOTRADER_AUTO_LAUNCH_MT5` | `true` | Open installed MT5 Desktop when it is not running. |
+| `GOTRADER_SUPERVISOR_INTERVAL_MS` | `15000` | Health-check interval, bounded to at least five seconds. |
+| `GOTRADER_STARTUP_TIMEOUT_MS` | `45000` | Maximum initial wait for core services. |
+| `GOTRADER_RECOVERY_COOLDOWN_MS` | `30000` | Minimum delay between recovery attempts. |
+| `GOTRADER_MAX_RECOVERY_ATTEMPTS` | `3` | Maximum consecutive recovery attempts before operator review. |
+| `GOTRADER_UNHEALTHY_RESTART_THRESHOLD` | `3` | Consecutive failed health checks before a tracked unhealthy process is restarted. |
+| `GOTRADER_DASHBOARD_URL` | `http://127.0.0.1:5173/dashboard` | Local page opened after startup. |
+
+The future GoTrader MCP server will be registered with this same supervisor. It will not require a separate operator startup command.
+
 ## Commands
 
 ```powershell
+npm.cmd run gotrader:start
+npm.cmd run gotrader:status
+npm.cmd run gotrader:stop
 npm.cmd run start:local-stack
 npm.cmd run diagnose:local-stack
 npm.cmd run stop:local-stack

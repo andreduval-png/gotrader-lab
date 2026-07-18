@@ -49,7 +49,10 @@ import {
 } from "@/lib/marketData";
 import { hydrateActiveTradingViewMcpChartFeed } from "@/lib/integrations/tradingview";
 import { hydrateActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5";
-import { buildIctAdvisorPacketFromRuntime } from "@/lib/ict-strategy-suite";
+import {
+  buildIctAdvisorPacketFromRuntime,
+  buildIctMarketAnalysisContextBundle
+} from "@/lib/ict-strategy-suite";
 import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import { buildCanonicalPerformanceMetricsFromRun, canonicalMetricsForRun } from "@/lib/performance/canonicalMetrics";
@@ -99,6 +102,10 @@ import {
   recordWalkForwardRunInValidationChain
 } from "@/lib/validationChain";
 import { buildForwardScenarioMap } from "@/lib/forwardScenario";
+import {
+  recordFrozenMarketEpisodeProfileObservationsFromClosedCandle,
+  recordForwardScenarioPrediction
+} from "@/lib/predictionLedger";
 
 export const RESEARCH_CYCLE_STORAGE_KEY = "gotrader_ai_lab_research_cycle_state";
 export const RESEARCH_CYCLE_UPDATED_EVENT = "gotrader-ai-lab-research-cycle-updated";
@@ -983,7 +990,13 @@ export async function runResearchCycle({
       if (!mockDataBlockedReason) {
         try {
           const runtimeSnapshot = await resolveResearchRuntimeSnapshot({ labState: workingState });
-          const advisorPacket: IctAdvisorPacket = await buildIctAdvisorPacketFromRuntime(runtimeSnapshot);
+          const marketAnalysisContextBundle =
+            activeCandleSource.mode === "mt5_read_only"
+              ? await buildIctMarketAnalysisContextBundle({ snapshot: runtimeSnapshot })
+              : undefined;
+          const advisorPacket: IctAdvisorPacket = await buildIctAdvisorPacketFromRuntime(runtimeSnapshot, {
+            marketAnalysisContextBundle
+          });
           const recommended = advisorPacket.recommendedSignal;
           run.ictAdvisorSignalSummary = {
             packetId: advisorPacket.packetId,
@@ -1121,6 +1134,74 @@ export async function runResearchCycle({
     // LLM advisory review now runs after validation/quality/readiness so the
     // packet carries real results instead of undefined placeholders.
 
+    const cycleForwardScenarioMap = buildForwardScenarioMap({
+      timestamp: run.startedAt,
+      sourceProvider: activeCandleSource.mode,
+      requestedSymbol: generatedThesis.thesis.symbol,
+      brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
+      timeframe: generatedThesis.thesis.timeframe,
+      sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint,
+      regime: generatedThesis.thesis.regimeClassification?.stableLabel ?? generatedThesis.thesis.marketRegime,
+      evidenceQuality: generatedThesis.thesis.confidence * 100,
+      direction: generatedThesis.thesis.finalBias,
+      confirmedSetup: false,
+      liquidityDraw: `Conditional liquidity objective ${generatedThesis.thesis.targetLiquidity}`,
+      liquidityDrawDirection: generatedThesis.thesis.finalBias,
+      liquiditySwept: generatedThesis.thesis.ictContext.liquiditySweep,
+      mitigationDetected: false,
+      displacementConfirmed: generatedThesis.thesis.ictContext.displacement === "strong",
+      premiumDiscountContext: generatedThesis.thesis.ictContext.premiumDiscount,
+      ifvgFreshRetestState: generatedThesis.thesis.ictContext.fairValueGap === "none" ? "absent" : "partial",
+      ifvgDirection:
+        generatedThesis.thesis.ictContext.fairValueGap === "bullish"
+          ? "bullish"
+          : generatedThesis.thesis.ictContext.fairValueGap === "bearish"
+            ? "bearish"
+            : "neutral",
+      ifvgZone: {
+        lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
+        upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
+      },
+      ifvgProfileStrength: "unvalidated",
+      conditionalEntryZone: {
+        lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
+        upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
+      },
+      conditionalStopReference: generatedThesis.thesis.invalidationLevel,
+      conditionalTargets: [{ label: "Conditional thesis liquidity target", price: generatedThesis.thesis.targetLiquidity }],
+      missingConfirmations: [
+        generatedThesis.thesis.ictContext.liquiditySweep ? undefined : "Liquidity sweep is not confirmed.",
+        generatedThesis.thesis.ictContext.displacement === "strong" ? undefined : "Strong displacement is not confirmed.",
+        generatedThesis.thesis.ictContext.fairValueGap === "none" ? "A qualifying FVG is not confirmed." : "A fresh FVG retest is not confirmed."
+      ].filter((item): item is string => Boolean(item)),
+      blockers: generatedThesis.thesis.finalBias === "neutral" ? ["Directional thesis is neutral."] : [],
+      warnings: [generatedThesis.thesis.riskNotes]
+    });
+
+    const sourceIsEligibleForPrediction =
+      Boolean(activeResearchCandleSource.identity.dataFingerprint) &&
+      !/mock|sample/i.test(activeCandleSource.mode);
+    if (sourceIsEligibleForPrediction) {
+      recordForwardScenarioPrediction(cycleForwardScenarioMap, {
+        modelVersion: activeConfig.strategyProfile ?? "research_cycle:v1",
+        maxBarsToResolve: 48
+      });
+      if (activeCandleSource.mode === "mt5_read_only" && generatedThesis.thesis.timeframe.toLowerCase() === "5m") {
+        const latestClosedTimestamp = researchCandles.at(-1)?.timestamp;
+        if (latestClosedTimestamp) {
+          recordFrozenMarketEpisodeProfileObservationsFromClosedCandle({
+            candles: researchCandles,
+            closedCandleTimestamp: latestClosedTimestamp,
+            sourceProvider: "mt5_read_only",
+            requestedSymbol: generatedThesis.thesis.symbol,
+            brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
+            timeframe: generatedThesis.thesis.timeframe,
+            sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint
+          });
+        }
+      }
+    }
+
     startStep("auto_research");
     await yieldToBrowser();
     throwIfCanceled();
@@ -1142,48 +1223,7 @@ export async function runResearchCycle({
         dataSource: dataSourceLabel,
         candleWindow: `${activeCandleSource.researchWindowCandles} raw window / ${activeCandleSource.processedCandleCount} processed ${activeCandleSource.appliedSettings.targetTimeframe} candles`,
         activeCalibrationIdUsed: activeResearchConfig.activeCalibrationId,
-        forwardScenarioMap: buildForwardScenarioMap({
-          timestamp: run.startedAt,
-          sourceProvider: activeCandleSource.mode,
-          requestedSymbol: generatedThesis.thesis.symbol,
-          brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
-          timeframe: generatedThesis.thesis.timeframe,
-          regime: generatedThesis.thesis.regimeClassification?.stableLabel ?? generatedThesis.thesis.marketRegime,
-          evidenceQuality: generatedThesis.thesis.confidence * 100,
-          direction: generatedThesis.thesis.finalBias,
-          confirmedSetup: false,
-          liquidityDraw: `Conditional liquidity objective ${generatedThesis.thesis.targetLiquidity}`,
-          liquidityDrawDirection: generatedThesis.thesis.finalBias,
-          liquiditySwept: generatedThesis.thesis.ictContext.liquiditySweep,
-          mitigationDetected: false,
-          displacementConfirmed: generatedThesis.thesis.ictContext.displacement === "strong",
-          premiumDiscountContext: generatedThesis.thesis.ictContext.premiumDiscount,
-          ifvgFreshRetestState: generatedThesis.thesis.ictContext.fairValueGap === "none" ? "absent" : "partial",
-          ifvgDirection:
-            generatedThesis.thesis.ictContext.fairValueGap === "bullish"
-              ? "bullish"
-              : generatedThesis.thesis.ictContext.fairValueGap === "bearish"
-                ? "bearish"
-                : "neutral",
-          ifvgZone: {
-            lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
-            upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
-          },
-          ifvgProfileStrength: "unvalidated",
-          conditionalEntryZone: {
-            lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
-            upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
-          },
-          conditionalStopReference: generatedThesis.thesis.invalidationLevel,
-          conditionalTargets: [{ label: "Conditional thesis liquidity target", price: generatedThesis.thesis.targetLiquidity }],
-          missingConfirmations: [
-            generatedThesis.thesis.ictContext.liquiditySweep ? undefined : "Liquidity sweep is not confirmed.",
-            generatedThesis.thesis.ictContext.displacement === "strong" ? undefined : "Strong displacement is not confirmed.",
-            generatedThesis.thesis.ictContext.fairValueGap === "none" ? "A qualifying FVG is not confirmed." : "A fresh FVG retest is not confirmed."
-          ].filter((item): item is string => Boolean(item)),
-          blockers: generatedThesis.thesis.finalBias === "neutral" ? ["Directional thesis is neutral."] : [],
-          warnings: [generatedThesis.thesis.riskNotes]
-        }),
+        forwardScenarioMap: cycleForwardScenarioMap,
         signal,
         timeoutMs: autoResearchTimeoutMs ?? (activeCandleSource.mode === "imported" && !advancedFullResearchMode ? 25_000 : 45_000),
         checkpointPersistence: autoResearchCheckpointPersistence,

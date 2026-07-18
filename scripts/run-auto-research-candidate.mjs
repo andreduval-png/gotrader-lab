@@ -809,27 +809,33 @@ const directScoreBreakdown = (baselineMetrics, metrics, grinch) => {
   };
 };
 
-const detectorProfileComparison = (walkForward) => ({
-  improved: walkForward.verdict === "passed",
-  stabilityImproved: walkForward.verdict === "passed",
-  recommendation: walkForward.verdict === "passed" ? "keep_testing" : "reject",
+const detectorProfileComparison = (walkForward) => {
+  const historicalPass = walkForward.verdict === "passed";
+  const forwardEvidenceRequired = walkForward.verdict === "forward_evidence_required";
+  return {
+  improved: historicalPass,
+  stabilityImproved: historicalPass,
+  recommendation: historicalPass || forwardEvidenceRequired ? "keep_testing" : "reject",
   promotionVerdict: "needs_follow_up",
   summary:
-    walkForward.verdict === "passed"
+    historicalPass
       ? "The frozen detector profile passed chronological holdout validation. Keep it research-only and collect untouched forward evidence."
+      : forwardEvidenceRequired
+        ? "The active MT5 window is post-cutoff forward data. Preserve the frozen historical audit and collect untouched outcomes."
       : `The frozen detector profile did not pass chronological holdout validation (${walkForward.verdict}).`,
   positiveChanges:
-    walkForward.verdict === "passed"
+    historicalPass
       ? [
           `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} OOS windows passed.`,
           `Pooled OOS expectancy is ${walkForward.pooledOos.averageR}R with ${walkForward.totalOosTrades} trades.`
         ]
       : [],
   negativeChanges: walkForward.blockers,
-  criticalRegressions: walkForward.verdict === "passed" ? [] : walkForward.blockers,
+  criticalRegressions: historicalPass || forwardEvidenceRequired ? [] : walkForward.blockers,
   sanityWarnings: walkForward.warnings,
   followUpSearchDirection: walkForward.nextAction
-});
+  };
+};
 
 const detectorProfileScoreBreakdown = (metrics, walkForward) => {
   const sampleScore = Math.min(100, (walkForward.totalOosTrades / 60) * 100);

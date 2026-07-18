@@ -29,6 +29,11 @@ const modules = [
     sourceFiles: ["validationChainTypes.ts", "buildValidationChain.ts", "validationChainStore.ts"]
   },
   {
+    sourceRoot: path.join(projectRoot, "src", "lib", "validationProvenance"),
+    targetRoot: path.join(outRoot, "validationProvenance"),
+    sourceFiles: ["validationProvenanceTypes.ts", "validationProvenance.ts", "index.ts"]
+  },
+  {
     sourceRoot: path.join(projectRoot, "src", "lib", "ict-strategy-suite"),
     targetRoot: path.join(outRoot, "ict-strategy-suite"),
     sourceFiles: ["ictCmdIndependentDateGateTypes.ts", "ictCmdIndependentDateGate.ts"]
@@ -57,7 +62,9 @@ function compileForNode() {
         .replace(/from\s+"\.\.\/ict-strategy-suite\/([^"]+)"/g, 'from "./ict-strategy-suite/$1.mjs"')
         .replace(/from\s+'\.\.\/ict-strategy-suite\/([^']+)'/g, "from './ict-strategy-suite/$1.mjs'")
         .replace(/from\s+"\.\.\/validationChain\/([^"]+)"/g, 'from "./validationChain/$1.mjs"')
-        .replace(/from\s+'\.\.\/validationChain\/([^']+)'/g, "from './validationChain/$1.mjs'");
+        .replace(/from\s+'\.\.\/validationChain\/([^']+)'/g, "from './validationChain/$1.mjs'")
+        .replace(/from\s+"\.\.\/validationProvenance"/g, 'from "../validationProvenance/index.mjs"')
+        .replace(/from\s+'\.\.\/validationProvenance'/g, "from '../validationProvenance/index.mjs'");
       fs.writeFileSync(path.join(moduleConfig.targetRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
     }
   }

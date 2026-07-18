@@ -197,6 +197,8 @@ type AdvisorChatMessage = {
   role: "assistant" | "user";
   content: string;
   timestamp: string;
+  source?: "llm-online" | "deterministic-fallback" | "system";
+  model?: string;
 };
 
 class ResearchPanelErrorBoundary extends Component<
@@ -237,11 +239,18 @@ class ResearchPanelErrorBoundary extends Component<
   }
 }
 
-const createAdvisorMessage = (role: AdvisorChatMessage["role"], content: string): AdvisorChatMessage => ({
+const createAdvisorMessage = (
+  role: AdvisorChatMessage["role"],
+  content: string,
+  source?: AdvisorChatMessage["source"],
+  model?: string
+): AdvisorChatMessage => ({
   id: `advisor_msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   role,
   content,
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
+  source,
+  model
 });
 
 const approvalVariant = (status?: IctAdvisorPacket["approvedProfileDecision"]["status"]) =>
@@ -498,12 +507,15 @@ export function ResearchAdvisorView() {
   );
   const [advisorCandleLimit, setAdvisorCandleLimit] = useState(() => String(Math.max(1000, loadMt5ReadOnlySettings().candleLimit ?? 1000)));
   const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatStatusMessage, setChatStatusMessage] = useState<string>();
   const [chatReplySource, setChatReplySource] = useState<"llm-online" | "deterministic-fallback" | "idle">("idle");
   const [chatReplyModel, setChatReplyModel] = useState<string | undefined>();
   const [chatMessages, setChatMessages] = useState<AdvisorChatMessage[]>([
     createAdvisorMessage(
       "assistant",
-      "Advisor chat is UI-ready. I can summarize the current deterministic GoTrader read, setup blockers, replay status, risk, and SMT context. OpenClaw advisory can be connected separately when configured."
+      "Advisor chat is ready. I use the local LLM bridge when it is online and clearly label deterministic fallback responses.",
+      "system"
     )
   ]);
   const deepActionRunIdRef = useRef(0);
@@ -1099,9 +1111,11 @@ export function ResearchAdvisorView() {
   };
   const submitAdvisorMessage = async (content: string) => {
     const normalized = content.trim();
-    if (!normalized) return;
+    if (!normalized || chatBusy) return;
     setChatMessages((messages) => [...messages, createAdvisorMessage("user", normalized)]);
     setChatInput("");
+    setChatBusy(true);
+    setChatStatusMessage("Waiting for the local LLM bridge...");
 
     const fallbackReply = () => {
       const reply = buildLocalAdvisorReply(
@@ -1119,28 +1133,34 @@ export function ResearchAdvisorView() {
         : reply;
     };
 
-    const chatResult = await runAdvisorChatWithFallback(
-      {
-        prompt: normalized,
-        packet: activeAdvisorPacket,
-        currentRead,
-        snapshot,
-        manualReplayStatus,
-        marketScorecardStatus,
-        profileOptimizationStatus
-      },
-      fallbackReply
-    );
-    const sourceNote =
-      chatResult.source === "llm-online"
-        ? `[LLM online${chatResult.model ? ` · ${chatResult.model}` : ""}] `
-        : "[Deterministic fallback] ";
-    setChatReplySource(chatResult.source);
-    setChatReplyModel(chatResult.model);
-    setChatMessages((messages) => [
-      ...messages,
-      createAdvisorMessage("assistant", `${sourceNote}${chatResult.text}`)
-    ]);
+    try {
+      const chatResult = await runAdvisorChatWithFallback(
+        {
+          prompt: normalized,
+          conversation: chatMessages.slice(-8).map((message) => ({ role: message.role, content: message.content })),
+          packet: activeAdvisorPacket,
+          currentRead,
+          snapshot,
+          manualReplayStatus,
+          marketScorecardStatus,
+          profileOptimizationStatus
+        },
+        fallbackReply
+      );
+      setChatReplySource(chatResult.source);
+      setChatReplyModel(chatResult.model);
+      setChatStatusMessage(
+        chatResult.source === "llm-online"
+          ? `Connected to ${chatResult.model ?? "the local LLM provider"}.`
+          : chatResult.fallbackReason ?? "Local LLM unavailable; deterministic fallback used."
+      );
+      setChatMessages((messages) => [
+        ...messages,
+        createAdvisorMessage("assistant", chatResult.text, chatResult.source, chatResult.model)
+      ]);
+    } finally {
+      setChatBusy(false);
+    }
   };
   const handleChatSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1321,7 +1341,7 @@ export function ResearchAdvisorView() {
       {workspaceTab === "chat" ? (
       <>
       <AdvisorWorkspaceSummary />
-      <section data-testid="research-advisor-chat-workspace" className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(260px,0.65fr)_minmax(480px,1.35fr)_minmax(260px,0.72fr)]">
+      <section data-testid="research-advisor-chat-workspace" className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(240px,0.52fr)_minmax(520px,1.8fr)_minmax(240px,0.6fr)]">
         <ResearchAdvisorChatCard
           currentRead={currentRead}
           packet={activeAdvisorPacket}
@@ -1329,8 +1349,10 @@ export function ResearchAdvisorView() {
           snapshot={snapshot}
           messages={chatMessages}
           inputValue={chatInput}
+          chatBusy={chatBusy}
           chatReplySource={chatReplySource}
           chatReplyModel={chatReplyModel}
+          chatStatusMessage={chatStatusMessage}
           onInputChange={setChatInput}
           onSubmit={handleChatSubmit}
           onQuickAction={handleQuickAction}
@@ -2798,8 +2820,10 @@ function CurrentReadDataFlowPanel({ currentRead }: { currentRead: IctCurrentRead
 }
 
 function ResearchAdvisorChatCard({
+  chatBusy,
   chatReplyModel,
   chatReplySource,
+  chatStatusMessage,
   currentRead,
   inputValue,
   manualReplayStatus,
@@ -2813,8 +2837,10 @@ function ResearchAdvisorChatCard({
   profileOptimizationStatus,
   snapshot
 }: {
+  chatBusy: boolean;
   chatReplyModel?: string;
   chatReplySource: "llm-online" | "deterministic-fallback" | "idle";
+  chatStatusMessage?: string;
   currentRead: IctCurrentRead;
   inputValue: string;
   manualReplayStatus: IctManualReplayReviewStatus;
@@ -2843,19 +2869,33 @@ function ResearchAdvisorChatCard({
     currentRead.topReasons[0] ??
     "Current setup summary is shown in the cards below. Advisor packet is still hydrating.";
   const modeLabel =
-    chatReplySource === "llm-online"
+    chatBusy
+      ? "LLM thinking..."
+      : chatReplySource === "llm-online"
       ? `LLM online${chatReplyModel ? ` · ${chatReplyModel}` : ""}`
       : chatReplySource === "deterministic-fallback"
         ? "Deterministic fallback"
         : "Chat ready";
-  const modeVariant = chatReplySource === "llm-online" ? ("success" as const) : ("muted" as const);
+  const modeVariant = chatReplySource === "llm-online" ? ("success" as const) : chatBusy ? ("warning" as const) : ("muted" as const);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      transcript.scrollTop = transcript.scrollHeight;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [chatBusy, messages.length]);
 
   return (
     <section
       data-testid="research-advisor-chat-card"
-      className="premium-surface premium-panel-grid order-1 overflow-hidden rounded-[24px] xl:order-2"
+      className="premium-surface premium-panel-grid order-1 flex h-[clamp(42rem,82vh,58rem)] min-h-0 flex-col overflow-hidden rounded-[24px] xl:order-2"
     >
-      <div className="border-b border-white/10 p-4">
+      <div className="shrink-0 border-b border-white/10 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className={`flex items-center gap-2 ${WORKSPACE_SECTION_LABEL}`}>
@@ -2883,33 +2923,41 @@ function ResearchAdvisorChatCard({
         </div>
       </div>
 
-      <div className="space-y-3 p-4">
-        <AdvisorMessageBubble role="assistant">
+      <div
+        ref={transcriptRef}
+        data-testid="research-advisor-chat-transcript"
+        className="min-h-0 flex-1 space-y-3 overflow-y-scroll overscroll-contain p-4 [scrollbar-gutter:stable]"
+      >
+        <AdvisorMessageBubble role="assistant" source="system">
           Welcome. I can explain the selected market, current ICT read, setup state, risk, replay status, SMT, and next research actions.
         </AdvisorMessageBubble>
-        <AdvisorMessageBubble role="assistant">
+        <AdvisorMessageBubble role="assistant" source="system">
           <span className="font-semibold text-slate-100">Current read:</span> {readSummary}
         </AdvisorMessageBubble>
         {messages.map((message) => (
-          <AdvisorMessageBubble key={message.id} role={message.role}>{message.content}</AdvisorMessageBubble>
+          <AdvisorMessageBubble key={message.id} role={message.role} source={message.source} model={message.model}>
+            {message.content}
+          </AdvisorMessageBubble>
         ))}
       </div>
 
-      <div className="border-t border-white/10 p-4">
-        <AdvisorQuickActions actions={quickActions} onAction={onQuickAction} />
+      <div className="shrink-0 border-t border-white/10 p-4">
+        <AdvisorQuickActions actions={quickActions} onAction={onQuickAction} disabled={chatBusy} />
         <form className="mt-3 flex gap-2" onSubmit={onSubmit}>
           <input
             data-testid="research-advisor-chat-input"
             value={inputValue}
             onChange={(event) => onInputChange(event.target.value)}
+            disabled={chatBusy}
             placeholder="Ask GoTrader about this setup, replay, risk, or market bias..."
             className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
           />
-          <Button type="submit" size="icon" aria-label="Send advisor message">
+          <Button type="submit" size="icon" aria-label="Send advisor message" disabled={chatBusy || !inputValue.trim()}>
             <Send className="h-4 w-4" aria-hidden="true" />
           </Button>
         </form>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-slate-500" data-testid="research-advisor-chat-status">
+          {chatStatusMessage ? `${chatStatusMessage} ` : ""}
           Replay {formatToken(manualReplayStatus)} / scorecard {formatToken(marketScorecardStatus)} / optimizer{" "}
           {formatToken(profileOptimizationStatus)}. Reply provenance: {modeLabel}.
         </p>
@@ -2918,8 +2966,24 @@ function ResearchAdvisorChatCard({
   );
 }
 
-function AdvisorMessageBubble({ children, role }: { children: ReactNode; role: AdvisorChatMessage["role"] }) {
+function AdvisorMessageBubble({
+  children,
+  role,
+  source,
+  model
+}: {
+  children: ReactNode;
+  role: AdvisorChatMessage["role"];
+  source?: AdvisorChatMessage["source"];
+  model?: string;
+}) {
   const user = role === "user";
+  const sourceLabel =
+    source === "llm-online"
+      ? `LLM online${model ? ` · ${model}` : ""}`
+      : source === "deterministic-fallback"
+        ? "Deterministic fallback"
+        : "Advisor context";
   return (
     <div className={`flex ${user ? "justify-end" : "justify-start"}`}>
       <div
@@ -2931,7 +2995,7 @@ function AdvisorMessageBubble({ children, role }: { children: ReactNode; role: A
       >
         {!user ? (
           <p className="mb-1 text-[0.6rem] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Local deterministic
+            {sourceLabel}
           </p>
         ) : null}
         {children}
@@ -2940,7 +3004,15 @@ function AdvisorMessageBubble({ children, role }: { children: ReactNode; role: A
   );
 }
 
-function AdvisorQuickActions({ actions, onAction }: { actions: string[]; onAction: (action: string) => void }) {
+function AdvisorQuickActions({
+  actions,
+  onAction,
+  disabled = false
+}: {
+  actions: string[];
+  onAction: (action: string) => void;
+  disabled?: boolean;
+}) {
   return (
     <div data-testid="research-advisor-quick-actions" className="flex flex-wrap gap-2">
       {actions.map((action) => (
@@ -2948,6 +3020,7 @@ function AdvisorQuickActions({ actions, onAction }: { actions: string[]; onActio
           key={action}
           type="button"
           onClick={() => onAction(action)}
+          disabled={disabled}
           className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-cyan-300/35 hover:text-cyan-100"
         >
           {action}

@@ -268,6 +268,7 @@ export async function runAutoPaperDemoCycle(config: AutoPaperDemoCycleConfig = {
         isResearchActive: true,
         statusLabel: sourceSummary.sourceStatus
       },
+      provenance: config.recognition?.provenance,
       generatedAt: startedAt
     });
 

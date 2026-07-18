@@ -12,13 +12,23 @@ Authority boundaries (always `none`):
 
 ## 1. Start GoTrader (browser app)
 
+For normal local operation, open MT5 Desktop and double-click `Start-GoTrader.cmd` in the repository root. The unified supervisor starts the MT5 read-only upstream, safe wrapper, advisory bridge, and GoTrader app, then opens the Dashboard.
+
+PowerShell equivalent:
+
 ```powershell
-cd C:\Users\andre\OneDrive\Documents\gotrader
-npm install
-npm run dev
+Set-Location "C:\Users\andre\OneDrive\Documents\gotrader"
+npm.cmd run gotrader:start
 ```
 
-Open `http://127.0.0.1:5173` (or the URL Vite prints). Default route redirects to `/dashboard`.
+Check status or stop all GoTrader-tracked services:
+
+```powershell
+npm.cmd run gotrader:status
+npm.cmd run gotrader:stop
+```
+
+The launcher opens `http://127.0.0.1:5173/dashboard` after the app health check passes. See `docs/local-stack-manager.md` for configuration and recovery behavior.
 
 Production preview:
 

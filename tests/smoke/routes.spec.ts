@@ -157,6 +157,7 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(page.getByTestId("operator-console")).toBeVisible();
     await expect(page.getByTestId("operator-start-cycle")).toBeVisible();
     await expect(page.getByTestId("operator-market-brief")).toBeVisible();
+    await expect(page.getByTestId("operator-prediction-summary")).toBeVisible();
     await expect(page.getByTestId("operator-decision-summary")).toBeVisible();
     await expect(page.locator("main")).toContainText(/supervised research cycle/i);
     await expect(page.locator("main")).toContainText(/Research trades/i);
@@ -365,7 +366,10 @@ test.describe("GoTrader browser route smoke", () => {
 
     // Deterministic chat is labeled as local deterministic guidance on the default Chat tab.
     await expect(page.getByTestId("research-advisor-chat-mode")).toContainText(/Chat ready|Deterministic fallback|LLM online/i);
-    await expect(page.getByTestId("research-advisor-chat-card")).toContainText(/Local deterministic|Deterministic Research Helper/i);
+    await expect(page.getByTestId("research-advisor-chat-card")).toContainText(/Advisor context|Deterministic fallback|LLM online/i);
+    const chatTranscript = page.getByTestId("research-advisor-chat-transcript");
+    await expect(chatTranscript).toBeVisible();
+    expect(await chatTranscript.evaluate((element) => getComputedStyle(element).overflowY)).toBe("scroll");
 
     // Validation-chain explanation panel: detailed rows + recognition is not evidence.
     await page.getByTestId("advisor-tab-validation").click();
@@ -382,14 +386,13 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(providerHeader.getByTestId("advisor-provider-mode")).toBeVisible();
     await expect(providerHeader.getByTestId("advisor-provider-authority")).toContainText(/Authority: none/i);
     await expect(providerHeader.getByTestId("advisor-provider-last-checked")).toBeVisible();
-    await expect(providerHeader).toContainText(/Deterministic Research Helper/i);
+    await expect(providerHeader).toContainText(/LLM Advisory \(local bridge\)|Deterministic fallback/i);
 
-    // Status chip never claims ordinary success in the default unchecked state.
+    // Status chip reports the result of the active health check without changing authority.
     const statusChip = providerHeader.getByTestId("advisor-provider-status-chip");
     await expect(statusChip).toBeVisible();
     const statusChipText = (await statusChip.innerText()).trim();
-    expect(statusChipText).toMatch(/not checked|not configured|config missing|disabled|deterministic|stub|offline|timeout/i);
-    expect(statusChipText).not.toMatch(/^(online|ready|connected)$/i);
+    expect(statusChipText).toMatch(/online|not checked|not configured|config missing|disabled|deterministic|stub|offline|timeout/i);
 
     // OpenClaw pilot card: advisory/proposal-only with auto-apply locked off.
     const pilotCard = page.getByTestId("openclaw-pilot-card");
@@ -665,11 +668,13 @@ async function expectUpgradedResultsPage(page: Page) {
   await expect(page.getByTestId("performance-results-page")).toBeVisible();
   await expect(page.getByTestId("results-tabs")).toBeVisible();
   await expect(page.getByTestId("results-calendar")).toBeVisible();
-  await expect(page.getByTestId("results-calendar")).toContainText(/Monthly P\/L/i);
-  await expect(main).toContainText(/Performance Results/i);
+  await expect(page.getByTestId("results-calendar")).toContainText(/Dated outcome move/i);
+  await expect(main).toContainText(/Research Results/i);
+  await expect(page.getByTestId("results-tab-overview")).toContainText(/Frozen IFVG v3/i);
+  await page.getByRole("tab", { name: "Backtest" }).click();
   await expect(main).toContainText(/Performance Curve/i);
   await expect(main).toContainText(/Outcome Log/i);
-  await expect(main).toContainText(/Provenance labeled|in_sample/i);
+  await expect(main).toContainText(/authority none|in_sample/i);
   await expect(main).not.toContainText(/Simulation results cockpit/i);
   await expect(main).not.toContainText(/Monte Carlo Robustness|Run Real Replay Review|Run Market Scorecard/i);
   await expect(main).not.toContainText(/"candles"\s*:|accountNumber|orderId|positionId/i);

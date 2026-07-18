@@ -5,7 +5,7 @@ import path from "node:path";
 
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-5.5";
-const DEFAULT_ADVISORY_TIMEOUT_MS = 30_000;
+const DEFAULT_ADVISORY_TIMEOUT_MS = 120_000;
 
 const requiredAgents = [
   {

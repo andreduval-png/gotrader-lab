@@ -43,6 +43,12 @@ export const ICT_OPTIONAL_MARKET_ANALYSIS_TIMEFRAMES: IctAnalysisTimeframe[] = [
 export const ICT_DEFAULT_MARKET_ANALYSIS_LOOKBACK_DAYS = 90;
 export const ICT_DEFAULT_CHART_DISPLAY_CANDLE_LIMIT = 1000;
 
+const ICT_MARKET_ANALYSIS_CACHE_TTL_MS = 5 * 60_000;
+const marketAnalysisBundleCache = new Map<
+  string,
+  { expiresAt: number; bundle: IctMarketAnalysisContextBundle }
+>();
+
 const timeframeRole: Record<IctAnalysisTimeframe, IctAnalysisTimeframeRole> = {
   W1: "weekly_bias",
   D1: "daily_bias",
@@ -578,6 +584,19 @@ export async function buildIctMarketAnalysisContextBundle(
     ...ICT_REQUIRED_MARKET_ANALYSIS_TIMEFRAMES,
     ...(config.includeOptionalTimeframes ?? [])
   ];
+  const useDefaultFetchers = !dependencies.fetchDisplayCandles && !dependencies.fetchChunkedHistory;
+  const cacheKey = [
+    requestedSymbol,
+    brokerSymbol,
+    displayTimeframe,
+    lookbackDays,
+    config.to ?? "latest",
+    timeframes.join(",")
+  ].join("|");
+  const cached = useDefaultFetchers ? marketAnalysisBundleCache.get(cacheKey) : undefined;
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.bundle;
+  }
   const fetchDisplay = dependencies.fetchDisplayCandles ?? fetchMt5ReadOnlyCandles;
   const fetchHistory = dependencies.fetchChunkedHistory ?? fetchMt5CandlesInChunks;
   const warnings: string[] = [];
@@ -677,7 +696,7 @@ export async function buildIctMarketAnalysisContextBundle(
   }
   const resolvedWeeklyBias = weeklyBiasFromCandles(analysisCandlesByTimeframe.W1 ?? []);
 
-  return {
+  const bundle: IctMarketAnalysisContextBundle = {
     context: buildContext({
       analysisContexts,
       brokerSymbol,
@@ -691,6 +710,13 @@ export async function buildIctMarketAnalysisContextBundle(
     analysisCandlesByTimeframe,
     depthSummariesByTimeframe
   };
+  if (useDefaultFetchers) {
+    marketAnalysisBundleCache.set(cacheKey, {
+      bundle,
+      expiresAt: Date.now() + ICT_MARKET_ANALYSIS_CACHE_TTL_MS
+    });
+  }
+  return bundle;
 }
 
 export async function buildIctMarketAnalysisContext(

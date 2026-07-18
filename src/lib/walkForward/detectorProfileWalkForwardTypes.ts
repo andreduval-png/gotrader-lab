@@ -1,4 +1,9 @@
-export type DetectorProfileWalkForwardVerdict = "passed" | "failed" | "insufficient_data" | "blocked_source";
+export type DetectorProfileWalkForwardVerdict =
+  | "passed"
+  | "failed"
+  | "insufficient_data"
+  | "blocked_source"
+  | "forward_evidence_required";
 
 export interface DetectorProfileTradeOutcome {
   openedAt: string;

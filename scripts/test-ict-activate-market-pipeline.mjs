@@ -393,6 +393,14 @@ async function main() {
   assert.equal(success.summary.recommendedMaxRiskPerTradePct, 0.5);
   assert.equal(savedSummaries.length, 1, "compact activation summary should be saved once");
   assert.equal(savedSummaries[0].executionAllowed, false);
+  assert.deepEqual(savedSummaries[0].analysisTimeframesRequested, ["W1", "D1", "H4", "H1", "M15", "M5"]);
+  assert.deepEqual(savedSummaries[0].analysisTimeframesLoaded, ["W1", "D1", "H4", "H1", "M15", "M5"]);
+  assert.equal(savedSummaries[0].requiredTimeframesLoaded, true);
+  assert.equal(savedSummaries[0].multiTimeframeContextStatus, "built");
+  assert.equal(savedSummaries[0].weeklyBiasStatus, "loaded");
+  assert.equal(savedSummaries[0].weeklyBiasDirection, success.summary.weeklyBiasDirection);
+  assert.equal(savedSummaries[0].weeklyBiasDirection, "bearish");
+  assert.doesNotMatch(JSON.stringify(savedSummaries[0]), /"(?:candles|rawCandles|rawSnapshots)"\s*:/i);
   assertSafe(success);
   assert.match(suite.summarizeActivateMarketResult(success), /execution disabled/i);
 

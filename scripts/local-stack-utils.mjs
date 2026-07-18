@@ -43,7 +43,7 @@ export const serviceDefinitions = [
     port: 7341,
     required: true,
     defaultEnabled: true,
-    healthUrls: [`http://${stackHost}:7341/health`]
+    healthUrls: [`http://${stackHost}:7341/status`, `http://${stackHost}:7341/health`]
   },
   {
     id: "llm-bridge",

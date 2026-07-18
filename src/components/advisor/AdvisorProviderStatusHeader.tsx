@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Radio, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   advisorProviderStatusInfo,
+  checkLocalBridgeHealth,
   checkOpenClawBridgeHealth,
   classifyLocalLlmCapability,
   getLocalBridgeStatusSnapshot,
@@ -13,6 +14,7 @@ import {
   openClawEndpointHostLabel,
   type AdvisorProviderStatusLevel,
   type GoTraderAdvisoryProviderMode,
+  type LocalBridgeHealthResult,
   type OpenClawBridgeHealthResult
 } from "@/lib/llm";
 
@@ -63,6 +65,7 @@ export function OpenClawStubSetupHelper({ testId = "openclaw-stub-helper" }: { t
 export function AdvisorProviderStatusHeader({ testId = "advisor-provider-status" }: { testId?: string }) {
   const settings = useMemo(() => loadAdvisoryProviderSettings(), []);
   const [health, setHealth] = useState<OpenClawBridgeHealthResult | undefined>(undefined);
+  const [localHealth, setLocalHealth] = useState<LocalBridgeHealthResult | undefined>(undefined);
   const [checking, setChecking] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | undefined>(undefined);
 
@@ -78,11 +81,12 @@ export function AdvisorProviderStatusHeader({ testId = "advisor-provider-status"
       }
       return health?.providerStatus ?? "openclaw_not_configured";
     }
-    if (localBridgeSnapshot.advisoryCapabilityStatus === "unknown") {
+    const capability = localHealth?.advisoryCapabilityStatus ?? localBridgeSnapshot.advisoryCapabilityStatus;
+    if (capability === "unknown") {
       return "local_llm_config_missing";
     }
-    return classifyLocalLlmCapability(localBridgeSnapshot.advisoryCapabilityStatus);
-  }, [settings, health, localBridgeSnapshot]);
+    return classifyLocalLlmCapability(capability);
+  }, [settings, health, localHealth, localBridgeSnapshot]);
 
   const statusInfo = advisorProviderStatusInfo(providerStatus);
   const openClawSelected = settings.providerMode === "openclaw";
@@ -94,6 +98,26 @@ export function AdvisorProviderStatusHeader({ testId = "advisor-provider-status"
         ? "yes"
         : "no"
       : "unknown (not checked)";
+
+  const checkLocalBridge = async () => {
+    setChecking(true);
+    try {
+      const result = await checkLocalBridgeHealth(undefined, { bypassCircuitBreaker: true });
+      setLocalHealth(result);
+      setLastCheckedAt(result.healthCheckedAt ?? new Date().toISOString());
+    } catch {
+      setLocalHealth(undefined);
+      setLastCheckedAt(new Date().toISOString());
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (settings.providerMode === "local_llm_bridge") {
+      void checkLocalBridge();
+    }
+  }, [settings.providerMode]);
 
   const checkBridge = async () => {
     setChecking(true);
@@ -128,7 +152,7 @@ export function AdvisorProviderStatusHeader({ testId = "advisor-provider-status"
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
         <span>
           <span className="text-[0.65rem] uppercase tracking-[0.14em] text-slate-500">Chat on this page</span>{" "}
-          Deterministic Research Helper (local deterministic guidance)
+          {providerStatus === "local_llm_online" ? "Local LLM bridge" : "Deterministic fallback"}
         </span>
         {openClawSelected ? (
           <>
@@ -152,6 +176,12 @@ export function AdvisorProviderStatusHeader({ testId = "advisor-provider-status"
         <div className="mt-2">
           <Button size="sm" variant="outline" onClick={() => void checkBridge()} disabled={checking}>
             {checking ? "Checking bridge..." : "Check OpenClaw bridge"}
+          </Button>
+        </div>
+      ) : settings.providerMode === "local_llm_bridge" ? (
+        <div className="mt-2">
+          <Button size="sm" variant="outline" onClick={() => void checkLocalBridge()} disabled={checking}>
+            {checking ? "Checking bridge..." : "Check LLM bridge"}
           </Button>
         </div>
       ) : null}

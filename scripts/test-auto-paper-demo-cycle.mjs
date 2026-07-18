@@ -10,6 +10,10 @@ const projectRoot = process.cwd();
 const outRoot = path.join(projectRoot, ".gotrader", "auto-paper-demo-cycle-test");
 const modules = [
   ["src/lib/validationChain", ["validationChainTypes.ts", "buildValidationChain.ts", "validationChainStore.ts"]],
+  [
+    "src/lib/validationProvenance",
+    ["validationProvenanceTypes.ts", "validationProvenance.ts", "index.ts"]
+  ],
   ["src/lib/ict-strategy-suite", ["ictCmdIndependentDateGateTypes.ts", "ictCmdIndependentDateGate.ts"]],
   [
     "src/lib/paperDemoOperations",
@@ -31,7 +35,9 @@ function rewriteImports(source) {
     .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
     .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
     .replace(/from\s+"\.\.\/([^"]+)"/g, 'from "../$1.mjs"')
-    .replace(/from\s+'\.\.\/([^']+)'/g, "from '../$1.mjs'");
+    .replace(/from\s+'\.\.\/([^']+)'/g, "from '../$1.mjs'")
+    .replace(/from\s+"\.\.\/validationProvenance\.mjs"/g, 'from "../validationProvenance/index.mjs"')
+    .replace(/from\s+'\.\.\/validationProvenance\.mjs'/g, "from '../validationProvenance/index.mjs'");
 }
 
 function compileForNode() {
@@ -187,6 +193,17 @@ const cmdIndependentDateEvidence = {
   oosVerdict: "promising"
 };
 
+const validationProvenance = (candidateId) => ({
+  strategyProfile: "cmd_short_paper_watchlist_v1",
+  candidateId,
+  sourceProvider: validSource.sourceProvider,
+  requestedSymbol: validSource.requestedSymbol,
+  brokerSymbol: validSource.brokerSymbol,
+  timeframe: validSource.primaryTimeframe,
+  sourceFingerprint: validSource.sourceFingerprint,
+  parameterFingerprint: "params_cmd_fixture_v1"
+});
+
 async function main() {
   compileForNode();
   installLocalStorage();
@@ -235,10 +252,27 @@ async function main() {
 
   const cmdWithoutIndependentDates = await mod.runAutoPaperDemoCycle({
     sourceSnapshot: validSource,
-    recognition: { recognitionType: "full_model", setupLabel: "CMD eligible paper demo" },
-    replaySummary: replayPassed,
-    walkForwardSummary: walkForwardPassed,
-    evidenceSummary: evidenceUpdated,
+    recognition: {
+      recognitionId: "cmd_without_independent_dates",
+      recognitionType: "full_model",
+      setupLabel: "CMD eligible paper demo",
+      provenance: validationProvenance("cmd_without_independent_dates")
+    },
+    replaySummary: {
+      ...replayPassed,
+      provenance: validationProvenance("cmd_without_independent_dates")
+    },
+    walkForwardSummary: {
+      ...walkForwardPassed,
+      provenance: {
+        ...validationProvenance("cmd_without_independent_dates"),
+        walkForwardRunId: "wf_cmd_without_independent_dates"
+      }
+    },
+    evidenceSummary: {
+      ...evidenceUpdated,
+      provenance: validationProvenance("cmd_without_independent_dates")
+    },
     checklistSummary: checklistPassed,
     createWatchlistCandidate: true,
     now: "2026-06-12T11:04:30.000Z"
@@ -249,10 +283,27 @@ async function main() {
 
   const eligible = await mod.runAutoPaperDemoCycle({
     sourceSnapshot: validSource,
-    recognition: { recognitionType: "full_model", setupLabel: "CMD eligible paper demo" },
-    replaySummary: replayPassed,
-    walkForwardSummary: walkForwardPassed,
-    evidenceSummary: evidenceUpdated,
+    recognition: {
+      recognitionId: "cmd_independent_dates_passed",
+      recognitionType: "full_model",
+      setupLabel: "CMD eligible paper demo",
+      provenance: validationProvenance("cmd_independent_dates_passed")
+    },
+    replaySummary: {
+      ...replayPassed,
+      provenance: validationProvenance("cmd_independent_dates_passed")
+    },
+    walkForwardSummary: {
+      ...walkForwardPassed,
+      provenance: {
+        ...validationProvenance("cmd_independent_dates_passed"),
+        walkForwardRunId: "wf_cmd_independent_dates_passed"
+      }
+    },
+    evidenceSummary: {
+      ...evidenceUpdated,
+      provenance: validationProvenance("cmd_independent_dates_passed")
+    },
     cmdIndependentDateEvidence,
     checklistSummary: checklistPassed,
     persist: true,

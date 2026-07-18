@@ -530,10 +530,10 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
     id: "ifvg_fresh_retest_v3_research",
     name: "IFVG Fresh Retest v3 Research",
     family: "ifvg",
-    status: "replay_required",
+    status: "evidence_building",
     detectorStatus: "executable_research",
     description:
-      "Executable causal IFVG profile requiring a validation-eligible base inversion and a clean retest on the latest closed candle. It removes post-entry confirmation leakage and remains research-only pending exact-profile independent validation.",
+      "Frozen causal IFVG profile with passed 180-day replay, rolling-window, and chronological OOS validation. It remains research-only while untouched post-cutoff forward evidence is collected.",
     side: "both",
     supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES", "XAUUSD", "EURUSD.pro", "BTCUSD"],
     primaryTimeframes: ["5m", "15m"],

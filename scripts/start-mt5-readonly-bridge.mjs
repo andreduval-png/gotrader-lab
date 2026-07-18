@@ -106,7 +106,11 @@ const redactUrl = (value) => {
 
 const plannedStatus = () => ({
   provider: "mt5_read_only",
-  connectionStatus: upstreamBaseUrl ? "degraded" : "planned",
+  connectionStatus: upstreamBaseUrl
+    ? latestEndpointAvailable === true
+      ? "connected"
+      : "degraded"
+    : "planned",
   bridgeMode: upstreamBaseUrl
     ? latestEndpointAvailable === true
       ? "live"
@@ -731,6 +735,9 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/" || url.pathname === "/health") {
+    if (upstreamBaseUrl && latestEndpointAvailable === undefined) {
+      await updateEndpointAvailability();
+    }
     json(res, 200, plannedStatus());
     return;
   }

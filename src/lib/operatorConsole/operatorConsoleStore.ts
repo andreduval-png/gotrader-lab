@@ -9,6 +9,11 @@ import {
 } from "@/lib/ict-strategy-suite/ictActivateMarketPipeline";
 import { ICT_LATEST_RESEARCH_STATE_UPDATED_EVENT } from "@/lib/ict-strategy-suite/ictLatestResearchState";
 import { RESEARCH_CYCLE_UPDATED_EVENT } from "@/lib/researchCycle";
+import {
+  evaluatePredictionCalibration,
+  loadPredictionLedger,
+  PREDICTION_LEDGER_UPDATED_EVENT
+} from "@/lib/predictionLedger";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import {
   latestValidationChainEntry,
@@ -21,11 +26,36 @@ import {
   readOperatorCycleState
 } from "./operatorCycle";
 import type { OperatorConsoleSnapshot } from "./operatorConsoleTypes";
+import type { OperatorPredictionSummary } from "./operatorConsoleTypes";
 
 const listeners = new Set<() => void>();
 let refreshPromise: Promise<OperatorConsoleSnapshot> | undefined;
 let attached = false;
 let snapshot = buildOperatorConsoleSnapshot({ cycle: readOperatorCycleState() });
+
+const readPredictionSummary = (): OperatorPredictionSummary => {
+  const state = loadPredictionLedger();
+  const latest = state.entries.at(-1);
+  const calibration = evaluatePredictionCalibration(state.entries);
+  const nextAction = !latest
+    ? "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
+    : calibration.classification === "uncalibrated"
+      ? "Collect later closed-candle outcomes across independent dates before trusting the probability estimate."
+      : calibration.classification === "insufficient_data"
+        ? calibration.blockers[0] ?? "Collect more independent causal outcomes."
+        : calibration.classification === "calibrated_positive"
+          ? "Continue forward tracking; calibration does not promote readiness by itself."
+          : "Keep the forecast family in research and review its expectancy and calibration blockers.";
+  return {
+    latestFamily: (latest?.scenarioFamily ?? "No forecast issued").replace(/_/g, " "),
+    latestState: (latest?.lifecycleState ?? "not started").replace(/_/g, " "),
+    pendingForecasts: calibration.pendingForecasts,
+    completedForecasts: calibration.completedForecasts,
+    classification: calibration.classification.replace(/_/g, " "),
+    averageRealizedR: calibration.averageRealizedR ?? undefined,
+    nextAction
+  };
+};
 
 const notify = () => listeners.forEach((listener) => listener());
 
@@ -40,6 +70,7 @@ export const refreshOperatorConsoleSnapshot = (): Promise<OperatorConsoleSnapsho
         activation: readLatestActivateMarketSummary(),
         autonomousRun: latestAutonomousResearchRun(loadAutonomousResearchState()),
         validation: latestValidationChainEntry(),
+        prediction: readPredictionSummary(),
         cycle: readOperatorCycleState()
       });
       notify();
@@ -50,6 +81,7 @@ export const refreshOperatorConsoleSnapshot = (): Promise<OperatorConsoleSnapsho
         activation: readLatestActivateMarketSummary(),
         autonomousRun: latestAutonomousResearchRun(loadAutonomousResearchState()),
         validation: latestValidationChainEntry(),
+        prediction: readPredictionSummary(),
         cycle: readOperatorCycleState()
       });
       notify();
@@ -100,6 +132,7 @@ const eventNames = [
   ICT_ACTIVATE_MARKET_UPDATED_EVENT,
   ICT_LATEST_RESEARCH_STATE_UPDATED_EVENT,
   RESEARCH_CYCLE_UPDATED_EVENT,
+  PREDICTION_LEDGER_UPDATED_EVENT,
   VALIDATION_CHAIN_UPDATED_EVENT,
   "gotrader:mt5-feed-status-updated",
   "gotrader:mt5-readonly-feed-updated"

@@ -842,16 +842,21 @@ const detectorReadinessEstimate = (
 
 const detectorComparison = (
   walkForward: ReturnType<typeof runDetectorProfileWalkForward>
-): AutoResearchCandidateResult["comparisonResult"] => ({
-  improved: walkForward.verdict === "passed",
-  stabilityImproved: walkForward.verdict === "passed",
-  recommendation: walkForward.verdict === "passed" ? "keep_testing" : "reject",
+): AutoResearchCandidateResult["comparisonResult"] => {
+  const historicalPass = walkForward.verdict === "passed";
+  const forwardEvidenceRequired = walkForward.verdict === "forward_evidence_required";
+  return {
+  improved: historicalPass,
+  stabilityImproved: historicalPass,
+  recommendation: historicalPass || forwardEvidenceRequired ? "keep_testing" : "reject",
   summary:
-    walkForward.verdict === "passed"
+    historicalPass
       ? "Frozen detector profile passed chronological OOS validation; untouched forward evidence is still required."
+      : forwardEvidenceRequired
+        ? "The active MT5 window is entirely after the frozen validation cutoff. Preserve the historical audit and collect untouched forward evidence."
       : `Frozen detector profile did not pass chronological OOS validation (${walkForward.verdict}).`,
   positiveChanges:
-    walkForward.verdict === "passed"
+    historicalPass
       ? [
           `${walkForward.oosWindowsPassed}/${walkForward.oosWindowCount} chronological OOS windows passed.`,
           `Pooled OOS expectancy ${walkForward.pooledOos.averageR}R across ${walkForward.totalOosTrades} trades.`
@@ -859,13 +864,14 @@ const detectorComparison = (
       : [],
   negativeChanges: walkForward.blockers,
   neutralChanges: [],
-  improvedMetrics: walkForward.verdict === "passed" ? ["out_of_sample_expectancy", "window_stability"] : [],
+  improvedMetrics: historicalPass ? ["out_of_sample_expectancy", "window_stability"] : [],
   worsenedMetrics: [],
-  criticalRegressions: walkForward.verdict === "passed" ? [] : walkForward.blockers,
+  criticalRegressions: historicalPass || forwardEvidenceRequired ? [] : walkForward.blockers,
   sanityWarnings: walkForward.warnings,
   promotionVerdict: "needs_follow_up",
   followUpSearchDirection: walkForward.nextAction
-});
+  };
+};
 
 const detectorScoreBreakdown = (
   metrics: CalibrationProposalMetrics,
@@ -947,10 +953,13 @@ const evaluateFrozenDetectorCandidate = (
     grinchScore: undefined,
     comparisonResult: detectorComparison(profileWalkForward),
     profileWalkForward,
-    resultCategory: profileWalkForward.verdict === "passed" ? "improved_but_not_ready" : "rejected",
+    resultCategory:
+      profileWalkForward.verdict === "passed" || profileWalkForward.verdict === "forward_evidence_required"
+        ? "improved_but_not_ready"
+        : "rejected",
     promotionEligible: false,
     rejectionReasons:
-      profileWalkForward.verdict === "passed"
+      profileWalkForward.verdict === "passed" || profileWalkForward.verdict === "forward_evidence_required"
         ? ["Untouched forward evidence, maturity, and readiness gates remain required."]
         : profileWalkForward.blockers
   };

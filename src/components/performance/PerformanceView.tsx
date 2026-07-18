@@ -10,7 +10,19 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { CalendarDays, ChevronLeft, ChevronRight, LockKeyhole, ShieldAlert } from "lucide-react";
+import {
+  Activity,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FlaskConical,
+  Layers3,
+  LockKeyhole,
+  ShieldAlert,
+  ShieldCheck,
+  Target,
+  TrendingUp
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +34,7 @@ import {
   normalizeCycleMetricsForDisplay,
   type CanonicalPerformanceMetrics
 } from "@/lib/performance/canonicalMetrics";
-import { buildSimulatedAccountFromCanonicalMetrics, type SimulatedAccount } from "@/lib/performance/simulatedAccount";
+import { buildSimulatedAccountFromCanonicalMetrics } from "@/lib/performance/simulatedAccount";
 import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 import {
   resolveResearchRuntimeSnapshot,
@@ -36,9 +48,16 @@ import { cn } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
 import { latestWalkForwardRun } from "@/lib/walkForward";
 import { loadSelfImprovementState } from "@/lib/selfImprovement";
+import { readLatestActivateMarketSummary } from "@/lib/ict-strategy-suite/ictActivateMarketPipeline";
+import { readLatestResearchState } from "@/lib/ict-strategy-suite";
+import { loadPaperDemoOperationsState } from "@/lib/paperDemoOperations";
+import { loadPredictionLedger } from "@/lib/predictionLedger";
+import { loadForwardEvidenceLedger } from "@/lib/forwardEvidence";
+import { latestValidationChainEntry, readValidationChainState } from "@/lib/validationChain";
+import { buildResultsWorkspaceSnapshot } from "@/lib/results";
 import { WORKSPACE_PAGE, WORKSPACE_SECTION_LABEL } from "@/components/common/workspaceStyles";
 
-type ResultsTab = "backtest" | "walk_forward" | "calibration";
+type ResultsTab = "overview" | "backtest" | "replay" | "walk_forward" | "paper_forward" | "robustness";
 
 const money = new Intl.NumberFormat(undefined, {
   currency: "USD",
@@ -66,17 +85,17 @@ interface CalendarCell {
   dateKey: string;
   day: number;
   inMonth: boolean;
-  pnl: number;
+  move: number;
   trades: number;
   isToday: boolean;
   weekIndex: number;
-  weekPnl: number;
+  weekMove: number;
   weekTrades: number;
 }
 
 export function PerformanceView({ state }: { state: LabState }) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
-  const [resultsTab, setResultsTab] = useState<ResultsTab>("backtest");
+  const [resultsTab, setResultsTab] = useState<ResultsTab>("overview");
   const [monthOffset, setMonthOffset] = useState(0);
 
   const legacyMetrics = aggregatePortfolioMetrics(state);
@@ -84,7 +103,6 @@ export function PerformanceView({ state }: { state: LabState }) {
   const latestCycle = latestResearchCycleRun(loadResearchCycleState());
   const latestValidation = loadLatestValidationReport();
   const walkForward = latestWalkForwardRun();
-  const oosEdge = walkForward?.stability?.edgeStatistics?.provenance === "out_of_sample" ? walkForward.stability.edgeStatistics : undefined;
   const selfImprovement = loadSelfImprovementState();
   const latestProposal = selfImprovement.proposals?.[0];
   const canonicalMetrics = runtimeSnapshot?.performance.canonicalPerformanceMetrics ?? normalizeCycleMetricsForDisplay(latestCycle, latestValidation);
@@ -97,20 +115,34 @@ export function PerformanceView({ state }: { state: LabState }) {
   const calendar = useMemo(
     () =>
       buildResultsCalendar({
-        account: simulatedAccount,
         metrics: canonicalMetrics,
         outcomes: state.outcomes,
         monthOffset
       }),
     [canonicalMetrics, simulatedAccount, state.outcomes, monthOffset]
   );
-  const equityCurve = useMemo(() => buildEquityCurve(canonicalMetrics, simulatedAccount, calendar.cells), [canonicalMetrics, simulatedAccount, calendar.cells]);
+  const outcomeMoveCurve = useMemo(() => buildOutcomeMoveCurve(calendar.cells), [calendar.cells]);
   const tradeBars = useMemo(() => buildTradeBars(calendar.cells), [calendar.cells]);
-  const recentRows = useMemo(() => buildRecentOutcomeRows(state.outcomes, canonicalMetrics), [canonicalMetrics, state.outcomes]);
+  const recentRows = useMemo(() => buildRecentOutcomeRows(state.outcomes), [state.outcomes]);
+  const resultsSnapshot = useMemo(
+    () => buildResultsWorkspaceSnapshot({
+      runtimeSnapshot,
+      canonicalMetrics,
+      activationSummary: readLatestActivateMarketSummary(),
+      latestResearchState: readLatestResearchState(),
+      walkForward,
+      validationChainEntry: latestValidationChainEntry(readValidationChainState()),
+      paperDemoState: loadPaperDemoOperationsState(),
+      predictionLedger: loadPredictionLedger(),
+      forwardEvidenceEntries: loadForwardEvidenceLedger()
+    }),
+    [canonicalMetrics, runtimeSnapshot, walkForward]
+  );
   const sourceWarnings = selectRuntimeProvenanceWarnings(runtimeSnapshot);
-  const pnlPositive = calendar.monthPnl >= 0;
+  const movePositive = calendar.monthMove >= 0;
   const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
   const avgWinLoss = averageWinLossRatio(canonicalMetrics);
+  const hasDatedOutcomes = state.outcomes.length > 0;
 
   useEffect(() => {
     let mounted = true;
@@ -126,26 +158,41 @@ export function PerformanceView({ state }: { state: LabState }) {
 
   return (
     <div data-testid="performance-results-page" className={`${WORKSPACE_PAGE} text-slate-100`}>
-      <header className="premium-surface premium-panel-grid flex flex-col justify-between gap-4 rounded-[24px] p-4 sm:p-5 lg:flex-row lg:items-end">
+      <header className="premium-surface premium-panel-grid flex flex-col justify-between gap-4 rounded-lg p-4 sm:p-5 lg:flex-row lg:items-end">
         <div className="min-w-0">
           <p className={WORKSPACE_SECTION_LABEL}>Research Results</p>
-          <h2 className="mt-1 text-3xl font-semibold tracking-normal text-slate-50">Performance Results</h2>
+          <h2 className="mt-1 text-3xl font-semibold tracking-normal text-slate-50">Research Performance</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-            Backtest, walk-forward, and calibration results stay separately labeled by evidence source.
+            One evidence ledger for backtest, replay, chronological OOS, robustness, Paper-Demo monitoring, and forward forecasts.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant="warning">Provenance labeled</Badge>
-          <Badge variant="secondary">{canonicalMetrics?.symbol ?? runtimeSnapshot?.marketData.symbol ?? "NQ"} / {canonicalMetrics?.timeframe ?? runtimeSnapshot?.marketData.timeframe ?? "5m"}</Badge>
+          <Badge variant={resultsSnapshot.source.provider === "mt5_read_only" ? "success" : "warning"}>
+            {resultsSnapshot.source.provider.replace(/_/g, " ")}
+          </Badge>
+          <Badge variant="secondary">{resultsSnapshot.source.brokerSymbol} -&gt; {resultsSnapshot.source.requestedSymbol} / {resultsSnapshot.source.timeframe}</Badge>
+          <Badge variant="danger">authority none</Badge>
         </div>
       </header>
+
+      <ResultsCalendar
+        calendar={calendar}
+        movePositive={movePositive}
+        hasDatedOutcomes={hasDatedOutcomes}
+        onPreviousMonth={() => setMonthOffset((value) => value - 1)}
+        onNextMonth={() => setMonthOffset((value) => value + 1)}
+        onToday={() => setMonthOffset(0)}
+      />
 
       <div className="flex flex-wrap gap-2" data-testid="results-tabs" role="tablist" aria-label="Results series">
         {(
           [
+            ["overview", "Overview"],
             ["backtest", "Backtest"],
+            ["replay", "Replay"],
             ["walk_forward", "Walk-Forward OOS"],
-            ["calibration", "Calibration"]
+            ["paper_forward", "Paper & Forward"],
+            ["robustness", "Robustness"]
           ] as const
         ).map(([id, label]) => (
           <Button
@@ -161,55 +208,188 @@ export function PerformanceView({ state }: { state: LabState }) {
         ))}
       </div>
 
-      {resultsTab === "walk_forward" ? (
-        <section className="premium-surface space-y-4 rounded-[24px] p-4 sm:p-5" data-testid="results-tab-walk-forward">
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">provenance: out_of_sample</Badge>
-            <Badge variant={oosEdge ? "secondary" : "warning"}>{oosEdge ? "OOS edge present" : "Run walk-forward first"}</Badge>
-          </div>
+      {resultsTab === "overview" ? (
+        <section className="space-y-4" data-testid="results-tab-overview">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="OOS expectancy" value={rValue(oosEdge?.meanR)} detail={`${oosEdge?.sampleSize ?? 0} OOS trades`} />
-            <ResultMetricCard label="OOS win rate" value={pct(oosEdge?.winRate)} detail={`Lower 95 ${rValue(oosEdge?.expectancyLower95)}`} />
             <ResultMetricCard
-              label="OOS profit factor"
-              value="n/a"
-              detail={`Stability ${walkForward?.stability?.stabilityScore ?? "n/a"} · use expectancy CI`}
+              label="Frozen IFVG v3"
+              value={`${resultsSnapshot.frozenProfile.historicalTrades} trades`}
+              detail={`${pct(resultsSnapshot.frozenProfile.historicalTargetFirstRate)} target-first / ${rValue(resultsSnapshot.frozenProfile.historicalAverageR)}`}
+              tone="positive"
             />
-            <ResultMetricCard label="Verdict" value={walkForward?.stability?.verdict ?? "pending"} detail={walkForward?.runId ?? "no WF run"} />
+            <ResultMetricCard
+              label="Chronological OOS"
+              value={`${resultsSnapshot.frozenProfile.oosTrades} trades`}
+              detail={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal} rolling windows / ${rValue(resultsSnapshot.frozenProfile.oosAverageR)}`}
+              tone="positive"
+            />
+            <ResultMetricCard
+              label="Forward Evidence"
+              value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`}
+              detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} dates / ${resultsSnapshot.frozenProfile.forwardWindows} windows`}
+            />
+            <ResultMetricCard
+              label="Research Readiness"
+              value={resultsSnapshot.validation.readinessState.replace(/_/g, " ")}
+              detail={`Evidence ${resultsSnapshot.validation.evidenceScore} / Maturity ${resultsSnapshot.validation.maturityScore}`}
+            />
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <ResultPanel>
+              <PanelHeading icon={<Layers3 className="h-4 w-4" />} title="Analysis integrity" subtitle="Last explicit Activate Market context" />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <StatTile label="Depth" value={resultsSnapshot.source.analysisDepthStatus.replace(/_/g, " ")} />
+                <StatTile label="Required timeframes" value={resultsSnapshot.source.requiredTimeframesLoaded ? "loaded" : "incomplete"} />
+                <StatTile label="Loaded" value={resultsSnapshot.source.analysisTimeframesLoaded.join(" / ") || "Activate Market required"} />
+                <StatTile
+                  label="Missing"
+                  value={
+                    resultsSnapshot.source.requiredTimeframesLoaded
+                      ? resultsSnapshot.source.missingTimeframes.join(" / ") || "none"
+                      : resultsSnapshot.source.missingTimeframes.join(" / ") || "Activate Market required"
+                  }
+                />
+                <StatTile label="Weekly bias" value={`${resultsSnapshot.source.weeklyBiasDirection} / ${resultsSnapshot.source.weeklyBiasStatus}`} />
+                <StatTile label="Fingerprint" value={resultsSnapshot.source.fingerprint} />
+              </div>
+            </ResultPanel>
+
+            <ResultPanel>
+              <PanelHeading icon={<ShieldCheck className="h-4 w-4" />} title="Progression gate" subtitle="Historical strength does not auto-promote a profile" />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <StatTile label="Latest replay" value={resultsSnapshot.validation.replayVerdict.replace(/_/g, " ")} />
+                <StatTile label="Latest walk-forward" value={resultsSnapshot.validation.walkForwardVerdict.replace(/_/g, " ")} />
+                <StatTile label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} />
+                <StatTile label="Paper-Demo" value={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / broker disconnected`} />
+              </div>
+              <p className="mt-4 rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm leading-6 text-emerald-100">
+                Frozen IFVG v3 historical replay, chronological OOS, and Monte Carlo evidence are preserved separately. Forward reassessment still requires untouched post-cutoff outcomes.
+              </p>
+              <p className="mt-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
+                {resultsSnapshot.validation.nextAction}
+              </p>
+            </ResultPanel>
           </div>
         </section>
       ) : null}
 
-      {resultsTab === "calibration" ? (
-        <section className="premium-surface space-y-4 rounded-[24px] p-4 sm:p-5" data-testid="results-tab-calibration">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <ResultMetricCard label="Latest proposal" value={latestProposal?.proposalId ?? "none"} detail={latestProposal?.status ?? "no proposals"} />
-            <ResultMetricCard label="Intent" value={latestProposal?.proposalIntent ?? "n/a"} detail={latestProposal?.source ?? "self-improvement"} />
-            <ResultMetricCard
-              label="Active calibration"
-              value={selfImprovement.activeResearchCalibration?.sourceProposalId ?? "none"}
-              detail={selfImprovement.lastAcceptedProposalId ? `Last accepted ${selfImprovement.lastAcceptedProposalId}` : "No accepted calibration"}
-            />
+      {resultsTab === "replay" ? (
+        <section className="premium-surface space-y-4 rounded-lg p-4 sm:p-5" data-testid="results-tab-replay">
+          <PanelHeading icon={<Activity className="h-4 w-4" />} title="Replay evidence" subtitle="Compact manual replay outcomes; no candles are stored here" />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="Signals" value={String(resultsSnapshot.replay.totalSignals)} detail={resultsSnapshot.replay.runId ?? "no saved replay"} />
+            <ResultMetricCard label="Target-first" value={pct(resultsSnapshot.replay.targetFirstRate ?? undefined)} detail="all replay signals" />
+            <ResultMetricCard label="Approved target-first" value={pct(resultsSnapshot.replay.approvedTargetFirstRate ?? undefined)} detail={`Approved RR ${rValue(resultsSnapshot.replay.approvedAverageRr)}`} />
+            <ResultMetricCard label="Replay verdict" value={resultsSnapshot.replay.verdict.replace(/_/g, " ")} detail="Recognition alone is not evidence" />
           </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "walk_forward" ? (
+        <section className="premium-surface space-y-4 rounded-lg p-4 sm:p-5" data-testid="results-tab-walk-forward">
+          <PanelHeading
+            icon={<TrendingUp className="h-4 w-4" />}
+            title="Walk-forward and chronological OOS"
+            subtitle="Latest active validation and frozen profile evidence are reported separately"
+          />
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">latest run: {resultsSnapshot.walkForward.status.replace(/_/g, " ")}</Badge>
+            <Badge variant="secondary">frozen IFVG v3: OOS passed</Badge>
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Latest active validation run</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="OOS expectancy" value={rValue(resultsSnapshot.walkForward.oosAverageR)} detail={`${resultsSnapshot.walkForward.oosTrades} OOS trades`} />
+            <ResultMetricCard label="Lower 95% expectancy" value={rValue(resultsSnapshot.walkForward.oosLower95)} detail="Must remain positive for stronger evidence" />
+            <ResultMetricCard
+              label="Windows passed"
+              value={`${resultsSnapshot.walkForward.windowsPassed}/${resultsSnapshot.walkForward.windows}`}
+              detail={`Stability ${walkForward?.stability?.stabilityScore ?? "n/a"} / use expectancy CI`}
+            />
+            <ResultMetricCard label="Verdict" value={resultsSnapshot.walkForward.verdict.replace(/_/g, " ")} detail={resultsSnapshot.walkForward.runId ?? "no saved WF run"} />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frozen IFVG v3 chronological evidence</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="OOS sample" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} detail={`${resultsSnapshot.frozenProfile.historicalUniqueDates} historical dates`} tone="positive" />
+            <ResultMetricCard label="Rolling windows" value={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal}`} detail="positive chronological windows" tone="positive" />
+            <ResultMetricCard label="OOS average" value={rValue(resultsSnapshot.frozenProfile.oosAverageR)} detail="frozen detector profile" tone="positive" />
+            <ResultMetricCard label="OOS profit factor" value={resultsSnapshot.frozenProfile.oosProfitFactor.toFixed(3)} detail="historical evidence; no auto-promotion" tone="positive" />
+          </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "paper_forward" ? (
+        <section className="space-y-4" data-testid="results-tab-paper-forward">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="Paper candidates" value={String(resultsSnapshot.paperDemo.candidateCount)} detail={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / ${resultsSnapshot.paperDemo.blockedCount} blocked`} />
+            <ResultMetricCard label="Daily checklist" value={`${resultsSnapshot.paperDemo.checklistCompleted}/${resultsSnapshot.paperDemo.checklistTotal}`} detail={`${resultsSnapshot.paperDemo.journalEntries} compact journal entries`} />
+            <ResultMetricCard label="Forward outcomes" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} independent dates`} />
+            <ResultMetricCard label="Forecast calibration" value={resultsSnapshot.predictions.classification.replace(/_/g, " ")} detail={`${resultsSnapshot.predictions.completedForecasts} completed / ${resultsSnapshot.predictions.pendingForecasts} pending`} />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <ResultPanel>
+              <PanelHeading icon={<Target className="h-4 w-4" />} title="Frozen profile forward ledger" subtitle="Untouched outcomes after the validation cutoff" />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <StatTile label="Target-first" value={pct(resultsSnapshot.frozenProfile.forwardTargetFirstRate ?? undefined)} />
+                <StatTile label="Average R" value={rValue(resultsSnapshot.frozenProfile.forwardAverageR)} />
+                <StatTile label="Reassessment" value={resultsSnapshot.frozenProfile.reassessmentEligible ? "eligible for review" : "not yet eligible"} />
+                <StatTile label="Recommendation" value={resultsSnapshot.frozenProfile.recommendation.replace(/_/g, " ")} />
+              </div>
+            </ResultPanel>
+            <ResultPanel>
+              <PanelHeading icon={<TrendingUp className="h-4 w-4" />} title="Causal forecast ledger" subtitle="Anticipated scenarios measured before outcomes" />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <StatTile label="Forecasts" value={`${resultsSnapshot.predictions.totalForecasts} total / ${resultsSnapshot.predictions.actionableForecasts} actionable`} />
+                <StatTile label="Target-first" value={pct(resultsSnapshot.predictions.targetFirstRate ?? undefined)} />
+                <StatTile label="Average realized R" value={rValue(resultsSnapshot.predictions.averageRealizedR)} />
+                <StatTile label="Brier score" value={resultsSnapshot.predictions.brierScore?.toFixed(3) ?? "n/a"} />
+              </div>
+            </ResultPanel>
+          </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "robustness" ? (
+        <section className="space-y-4" data-testid="results-tab-robustness">
+          <PanelHeading
+            icon={<ShieldCheck className="h-4 w-4" />}
+            title="Robustness and Monte Carlo"
+            subtitle="Latest saved simulation and frozen profile evidence remain distinct"
+          />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} detail={`${resultsSnapshot.monteCarlo.usableOutcomes} usable outcomes`} />
+            <ResultMetricCard label="5th percentile ending R" value={rValue(resultsSnapshot.monteCarlo.fifthPercentileEndingR)} detail={`Median ${rValue(resultsSnapshot.monteCarlo.medianEndingR)}`} />
+            <ResultMetricCard label="Worst drawdown" value={resultsSnapshot.monteCarlo.worstMaxDrawdownPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.worstMaxDrawdownPct.toFixed(2)}%`} detail={`Median ${resultsSnapshot.monteCarlo.medianMaxDrawdownPct?.toFixed(2) ?? "n/a"}%`} />
+            <ResultMetricCard label="Risk of ruin" value={resultsSnapshot.monteCarlo.riskOfRuinPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.riskOfRuinPct.toFixed(2)}%`} detail="Research simulation only" />
+          </div>
+          <ResultPanel>
+            <PanelHeading icon={<Activity className="h-4 w-4" />} title="Frozen IFVG v3 robustness" subtitle="Validated historical profile; forward reassessment remains gated" />
+            <div className="mt-4 grid gap-2 md:grid-cols-4">
+              <StatTile label="Monte Carlo" value={resultsSnapshot.frozenProfile.monteCarloRobustness.replace(/_/g, " ")} />
+              <StatTile label="Historical outcomes" value={String(resultsSnapshot.frozenProfile.historicalTrades)} />
+              <StatTile label="Chronological OOS" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} />
+              <StatTile label="Forward threshold" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} />
+            </div>
+          </ResultPanel>
+          <ResultPanel>
+            <PanelHeading icon={<FlaskConical className="h-4 w-4" />} title="Calibration and deterministic review" subtitle="Drafts may be tested; nothing applies or promotes automatically" />
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              <StatTile label="Latest proposal" value={latestProposal?.proposalId ?? "none"} />
+              <StatTile label="Proposal status" value={latestProposal?.status ?? "none"} />
+              <StatTile label="Active calibration" value={selfImprovement.activeResearchCalibration?.sourceProposalId ?? "none"} />
+            </div>
+          </ResultPanel>
         </section>
       ) : null}
 
       {resultsTab === "backtest" ? (
         <>
-      <ResultsCalendar
-        calendar={calendar}
-        pnlPositive={pnlPositive}
-        onPreviousMonth={() => setMonthOffset((value) => value - 1)}
-        onNextMonth={() => setMonthOffset((value) => value + 1)}
-        onToday={() => setMonthOffset(0)}
-      />
-
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <ResultMetricCard
-          label="Total P&L"
-          value={money.format(calendar.monthPnl)}
-          detail={`${calendar.monthTrades.toLocaleString()} simulated research trades`}
-          tone={calendar.monthPnl >= 0 ? "positive" : "negative"}
+          label="Aggregate simulated P&L"
+          value={money.format(resultsSnapshot.backtest.realizedPnL ?? 0)}
+          detail={`${resultsSnapshot.backtest.totalTrades.toLocaleString()} canonical research trades`}
+          tone={(resultsSnapshot.backtest.realizedPnL ?? 0) >= 0 ? "positive" : "negative"}
         />
         <ResultMetricCard
           label="Win Rate"
@@ -242,20 +422,20 @@ export function PerformanceView({ state }: { state: LabState }) {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <ResultPanel className="min-h-[430px]">
+        <ResultPanel className="min-h-[430px] min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">Performance Curve</p>
-              <h3 className="mt-1 text-xl font-semibold text-slate-50">Simulated balance progression</h3>
+              <h3 className="mt-1 text-xl font-semibold text-slate-50">Cumulative dated outcome move</h3>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">{canonicalMetrics?.sourceCycleId ?? "no cycle"}</Badge>
               <Badge variant="warning">in_sample</Badge>
             </div>
           </div>
-          <div className="mt-5 h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={equityCurve}>
+          <div className="mt-5 h-[320px] min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 720, height: 320 }}>
+              <AreaChart data={outcomeMoveCurve}>
                 <defs>
                   <linearGradient id="performanceBalanceFill" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="#22c55e" stopOpacity={0.42} />
@@ -265,8 +445,8 @@ export function PerformanceView({ state }: { state: LabState }) {
                 <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 12 }} tickLine={false} axisLine={false} />
                 <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} tickLine={false} axisLine={false} width={72} />
-                <Tooltip contentStyle={{ background: "#15151a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "#f8fafc" }} formatter={(value) => wholeMoney.format(Number(value))} />
-                <Area type="monotone" dataKey="balance" stroke="#22c55e" strokeWidth={2.4} fill="url(#performanceBalanceFill)" dot={{ r: 2, fill: "#f8fafc" }} />
+                <Tooltip contentStyle={{ background: "#15151a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "#f8fafc" }} formatter={(value) => `${Number(value).toFixed(2)} move units`} />
+                <Area type="monotone" dataKey="cumulativeMove" stroke="#22c55e" strokeWidth={2.4} fill="url(#performanceBalanceFill)" dot={{ r: 2, fill: "#f8fafc" }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -308,8 +488,8 @@ export function PerformanceView({ state }: { state: LabState }) {
             <h3 className="text-lg font-semibold text-slate-50">Daily Trade Load</h3>
             <CalendarDays className="h-4 w-4 text-sky-300" aria-hidden="true" />
           </div>
-          <div className="mt-4 h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="mt-4 h-[220px] min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 480, height: 220 }}>
               <BarChart data={tradeBars}>
                 <CartesianGrid stroke="rgba(148,163,184,0.14)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} />
@@ -379,12 +559,19 @@ export function PerformanceView({ state }: { state: LabState }) {
                   <td className="py-3 pr-4 font-semibold text-slate-100">{row.symbol}</td>
                   <td className="py-3 pr-4"><Badge variant="secondary">{row.session}</Badge></td>
                   <td className="py-3 pr-4"><Badge variant={row.actualBias === "bullish" ? "success" : row.actualBias === "bearish" ? "danger" : "warning"}>{row.actualBias}</Badge></td>
-                  <td className={cn("py-3 pr-4 font-mono", row.pnl >= 0 ? "text-emerald-300" : "text-rose-300")}>{money.format(row.pnl)}</td>
+                  <td className={cn("py-3 pr-4 font-mono", row.move >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatMove(row.move)}</td>
                   <td className="py-3 pr-4">{row.liquidityTargetReached ? "Reached" : "No"}</td>
                   <td className="py-3 pr-4">{row.invalidationHit ? "Hit" : "Held"}</td>
                   <td className="max-w-[360px] py-3 pr-4 text-slate-500">{row.notes}</td>
                 </tr>
               ))}
+              {!recentRows.length ? (
+                <tr>
+                  <td colSpan={9} className="py-10 text-center text-sm text-slate-500">
+                    No dated simulated outcomes are stored. Aggregate cycle metrics are not presented as individual outcome rows.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -415,23 +602,25 @@ export function PerformanceView({ state }: { state: LabState }) {
 
 function ResultsCalendar({
   calendar,
-  pnlPositive,
+  hasDatedOutcomes,
+  movePositive,
   onPreviousMonth,
   onNextMonth,
   onToday
 }: {
   calendar: ReturnType<typeof buildResultsCalendar>;
-  pnlPositive: boolean;
+  hasDatedOutcomes: boolean;
+  movePositive: boolean;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onToday: () => void;
 }) {
   return (
-    <section data-testid="results-calendar" className="premium-surface overflow-hidden rounded-[24px]">
+    <section data-testid="results-calendar" className="premium-surface overflow-hidden rounded-lg">
       <div className="flex flex-col gap-4 border-b border-white/10 px-4 py-5 md:px-6">
         <div className="flex flex-wrap items-center justify-center gap-2 text-center text-2xl font-semibold">
-          <span className="text-slate-50">Monthly P/L:</span>
-          <span className={pnlPositive ? "text-emerald-400" : "text-rose-400"}>{money.format(calendar.monthPnl)}</span>
+          <span className="text-slate-50">Dated outcome move:</span>
+          <span className={movePositive ? "text-emerald-400" : "text-rose-400"}>{formatMove(calendar.monthMove)}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -440,7 +629,7 @@ function ResultsCalendar({
             </Button>
             <div>
               <p className="text-lg font-semibold text-slate-200">{compactDate.format(calendar.anchorDate)}</p>
-              <p className="text-xs text-slate-500">Derived simulated results calendar</p>
+              <p className="text-xs text-slate-500">Recorded dated research outcomes only</p>
             </div>
             <Button variant="ghost" size="sm" aria-label="Next month" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -448,7 +637,7 @@ function ResultsCalendar({
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{calendar.monthTrades.toLocaleString()} trades</Badge>
-            <Badge variant="warning">Simulation only</Badge>
+            <Badge variant={hasDatedOutcomes ? "warning" : "secondary"}>{hasDatedOutcomes ? "Simulation only" : "No dated outcomes"}</Badge>
             <Button variant="secondary" size="sm" onClick={onToday}>
               Today
             </Button>
@@ -469,14 +658,19 @@ function ResultsCalendar({
           </div>
         </div>
       </div>
+      {!hasDatedOutcomes ? (
+        <div className="border-t border-white/10 px-5 py-3 text-sm text-slate-400">
+          Aggregate backtest metrics are intentionally not spread across calendar days. Dated replay, paper, or forward outcomes will appear here when recorded.
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function CalendarDayCell({ cell }: { cell: CalendarCell }) {
   const isWeekSummary = cell.date.getDay() === 6;
-  const hasActivity = cell.trades > 0 || Math.abs(cell.pnl) > 0;
-  const isPositive = cell.pnl >= 0;
+  const hasActivity = cell.trades > 0 || Math.abs(cell.move) > 0;
+  const isPositive = cell.move >= 0;
   return (
     <div
       className={cn(
@@ -491,15 +685,15 @@ function CalendarDayCell({ cell }: { cell: CalendarCell }) {
       {isWeekSummary ? (
         <div className="flex h-full min-h-[90px] flex-col items-center justify-center">
           <div className="text-sm font-bold text-slate-50">Week {cell.weekIndex + 1}</div>
-          <div className={cn("mt-2 font-mono text-2xl font-semibold", cell.weekPnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
-            {money.format(cell.weekPnl)}
+          <div className={cn("mt-2 font-mono text-2xl font-semibold", cell.weekMove >= 0 ? "text-emerald-400" : "text-rose-400")}>
+            {formatMove(cell.weekMove)}
           </div>
           <div className="mt-1 text-sm text-slate-400">{cell.weekTrades} trades</div>
         </div>
       ) : hasActivity ? (
         <div className="flex h-full min-h-[90px] flex-col items-center justify-center">
           <div className={cn("font-mono text-2xl font-semibold", isPositive ? "text-emerald-400" : "text-rose-400")}>
-            {money.format(cell.pnl)}
+            {formatMove(cell.move)}
           </div>
           <div className="mt-1 text-sm text-slate-400">{cell.trades} trades</div>
         </div>
@@ -510,7 +704,7 @@ function CalendarDayCell({ cell }: { cell: CalendarCell }) {
 
 function ResultMetricCard({ detail, label, tone = "neutral", value, visual }: { detail?: string; label: string; tone?: "positive" | "negative" | "neutral"; value: string; visual?: ReactNode }) {
   return (
-    <section className="premium-surface-soft min-h-[132px] rounded-2xl p-5">
+    <section className="premium-surface-soft min-h-[132px] rounded-lg p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-400">{label}</p>
@@ -525,9 +719,23 @@ function ResultMetricCard({ detail, label, tone = "neutral", value, visual }: { 
 
 function ResultPanel({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("premium-surface-soft rounded-2xl p-5", className)}>
+    <section className={cn("premium-surface-soft rounded-lg p-5", className)}>
       {children}
     </section>
+  );
+}
+
+function PanelHeading({ icon, subtitle, title }: { icon: ReactNode; subtitle: string; title: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-sky-300/20 bg-sky-300/10 text-sky-300">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-lg font-semibold text-slate-50">{title}</h3>
+        <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
+      </div>
+    </div>
   );
 }
 
@@ -574,12 +782,10 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 function buildResultsCalendar({
-  account,
   metrics,
   outcomes,
   monthOffset = 0
 }: {
-  account?: SimulatedAccount;
   metrics?: CanonicalPerformanceMetrics;
   outcomes: MarketOutcome[];
   monthOffset?: number;
@@ -589,43 +795,41 @@ function buildResultsCalendar({
   const firstOfMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
   const calendarStart = new Date(firstOfMonth);
   calendarStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
-  const outcomeByDay = new Map<string, { pnl: number; trades: number }>();
+  const outcomeByDay = new Map<string, { move: number; trades: number }>();
   for (const outcome of outcomes) {
     const key = dateKey(new Date(outcome.resolvedAt));
-    const current = outcomeByDay.get(key) ?? { pnl: 0, trades: 0 };
-    current.pnl += outcome.priceMove * 1.25;
+    const current = outcomeByDay.get(key) ?? { move: 0, trades: 0 };
+    current.move += outcome.priceMove;
     current.trades += 1;
     outcomeByDay.set(key, current);
   }
 
-  const hasOutcomeActivity = [...outcomeByDay.values()].some((value) => value.trades > 0 || Math.abs(value.pnl) > 0);
-  const allocated = allocateMetricsAcrossCalendar(metrics, account, calendarStart);
   const todayKey = dateKey(new Date());
   const cells: CalendarCell[] = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(calendarStart);
     date.setDate(calendarStart.getDate() + index);
     const key = dateKey(date);
-    const source = hasOutcomeActivity ? outcomeByDay.get(key) : allocated.get(key);
+    const source = outcomeByDay.get(key);
     return {
       date,
       dateKey: key,
       day: date.getDate(),
       inMonth: date.getMonth() === anchorDate.getMonth(),
-      pnl: Math.round((source?.pnl ?? 0) * 100) / 100,
+      move: Math.round((source?.move ?? 0) * 100) / 100,
       trades: source?.trades ?? 0,
       isToday: key === todayKey,
       weekIndex: Math.floor(index / 7),
-      weekPnl: 0,
+      weekMove: 0,
       weekTrades: 0
     };
   });
 
   for (let week = 0; week < 6; week += 1) {
     const weekCells = cells.slice(week * 7, week * 7 + 7);
-    const weekPnl = weekCells.reduce((sum, cell) => sum + cell.pnl, 0);
+    const weekMove = weekCells.reduce((sum, cell) => sum + cell.move, 0);
     const weekTrades = weekCells.reduce((sum, cell) => sum + cell.trades, 0);
     weekCells.forEach((cell) => {
-      cell.weekPnl = Math.round(weekPnl * 100) / 100;
+      cell.weekMove = Math.round(weekMove * 100) / 100;
       cell.weekTrades = weekTrades;
     });
   }
@@ -633,46 +837,20 @@ function buildResultsCalendar({
   return {
     anchorDate,
     cells,
-    monthPnl: Math.round(cells.filter((cell) => cell.inMonth).reduce((sum, cell) => sum + cell.pnl, 0) * 100) / 100,
+    monthMove: Math.round(cells.filter((cell) => cell.inMonth).reduce((sum, cell) => sum + cell.move, 0) * 100) / 100,
     monthTrades: cells.filter((cell) => cell.inMonth).reduce((sum, cell) => sum + cell.trades, 0)
   };
 }
 
-function allocateMetricsAcrossCalendar(metrics: CanonicalPerformanceMetrics | undefined, account: SimulatedAccount | undefined, calendarStart: Date) {
-  const totalPnl = metrics?.realizedPnL ?? account?.realizedPnL ?? 0;
-  const totalTrades = metrics?.totalTrades ?? account?.totalTrades ?? 0;
-  const seed = metrics?.sourceCycleId ?? "empty-performance-calendar";
-  const activeIndexes = Array.from({ length: 42 }, (_, index) => index).filter((index) => {
-    const date = new Date(calendarStart);
-    date.setDate(calendarStart.getDate() + index);
-    const day = date.getDay();
-    return day >= 1 && day <= 5;
-  });
-  const weights = activeIndexes.map((index) => 0.35 + seededNoise(seed, index) * 1.25);
-  const weightSum = weights.reduce((sum, value) => sum + value, 0) || 1;
-  const allocated = new Map<string, { pnl: number; trades: number }>();
-  activeIndexes.forEach((index, weightIndex) => {
-    const date = new Date(calendarStart);
-    date.setDate(calendarStart.getDate() + index);
-    const share = weights[weightIndex] / weightSum;
-    const signNoise = seededNoise(seed, index + 300) < 0.16 ? -1 : 1;
-    const pnl = totalPnl * share * signNoise;
-    const trades = Math.max(0, Math.round(totalTrades * share));
-    allocated.set(dateKey(date), { pnl, trades });
-  });
-  return allocated;
-}
-
-function buildEquityCurve(metrics: CanonicalPerformanceMetrics | undefined, account: SimulatedAccount | undefined, cells: CalendarCell[]) {
-  const starting = account?.startingBalance ?? metrics?.startingBalance ?? 50000;
-  let running = starting;
+function buildOutcomeMoveCurve(cells: CalendarCell[]) {
+  let running = 0;
   return cells
-    .filter((cell) => cell.inMonth && (cell.trades > 0 || Math.abs(cell.pnl) > 0))
+    .filter((cell) => cell.inMonth && (cell.trades > 0 || Math.abs(cell.move) > 0))
     .map((cell) => {
-      running += cell.pnl;
+      running += cell.move;
       return {
         label: String(cell.day),
-        balance: Math.round(running)
+        cumulativeMove: Math.round(running * 100) / 100
       };
     });
 }
@@ -686,37 +864,22 @@ function buildTradeBars(cells: CalendarCell[]) {
     }));
 }
 
-function buildRecentOutcomeRows(outcomes: MarketOutcome[], metrics?: CanonicalPerformanceMetrics) {
-  if (outcomes.length) {
-    return outcomes
-      .slice()
-      .sort((left, right) => new Date(right.resolvedAt).getTime() - new Date(left.resolvedAt).getTime())
-      .slice(0, 12)
-      .map((outcome) => ({
-        id: outcome.id,
-        resolvedAt: new Date(outcome.resolvedAt).toLocaleString(),
-        symbol: outcome.symbol,
-        session: outcome.session,
-        actualBias: outcome.actualBias,
-        pnl: outcome.priceMove * 1.25,
-        liquidityTargetReached: outcome.liquidityTargetReached,
-        invalidationHit: outcome.invalidationHit,
-        notes: outcome.notes
-      }));
-  }
-  return [
-    {
-      id: "latest-cycle",
-      resolvedAt: metrics?.generatedAt ? new Date(metrics.generatedAt).toLocaleString() : "n/a",
-      symbol: metrics?.symbol ?? "NQ",
-      session: "New York AM",
-      actualBias: "neutral" as const,
-      pnl: metrics?.realizedPnL ?? 0,
-      liquidityTargetReached: (metrics?.winningTrades ?? 0) > 0,
-      invalidationHit: (metrics?.losingTrades ?? 0) > 0,
-      notes: "Latest canonical research cycle summary; no per-trade broker ledger is connected."
-    }
-  ];
+function buildRecentOutcomeRows(outcomes: MarketOutcome[]) {
+  return outcomes
+    .slice()
+    .sort((left, right) => new Date(right.resolvedAt).getTime() - new Date(left.resolvedAt).getTime())
+    .slice(0, 12)
+    .map((outcome) => ({
+      id: outcome.id,
+      resolvedAt: new Date(outcome.resolvedAt).toLocaleString(),
+      symbol: outcome.symbol,
+      session: outcome.session,
+      actualBias: outcome.actualBias,
+      move: outcome.priceMove,
+      liquidityTargetReached: outcome.liquidityTargetReached,
+      invalidationHit: outcome.invalidationHit,
+      notes: outcome.notes
+    }));
 }
 
 function averageWinLossRatio(metrics?: CanonicalPerformanceMetrics) {
@@ -726,16 +889,10 @@ function averageWinLossRatio(metrics?: CanonicalPerformanceMetrics) {
   return metrics.profitFactor * (metrics.losingTrades / metrics.winningTrades);
 }
 
-function seededNoise(seed: string, index: number) {
-  let hash = 0;
-  const value = `${seed}:${index}`;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.sin(hash) * 0.5 + 0.5;
-}
-
 function dateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatMove(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
 }

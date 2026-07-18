@@ -91,8 +91,15 @@ export interface IctActivateMarketLatestSummary {
   primaryTimeframe: string;
   displayTimeframe?: string;
   analysisDepthStatus?: IctAnalysisDepthStatus;
+  analysisTimeframesRequested?: IctAnalysisTimeframe[];
+  analysisTimeframesLoaded?: IctAnalysisTimeframe[];
   analysisTimeframesUsed?: IctAnalysisTimeframe[];
   missingTimeframes?: IctAnalysisTimeframe[];
+  requiredTimeframesLoaded?: boolean;
+  multiTimeframeContextStatus?: IctMultiTimeframeContextStatus;
+  weeklyBiasStatus?: IctWeeklyBiasStatus;
+  weeklyBiasDirection?: IctWeeklyBiasDirection;
+  weeklyBiasReason?: string;
   modelName?: string;
   modelLane?: string;
   opportunityType?: IctOpportunityType;

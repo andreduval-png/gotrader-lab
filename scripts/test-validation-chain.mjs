@@ -7,14 +7,20 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const projectRoot = process.cwd();
-const sourceRoot = path.join(projectRoot, "src", "lib", "validationChain");
+const libRoot = path.join(projectRoot, "src", "lib");
 const outRoot = path.join(projectRoot, ".gotrader", "validation-chain-test");
-const sourceFiles = ["validationChainTypes.ts", "buildValidationChain.ts"];
+const sourceFiles = [
+  "validationChain/validationChainTypes.ts",
+  "validationChain/buildValidationChain.ts",
+  "validationProvenance/validationProvenanceTypes.ts",
+  "validationProvenance/validationProvenance.ts",
+  "validationProvenance/index.ts"
+];
 
 function compileForNode() {
   fs.mkdirSync(outRoot, { recursive: true });
   for (const file of sourceFiles) {
-    const sourcePath = path.join(sourceRoot, file);
+    const sourcePath = path.join(libRoot, file);
     const source = fs.readFileSync(sourcePath, "utf8");
     const transpiled = ts.transpileModule(source, {
       compilerOptions: {
@@ -26,9 +32,13 @@ function compileForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(/from\s+"\.\.\/validationProvenance"/g, 'from "../validationProvenance/index.mjs"')
+      .replace(/from\s+'\.\.\/validationProvenance'/g, "from '../validationProvenance/index.mjs'")
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const outputPath = path.join(outRoot, file.replace(/\.ts$/, ".mjs"));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, rewritten, "utf8");
   }
 }
 
@@ -40,7 +50,7 @@ async function main() {
     applyValidationChainWalkForwardResult,
     applyValidationChainEvidenceUpdate,
     describeValidationChainStage
-  } = await import(pathToFileURL(path.join(outRoot, "buildValidationChain.mjs")).href);
+  } = await import(pathToFileURL(path.join(outRoot, "validationChain", "buildValidationChain.mjs")).href);
 
   const mt5SourceStatus = {
     sourceProvider: "mt5_read_only",
@@ -54,19 +64,35 @@ async function main() {
     isResearchActive: false,
     statusLabel: "Mock/sample data"
   };
-  const recognitionInput = (overrides = {}) => ({
-    recognitionId: "recognition_test_1",
-    recognitionType: "full_model",
-    setupLabel: "CMD Full Model",
-    symbol: "MNQ",
-    brokerSymbol: "USTECH",
-    timeframe: "5m",
-    htfContext: ["15m", "1h"],
-    sourceFingerprint: "mt5_fp_test",
-    sourceStatus: mt5SourceStatus,
-    generatedAt: "2026-06-11T10:00:00.000Z",
-    ...overrides
-  });
+  const recognitionInput = (overrides = {}) => {
+    const input = {
+      recognitionId: "recognition_test_1",
+      recognitionType: "full_model",
+      setupLabel: "CMD Full Model",
+      symbol: "MNQ",
+      brokerSymbol: "USTECH",
+      timeframe: "5m",
+      htfContext: ["15m", "1h"],
+      sourceFingerprint: "mt5_fp_test",
+      sourceStatus: mt5SourceStatus,
+      generatedAt: "2026-06-11T10:00:00.000Z",
+      ...overrides
+    };
+    return {
+      ...input,
+      provenance: {
+        strategyProfile: "cmd_validation_fixture_v1",
+        candidateId: input.recognitionId,
+        sourceProvider: input.sourceStatus.sourceProvider,
+        requestedSymbol: input.symbol,
+        brokerSymbol: input.brokerSymbol,
+        timeframe: input.timeframe,
+        sourceFingerprint: input.sourceFingerprint,
+        parameterFingerprint: "params_validation_fixture_v1",
+        ...overrides.provenance
+      }
+    };
+  };
 
   // 1. Mock recognition cannot create evidence.
   const mockQueue = queueValidationChainEntry(recognitionInput({ sourceStatus: mockSourceStatus }));
@@ -125,7 +151,8 @@ async function main() {
     targetFirstRate: 0.61,
     averageRr: 1.4,
     usableOutcomes: 18,
-    reason: "Target-first rate 61% across 18 signals."
+    reason: "Target-first rate 61% across 18 signals.",
+    provenance: entry.provenance
   });
   assert.ok(replayPassed.replayResult, "replay result summary must be preserved, not dropped");
   assert.equal(replayPassed.replayResult.runId, "replay_run_1");
@@ -143,7 +170,8 @@ async function main() {
     totalWindows: 12,
     totalSignals: 18,
     targetFirstRate: 0.2,
-    reason: "Target-first rate 20% across 18 signals."
+    reason: "Target-first rate 20% across 18 signals.",
+    provenance: entry.provenance
   });
   assert.equal(replayFailed.hypothesisStatus, "replay_failed");
   const wfAfterFailedReplay = applyValidationChainWalkForwardResult(replayFailed, {
@@ -168,7 +196,11 @@ async function main() {
     windowsTested: 5,
     oosWindowsPassed: 4,
     warningFlags: ["low trade count in window 3"],
-    reason: "4/5 OOS windows passed."
+    reason: "4/5 OOS windows passed.",
+    provenance: {
+      ...entry.provenance,
+      walkForwardRunId: "wf_run_1"
+    }
   });
   assert.equal(wfPassed.hypothesisStatus, "walk_forward_passed");
   assert.equal(wfPassed.walkForwardResult.oosVerdict, "robust_research");
@@ -178,7 +210,8 @@ async function main() {
     evidenceQualityScore: 64,
     maturityScore: 55,
     maturityGrade: "developing",
-    detail: "test evidence snapshot"
+    detail: "test evidence snapshot",
+    provenance: entry.provenance
   });
   assert.equal(evidenceUpdated.hypothesisStatus, "evidence_updated");
   assert.equal(evidenceUpdated.evidenceQuality.evidenceQualityScore, 64);
@@ -191,7 +224,11 @@ async function main() {
     oosVerdict: "fail",
     tradeCount: 10,
     warningFlags: ["oos collapse"],
-    reason: "OOS windows failed."
+    reason: "OOS windows failed.",
+    provenance: {
+      ...entry.provenance,
+      walkForwardRunId: "wf_run_failed"
+    }
   });
   assert.equal(wfFailed.hypothesisStatus, "walk_forward_failed");
   assert.match(wfFailed.paperDemoChecklistImpact, /Blocked for Paper-Demo/i);

@@ -11,7 +11,7 @@ await loadLocalEnvironment();
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 const DEFAULT_MODEL = "gpt-5.5";
-const DEFAULT_ADVISORY_TIMEOUT_MS = 30_000;
+const DEFAULT_ADVISORY_TIMEOUT_MS = 120_000;
 const HEALTH_TIMEOUT_MS = 2_000;
 const PROVIDER_SCRIPT = path.join("scripts", "gpt55-llm-agent-provider.mjs");
 const LATEST_RESPONSE_FILE = path.join("llm", "responses", "latest-llm-response.json");

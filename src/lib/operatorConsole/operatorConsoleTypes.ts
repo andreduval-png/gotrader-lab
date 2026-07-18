@@ -96,6 +96,16 @@ export interface OperatorValidationSummary {
   updatedAt?: string;
 }
 
+export interface OperatorPredictionSummary {
+  latestFamily: string;
+  latestState: string;
+  pendingForecasts: number;
+  completedForecasts: number;
+  classification: string;
+  averageRealizedR?: number;
+  nextAction: string;
+}
+
 export interface OperatorConsoleSnapshot {
   generatedAt: string;
   source: OperatorSourceSummary;
@@ -103,6 +113,7 @@ export interface OperatorConsoleSnapshot {
   insight: OperatorInsightSummary;
   results: OperatorResultsSummary;
   validation: OperatorValidationSummary;
+  prediction: OperatorPredictionSummary;
   decisions: OperatorDecision[];
   authority: OperatorAuthority;
   autoApplyAllowed: false;

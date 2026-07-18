@@ -1,9 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { MessageSquareText } from "lucide-react";
 
 import { useLatestValidationChainEntry } from "@/components/common/ValidationChainCard";
 import { Badge } from "@/components/ui/badge";
 import {
   advisorProviderStatusInfo,
+  checkLocalBridgeHealth,
   classifyLocalLlmCapability,
   getLocalBridgeStatusSnapshot,
   loadAdvisoryProviderSettings,
@@ -32,16 +34,33 @@ const resolveDefaultProviderStatus = (): AdvisorProviderStatusLevel => {
  */
 export function AdvisorWorkspaceSummary({ testNextAction }: { testNextAction?: string }) {
   const chain = useLatestValidationChainEntry();
-  const settings = loadAdvisoryProviderSettings();
-  const providerStatus = resolveDefaultProviderStatus();
+  const settings = useMemo(() => loadAdvisoryProviderSettings(), []);
+  const [providerStatus, setProviderStatus] = useState<AdvisorProviderStatusLevel>(() => resolveDefaultProviderStatus());
   const statusInfo = advisorProviderStatusInfo(providerStatus);
+
+  useEffect(() => {
+    if (settings.providerMode !== "local_llm_bridge") return;
+    let active = true;
+    void checkLocalBridgeHealth(undefined, { bypassCircuitBreaker: true })
+      .then((health) => {
+        if (active) setProviderStatus(classifyLocalLlmCapability(health.advisoryCapabilityStatus));
+      })
+      .catch(() => {
+        if (active) setProviderStatus(classifyLocalLlmCapability(getLocalBridgeStatusSnapshot().advisoryCapabilityStatus));
+      });
+    return () => {
+      active = false;
+    };
+  }, [settings.providerMode]);
 
   const modeLabel =
     settings.providerMode === "openclaw"
       ? "OpenClaw advisory path (check OpenClaw tab for stub vs skill-routed)"
       : settings.providerMode === "disabled"
         ? "Deterministic Research Helper only"
-        : "Local LLM bridge (optional - chat tab is deterministic by default)";
+        : providerStatus === "local_llm_online"
+          ? "Research Advisor chat is connected to the local LLM bridge. Deterministic guidance is fallback-only."
+          : "Local LLM bridge is unavailable; chat will use clearly labeled deterministic fallback guidance.";
 
   const validationLine = chain
     ? `${chain.setupLabel} / ${validationChainStatusLabel(chain.hypothesisStatus)} / next: ${chain.nextAction}`
@@ -50,7 +69,7 @@ export function AdvisorWorkspaceSummary({ testNextAction }: { testNextAction?: s
   const testNext =
     testNextAction ??
     chain?.nextAction ??
-    "Run Activate Market, then ask the deterministic helper what to test next.";
+    "Run Activate Market, then ask the Research Advisor what to test next.";
 
   return (
     <section data-testid="advisor-workspace-summary" className={`${WORKSPACE_CARD} px-4 py-3`}>
@@ -58,7 +77,7 @@ export function AdvisorWorkspaceSummary({ testNextAction }: { testNextAction?: s
         <MessageSquareText className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden="true" />
         <span className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-500">Advisor workspace</span>
         <Badge variant="secondary" data-testid="advisor-summary-mode">
-          Chat: Local deterministic
+          Chat: {providerStatus === "local_llm_online" ? "LLM online" : "Deterministic fallback"}
         </Badge>
         <Badge variant={statusInfo.isOrdinarySuccess ? "success" : "warning"} data-testid="advisor-summary-provider">
           Provider: {statusInfo.label}

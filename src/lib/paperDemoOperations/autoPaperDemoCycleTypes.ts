@@ -7,6 +7,7 @@ import type {
   ValidationChainReplaySummary,
   ValidationChainWalkForwardSummary
 } from "../validationChain/validationChainTypes";
+import type { ValidationProvenanceIdentity } from "../validationProvenance";
 
 export type AutoPaperDemoCycleStatus =
   | "idle"
@@ -100,6 +101,7 @@ export interface AutoPaperDemoCycleConfig {
     recognitionType: ValidationChainRecognitionType;
     setupLabel: string;
     laneRecommendation?: string;
+    provenance?: ValidationProvenanceIdentity;
   };
   replaySummary?: ValidationChainReplaySummary;
   walkForwardSummary?: ValidationChainWalkForwardSummary;

@@ -50,10 +50,24 @@ const buildTrades = ({ start, fromDay, days, tradesPerDay = 1, winning = true })
 async function main() {
   fs.rmSync(outRoot, { recursive: true, force: true });
   compile("src/lib/statistics/edgeStatistics.ts", "statistics/edgeStatistics.mjs");
+  compile("src/lib/forwardEvidence/forwardEvidenceTypes.ts", "forwardEvidence/forwardEvidenceTypes.mjs");
+  compile(
+    "src/lib/forwardEvidence/frozenProfileRegistry.ts",
+    "forwardEvidence/frozenProfileRegistry.mjs",
+    [["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]]
+  );
+  compile(
+    "src/lib/validationProvenance/validationProvenance.ts",
+    "validationProvenance/validationProvenance.mjs"
+  );
   compile(
     "src/lib/walkForward/detectorProfileWalkForward.ts",
     "walkForward/detectorProfileWalkForward.mjs",
-    [["@/lib/statistics/edgeStatistics", "../statistics/edgeStatistics.mjs"]]
+    [
+      ["@/lib/statistics/edgeStatistics", "../statistics/edgeStatistics.mjs"],
+      ["@/lib/forwardEvidence", "../forwardEvidence/frozenProfileRegistry.mjs"],
+      ["@/lib/validationProvenance", "../validationProvenance/validationProvenance.mjs"]
+    ]
   );
   const { runDetectorProfileWalkForward } = await import(
     pathToFileURL(path.join(outRoot, "walkForward", "detectorProfileWalkForward.mjs")).href
@@ -136,6 +150,21 @@ async function main() {
   });
   assert.equal(mock.verdict, "blocked_source");
 
+  const forwardOnly = runDetectorProfileWalkForward({
+    profileId: "ifvg_fresh_retest_v3_research",
+    sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5_post_cutoff_fp",
+    sourceStart: "2026-07-14T09:40:00.000Z",
+    sourceEnd: "2026-07-17T23:55:00.000Z",
+    trades: []
+  });
+  assert.equal(forwardOnly.verdict, "forward_evidence_required");
+  assert.match(forwardOnly.blockers.join(" "), /begins after the frozen validation cutoff/i);
+  assert.match(forwardOnly.nextAction, /forward evidence ledger/i);
+  assert.doesNotMatch(forwardOnly.blockers.join(" "), /source fingerprint are required/i);
+  assert.equal(forwardOnly.authority.executionAuthority, "none");
+  assert.equal(forwardOnly.safety.readinessPromotionAllowed, false);
+
   console.log(
     JSON.stringify(
       {
@@ -149,6 +178,10 @@ async function main() {
           averageR: safeResult.pooledOos.averageR,
           stressedAverageR: safeResult.additionalCost05R.averageR,
           edgeVerdict: safeResult.pooledOos.edgeVerdict
+        },
+        forwardOnly: {
+          verdict: forwardOnly.verdict,
+          nextAction: forwardOnly.nextAction
         },
         safety: safeResult.safety,
         authority: safeResult.authority

@@ -80,27 +80,33 @@ export function runDetectorProfileWalkForward(
   const requestedEnd = Date.parse(input.sourceEnd);
   const frozenProfile = getFrozenResearchProfile(input.profileId);
   const frozenCutoff = frozenProfile ? Date.parse(frozenProfile.validationCutoff) : Number.NaN;
-  const end = Number.isFinite(frozenCutoff) && Number.isFinite(requestedEnd)
+  const inputRangeValid = Number.isFinite(start) && Number.isFinite(requestedEnd) && requestedEnd > start;
+  const postCutoffForwardOnly =
+    inputRangeValid && Number.isFinite(frozenCutoff) && start > frozenCutoff;
+  const historicalEnd = Number.isFinite(frozenCutoff) && Number.isFinite(requestedEnd)
     ? Math.min(requestedEnd, frozenCutoff)
     : requestedEnd;
-  const sourceValid = Number.isFinite(start) && Number.isFinite(end) && end > start;
+  const historicalRangeValid =
+    inputRangeValid && !postCutoffForwardOnly && Number.isFinite(historicalEnd) && historicalEnd > start;
   const sourceBlocked =
-    !input.sourceFingerprint || /mock|sample|unavailable/i.test(input.sourceProvider || "") || !sourceValid;
-  const developmentEnd = sourceValid ? start + (end - start) * (1 - holdoutFraction) : 0;
+    !input.sourceFingerprint || /mock|sample|unavailable/i.test(input.sourceProvider || "") || !inputRangeValid;
+  const developmentEnd = historicalRangeValid
+    ? start + (historicalEnd - start) * (1 - holdoutFraction)
+    : 0;
   const sortedTrades = input.trades
     .filter((trade) => {
       const openedAt = Date.parse(trade.openedAt);
-      return Number.isFinite(openedAt) && openedAt <= end && Number.isFinite(trade.rMultiple);
+      return Number.isFinite(openedAt) && openedAt <= historicalEnd && Number.isFinite(trade.rMultiple);
     })
     .sort((left, right) => Date.parse(left.openedAt) - Date.parse(right.openedAt));
   const windows: DetectorProfileWalkForwardWindow[] = [];
   const windowMs = windowDays * DAY_MS;
 
-  if (!sourceBlocked) {
+  if (!sourceBlocked && historicalRangeValid) {
     // Ignore tiny trailing fragments; they are not independent OOS windows and
     // can distort pass rates around an inclusive range-end timestamp.
-    for (let cursor = developmentEnd; cursor + windowMs * 0.5 <= end + 1; cursor += windowMs) {
-      const windowEnd = Math.min(end + 1, cursor + windowMs);
+    for (let cursor = developmentEnd; cursor + windowMs * 0.5 <= historicalEnd + 1; cursor += windowMs) {
+      const windowEnd = Math.min(historicalEnd + 1, cursor + windowMs);
       const priorTradeCount = sortedTrades.filter((trade) => Date.parse(trade.openedAt) < cursor).length;
       const scoped = sortedTrades.filter((trade) => {
         const openedAt = Date.parse(trade.openedAt);
@@ -137,11 +143,11 @@ export function runDetectorProfileWalkForward(
     }
   }
 
-  const holdoutTrades = sourceBlocked
+  const holdoutTrades = sourceBlocked || postCutoffForwardOnly
     ? []
     : sortedTrades.filter((trade) => {
         const openedAt = Date.parse(trade.openedAt);
-        return openedAt >= developmentEnd && openedAt <= end;
+        return openedAt >= developmentEnd && openedAt <= historicalEnd;
       });
   const pooled = summarizeReturns(holdoutTrades);
   const stressed = summarizeReturns(holdoutTrades, 0.5);
@@ -155,8 +161,7 @@ export function runDetectorProfileWalkForward(
     : 0;
   const passedWindows = windows.filter((window) => window.passed).length;
   const passRate = windows.length ? passedWindows / windows.length : 0;
-  const blockers = [
-    sourceBlocked ? "Eligible non-mock source metadata and a source fingerprint are required." : undefined,
+  const historicalGateBlockers = [
     windows.length < minimumOosWindows
       ? `Only ${windows.length} chronological OOS windows; ${minimumOosWindows} required.`
       : undefined,
@@ -178,16 +183,30 @@ export function runDetectorProfileWalkForward(
       : undefined
   ].filter((reason): reason is string => Boolean(reason));
 
+  const blockers = sourceBlocked
+    ? ["Eligible non-mock source metadata, a source fingerprint, and a valid chronological range are required."]
+    : postCutoffForwardOnly
+      ? [
+          `Active source begins after the frozen validation cutoff ${frozenProfile?.validationCutoff ?? "unavailable"}; historical OOS validation is already frozen and this window must be recorded as forward evidence.`
+        ]
+      : historicalGateBlockers;
+
   const verdict = sourceBlocked
     ? "blocked_source"
-    : pooled.trades < minimumOosTrades || windows.length < minimumOosWindows
+    : postCutoffForwardOnly
+      ? "forward_evidence_required"
+      : pooled.trades < minimumOosTrades || windows.length < minimumOosWindows
       ? "insufficient_data"
       : blockers.length
         ? "failed"
         : "passed";
 
   const generatedAt = new Date().toISOString();
-  const effectiveEnd = Number.isFinite(end) ? new Date(end).toISOString() : input.sourceEnd;
+  const effectiveEnd = postCutoffForwardOnly
+    ? input.sourceEnd
+    : Number.isFinite(historicalEnd)
+      ? new Date(historicalEnd).toISOString()
+      : input.sourceEnd;
   const validationRunId = input.validationRunId ??
     `detector_validation_${fingerprintValidationParameters({
       profileId: input.profileId,
@@ -259,11 +278,16 @@ export function runDetectorProfileWalkForward(
     warnings: [
       "This is chronological holdout evidence for a frozen research profile, not untouched future-market proof.",
       "MT5 USTECH is CFD/proxy data for MNQ-style research, not CME MNQ futures truth.",
+      ...(postCutoffForwardOnly
+        ? ["The active tactical window is post-cutoff forward data. It is not a replacement for the frozen historical audit."]
+        : []),
       "Passing this validator cannot create evidence, readiness, Paper-Demo eligibility, or execution authority by itself."
     ],
     nextAction:
       verdict === "passed"
         ? "Freeze the profile and collect an untouched forward sample before evidence/maturity review."
+        : verdict === "forward_evidence_required"
+          ? "Record eligible post-cutoff outcomes in the forward evidence ledger; do not rerun or mutate the frozen profile."
         : "Keep the profile research-only and inspect the failed OOS gate before any further progression.",
     authority: AUTHORITY_NONE,
     safety: {

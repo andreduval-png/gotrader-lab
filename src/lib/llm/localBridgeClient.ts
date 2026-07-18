@@ -6,7 +6,7 @@ export const LLM_LOCAL_BRIDGE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/run-adviso
 export const LLM_LOCAL_BRIDGE_CHAT_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/chat`;
 export const LLM_LOCAL_BRIDGE_DEBATE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/debate`;
 export const LLM_LOCAL_BRIDGE_COMMITTEE_URL = `${LLM_LOCAL_BRIDGE_BASE_URL}/llm/committee`;
-const DEFAULT_LLM_ADVISORY_TIMEOUT_MS = 30_000;
+const DEFAULT_LLM_ADVISORY_TIMEOUT_MS = 120_000;
 const readAdvisoryTimeoutMs = () => {
   const raw = import.meta.env?.LLM_ADVISORY_TIMEOUT_MS ?? import.meta.env?.VITE_LLM_ADVISORY_TIMEOUT_MS;
   const parsed = Number(raw);

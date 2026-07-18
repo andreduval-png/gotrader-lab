@@ -1,6 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
+import { mt5PushFeedEventBus } from "@/lib/mt5PushFeed";
+import {
+  subscribeFrozenMarketEpisodeProfilesToMt5PushFeed,
+  subscribePredictionLedgerToMt5PushFeed
+} from "@/lib/predictionLedger";
 import { useLabState } from "@/lib/storage/useLabState";
 
 // Route-level code splitting: each view loads on demand so the initial
@@ -47,6 +52,15 @@ function RouteFallback() {
 
 export default function App() {
   const { state, actions } = useLabState();
+
+  useEffect(() => {
+    const ledgerSubscription = subscribePredictionLedgerToMt5PushFeed(mt5PushFeedEventBus);
+    const frozenProfileSubscription = subscribeFrozenMarketEpisodeProfilesToMt5PushFeed(mt5PushFeedEventBus);
+    return () => {
+      ledgerSubscription.unsubscribe();
+      frozenProfileSubscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <AppShell>
