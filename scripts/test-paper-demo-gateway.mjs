@@ -5,12 +5,16 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  buildPaperDemoExecutionRequest,
   buildPaperDemoGatewayStatus,
   evaluatePaperDemoPreparation,
   loadPaperDemoGatewayPolicy,
   preparePaperDemoSimulation,
+  readRecentPaperDemoReceipts,
   summarizeForwardEvidenceReport,
-  summarizeValidationReport
+  summarizeValidationReport,
+  verifyPaperDemoExecutionRequestHash,
+  writePaperDemoExecutionRequest
 } from "./gotrader-paper-demo-gateway-core.mjs";
 import { appendTradeProposalAudit, evaluateTradeProposal } from "./gotrader-trade-proposal-core.mjs";
 
@@ -226,9 +230,64 @@ const integrated = await preparePaperDemoSimulation(proposal.proposalId, {
   repoRoot: tempRoot
 });
 assert.equal(integrated.status, "prepared_for_local_paper_simulation_review");
+assert.equal(integrated.gatewayRequest.status, "queued");
+assert.equal(integrated.gatewayRequest.brokerSubmissionAllowed, false);
 const persisted = JSON.parse(await readFile(path.join(tempRoot, ".gotrader", "paper-demo-gateway-state.json"), "utf8"));
 assert.equal(persisted.preparations.length, 1);
 assert.equal(persisted.preparations[0].brokerSubmissionAttempted, false);
+const queuedRequest = JSON.parse(
+  await readFile(
+    path.join(tempRoot, ".gotrader", "paper-demo-outbox", `${integrated.gatewayRequest.requestId}.json`),
+    "utf8"
+  )
+);
+assert.equal(queuedRequest.contract, "gotrader.paper_demo_execution_request");
+assert.equal(queuedRequest.mode, "paper_simulation");
+assert.equal(queuedRequest.permissions.paperSimulationAllowed, true);
+assert.equal(queuedRequest.permissions.brokerSubmissionAllowed, false);
+assert.equal(queuedRequest.permissions.liveExecutionAllowed, false);
+assert.equal(queuedRequest.safety.rawCandlesIncluded, false);
+assert.equal(verifyPaperDemoExecutionRequestHash(queuedRequest), true);
+assert.deepEqual(queuedRequest.authority, authorityNone);
+
+const duplicateIntegrated = await preparePaperDemoSimulation(proposal.proposalId, {
+  env,
+  now: "2026-07-18T14:03:01.000Z",
+  repoRoot: tempRoot
+});
+assert.equal(duplicateIntegrated.status, "already_prepared");
+assert.equal(duplicateIntegrated.gatewayRequest.status, "already_queued");
+assert.equal(duplicateIntegrated.gatewayRequest.requestHash, integrated.gatewayRequest.requestHash);
+
+const rebuiltRequest = buildPaperDemoExecutionRequest({
+  now: "2026-07-18T14:03:00.000Z",
+  policy: enabledPolicy,
+  preparation: prepared.preparation
+});
+assert.equal(verifyPaperDemoExecutionRequestHash(rebuiltRequest), true);
+await assert.rejects(
+  () => writePaperDemoExecutionRequest({ ...rebuiltRequest, requestHash: "tampered" }, { repoRoot: tempRoot }),
+  /hash validation failed/
+);
+
+await mkdir(path.join(tempRoot, ".gotrader", "paper-demo-receipts"), { recursive: true });
+await writeFile(
+  path.join(tempRoot, ".gotrader", "paper-demo-receipts", `${queuedRequest.requestId}.json`),
+  JSON.stringify({
+    contract: "gotrader.paper_demo_execution_receipt",
+    version: "1.0",
+    requestId: queuedRequest.requestId,
+    requestHash: queuedRequest.requestHash,
+    status: "waiting_for_entry",
+    paperOnly: true,
+    brokerCallsMade: false,
+    authority: authorityNone
+  }),
+  "utf8"
+);
+const receipts = await readRecentPaperDemoReceipts({ repoRoot: tempRoot });
+assert.equal(receipts.length, 1);
+assert.equal(receipts[0].brokerCallsMade, false);
 
 const exportedForwardReportPath = path.join(tempRoot, "exported-forward-report.json");
 await writeFile(exportedForwardReportPath, JSON.stringify({
@@ -269,6 +328,8 @@ const currentStatus = await buildPaperDemoGatewayStatus({ repoRoot: process.cwd(
 assert.equal(currentStatus.enabled, false);
 assert.equal(currentStatus.killSwitchActive, true);
 assert.equal(currentStatus.brokerGateway.status, "disabled");
+assert.equal(currentStatus.paperGateway.immutableOutboxSupported, true);
+assert.equal(currentStatus.paperGateway.monitoringSupported, true);
 assert.deepEqual(currentStatus.authority, authorityNone);
 
 const serialized = JSON.stringify({ prepared, currentStatus });
@@ -284,6 +345,8 @@ console.log(JSON.stringify({
   duplicateStatus: duplicate.status,
   currentReadiness: currentStatus.validationEvidence.validationReadinessStatus,
   currentGatewayReady: false,
+  immutableOutboxVerified: verifyPaperDemoExecutionRequestHash(queuedRequest),
+  receiptContractVerified: receipts.length === 1,
   brokerSubmissionAttempted: false,
   authority: authorityNone
 }, null, 2));

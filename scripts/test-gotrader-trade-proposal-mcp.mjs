@@ -124,6 +124,7 @@ try {
   const toolNames = listed.tools.map((tool) => tool.name).sort();
   assert.deepEqual(toolNames, [
     "gotrader_control_plane_status",
+    "gotrader_list_paper_demo_receipts",
     "gotrader_list_recent_trade_proposals",
     "gotrader_paper_demo_gateway_status",
     "gotrader_prepare_paper_demo_simulation",
@@ -163,6 +164,7 @@ console.log(
         "gotrader_control_plane_status",
         "gotrader_propose_trade_evaluation",
         "gotrader_list_recent_trade_proposals",
+        "gotrader_list_paper_demo_receipts",
         "gotrader_paper_demo_gateway_status",
         "gotrader_prepare_paper_demo_simulation"
       ],

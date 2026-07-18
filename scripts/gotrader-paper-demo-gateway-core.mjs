@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -10,11 +11,15 @@ import {
 export const PAPER_DEMO_GATEWAY_POLICY_VERSION = "gotrader_paper_demo_gateway_v1";
 export const PAPER_DEMO_GATEWAY_AUTHORITY = TRADE_PROPOSAL_MCP_AUTHORITY;
 export const PAPER_DEMO_GATEWAY_PROFILE = "ifvg_fresh_retest_v3_research";
+export const PAPER_DEMO_EXECUTION_REQUEST_CONTRACT = "gotrader.paper_demo_execution_request";
+export const PAPER_DEMO_EXECUTION_REQUEST_VERSION = "1.0";
 
 const DEFAULT_SIGNAL_MAX_AGE_MS = 5 * 60 * 1000;
 const DEFAULT_VALIDATION_REPORT = ".gotrader/ifvg-v3-profile-oos.json";
 const DEFAULT_FORWARD_REPORT = ".gotrader/ifvg-v3-forward-evidence.json";
 const STATE_FILE = ".gotrader/paper-demo-gateway-state.json";
+const DEFAULT_OUTBOX_DIR = ".gotrader/paper-demo-outbox";
+const DEFAULT_RECEIPT_DIR = ".gotrader/paper-demo-receipts";
 
 const finitePositive = (value) => typeof value === "number" && Number.isFinite(value) && value > 0;
 const unique = (values) => [...new Set(values.filter(Boolean))];
@@ -32,6 +37,17 @@ const emptyState = (now) => ({
 });
 
 const safeJson = (text) => JSON.parse(text.replace(/^\uFEFF/, ""));
+const stableValue = (value) => {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, stableValue(value[key])])
+  );
+};
+const stableJson = (value) => JSON.stringify(stableValue(value));
+const sha256 = (value) => createHash("sha256").update(stableJson(value)).digest("hex");
 
 const resolveInsideRepo = (repoRoot, candidatePath) => {
   const resolved = path.resolve(repoRoot, candidatePath);
@@ -68,6 +84,8 @@ export const loadPaperDemoGatewayPolicy = (env = process.env) => {
     signalMaxAgeMs,
     validationReportPath: env.GOTRADER_PAPER_VALIDATION_REPORT || DEFAULT_VALIDATION_REPORT,
     forwardEvidenceReportPath: env.GOTRADER_PAPER_FORWARD_EVIDENCE_REPORT || DEFAULT_FORWARD_REPORT,
+    outboxDir: env.GOTRADER_PAPER_DEMO_OUTBOX_DIR || DEFAULT_OUTBOX_DIR,
+    receiptDir: env.GOTRADER_PAPER_DEMO_RECEIPT_DIR || DEFAULT_RECEIPT_DIR,
     operatorConfigured: true,
     llmMayOverride: false
   };
@@ -222,6 +240,8 @@ export const evaluatePaperDemoPreparation = ({
     preparedAt: now,
     expiresAt: new Date(nowMs + policy.signalMaxAgeMs).toISOString(),
     strategyProfileId: proposal.strategyProfileId,
+    sourceProvider: proposal.sourceProvider,
+    sourceFingerprint: proposal.sourceFingerprint,
     requestedSymbol: proposal.requestedSymbol,
     brokerSymbol: proposal.brokerSymbol,
     timeframe: proposal.timeframe,
@@ -251,6 +271,134 @@ export const evaluatePaperDemoPreparation = ({
     brokerSubmissionAttempted: false,
     authority: PAPER_DEMO_GATEWAY_AUTHORITY
   };
+};
+
+export const buildPaperDemoExecutionRequest = ({
+  now = new Date().toISOString(),
+  policy,
+  preparation
+}) => {
+  if (!preparation || preparation.paperOnly !== true || preparation.executable !== false) {
+    throw new Error("A valid paper-only preparation is required before creating a gateway request.");
+  }
+  if (!authorityIsNone(preparation.authority)) {
+    throw new Error("Paper-Demo request authority must remain none/none/none.");
+  }
+  const requestCreatedAt = preparation.preparedAt ?? now;
+  const createdMs = Date.parse(requestCreatedAt);
+  if (!Number.isFinite(createdMs)) throw new Error("Paper-Demo request timestamp is invalid.");
+  const request = {
+    contract: PAPER_DEMO_EXECUTION_REQUEST_CONTRACT,
+    version: PAPER_DEMO_EXECUTION_REQUEST_VERSION,
+    requestId: preparation.preparationId,
+    proposalId: preparation.proposalId,
+    validationChainId: preparation.validationChainId,
+    createdAt: requestCreatedAt,
+    entryExpiresAt: preparation.expiresAt,
+    monitorUntil: new Date(createdMs + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    mode: "paper_simulation",
+    status: "ready_for_paper_gateway",
+    strategyProfileId: preparation.strategyProfileId,
+    source: {
+      provider: preparation.sourceProvider,
+      requestedSymbol: preparation.requestedSymbol,
+      brokerSymbol: preparation.brokerSymbol,
+      timeframe: preparation.timeframe,
+      fingerprint: preparation.sourceFingerprint
+    },
+    scenario: {
+      direction: preparation.direction,
+      instructionType: "limit_entry",
+      entry: preparation.entry,
+      stop: preparation.stop,
+      targets: preparation.targets,
+      paperUnits: preparation.paperUnitsPreview
+    },
+    riskPolicy: {
+      maximumDailyLossR: policy.maxDailyLossR,
+      maximumRequestsPerDay: policy.maxPreparationsPerDay,
+      maximumLossPerScenarioR: 1
+    },
+    permissions: {
+      paperSimulationAllowed: true,
+      brokerSubmissionAllowed: false,
+      liveExecutionAllowed: false,
+      autoApplyAllowed: false,
+      readinessPromotionAllowed: false
+    },
+    safety: {
+      compactPayloadOnly: true,
+      rawCandlesIncluded: false,
+      credentialsIncluded: false,
+      brokerMutationAllowed: false
+    },
+    authority: PAPER_DEMO_GATEWAY_AUTHORITY
+  };
+  return { ...request, requestHash: sha256(request) };
+};
+
+export const verifyPaperDemoExecutionRequestHash = (request) => {
+  if (!request || typeof request !== "object" || !request.requestHash) return false;
+  const { requestHash, ...payload } = request;
+  return requestHash === sha256(payload);
+};
+
+const assertCompactPaperArtifact = (artifact, label) => {
+  const serialized = JSON.stringify(artifact);
+  if (/"(?:candles|rawCandles|account|accounts|orders|positions|apiKey|password|secret|token)"\s*:/i.test(serialized)) {
+    throw new Error(`${label} rejected unsafe fields.`);
+  }
+  if (!authorityIsNone(artifact?.authority)) {
+    throw new Error(`${label} authority must remain none/none/none.`);
+  }
+};
+
+export const writePaperDemoExecutionRequest = async (
+  request,
+  { outboxDir = DEFAULT_OUTBOX_DIR, repoRoot = process.cwd() } = {}
+) => {
+  assertCompactPaperArtifact(request, "Paper-Demo execution request");
+  if (!verifyPaperDemoExecutionRequestHash(request)) {
+    throw new Error("Paper-Demo execution request hash validation failed.");
+  }
+  const directory = resolveInsideRepo(repoRoot, outboxDir);
+  const filePath = path.join(directory, `${request.requestId}.json`);
+  await mkdir(directory, { recursive: true });
+  const existing = await readJsonFile(filePath);
+  if (existing) {
+    if (existing.requestHash !== request.requestHash || !verifyPaperDemoExecutionRequestHash(existing)) {
+      throw new Error("Paper-Demo outbox request ID already exists with different content.");
+    }
+    return { filePath, status: "already_queued" };
+  }
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, filePath);
+  return { filePath, status: "queued" };
+};
+
+const listJsonFiles = async (directory) => {
+  try {
+    return (await readdir(directory)).filter((name) => name.endsWith(".json")).sort();
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+};
+
+export const readRecentPaperDemoReceipts = async (
+  { limit = 20, receiptDir = DEFAULT_RECEIPT_DIR, repoRoot = process.cwd() } = {}
+) => {
+  const directory = resolveInsideRepo(repoRoot, receiptDir);
+  const files = (await listJsonFiles(directory)).slice(-Math.max(1, Math.min(20, limit))).reverse();
+  const receipts = [];
+  for (const name of files) {
+    const receipt = await readJsonFile(path.join(directory, name));
+    if (!receipt || !authorityIsNone(receipt.authority)) continue;
+    assertCompactPaperArtifact(receipt, "Paper-Demo receipt");
+    receipts.push(receipt);
+  }
+  return receipts;
 };
 
 export const loadPaperDemoGatewayState = async ({ repoRoot = process.cwd(), now = new Date().toISOString() } = {}) => {
@@ -294,6 +442,24 @@ export const preparePaperDemoSimulation = async (
   if (result.status === "prepared_for_local_paper_simulation_review") {
     await savePaperDemoGatewayState(result.state, { repoRoot });
   }
+  if (result.status === "prepared_for_local_paper_simulation_review" || result.status === "already_prepared") {
+    const request = buildPaperDemoExecutionRequest({ now, policy, preparation: result.preparation });
+    const queued = await writePaperDemoExecutionRequest(request, {
+      outboxDir: policy.outboxDir,
+      repoRoot
+    });
+    return {
+      ...result,
+      gatewayRequest: {
+        requestId: request.requestId,
+        requestHash: request.requestHash,
+        status: queued.status,
+        paperOnly: true,
+        brokerSubmissionAllowed: false
+      },
+      nextAction: "The immutable paper-only request is queued for independent simulation and monitoring. No broker submission was made."
+    };
+  }
   return result;
 };
 
@@ -301,6 +467,8 @@ export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot 
   const policy = loadPaperDemoGatewayPolicy(env);
   const validationReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.validationReportPath));
   const forwardReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.forwardEvidenceReportPath));
+  const outboxCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.outboxDir))).length;
+  const receiptCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.receiptDir))).length;
   return {
     provider: "gotrader_local_paper_demo_gateway",
     stage: "paper_simulation_preparation",
@@ -314,6 +482,14 @@ export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot 
       status: "disabled",
       submissionSupported: false,
       monitoringSupported: false
+    },
+    paperGateway: {
+      status: policy.enabled ? "operator_enabled" : "disabled",
+      immutableOutboxSupported: true,
+      simulationSupported: true,
+      monitoringSupported: true,
+      queuedRequestCount: outboxCount,
+      receiptCount
     },
     liveExecutionAllowed: false,
     llmMayOverridePolicy: false,

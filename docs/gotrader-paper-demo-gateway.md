@@ -6,8 +6,10 @@ The local gateway is the second safe phase of the GoTrader control plane:
 
 1. An LLM may propose a compact scenario through MCP.
 2. GoTrader validates the scenario and computes an operator-owned paper-sizing preview.
-3. The Paper-Demo gateway may prepare that scenario for local paper-only review after every deterministic gate passes.
-4. No broker submission or monitoring is implemented in this phase.
+3. The Paper-Demo gateway may prepare that scenario after every deterministic gate passes.
+4. GoTrader writes one hashed, immutable paper request to `.gotrader/paper-demo-outbox`.
+5. The independent `go-trader` paper consumer revalidates the request, simulates fills from MT5 read-only candles, and writes compact receipts to `.gotrader/paper-demo-receipts`.
+6. No broker submission is implemented in this phase.
 
 The gateway does not expose account, order, position, cancellation, closing, or broker-mutation tools. Its authority is always:
 
@@ -31,7 +33,7 @@ An LLM cannot change these settings through MCP.
 
 ## Required Operator Configuration
 
-These settings enable only a local simulation preparation review:
+These settings enable only local paper request preparation:
 
 ```powershell
 cd "C:\Users\andre\OneDrive\Documents\gotrader"
@@ -45,6 +47,9 @@ $env:GOTRADER_PAPER_SIGNAL_MAX_AGE_MS="300000"
 $env:GOTRADER_PAPER_RISK_BUDGET_USD="300"
 $env:GOTRADER_PAPER_POINT_VALUE_USD="2"
 $env:GOTRADER_PAPER_MAX_UNITS="5"
+
+$env:GOTRADER_PAPER_DEMO_OUTBOX_DIR=".gotrader/paper-demo-outbox"
+$env:GOTRADER_PAPER_DEMO_RECEIPT_DIR=".gotrader/paper-demo-receipts"
 
 npm.cmd run mcp:trade-proposal
 ```
@@ -108,12 +113,15 @@ A preparation is blocked unless all checks pass:
 
 The compact state file is `.gotrader/paper-demo-gateway-state.json`. A proposal and validation-chain pair can be prepared once per day. Repeated requests return `already_prepared` and do not create duplicates.
 
+Each passed preparation creates one `gotrader.paper_demo_execution_request` document. Its SHA-256 hash covers the complete request payload. A retry with identical content returns `already_queued`; a request ID collision with different content is rejected. Atomic rename prevents the consumer from reading a partially written request.
+
 State contains only scenario geometry, sizing preview, timestamps, compact IDs, status, and authority. It excludes raw candles, runtime snapshots, credentials, account data, orders, positions, and broker responses.
 
 ## MCP Tools
 
 - `gotrader_paper_demo_gateway_status`
 - `gotrader_prepare_paper_demo_simulation`
+- `gotrader_list_paper_demo_receipts`
 
 The preparation tool can return:
 
@@ -121,8 +129,8 @@ The preparation tool can return:
 - `already_prepared`
 - `prepared_for_local_paper_simulation_review`
 
-None of these statuses means an order was submitted. Every result returns `brokerSubmissionAttempted: false`.
+None of these statuses means a broker order was submitted. Every result returns `brokerSubmissionAttempted: false`. See `docs/gotrader-cycle-to-paper-execution-flow.md` for the complete process diagram and the `go-trader` paper-consumer command.
 
 ## Future Broker-Demo Phase
 
-Broker-demo submission remains a separate future phase. It requires a dedicated adapter, broker-demo credentials outside frontend storage, acknowledgements, reconciliation, disconnect lockout, cancellation policy, and independent monitoring. Live execution remains out of scope.
+Broker-demo submission remains a separate future phase. The current paper consumer cannot import or call broker adapters. Broker-demo requires a new reviewed contract, demo-only credentials outside frontend storage, acknowledgements, reconciliation, disconnect lockout, cancellation policy, and independent monitoring. Live execution remains out of scope.

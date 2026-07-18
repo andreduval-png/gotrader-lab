@@ -11,7 +11,8 @@ import {
 } from "./gotrader-trade-proposal-core.mjs";
 import {
   buildPaperDemoGatewayStatus,
-  preparePaperDemoSimulation
+  preparePaperDemoSimulation,
+  readRecentPaperDemoReceipts
 } from "./gotrader-paper-demo-gateway-core.mjs";
 
 const server = new McpServer({
@@ -90,6 +91,21 @@ server.registerTool(
   async ({ proposalId }) => {
     const result = await preparePaperDemoSimulation(proposalId);
     return asToolResult(result, result.status === "blocked");
+  }
+);
+
+server.registerTool(
+  "gotrader_list_paper_demo_receipts",
+  {
+    description:
+      "List compact receipts from the independent paper-only gateway. Receipts contain no candles, credentials, account data, broker orders, or positions.",
+    inputSchema: {
+      limit: z.number().int().min(1).max(20).optional().default(10)
+    }
+  },
+  async ({ limit }) => {
+    const receipts = await readRecentPaperDemoReceipts({ limit });
+    return asToolResult({ receipts, count: receipts.length });
   }
 );
 
