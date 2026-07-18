@@ -126,12 +126,17 @@ class Mt5ReadOnlyState:
                 self.last_error = f"MT5 initialize failed ({code}): {message}"
             return self.connected
 
-    def status(self) -> dict[str, Any]:
-        connected = self.ensure_connected()
+    def status(self, probe_terminal: bool = True) -> dict[str, Any]:
+        # Process health must not queue behind a potentially slow MT5 history call.
+        # The supervisor uses /health only to decide whether the service is alive;
+        # /status and every data route still perform a live terminal check.
+        connected = self.ensure_connected() if probe_terminal else self.connected
         return {
             "provider": "mt5_read_only_upstream",
             "connectionStatus": "connected" if connected else "degraded",
             "bridgeMode": "live" if connected else "degraded",
+            "processHealth": "healthy",
+            "terminalProbe": "live" if probe_terminal else "cached",
             "source": "mt5_terminal_session",
             "readOnly": True,
             "marketDataOnly": True,
@@ -206,7 +211,11 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
             self.reject_mutation()
             return
 
-        if path in {"/", "/health", "/status"}:
+        if path == "/health":
+            self.send_json(200, self.state.status(probe_terminal=False))
+            return
+
+        if path in {"/", "/status"}:
             self.send_json(200, self.state.status())
             return
 

@@ -9,6 +9,7 @@ import { runIctActivateMarketPipeline } from "@/lib/ict-strategy-suite/ictActiva
 import { ensureMt5CanonicalResearchSource } from "@/lib/ict-strategy-suite/ictActivateMarketSourceActivation";
 import { loadActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5/mt5ReadOnlyClient";
 import { publishClosedMt5ReadOnlyCandles } from "@/lib/mt5PushFeed/mt5ReadOnlyEventAdapter";
+import { recordForwardScenarioPrediction } from "@/lib/predictionLedger";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import type { LabState } from "@/lib/types";
 
@@ -18,6 +19,7 @@ import {
   type OperatorCycleState,
   type OperatorInsightSummary
 } from "./operatorConsoleTypes";
+import { prepareOperatorForwardScenario } from "./operatorForwardScenario";
 
 export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v1";
 export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
@@ -240,6 +242,16 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       }
     );
     const latestInsight = insightFromPipeline(pipeline);
+    const preparedScenario = prepareOperatorForwardScenario(
+      pipeline.currentRead?.forwardScenarioMap,
+      activation.source
+    );
+    if (preparedScenario.ok && preparedScenario.scenarioMap) {
+      recordForwardScenarioPrediction(preparedScenario.scenarioMap, {
+        modelVersion: "operator_market_scenario:v1",
+        maxBarsToResolve: 48
+      });
+    }
 
     if (controller.signal.aborted) {
       return updateState(current, {

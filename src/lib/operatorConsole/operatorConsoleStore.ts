@@ -37,21 +37,29 @@ const readPredictionSummary = (): OperatorPredictionSummary => {
   const state = loadPredictionLedger();
   const latest = state.entries.at(-1);
   const calibration = evaluatePredictionCalibration(state.entries);
+  const latestIsContextOnly = latest?.resolution === "not_actionable";
   const nextAction = !latest
     ? "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
-    : calibration.classification === "uncalibrated"
-      ? "Collect later closed-candle outcomes across independent dates before trusting the probability estimate."
-      : calibration.classification === "insufficient_data"
-        ? calibration.blockers[0] ?? "Collect more independent causal outcomes."
-        : calibration.classification === "calibrated_positive"
-          ? "Continue forward tracking; calibration does not promote readiness by itself."
-          : "Keep the forecast family in research and review its expectancy and calibration blockers.";
+    : latestIsContextOnly
+      ? "Context watch issued. Calibration starts only after direction, trigger zone, invalidation, and target define a causal forecast."
+      : latest.resolution === "pending"
+        ? "Forward forecast is active. Collect later closed-candle outcomes across independent dates before trusting its probability estimate."
+        : calibration.classification === "uncalibrated"
+          ? "Collect later closed-candle outcomes across independent dates before trusting the probability estimate."
+          : calibration.classification === "insufficient_data"
+            ? calibration.blockers[0] ?? "Collect more independent causal outcomes."
+            : calibration.classification === "calibrated_positive"
+              ? "Continue forward tracking; calibration does not promote readiness by itself."
+              : "Keep the forecast family in research and review its expectancy and calibration blockers.";
   return {
     latestFamily: (latest?.scenarioFamily ?? "No forecast issued").replace(/_/g, " "),
-    latestState: (latest?.lifecycleState ?? "not started").replace(/_/g, " "),
+    latestState: (latestIsContextOnly ? "context watch" : latest?.lifecycleState ?? "not started").replace(/_/g, " "),
     pendingForecasts: calibration.pendingForecasts,
     completedForecasts: calibration.completedForecasts,
-    classification: calibration.classification.replace(/_/g, " "),
+    classification: (latestIsContextOnly && calibration.actionableForecasts === 0
+      ? "awaiting causal forecast"
+      : calibration.classification
+    ).replace(/_/g, " "),
     averageRealizedR: calibration.averageRealizedR ?? undefined,
     nextAction
   };

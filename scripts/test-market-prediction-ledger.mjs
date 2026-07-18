@@ -261,6 +261,40 @@ async function main() {
   assert.equal(issued.probabilitySource, "heuristic_uncalibrated");
   assert.equal(issued.resolution, "pending");
   assert.equal(issued.safety.executionIntentCreated, false);
+  const contextOnlyScenario = {
+    ...scenarioMap,
+    scenarioMapId: "scenario-map-context-fixture",
+    currentDecisionState: "anticipated_scenario",
+    primaryScenario: {
+      ...scenarioMap.primaryScenario,
+      scenarioId: "scenario-context-fixture",
+      scenarioFamily: "consolidation_raid_displacement",
+      conditionalEntryPlan: {
+        status: "unavailable",
+        label: "Conditional entry zone if confirmation appears",
+        trigger: "Wait for a causal trigger.",
+        researchOnly: true
+      },
+      conditionalStopPlan: {
+        status: "unavailable",
+        label: "Conditional stop reference",
+        condition: "Wait for causal invalidation.",
+        researchOnly: true
+      },
+      conditionalTargetPlan: {
+        status: "unavailable",
+        label: "Conditional target references",
+        references: [{ label: "Opposing external liquidity" }],
+        condition: "Wait for a priced target.",
+        researchOnly: true
+      }
+    }
+  };
+  const contextWatch = ledgerModule.issuePredictionFromScenarioMap(contextOnlyScenario, { maxBarsToResolve: 12 });
+  assert.equal(contextWatch.lifecycleState, "anticipated");
+  assert.equal(contextWatch.resolution, "not_actionable");
+  assert.equal(contextWatch.safety.executionIntentCreated, false);
+  assert.equal(ledgerModule.evaluatePredictionCalibration([contextWatch]).actionableForecasts, 0);
   const frozenProfileIssued = ledgerModule.issuePredictionFromScenarioMap(scenarioMap, {
     modelVersion: "profile-version-fixture",
     maxBarsToResolve: 12
@@ -314,9 +348,12 @@ async function main() {
 
   const appSource = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
   const cycleSource = fs.readFileSync(path.join(root, "src/lib/researchCycle/runResearchCycle.ts"), "utf8");
+  const operatorCycleSource = fs.readFileSync(path.join(root, "src/lib/operatorConsole/operatorCycle.ts"), "utf8");
   assert.match(appSource, /subscribePredictionLedgerToMt5PushFeed/);
   assert.match(cycleSource, /recordForwardScenarioPrediction/);
   assert.match(cycleSource, /sourceFingerprint:\s*activeResearchCandleSource\.identity\.dataFingerprint/);
+  assert.match(operatorCycleSource, /recordForwardScenarioPrediction\(preparedScenario\.scenarioMap/);
+  assert.match(operatorCycleSource, /operator_market_scenario:v1/);
 
   console.log(JSON.stringify({
     status: "passed",

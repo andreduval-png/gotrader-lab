@@ -25,6 +25,9 @@ const blockedMutationResults = await Promise.all(
 );
 
 const healthAuthority = Object.entries(authority).every(([key, value]) => health.payload?.[key] === value);
+const healthIsNonBlocking =
+  health.payload?.processHealth === "healthy" &&
+  health.payload?.terminalProbe === "cached";
 const candlesValid =
   Array.isArray(candles.payload) &&
   candles.payload.length > 0 &&
@@ -50,6 +53,7 @@ const result = {
     health.payload?.connectionStatus === "connected" &&
     health.payload?.readOnly === true &&
     health.payload?.marketDataOnly === true &&
+    healthIsNonBlocking &&
     healthAuthority &&
     candles.response.ok &&
     candlesValid &&
@@ -61,6 +65,7 @@ const result = {
   candleCount: Array.isArray(candles.payload) ? candles.payload.length : 0,
   checks: {
     healthAuthority,
+    healthIsNonBlocking,
     candlesValid,
     blockedGet,
     blockedMutation,

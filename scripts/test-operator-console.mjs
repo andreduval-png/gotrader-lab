@@ -9,7 +9,7 @@ import ts from "typescript";
 const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, "src", "lib", "operatorConsole");
 const outRoot = path.join(projectRoot, ".gotrader", "operator-console-test");
-const sourceFiles = ["operatorConsoleTypes.ts", "buildOperatorConsoleSnapshot.ts"];
+const sourceFiles = ["operatorConsoleTypes.ts", "buildOperatorConsoleSnapshot.ts", "operatorForwardScenario.ts"];
 
 function compileForNode() {
   fs.mkdirSync(outRoot, { recursive: true });
@@ -94,6 +94,9 @@ async function main() {
   const { buildOperatorConsoleSnapshot } = await import(
     pathToFileURL(path.join(outRoot, "buildOperatorConsoleSnapshot.mjs")).href
   );
+  const { prepareOperatorForwardScenario } = await import(
+    pathToFileURL(path.join(outRoot, "operatorForwardScenario.mjs")).href
+  );
 
   const active = buildOperatorConsoleSnapshot({
     runtime: runtime(),
@@ -141,6 +144,46 @@ async function main() {
     assert.doesNotMatch(serialized, /rawCandles|accountNumber|orderId|positionId|password|secret|api[_-]?key/i);
   }
 
+  const scenarioMap = {
+    scenarioMapId: "scenario-map-operator-fixture",
+    timestamp: "2026-07-12T14:00:00.000Z",
+    sourceProvider: "mt5_read_only",
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "M5",
+    sourceFingerprint: "canonical-manager-fingerprint",
+    currentSession: "new_york",
+    marketPhase: "retracement",
+    currentDecisionState: "anticipated_scenario",
+    primaryScenario: {},
+    invalidationScenario: {},
+    missingConfirmations: [],
+    nextEvidenceToWatch: [],
+    authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" },
+    safety: { researchOnly: true, rawCandlesExcluded: true, rawSnapshotsExcluded: true, autoApplyAllowed: false, autoPromotionAllowed: false }
+  };
+  const source = {
+    provider: "mt5_read_only",
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "5m",
+    candleLimit: 1000,
+    candleCount: 1000,
+    sourceFingerprint: "activated-feed-fingerprint",
+    activeForChart: true,
+    activeForResearch: true,
+    researchEligibilityReasons: [],
+    authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" }
+  };
+  const preparedScenario = prepareOperatorForwardScenario(scenarioMap, source);
+  assert.equal(preparedScenario.ok, true);
+  assert.equal(preparedScenario.reason, "ready");
+  assert.equal(preparedScenario.scenarioMap?.sourceFingerprint, "activated-feed-fingerprint");
+  assert.equal(preparedScenario.scenarioMap?.timeframe, "5m");
+  assert.equal(prepareOperatorForwardScenario({ ...scenarioMap, brokerSymbol: "US30" }, source).reason, "source_identity_mismatch");
+  assert.equal(prepareOperatorForwardScenario({ ...scenarioMap, sourceProvider: "mock" }, source).reason, "unsafe_source_provider");
+  assert.doesNotMatch(JSON.stringify(preparedScenario), /"candles"\s*:/i);
+
   const cycleSource = fs.readFileSync(path.join(sourceRoot, "operatorCycle.ts"), "utf8");
   assert.match(cycleSource, /advancedFullResearchMode:\s*false/, "operator cycle must use bounded research mode");
   assert.match(
@@ -153,6 +196,16 @@ async function main() {
     cycleSource,
     /publishClosedMt5ReadOnlyCandles\(activatedFeed\)/,
     "source activation must publish the latest confirmed closed candle into the forward-evidence bus"
+  );
+  assert.match(
+    cycleSource,
+    /recordForwardScenarioPrediction\(preparedScenario\.scenarioMap/,
+    "operator cycles must persist their compact research-only forward scenario"
+  );
+  assert.match(
+    cycleSource,
+    /modelVersion:\s*"operator_market_scenario:v1"/,
+    "operator scenario watches need an explicit non-execution model version"
   );
   assert.match(cycleSource, /OPERATOR_RESEARCH_TIMEOUT_MS\s*=\s*120_000/, "operator cycle must have a responsiveness timeout");
   assert.match(cycleSource, /recoverInterruptedState/, "orphaned running state must recover after a reload");
