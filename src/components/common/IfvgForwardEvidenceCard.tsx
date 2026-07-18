@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
   FORWARD_EVIDENCE_UPDATED_EVENT,
   auditForwardEvidenceCycleSample,
+  buildForwardEvidenceGatewayReport,
   evaluateForwardEvidenceLedger,
   ifvgFreshRetestV3FrozenProfile,
   loadForwardEvidenceLedger
@@ -41,6 +43,17 @@ export function IfvgForwardEvidenceCard({
     [entries, latestCycle]
   );
   const frozen = ifvgFreshRetestV3FrozenProfile;
+
+  const exportGatewayEvidence = () => {
+    const report = buildForwardEvidenceGatewayReport(evaluation);
+    const blob = new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "ifvg-v3-forward-evidence.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     const refreshEvidence = () => setEntries(loadForwardEvidenceLedger());
@@ -121,6 +134,14 @@ export function IfvgForwardEvidenceCard({
           {evaluation.unverifiedOutcomes ? (
             <Badge variant="warning">{evaluation.unverifiedOutcomes} unverified outcome{evaluation.unverifiedOutcomes === 1 ? "" : "s"} excluded</Badge>
           ) : null}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background/45 p-3">
+          <p className="text-xs text-muted-foreground">
+            Export a compact report for the local Paper-Demo validator. Entries and raw candles are excluded.
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={exportGatewayEvidence}>
+            Export gateway evidence
+          </Button>
         </div>
         {evaluation.blockers.length ? (
           <p className="text-xs text-muted-foreground">Next: {evaluation.blockers[0]}</p>

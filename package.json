@@ -16,6 +16,8 @@
     "llm:bridge": "node scripts/llm-local-bridge-server.mjs",
     "mcp:trade-proposal": "node scripts/gotrader-trade-proposal-mcp.mjs",
     "test:mcp-trade-proposal": "node scripts/test-gotrader-trade-proposal-mcp.mjs",
+    "test:paper-demo-gateway": "node scripts/test-paper-demo-gateway.mjs",
+    "import:forward-evidence": "node scripts/import-forward-evidence-report.mjs",
     "openclaw:phone-bridge": "node scripts/openclaw-phone-advisory-bridge.mjs",
     "openclaw:skill-server": "node scripts/openclaw-gotrader-advisory-skill-server.mjs",
     "tradingview:mcp-bridge": "node scripts/start-tradingview-mcp-bridge.mjs",

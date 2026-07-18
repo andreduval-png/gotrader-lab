@@ -6,7 +6,7 @@ This local MCP implements the first safe slice of the operating model:
 
 > The LLM proposes and initiates. GoTrader validates and sizes. The broker gateway executes and monitors.
 
-Only the first two clauses are active in this phase. Codex or Claude may submit a compact research proposal and initiate deterministic validation. GoTrader validates source identity, profile allowlisting, price geometry, minimum RR, safety fields, and an operator-owned paper sizing preview. The broker gateway remains disabled and no submission or monitoring call is made.
+Codex or Claude may submit a compact research proposal and initiate deterministic validation. GoTrader validates source identity, profile allowlisting, price geometry, minimum RR, safety fields, and an operator-owned paper sizing preview. A second fail-closed gateway may prepare a proposal for local Paper-Demo review only after readiness and untouched forward-evidence gates pass. The broker gateway remains disabled and no submission or monitoring call is made.
 
 ## Current Boundary
 
@@ -52,6 +52,14 @@ Safe proposals are recorded as `queued_for_deterministic_validation`. This is no
 
 Returns up to 20 compact audit entries from `.gotrader/mcp-trade-proposals.jsonl`. The ledger excludes candles, runtime snapshots, credentials, account data, orders, and positions.
 
+### `gotrader_paper_demo_gateway_status`
+
+Returns operator opt-in, kill-switch, evidence, policy, and disabled broker-gateway status.
+
+### `gotrader_prepare_paper_demo_simulation`
+
+Attempts to prepare a safe proposal for local paper-only review. It independently checks GoTrader-generated validation and forward evidence, freshness, idempotency, sizing, daily limits, and the kill switch. It never submits to a broker.
+
 ## Codex CLI Setup
 
 From PowerShell:
@@ -84,15 +92,14 @@ The validator rejects raw candle arrays, raw snapshots, screenshots/base64, secr
 
 Frozen profiles cannot be mutated through MCP. Any parameter change requires a new candidate profile version and the normal replay, walk-forward, OOS, evidence, maturity, and Paper-Demo gates.
 
+## Paper-Demo Preparation
+
+See `docs/gotrader-paper-demo-gateway.md` for the opt-in environment settings and deterministic gates. The current IFVG v3 report remains `not_ready`, so preparation is expected to stay blocked until untouched forward evidence and readiness review pass.
+
 ## Future Phase
 
-The next phase is not live execution. It is an explicit Paper-Demo gateway with:
+GoTrader now owns compact validation-report lookup, operator paper-risk settings, idempotency, stale-signal rejection, a kill switch, and daily preparation limits. These controls currently end at local Paper-Demo preparation.
 
-1. GoTrader-owned validation-chain lookup rather than an unverified reference.
-2. Operator-owned paper account risk policy.
-3. Idempotent request IDs and stale-signal rejection.
-4. A kill switch and session/daily-loss gates.
-5. Broker-demo submission and reconciliation behind an explicit opt-in.
-6. Compact order-state monitoring returned to GoTrader, never directly to the LLM as authority.
+The remaining future phase is broker-demo submission, acknowledgement, reconciliation, disconnect lockout, and compact state monitoring behind a separate explicit opt-in. It must remain GoTrader-controlled; an LLM may request evaluation but may not grant authority or bypass policy.
 
 Live execution remains out of scope until independent forward evidence and Paper-Demo operations prove the full lifecycle.

@@ -73,12 +73,18 @@ async function main() {
       ["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]
     ]
   );
+  compile(
+    "src/lib/forwardEvidence/buildForwardEvidenceGatewayReport.ts",
+    "buildForwardEvidenceGatewayReport.mjs",
+    [["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]]
+  );
 
   const registry = await import(pathToFileURL(path.join(outRoot, "frozenProfileRegistry.mjs")).href);
   const builder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceEntry.mjs")).href);
   const evaluator = await import(pathToFileURL(path.join(outRoot, "evaluateForwardEvidenceLedger.mjs")).href);
   const ifvgPolicy = await import(pathToFileURL(path.join(outRoot, "ifvgForwardEvidencePolicy.mjs")).href);
   const intakeAudit = await import(pathToFileURL(path.join(outRoot, "auditForwardEvidenceCycleSample.mjs")).href);
+  const gatewayReportBuilder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceGatewayReport.mjs")).href);
   const frozen = registry.ifvgFreshRetestV3FrozenProfile;
 
   assert.equal(frozen.profileId, "ifvg_fresh_retest_v3_research");
@@ -265,6 +271,21 @@ async function main() {
   assert.equal(eligible.authority.executionAuthority, "none");
   assert.ok((eligible.averageR ?? 0) > 0);
   assert.ok((eligible.profitFactor ?? 0) > 1);
+
+  const gatewayReport = gatewayReportBuilder.buildForwardEvidenceGatewayReport(
+    eligible,
+    "2026-07-18T18:00:00.000Z"
+  );
+  assert.equal(gatewayReport.reportType, "gotrader_forward_evidence_gateway_report");
+  assert.equal(gatewayReport.reportVersion, "v1");
+  assert.equal(gatewayReport.completedForwardOutcomes, 40);
+  assert.equal(gatewayReport.reassessmentEligible, true);
+  assert.equal(gatewayReport.autoPromotionAllowed, false);
+  assert.deepEqual(gatewayReport.authority, frozen.authority);
+  assert.doesNotMatch(
+    JSON.stringify(gatewayReport),
+    /"(?:entries|candles|rawCandles|runtimeSnapshot|account|orders|positions|apiKey|password|secret|token)"\s*:/i
+  );
 
   const threeTradeCycleAudit = intakeAudit.auditForwardEvidenceCycleSample({
     cycleId: "cycle_ifvg_three_trades",

@@ -9,6 +9,10 @@ import {
   evaluateTradeProposal,
   readRecentTradeProposalAudits
 } from "./gotrader-trade-proposal-core.mjs";
+import {
+  buildPaperDemoGatewayStatus,
+  preparePaperDemoSimulation
+} from "./gotrader-paper-demo-gateway-core.mjs";
 
 const server = new McpServer({
   name: "gotrader-trade-proposal-control-plane",
@@ -61,6 +65,31 @@ server.registerTool(
   async ({ limit }) => {
     const proposals = await readRecentTradeProposalAudits({ limit });
     return asToolResult({ proposals, count: proposals.length });
+  }
+);
+
+server.registerTool(
+  "gotrader_paper_demo_gateway_status",
+  {
+    description:
+      "Read the opt-in local Paper-Demo preparation gateway status. The gateway cannot submit broker orders or grant authority.",
+    inputSchema: {}
+  },
+  async () => asToolResult(await buildPaperDemoGatewayStatus())
+);
+
+server.registerTool(
+  "gotrader_prepare_paper_demo_simulation",
+  {
+    description:
+      "Prepare an already validated proposal for local paper-only review. Requires operator opt-in, readiness, forward evidence, and risk limits; never submits to a broker.",
+    inputSchema: {
+      proposalId: z.string().min(1).describe("GoTrader MCP proposal identifier to review.")
+    }
+  },
+  async ({ proposalId }) => {
+    const result = await preparePaperDemoSimulation(proposalId);
+    return asToolResult(result, result.status === "blocked");
   }
 );
 
