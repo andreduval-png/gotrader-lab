@@ -14,6 +14,8 @@
     "gotrader:status": "node scripts/diagnose-gotrader.mjs",
     "test:gotrader-supervisor": "node scripts/test-gotrader-supervisor.mjs",
     "llm:bridge": "node scripts/llm-local-bridge-server.mjs",
+    "mcp:trade-proposal": "node scripts/gotrader-trade-proposal-mcp.mjs",
+    "test:mcp-trade-proposal": "node scripts/test-gotrader-trade-proposal-mcp.mjs",
     "openclaw:phone-bridge": "node scripts/openclaw-phone-advisory-bridge.mjs",
     "openclaw:skill-server": "node scripts/openclaw-gotrader-advisory-skill-server.mjs",
     "tradingview:mcp-bridge": "node scripts/start-tradingview-mcp-bridge.mjs",
@@ -154,6 +156,7 @@
     "test:auto-paper-demo-cycle": "node scripts/test-auto-paper-demo-cycle.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@vitejs/plugin-react": "^5.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -163,7 +166,8 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.3.0",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
