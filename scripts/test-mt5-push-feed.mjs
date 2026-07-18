@@ -17,6 +17,7 @@ const sourceFiles = [
   "mt5PushFeedStore.ts",
   "mt5PushFeedIctTriggers.ts",
   "mt5PushFeedGateway.ts",
+  "mt5ReadOnlyEventAdapter.ts",
   "mt5PushFeedFixtures.ts"
 ];
 
@@ -53,6 +54,7 @@ async function main() {
   const triggerModule = await importCompiled("mt5PushFeedIctTriggers.mjs");
   const gatewayModule = await importCompiled("mt5PushFeedGateway.mjs");
   const normalizerModule = await importCompiled("mt5PushFeedNormalizer.mjs");
+  const adapterModule = await importCompiled("mt5ReadOnlyEventAdapter.mjs");
 
   const normalized = normalizerModule.normalizeMt5PushFeedEvent(
     fixtures.mt5PushFeedCandleClosedFixture,
@@ -130,6 +132,70 @@ async function main() {
   assert.equal(stale.trigger.replayValidationMayQueue, false);
   assert.equal(triggerController.feedWarningCount, 1);
 
+  const adaptedEvents = [];
+  const adapterResult = adapterModule.publishClosedMt5ReadOnlyCandles(
+    {
+      brokerSymbol: "USTECH",
+      symbol: "USTECH",
+      requestedSymbol: "MNQ",
+      timeframe: "5m",
+      latestQuote: { timestamp: "2026-06-14T14:11:00.000Z" },
+      candles: [
+        {
+          id: "adapter_1400",
+          timestamp: "2026-06-14T14:00:00.000Z",
+          open: 21200,
+          high: 21210,
+          low: 21195,
+          close: 21206,
+          source: "mt5_read_only",
+          symbol: "USTECH",
+          timeframe: "5m"
+        },
+        {
+          id: "adapter_1405",
+          timestamp: "2026-06-14T14:05:00.000Z",
+          open: 21206,
+          high: 21220,
+          low: 21204,
+          close: 21218,
+          source: "mt5_read_only",
+          symbol: "USTECH",
+          timeframe: "5m"
+        },
+        {
+          id: "adapter_1410_open",
+          timestamp: "2026-06-14T14:10:00.000Z",
+          open: 21218,
+          high: 21222,
+          low: 21215,
+          close: 21220,
+          source: "mt5_read_only",
+          symbol: "USTECH",
+          timeframe: "5m"
+        }
+      ]
+    },
+    {
+      previousTimestamp: "2026-06-14T14:00:00.000Z",
+      referenceTime: "2026-06-14T14:11:00.000Z",
+      gateway: {
+        receiveEvent(event) {
+          adaptedEvents.push(event);
+          return { accepted: true };
+        }
+      }
+    }
+  );
+  assert.equal(adapterResult.publishedCount, 1);
+  assert.equal(adaptedEvents[0].type, "mt5.candle_closed");
+  assert.equal(adaptedEvents[0].candle.timestamp, "2026-06-14T14:05:00.000Z");
+  assert.equal(
+    adaptedEvents.some((event) => event.candle.timestamp === "2026-06-14T14:10:00.000Z"),
+    false,
+    "The still-open candle must not be published as closed."
+  );
+
   const gateway = gatewayModule.createMt5PushFeedGateway({
     eventBus,
     persistStatus: false,
@@ -169,6 +235,7 @@ async function main() {
         currentReadRefreshCount: triggerController.currentReadRefreshCount,
         duplicatesSkipped: state.status.skippedDuplicateCount,
         staleTriggeredTrading: stale.trigger.currentReadShouldRefresh || stale.trigger.replayValidationMayQueue,
+        refreshAdapterClosedCandlesPublished: adapterResult.publishedCount,
         authority: {
           executionAuthority: state.status.executionAuthority,
           brokerAuthority: state.status.brokerAuthority,

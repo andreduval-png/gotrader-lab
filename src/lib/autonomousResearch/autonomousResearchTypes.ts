@@ -3,6 +3,7 @@ import type { AutonomyBlockerCategory, AutonomySafetyDiagnosis, AutonomyScenario
 import type { HermesNotificationHookState, OpenClawMemoryHookState } from "@/lib/integrations/advisoryMemoryTypes";
 import type { CalibrationProposal, CalibrationProposalChanges } from "@/lib/selfImprovement";
 import type { WalkForwardRun } from "@/lib/walkForward";
+import type { BacktestStrategyProfile } from "@/lib/backtesting";
 
 export type AutonomousResearchStatus =
   | "idle"
@@ -103,6 +104,8 @@ export interface AutonomousResearchSettings {
   safeImportedDataMode: boolean;
   advancedFullResearchMode: boolean;
   autoApplyPolicyEnabled: boolean;
+  researchStrategyProfile?: BacktestStrategyProfile;
+  maxResearchCandles?: number;
 }
 
 export interface AutonomousPerformancePhaseTiming {

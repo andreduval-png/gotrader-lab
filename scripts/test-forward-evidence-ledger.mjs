@@ -56,10 +56,19 @@ async function main() {
       ["./frozenProfileRegistry", "./frozenProfileRegistry.mjs"]
     ]
   );
+  compile(
+    "src/lib/forwardEvidence/ifvgForwardEvidencePolicy.ts",
+    "ifvgForwardEvidencePolicy.mjs",
+    [
+      ["./buildForwardEvidenceEntry", "./buildForwardEvidenceEntry.mjs"],
+      ["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]
+    ]
+  );
 
   const registry = await import(pathToFileURL(path.join(outRoot, "frozenProfileRegistry.mjs")).href);
   const builder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceEntry.mjs")).href);
   const evaluator = await import(pathToFileURL(path.join(outRoot, "evaluateForwardEvidenceLedger.mjs")).href);
+  const ifvgPolicy = await import(pathToFileURL(path.join(outRoot, "ifvgForwardEvidencePolicy.mjs")).href);
   const frozen = registry.ifvgFreshRetestV3FrozenProfile;
 
   assert.equal(frozen.profileId, "ifvg_fresh_retest_v3_research");
@@ -104,6 +113,56 @@ async function main() {
   assert.equal(safeEntry.authority.executionAuthority, "none");
   assert.equal(safeEntry.authority.brokerAuthority, "none");
   assert.equal(safeEntry.authority.readinessOverrideAuthority, "none");
+  assert.equal(safeEntry.barsObserved, 0);
+
+  const pendingObservation = ifvgPolicy.buildIfvgV3ForwardObservation({
+    eligible: true,
+    cleanRetest: true,
+    signalFresh: true,
+    blockers: [],
+    candidate: {
+      side: "long",
+      sourceFingerprint: "mt5_ifvg_forward_001",
+      retestCandle: { timestamp: afterCutoff(0) },
+      ifvgBounds: { low: 100, high: 102, midpoint: 101 },
+      stop: 99,
+      target: 105,
+      rr: 2,
+      presentConditions: ["full_inversion", "unused_ifvg_zone", "ifvg_retest"],
+      missingConditions: [],
+      warnings: []
+    }
+  }, { observedAt: afterCutoff(0, 15) });
+  assert.ok(pendingObservation);
+  assert.equal(pendingObservation.outcome, "pending");
+  assert.equal(pendingObservation.authority.executionAuthority, "none");
+  assert.equal(pendingObservation.authority.brokerAuthority, "none");
+  assert.equal(pendingObservation.authority.readinessOverrideAuthority, "none");
+  assert.doesNotMatch(JSON.stringify(pendingObservation), /"(?:candles|rawCandles|accountData|orderData|positionData)"\s*:/i);
+
+  const targetResolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
+    [pendingObservation],
+    { timestamp: afterCutoff(0, 16), high: 106, low: 100 },
+    { observedBarsByEntryId: { [pendingObservation.entryId]: 1 }, checkedAt: afterCutoff(0, 16) }
+  );
+  assert.equal(targetResolution.entries[0].outcome, "target_first");
+  assert.equal(targetResolution.entries[0].realizedR, 2);
+
+  const conservativeSameBar = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
+    [pendingObservation],
+    { timestamp: afterCutoff(0, 16), high: 106, low: 98 },
+    { observedBarsByEntryId: { [pendingObservation.entryId]: 1 }, checkedAt: afterCutoff(0, 16) }
+  );
+  assert.equal(conservativeSameBar.entries[0].outcome, "invalidation_first");
+  assert.equal(conservativeSameBar.entries[0].realizedR, -1);
+
+  const expiredResolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
+    [pendingObservation],
+    { timestamp: afterCutoff(1, 16), high: 104, low: 100 },
+    { observedBarsByEntryId: { [pendingObservation.entryId]: 48 }, checkedAt: afterCutoff(1, 16) }
+  );
+  assert.equal(expiredResolution.entries[0].outcome, "expired");
+  assert.equal(expiredResolution.entries[0].realizedR, 0);
 
   const preCutoff = builder.buildForwardEvidenceEntry({
     sourceFingerprint: "mt5_historical_fp",
@@ -217,6 +276,8 @@ async function main() {
     safety: {
       rawCandlesSerialized: false,
       accountOrderPositionSerialized: false,
+      ifvgForwardObservationIssued: true,
+      ifvgForwardOutcomeResolved: targetResolution.entries[0].outcome,
       autoPromotionAllowed: false,
       authority: eligible.authority
     }

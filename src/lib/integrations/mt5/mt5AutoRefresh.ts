@@ -16,6 +16,7 @@ import type {
   Mt5ReadOnlyFeedUsageMode,
   Mt5ReadOnlyQuote
 } from "@/lib/integrations/mt5/mt5ReadOnlyTypes";
+import { publishClosedMt5ReadOnlyCandles } from "@/lib/mt5PushFeed/mt5ReadOnlyEventAdapter";
 
 export const MT5_READ_ONLY_AUTO_REFRESH_STORAGE_KEY = "gotrader-ai-lab-mt5-readonly-auto-refresh";
 export const MT5_READ_ONLY_AUTO_REFRESH_UPDATED_EVENT = "gotrader-ai-lab-mt5-readonly-auto-refresh-updated";
@@ -579,6 +580,12 @@ export async function refreshMt5ReadOnlyNow(
       );
       storageWriteStatus = feed.candlesPersisted ? "written" : "session_only";
     }
+
+    timeSyncPhase(
+      "canonical_candle_close_publish",
+      () => publishClosedMt5ReadOnlyCandles(feed),
+      `${feed.brokerSymbol ?? feed.symbol} ${feed.timeframe}`
+    );
 
     const latestState = loadMt5ReadOnlyAutoRefreshState();
     const recoveredFromFailure =

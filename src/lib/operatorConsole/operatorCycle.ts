@@ -7,6 +7,8 @@ import {
 } from "@/lib/ict-strategy-suite/ictLatestResearchState";
 import { runIctActivateMarketPipeline } from "@/lib/ict-strategy-suite/ictActivateMarketPipeline";
 import { ensureMt5CanonicalResearchSource } from "@/lib/ict-strategy-suite/ictActivateMarketSourceActivation";
+import { loadActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5/mt5ReadOnlyClient";
+import { publishClosedMt5ReadOnlyCandles } from "@/lib/mt5PushFeed/mt5ReadOnlyEventAdapter";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import type { LabState } from "@/lib/types";
 
@@ -194,6 +196,11 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       });
     }
 
+    const activatedFeed = loadActiveMt5ReadOnlyCandleFeed();
+    if (activatedFeed?.candles.length) {
+      publishClosedMt5ReadOnlyCandles(activatedFeed);
+    }
+
     if (controller.signal.aborted) {
       return updateState(current, {
         status: "canceled",
@@ -262,7 +269,9 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         noImprovementStop: 1,
         safeImportedDataMode: true,
         advancedFullResearchMode: false,
-        autoApplyPolicyEnabled: false
+        autoApplyPolicyEnabled: false,
+        researchStrategyProfile: "ifvg_fresh_retest_v3_research",
+        maxResearchCandles: 1000
       },
       onUpdate: (run) => {
         const progress = Math.max(0, Math.min(100, run.progress.progressPercent));

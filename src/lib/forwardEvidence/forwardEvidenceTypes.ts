@@ -109,6 +109,8 @@ export interface ForwardEvidenceEntry {
   missingEvidence: string[];
   outcome: ForwardEvidenceOutcome;
   realizedR?: number;
+  barsObserved: number;
+  lastCheckedAt?: string;
   blockerSummary: string;
   notes: string;
   authority: typeof FORWARD_EVIDENCE_AUTHORITY;
@@ -130,6 +132,8 @@ export interface ForwardEvidenceEntryInput {
   missingEvidence?: string[];
   outcome?: ForwardEvidenceOutcome;
   realizedR?: number;
+  barsObserved?: number;
+  lastCheckedAt?: string;
   blockerSummary?: string;
   notes?: string;
   authority?: {

@@ -36,6 +36,7 @@ import {
   recordWalkForwardRunInValidationChain
 } from "@/lib/validationChain";
 import { runWalkForwardValidation } from "@/lib/walkForward";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence/frozenProfileRegistry";
 
 const defaultSettings: AutonomousResearchSettings = {
   maxIterations: 1,
@@ -707,11 +708,33 @@ export async function runAutonomousResearchLoop({
       const autonomousMaxCandidateCount = settings.advancedFullResearchMode
         ? scenario.maxCandidateCount
         : Math.min(AUTONOMOUS_CANDIDATE_LIMIT, scenario.maxCandidateCount);
+      const frozenProfile = settings.researchStrategyProfile
+        ? getFrozenResearchProfile(settings.researchStrategyProfile)
+        : undefined;
+      const frozenBacktestConfig = frozenProfile
+        ? {
+            strategyProfile: frozenProfile.profileId,
+            symbol: frozenProfile.requestedSymbol,
+            timeframe: frozenProfile.timeframe,
+            warmupCandles: frozenProfile.frozenParameters.warmupCandles,
+            decisionInterval: frozenProfile.frozenParameters.decisionInterval,
+            maxBarsToResolveTrade: frozenProfile.frozenParameters.maxBarsToResolveTrade,
+            visibleWindow: frozenProfile.frozenParameters.visibleWindow,
+            targetRMultiple: frozenProfile.frozenParameters.minimumRR,
+            allowLong: frozenProfile.frozenParameters.allowLong,
+            allowShort: frozenProfile.frozenParameters.allowShort
+          }
+        : settings.researchStrategyProfile
+          ? { strategyProfile: settings.researchStrategyProfile }
+          : undefined;
       const cycle = await runResearchCycle({
         state,
         searchMode: scenario.searchMode,
         maxCandidateCount: autonomousMaxCandidateCount,
-        maxResearchCandles: settings.advancedFullResearchMode ? undefined : 500,
+        maxResearchCandles:
+          settings.maxResearchCandles ??
+          (frozenProfile ? 1000 : settings.advancedFullResearchMode ? undefined : 500),
+        backtestConfig: frozenBacktestConfig,
         maxAdaptivePasses: settings.advancedFullResearchMode ? undefined : 0,
         autoResearchTimeoutMs: settings.advancedFullResearchMode ? undefined : AUTONOMOUS_RESEARCH_TIMEOUT_MS,
         autoResearchCheckpointPersistence: "memory_only",

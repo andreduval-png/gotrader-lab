@@ -143,6 +143,17 @@ async function main() {
 
   const cycleSource = fs.readFileSync(path.join(sourceRoot, "operatorCycle.ts"), "utf8");
   assert.match(cycleSource, /advancedFullResearchMode:\s*false/, "operator cycle must use bounded research mode");
+  assert.match(
+    cycleSource,
+    /researchStrategyProfile:\s*"ifvg_fresh_retest_v3_research"/,
+    "operator cycle must evaluate the frozen positive-edge IFVG v3 research profile"
+  );
+  assert.match(cycleSource, /maxResearchCandles:\s*1000/, "IFVG v3 operator validation must retain its bounded 1,000-candle window");
+  assert.match(
+    cycleSource,
+    /publishClosedMt5ReadOnlyCandles\(activatedFeed\)/,
+    "source activation must publish the latest confirmed closed candle into the forward-evidence bus"
+  );
   assert.match(cycleSource, /OPERATOR_RESEARCH_TIMEOUT_MS\s*=\s*120_000/, "operator cycle must have a responsiveness timeout");
   assert.match(cycleSource, /recoverInterruptedState/, "orphaned running state must recover after a reload");
   assert.match(cycleSource, /status:\s*"canceled"/, "interrupted cycles must become terminal");
@@ -153,8 +164,8 @@ async function main() {
   );
   assert.match(
     autonomousSource,
-    /maxResearchCandles:\s*settings\.advancedFullResearchMode\s*\?\s*undefined\s*:\s*500/,
-    "bounded autonomous cycles must cap their working candle window"
+    /frozenProfile\s*\?\s*1000\s*:\s*settings\.advancedFullResearchMode\s*\?\s*undefined\s*:\s*500/,
+    "bounded autonomous cycles must use 1,000 candles only for a frozen profile and 500 otherwise"
   );
 
   const validationSource = fs.readFileSync(

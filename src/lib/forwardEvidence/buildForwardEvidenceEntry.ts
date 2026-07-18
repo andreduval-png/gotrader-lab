@@ -160,6 +160,8 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
     missingEvidence: compactList(input.missingEvidence),
     outcome,
     realizedR: outcome === "pending" || outcome === "rejected" ? undefined : finiteNumber(input.realizedR),
+    barsObserved: Math.max(0, Math.floor(finiteNumber(input.barsObserved) ?? 0)),
+    lastCheckedAt: validTimestamp(input.lastCheckedAt),
     blockerSummary,
     notes: blockedFields.length ? "" : compactText(input.notes, 500),
     authority: FORWARD_EVIDENCE_AUTHORITY
