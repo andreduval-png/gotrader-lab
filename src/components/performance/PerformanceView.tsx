@@ -72,7 +72,7 @@ const wholeMoney = new Intl.NumberFormat(undefined, {
 });
 
 const compactDate = new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" });
-const weekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const safeNumber = (value?: number | null) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 const pct = (value?: number, digits = 1) =>
@@ -139,7 +139,6 @@ export function PerformanceView({ state }: { state: LabState }) {
     [canonicalMetrics, runtimeSnapshot, walkForward]
   );
   const sourceWarnings = selectRuntimeProvenanceWarnings(runtimeSnapshot);
-  const movePositive = calendar.monthMove >= 0;
   const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
   const avgWinLoss = averageWinLossRatio(canonicalMetrics);
   const hasDatedOutcomes = state.outcomes.length > 0;
@@ -177,7 +176,6 @@ export function PerformanceView({ state }: { state: LabState }) {
 
       <ResultsCalendar
         calendar={calendar}
-        movePositive={movePositive}
         hasDatedOutcomes={hasDatedOutcomes}
         onPreviousMonth={() => setMonthOffset((value) => value - 1)}
         onNextMonth={() => setMonthOffset((value) => value + 1)}
@@ -603,52 +601,61 @@ export function PerformanceView({ state }: { state: LabState }) {
 function ResultsCalendar({
   calendar,
   hasDatedOutcomes,
-  movePositive,
   onPreviousMonth,
   onNextMonth,
   onToday
 }: {
   calendar: ReturnType<typeof buildResultsCalendar>;
   hasDatedOutcomes: boolean;
-  movePositive: boolean;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onToday: () => void;
 }) {
+  const activeDays = calendar.cells.filter((cell) => cell.inMonth && (cell.trades > 0 || Math.abs(cell.move) > 0)).length;
+  const moveTone = calendar.monthMove > 0 ? "text-emerald-400" : calendar.monthMove < 0 ? "text-rose-400" : "text-slate-200";
+
   return (
-    <section data-testid="results-calendar" className="premium-surface overflow-hidden rounded-lg">
-      <div className="flex flex-col gap-4 border-b border-white/10 px-4 py-5 md:px-6">
-        <div className="flex flex-wrap items-center justify-center gap-2 text-center text-2xl font-semibold">
-          <span className="text-slate-50">Dated outcome move:</span>
-          <span className={movePositive ? "text-emerald-400" : "text-rose-400"}>{formatMove(calendar.monthMove)}</span>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+    <section data-testid="results-calendar" className="results-calendar premium-surface overflow-hidden rounded-lg">
+      <div className="border-b border-white/10 bg-[#0d1016] px-4 py-5 md:px-6">
+        <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+          <div className="flex min-w-0 items-center gap-3">
             <Button variant="secondary" size="sm" aria-label="Previous month" onClick={onPreviousMonth}>
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <div>
-              <p className="text-lg font-semibold text-slate-200">{compactDate.format(calendar.anchorDate)}</p>
-              <p className="text-xs text-slate-500">Recorded dated research outcomes only</p>
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase text-slate-500">Reporting period</p>
+              <p className="financial-figure mt-1 text-xl font-semibold text-slate-100">{compactDate.format(calendar.anchorDate)}</p>
             </div>
             <Button variant="ghost" size="sm" aria-label="Next month" onClick={onNextMonth}>
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{calendar.monthTrades.toLocaleString()} trades</Badge>
+
+          <div className="border-white/10 text-left md:border-x md:px-8 md:text-center">
+            <p className="text-[11px] font-semibold uppercase text-slate-500">Monthly dated outcome</p>
+            <p className={cn("financial-figure mt-1 text-3xl font-semibold", moveTone)}>{formatMove(calendar.monthMove)}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase text-slate-500">Active days</p>
+              <p className="financial-figure mt-0.5 text-sm font-semibold text-slate-200">{activeDays}</p>
+            </div>
+            <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase text-slate-500">Records</p>
+              <p className="financial-figure mt-0.5 text-sm font-semibold text-slate-200">{calendar.monthTrades.toLocaleString()}</p>
+            </div>
             <Badge variant={hasDatedOutcomes ? "warning" : "secondary"}>{hasDatedOutcomes ? "Simulation only" : "No dated outcomes"}</Badge>
-            <Button variant="secondary" size="sm" onClick={onToday}>
-              Today
-            </Button>
+            <Button variant="secondary" size="sm" onClick={onToday}>Today</Button>
           </div>
         </div>
+        <p className="mt-4 text-xs text-slate-500 md:mt-3">Recorded dated research outcomes only. Aggregate backtest statistics remain in their evidence tabs.</p>
       </div>
-      <div className="overflow-x-auto">
-        <div className="min-w-[1050px]">
-          <div className="grid grid-cols-7 border-b border-white/10 text-center text-sm font-semibold text-slate-400">
+      <div className="scrollbar-thin overflow-x-auto">
+        <div className="min-w-[760px] lg:min-w-0">
+          <div className="grid grid-cols-7 border-b border-white/10 bg-[#090c11] text-center text-[11px] font-semibold uppercase text-slate-500">
             {weekdayLabels.map((label) => (
-              <div key={label} className="px-3 py-3">{label}</div>
+              <div key={label} className="border-r border-white/[0.055] px-3 py-3 last:border-r-0">{label}</div>
             ))}
           </div>
           <div className="grid grid-cols-7">
@@ -670,32 +677,37 @@ function ResultsCalendar({
 function CalendarDayCell({ cell }: { cell: CalendarCell }) {
   const isWeekSummary = cell.date.getDay() === 6;
   const hasActivity = cell.trades > 0 || Math.abs(cell.move) > 0;
-  const isPositive = cell.move >= 0;
+  const moveTone = cell.move > 0 ? "text-emerald-400" : cell.move < 0 ? "text-rose-400" : "text-slate-300";
+  const weekMoveTone = cell.weekMove > 0 ? "text-emerald-400" : cell.weekMove < 0 ? "text-rose-400" : "text-slate-300";
   return (
     <div
       className={cn(
-        "relative min-h-[118px] border-b border-r border-white/10 px-3 py-3 text-center",
-        !cell.inMonth && "bg-black/45 opacity-45",
-        cell.inMonth && hasActivity && isPositive && "bg-emerald-500/18",
-        cell.inMonth && hasActivity && !isPositive && "bg-rose-500/18",
-        cell.isToday && "outline outline-1 outline-sky-400"
+        "relative min-h-[116px] border-b border-r border-white/[0.075] bg-[#0c1016] px-3 py-3 text-left",
+        !cell.inMonth && "bg-[#080a0e] text-slate-700",
+        cell.inMonth && hasActivity && cell.move > 0 && "bg-[linear-gradient(180deg,rgba(16,185,129,0.13),rgba(16,185,129,0.035))]",
+        cell.inMonth && hasActivity && cell.move < 0 && "bg-[linear-gradient(180deg,rgba(244,63,94,0.13),rgba(244,63,94,0.035))]",
+        isWeekSummary && "border-l border-l-white/10 bg-[#0f131a]",
+        cell.isToday && "ring-1 ring-inset ring-sky-400/80"
       )}
     >
-      <div className="absolute left-3 top-2 text-sm font-semibold text-slate-400">{cell.day}</div>
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn("financial-figure text-xs font-semibold", cell.inMonth ? "text-slate-400" : "text-slate-700")}>{String(cell.day).padStart(2, "0")}</span>
+        {cell.isToday ? <span className="rounded-sm bg-sky-400/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-sky-300">Today</span> : null}
+      </div>
       {isWeekSummary ? (
-        <div className="flex h-full min-h-[90px] flex-col items-center justify-center">
-          <div className="text-sm font-bold text-slate-50">Week {cell.weekIndex + 1}</div>
-          <div className={cn("mt-2 font-mono text-2xl font-semibold", cell.weekMove >= 0 ? "text-emerald-400" : "text-rose-400")}>
+        <div className="flex min-h-[78px] flex-col justify-end pb-1">
+          <div className="text-[10px] font-semibold uppercase text-slate-500">Week {cell.weekIndex + 1}</div>
+          <div className={cn("financial-figure mt-1 text-xl font-semibold", weekMoveTone)}>
             {formatMove(cell.weekMove)}
           </div>
-          <div className="mt-1 text-sm text-slate-400">{cell.weekTrades} trades</div>
+          <div className="financial-figure mt-1 text-[11px] text-slate-500">{cell.weekTrades} records</div>
         </div>
       ) : hasActivity ? (
-        <div className="flex h-full min-h-[90px] flex-col items-center justify-center">
-          <div className={cn("font-mono text-2xl font-semibold", isPositive ? "text-emerald-400" : "text-rose-400")}>
+        <div className="flex min-h-[78px] flex-col justify-end pb-1">
+          <div className={cn("financial-figure text-xl font-semibold", moveTone)}>
             {formatMove(cell.move)}
           </div>
-          <div className="mt-1 text-sm text-slate-400">{cell.trades} trades</div>
+          <div className="financial-figure mt-1 text-[11px] text-slate-500">{cell.trades} records</div>
         </div>
       ) : null}
     </div>

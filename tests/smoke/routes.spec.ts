@@ -668,7 +668,7 @@ async function expectUpgradedResultsPage(page: Page) {
   await expect(page.getByTestId("performance-results-page")).toBeVisible();
   await expect(page.getByTestId("results-tabs")).toBeVisible();
   await expect(page.getByTestId("results-calendar")).toBeVisible();
-  await expect(page.getByTestId("results-calendar")).toContainText(/Dated outcome move/i);
+  await expect(page.getByTestId("results-calendar")).toContainText(/Monthly dated outcome/i);
   await expect(main).toContainText(/Research Results/i);
   await expect(page.getByTestId("results-tab-overview")).toContainText(/Frozen IFVG v3/i);
   await page.getByRole("tab", { name: "Backtest" }).click();
