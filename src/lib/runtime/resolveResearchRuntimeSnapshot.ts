@@ -1,6 +1,7 @@
-import { defaultBacktestConfig, loadBacktestConfig } from "@/lib/backtesting";
+import { defaultBacktestConfig, loadBacktestConfig, sanitizeBacktestConfig } from "@/lib/backtesting";
 import { latestAutoResearchCycle, loadAutoResearchState, AUTO_RESEARCH_STORAGE_KEY } from "@/lib/autoResearch";
 import { buildEvidenceLedger } from "@/lib/evidence";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
 import {
   getLLMReadinessImpact,
   getLocalBridgeStatusSnapshot,
@@ -87,7 +88,18 @@ import {
 import type { FuturesSymbol, LabState, Timeframe } from "@/lib/types";
 import { safeArray, safeTopN, uid } from "@/lib/utils";
 import { loadLatestValidationReport, VALIDATION_REPORT_STORAGE_KEY } from "@/lib/validation";
-import { latestWalkForwardRun, loadWalkForwardState, WALK_FORWARD_STORAGE_KEY } from "@/lib/walkForward";
+import {
+  latestWalkForwardRun,
+  loadWalkForwardState,
+  walkForwardProvenanceReview,
+  WALK_FORWARD_STORAGE_KEY
+} from "@/lib/walkForward";
+import {
+  attachMatchingCycleValidationProvenance,
+  buildValidationProvenanceIdentity,
+  fingerprintValidationParameters,
+  matchActiveResearchIdentity
+} from "@/lib/validationProvenance";
 
 import type {
   ResearchRuntimeSnapshot,
@@ -819,14 +831,74 @@ export async function resolveResearchRuntimeSnapshot(
             ? `${summarizeGrinchPhase1(grinchPhase1Summary)}${grinchHardGateDetail}`
             : `${grinchStrategyScore?.primaryRuleBlock ?? "No valid Grinch profile in this window."}${grinchHardGateDetail}`
   };
-  const readinessSnapshot = evaluateReadinessGate({
+  const walkForwardState = loadWalkForwardState();
+  const latestWalkForward = latestWalkForwardRun(walkForwardState);
+  const latestIdentityCandle = runtimeResearchCandles.at(-1);
+  const identityConfig = latestIdentityCandle
+    ? sanitizeBacktestConfig({
+        ...activeConfig.config,
+        symbol: latestIdentityCandle.symbol,
+        timeframe: latestIdentityCandle.timeframe
+      })
+    : activeConfig.config;
+  const frozenProfile = getFrozenResearchProfile(identityConfig.strategyProfile);
+  const configuredResearchIdentity = buildValidationProvenanceIdentity({
+    strategyProfile: identityConfig.strategyProfile,
+    strategyProfileVersion: frozenProfile?.profileVersion,
+    sourceProvider: displaySource.activeResearchSourceMode,
+    requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? identityConfig.symbol,
+    brokerSymbol:
+      mt5ReadOnlyFeed?.brokerSymbol ??
+      displaySource.activeResearchSource.provenance.providerSymbol ??
+      displaySource.activeResearchSource.symbol,
+    timeframe: identityConfig.timeframe,
+    sourceFingerprint: displaySource.activeResearchSource.fingerprint,
+    parameterFingerprint: fingerprintValidationParameters(identityConfig),
+    detectorProfileFingerprint: frozenProfile
+      ? fingerprintValidationParameters(frozenProfile.frozenParameters)
+      : undefined
+  });
+  const latestCycleValidationMatchesStored = Boolean(
+    validation?.id && latestCycle?.validationSummary?.validationId === validation.id
+  );
+  const readinessValidation = attachMatchingCycleValidationProvenance(
     validation,
+    latestCycle?.validationSummary
+  );
+  // Readiness describes the latest completed research cycle. Autonomous runs may
+  // use a frozen detector profile override without mutating the saved baseline,
+  // so retain the identity that actually produced the cycle's validation.
+  const activeResearchIdentity =
+    latestCycle?.validationSummary?.provenance ??
+    (latestCycleValidationMatchesStored ? readinessValidation?.provenance : undefined) ??
+    configuredResearchIdentity;
+  const activeResearchIdentitySource =
+    activeResearchIdentity === configuredResearchIdentity
+      ? "active backtest configuration"
+      : "latest research cycle validation";
+  const activeValidationIdentityReview = matchActiveResearchIdentity(
+    activeResearchIdentity,
+    readinessValidation?.provenance
+  );
+  const matchingWalkForward =
+    activeValidationIdentityReview.matched && readinessValidation?.provenance
+      ? walkForwardState.runs.find((run) =>
+          walkForwardProvenanceReview(readinessValidation.provenance!, run).matched
+        )
+      : undefined;
+  const readinessEdgeStatistics = (() => {
+    const oos = matchingWalkForward?.stability?.edgeStatistics;
+    return oos?.provenance === "out_of_sample" ? oos : undefined;
+  })();
+  const readinessSnapshot = evaluateReadinessGate({
+    validation: readinessValidation,
     quality: researchQuality,
     runbook,
-    edgeStatistics: (() => {
-      const oos = latestWalkForwardRun(loadWalkForwardState())?.stability?.edgeStatistics;
-      return oos?.provenance === "out_of_sample" ? oos : undefined;
-    })()
+    edgeStatistics: readinessEdgeStatistics,
+    provenanceExpectation: activeValidationIdentityReview.matched
+      ? readinessValidation?.provenance
+      : activeResearchIdentity,
+    walkForwardRun: matchingWalkForward
   });
   const canonicalPerformanceMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
   const derivedMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
@@ -834,8 +906,6 @@ export async function resolveResearchRuntimeSnapshot(
   const completedRunbookItems = countCompletedRunbookItems(runbook);
   const autoResearchState = loadAutoResearchState();
   const latestAutoResearch = latestAutoResearchCycle(autoResearchState);
-  const walkForwardState = loadWalkForwardState();
-  const latestWalkForward = latestWalkForwardRun(walkForwardState);
   const activeImportId = getActiveImportedCandleSetId();
   const evidenceLedgerSummary = buildEvidenceLedger({
     dataMode: runtimeResearchMode,
@@ -903,6 +973,7 @@ export async function resolveResearchRuntimeSnapshot(
     `stored imports: ${marketData.importedDatasetCount}`,
     `candle window: ${marketData.researchWindow.toLocaleString()} raw -> ${marketData.processedCandleCount.toLocaleString()} processed ${marketData.timeframe}`,
     `config merge: ${activeConfig.mergeStatusLabel}`,
+    `readiness identity: ${activeResearchIdentitySource} / ${activeResearchIdentity.strategyProfile} / ${activeResearchIdentity.parameterFingerprint}`,
     `latest cycle: ${latestCycle?.cycleId ?? "none"}`,
     `latest auto research: ${latestAutoResearch?.cycleId ?? "none"}`,
     `latest walk-forward: ${latestWalkForward?.runId ?? "none"}`,

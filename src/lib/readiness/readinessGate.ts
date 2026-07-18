@@ -171,6 +171,17 @@ const llmSnapshotFor = () => {
   };
 };
 
+const compactIdentity = (identity?: ValidationProvenanceIdentity) => {
+  if (!identity) return "missing";
+  const profile = identity.strategyProfile ?? "unknown profile";
+  const version = identity.strategyProfileVersion ? ` ${identity.strategyProfileVersion}` : "";
+  const source = [identity.sourceProvider, identity.requestedSymbol, identity.brokerSymbol, identity.timeframe]
+    .filter(Boolean)
+    .join("/");
+  const parameters = identity.parameterFingerprint ?? "parameters missing";
+  return `${profile}${version}; ${source || "source missing"}; ${parameters}`;
+};
+
 export function evaluateReadinessGate({
   validation,
   quality,
@@ -194,7 +205,7 @@ export function evaluateReadinessGate({
   const redClusters = redDrawdownClusters(quality);
   const llmSnapshot = llmSnapshotFor();
   const validationProvenanceReview = matchValidationProvenance(
-    provenanceExpectation,
+    provenanceExpectation ?? validation?.provenance,
     validation?.provenance,
     {
       purpose: "readiness",
@@ -233,16 +244,21 @@ export function evaluateReadinessGate({
       "Validation and OOS evidence match the active research identity",
       matchedEvidenceProvenance,
       matchedEvidenceProvenance
-        ? "Validation and walk-forward provenance match exactly."
+        ? "Active research identity matches; frozen validation and walk-forward provenance match exactly."
         : MATCHING_OOS_UNAVAILABLE_MESSAGE,
       "blocker",
       {
         currentValue: matchedEvidenceProvenance
           ? "exact profile/source/parameter/run match"
-          : [...validationProvenanceReview.blockers, ...walkForwardProvenanceReview.blockers].join(", "),
-        requiredValue: "exact strategy profile, version, proposal/candidate, source, timeframe, parameters, and validation run",
-        explanation: "Evidence from another profile, parameter set, source window, or legacy record cannot promote readiness.",
-        suggestedFix: "Run replay and walk-forward validation for this exact active research identity.",
+          : [
+              `active: ${compactIdentity(provenanceExpectation)}`,
+              `validation: ${compactIdentity(validation?.provenance)}`,
+              `OOS: ${compactIdentity(walkForwardRun?.provenance)}`,
+              `blockers: ${[...validationProvenanceReview.blockers, ...walkForwardProvenanceReview.blockers].join(", ")}`
+            ].join(" | "),
+        requiredValue: "active strategy/profile/source-series match plus exact frozen validation and OOS run provenance",
+        explanation: "Evidence from another profile, parameter set, canonical source series, validation snapshot, or legacy record cannot promote readiness.",
+        suggestedFix: "Run validation and walk-forward for the active research identity, then keep the resulting frozen validation/OOS pair linked.",
         runPage: "/walk-forward"
       }
     ),

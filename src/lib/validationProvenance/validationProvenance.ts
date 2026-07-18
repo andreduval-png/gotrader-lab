@@ -92,6 +92,49 @@ const differs = (
   field: keyof ValidationProvenanceIdentity
 ) => compact(expected[field]) !== compact(actual[field]);
 
+interface ParsedCandleWindowFingerprint {
+  provider: string;
+  candleCount: string;
+  firstTimestamp: string;
+  firstClose: string;
+  lastTimestamp: string;
+  lastClose: string;
+}
+
+const parseCandleWindowFingerprint = (
+  fingerprint?: string
+): ParsedCandleWindowFingerprint | undefined => {
+  const parts = compact(fingerprint)?.split("|") ?? [];
+  const canonical = parts.length >= 9;
+  const legacy = parts.length >= 7;
+  if (!canonical && !legacy) return undefined;
+  const offset = canonical ? parts.length - 5 : parts.length - 5;
+  return {
+    provider: parts[0],
+    candleCount: parts[offset],
+    firstTimestamp: parts[offset + 1],
+    firstClose: parts[offset + 2],
+    lastTimestamp: parts[offset + 3],
+    lastClose: parts[offset + 4]
+  };
+};
+
+const sourceFingerprintsMatch = (expected?: string, actual?: string) => {
+  if (compact(expected) === compact(actual)) return true;
+  const expectedWindow = parseCandleWindowFingerprint(expected);
+  const actualWindow = parseCandleWindowFingerprint(actual);
+  return Boolean(
+    expectedWindow &&
+    actualWindow &&
+    expectedWindow.provider === actualWindow.provider &&
+    expectedWindow.candleCount === actualWindow.candleCount &&
+    expectedWindow.firstTimestamp === actualWindow.firstTimestamp &&
+    expectedWindow.firstClose === actualWindow.firstClose &&
+    expectedWindow.lastTimestamp === actualWindow.lastTimestamp &&
+    expectedWindow.lastClose === actualWindow.lastClose
+  );
+};
+
 const requiredFieldsFor = (
   expected: ValidationProvenanceIdentity,
   options: ValidationProvenanceMatchOptions
@@ -150,7 +193,14 @@ export function matchValidationProvenance(
   compare("sourceProvider", "source_fingerprint_mismatch");
   compare("requestedSymbol", "source_fingerprint_mismatch");
   compare("brokerSymbol", "source_fingerprint_mismatch");
-  compare("sourceFingerprint", "source_fingerprint_mismatch");
+  if (
+    !isMissing(expected, "sourceFingerprint") &&
+    !isMissing(actual, "sourceFingerprint") &&
+    !sourceFingerprintsMatch(expected.sourceFingerprint, actual.sourceFingerprint)
+  ) {
+    mismatchedFields.push("sourceFingerprint");
+    addBlocker(blockers, "source_fingerprint_mismatch");
+  }
   compare("timeframe", "timeframe_mismatch");
   compare("parameterFingerprint", "parameter_fingerprint_mismatch");
   compare("detectorProfileFingerprint", "parameter_fingerprint_mismatch");
@@ -162,8 +212,18 @@ export function matchValidationProvenance(
 
   if (expected.validationCutoff && actual.dataRangeEnd) {
     const cutoff = Date.parse(expected.validationCutoff);
+    const expectedRangeEnd = expected.dataRangeEnd
+      ? Date.parse(expected.dataRangeEnd)
+      : Number.NaN;
     const rangeEnd = Date.parse(actual.dataRangeEnd);
-    if (Number.isFinite(cutoff) && Number.isFinite(rangeEnd) && rangeEnd > cutoff) {
+    const expectedRepresentsFrozenHistory =
+      !Number.isFinite(expectedRangeEnd) || expectedRangeEnd <= cutoff;
+    if (
+      Number.isFinite(cutoff) &&
+      Number.isFinite(rangeEnd) &&
+      expectedRepresentsFrozenHistory &&
+      rangeEnd > cutoff
+    ) {
       addBlocker(blockers, "stale_validation_evidence");
       if (!mismatchedFields.includes("dataRangeEnd")) mismatchedFields.push("dataRangeEnd");
     }
@@ -195,6 +255,75 @@ export function matchValidationProvenance(
     summary: blockers.length === 0 ? "Validation provenance matches exactly." : MATCHING_OOS_UNAVAILABLE_MESSAGE,
     legacyRecordVisible: true,
     authority: VALIDATION_PROVENANCE_AUTHORITY
+  };
+}
+
+/**
+ * Matches the active strategy and canonical source series to frozen validation
+ * evidence without treating a newly closed candle as a different research
+ * identity. The frozen source fingerprint is still required and is matched
+ * exactly between validation and OOS evidence by matchValidationProvenance.
+ */
+export function matchActiveResearchIdentity(
+  activeInput: ValidationProvenanceIdentity | undefined,
+  evidenceInput: ValidationProvenanceIdentity | undefined
+): ValidationProvenanceMatchResult {
+  const active = buildValidationProvenanceIdentity(activeInput ?? {});
+  const evidence = buildValidationProvenanceIdentity(evidenceInput ?? {});
+  const review = matchValidationProvenance(
+    {
+      ...active,
+      // Active candle-window fingerprints advance as MT5 closes candles. Use
+      // the frozen evidence fingerprint here only after confirming the active
+      // source has a fingerprint, then compare the immutable series fields.
+      sourceFingerprint: active.sourceFingerprint ? evidence.sourceFingerprint : undefined,
+      validationRunId: undefined,
+      walkForwardRunId: undefined,
+      validationCutoff: undefined,
+      dataRangeStart: undefined,
+      dataRangeEnd: undefined
+    },
+    evidence,
+    {
+      purpose: "readiness",
+      requireProposalId: Boolean(active.proposalId),
+      requireCandidateId: Boolean(active.candidateId)
+    }
+  );
+
+  return {
+    ...review,
+    summary: review.matched
+      ? "Active strategy, parameters, and canonical source series match the frozen validation identity."
+      : "Validation evidence does not match the active strategy, parameters, or canonical source series."
+  };
+}
+
+/**
+ * Older compact validation reports may predate provenance persistence even
+ * though the research cycle that created them retained the exact identity.
+ * Restore that identity only when both records name the same validation run.
+ */
+export function attachMatchingCycleValidationProvenance<
+  TReport extends { id: string; provenance?: ValidationProvenanceIdentity }
+>(
+  report: TReport | undefined,
+  cycleSummary:
+    | { validationId: string; provenance?: ValidationProvenanceIdentity }
+    | undefined
+): TReport | undefined {
+  if (
+    !report ||
+    report.provenance ||
+    !cycleSummary?.provenance ||
+    cycleSummary.validationId !== report.id
+  ) {
+    return report;
+  }
+
+  return {
+    ...report,
+    provenance: buildValidationProvenanceIdentity(cycleSummary.provenance)
   };
 }
 

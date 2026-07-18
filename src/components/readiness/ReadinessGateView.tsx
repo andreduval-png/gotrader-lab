@@ -38,6 +38,9 @@ import { latestAutoResearchCycle, loadAutoResearchState } from "@/lib/autoResear
 import { loadSelfImprovementState } from "@/lib/selfImprovement";
 import { countCompletedRunbookItems, loadSimulationRunbookState, simulationRunbookChecklist } from "@/lib/simulationRunbook";
 import { loadLatestValidationReport } from "@/lib/validation";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
+import { attachMatchingCycleValidationProvenance } from "@/lib/validationProvenance";
+import { loadWalkForwardState, walkForwardProvenanceReview } from "@/lib/walkForward";
 
 const stateVariant = (state: ReadinessState) =>
   state === "Paper-Demo Candidate" ? "success" : state === "Research Ready" ? "warning" : "danger";
@@ -76,12 +79,27 @@ export function ReadinessGateView() {
   const [notes, setNotes] = useState("");
 
   const computedGate = useMemo(
-    () =>
-      evaluateReadinessGate({
+    () => {
+      const latestCycle = latestResearchCycleRun(loadResearchCycleState());
+      const readinessValidation = attachMatchingCycleValidationProvenance(
         validation,
+        latestCycle?.validationSummary
+      );
+      const matchingWalkForward = readinessValidation?.provenance
+        ? loadWalkForwardState().runs.find((run) =>
+            walkForwardProvenanceReview(readinessValidation.provenance!, run).matched
+          )
+        : undefined;
+      const oosEdge = matchingWalkForward?.stability?.edgeStatistics;
+      return evaluateReadinessGate({
+        validation: readinessValidation,
         quality,
-        runbook
-      }),
+        runbook,
+        provenanceExpectation: readinessValidation?.provenance,
+        walkForwardRun: matchingWalkForward,
+        edgeStatistics: oosEdge?.provenance === "out_of_sample" ? oosEdge : undefined
+      });
+    },
     [validation, quality, runbook]
   );
   const gate = runtimeSnapshot?.readiness.readinessSnapshot ?? computedGate;

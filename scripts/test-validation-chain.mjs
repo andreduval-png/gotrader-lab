@@ -51,6 +51,171 @@ async function main() {
     applyValidationChainEvidenceUpdate,
     describeValidationChainStage
   } = await import(pathToFileURL(path.join(outRoot, "validationChain", "buildValidationChain.mjs")).href);
+  const {
+    attachMatchingCycleValidationProvenance,
+    matchActiveResearchIdentity,
+    matchValidationProvenance
+  } = await import(pathToFileURL(path.join(outRoot, "validationProvenance", "index.mjs")).href);
+
+  const frozenValidationIdentity = {
+    strategyProfile: "ifvg_fresh_retest_v3_research",
+    strategyProfileVersion: "v3",
+    sourceProvider: "mt5_read_only",
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "5m",
+    sourceFingerprint: "mt5_frozen_validation_window",
+    parameterFingerprint: "params_ifvg_v3",
+    detectorProfileFingerprint: "detector_ifvg_v3",
+    validationRunId: "validation_ifvg_v3"
+  };
+  const activeResearchIdentity = {
+    ...frozenValidationIdentity,
+    sourceFingerprint: "mt5_current_rolling_window",
+    validationRunId: undefined
+  };
+  assert.equal(
+    matchActiveResearchIdentity(activeResearchIdentity, frozenValidationIdentity).matched,
+    true,
+    "a newly closed MT5 candle must not change the canonical strategy/source-series identity"
+  );
+  assert.equal(
+    matchActiveResearchIdentity(
+      { ...activeResearchIdentity, strategyProfile: "agent_consensus" },
+      frozenValidationIdentity
+    ).matched,
+    false,
+    "evidence from another active strategy profile must remain blocked"
+  );
+  assert.equal(
+    matchValidationProvenance(frozenValidationIdentity, {
+      ...frozenValidationIdentity,
+      walkForwardRunId: "walk_forward_ifvg_v3"
+    }, {
+      purpose: "readiness",
+      requireValidationRunId: true,
+      requireWalkForwardRunId: true,
+      requireMatchingOosEvidence: true
+    }).matched,
+    true,
+    "walk-forward evidence must still match the exact frozen validation fingerprint and run"
+  );
+  assert.equal(
+    matchValidationProvenance(frozenValidationIdentity, {
+      ...frozenValidationIdentity,
+      sourceFingerprint: "another_frozen_window",
+      walkForwardRunId: "walk_forward_ifvg_v3"
+    }, {
+      purpose: "readiness",
+      requireValidationRunId: true,
+      requireWalkForwardRunId: true,
+      requireMatchingOosEvidence: true
+    }).matched,
+    false,
+    "OOS from another frozen source window must remain blocked"
+  );
+  const legacyValidationReport = { id: "validation_ifvg_v3", provenance: undefined };
+  const restoredValidationReport = attachMatchingCycleValidationProvenance(
+    legacyValidationReport,
+    {
+      validationId: "validation_ifvg_v3",
+      provenance: frozenValidationIdentity
+    }
+  );
+  assert.equal(
+    matchValidationProvenance(
+      frozenValidationIdentity,
+      restoredValidationReport?.provenance,
+      { requireValidationRunId: true }
+    ).matched,
+    true,
+    "a matching compact cycle summary may restore provenance dropped by a legacy validation record"
+  );
+  assert.equal(
+    legacyValidationReport.provenance,
+    undefined,
+    "legacy validation evidence must not be mutated in place"
+  );
+  assert.equal(
+    attachMatchingCycleValidationProvenance(legacyValidationReport, {
+      validationId: "another_validation",
+      provenance: frozenValidationIdentity
+    })?.provenance,
+    undefined,
+    "a different validation id must remain blocked as unverified legacy evidence"
+  );
+  const validationCutoff = "2026-07-14T04:40:00.000Z";
+  const currentPostCutoffValidation = {
+    ...frozenValidationIdentity,
+    validationCutoff,
+    dataRangeStart: "2026-07-14T09:40:00.000Z",
+    dataRangeEnd: "2026-07-17T23:55:00.000Z"
+  };
+  assert.equal(
+    matchValidationProvenance(
+      currentPostCutoffValidation,
+      {
+        ...currentPostCutoffValidation,
+        walkForwardRunId: "walk_forward_current_ifvg_v3"
+      },
+      {
+        purpose: "readiness",
+        requireValidationRunId: true,
+        requireWalkForwardRunId: true,
+        requireMatchingOosEvidence: true
+      }
+    ).matched,
+    true,
+    "an exact post-cutoff validation/OOS pair is the same current research identity"
+  );
+  assert.equal(
+    matchValidationProvenance(
+      {
+        ...frozenValidationIdentity,
+        validationCutoff,
+        dataRangeStart: "2026-01-16T00:00:00.000Z",
+        dataRangeEnd: validationCutoff
+      },
+      {
+        ...frozenValidationIdentity,
+        validationCutoff,
+        dataRangeStart: "2026-07-14T09:40:00.000Z",
+        dataRangeEnd: "2026-07-17T23:55:00.000Z",
+        walkForwardRunId: "walk_forward_post_cutoff"
+      },
+      {
+        purpose: "readiness",
+        requireValidationRunId: true,
+        requireWalkForwardRunId: true,
+        requireMatchingOosEvidence: true
+      }
+    ).matched,
+    false,
+    "post-cutoff evidence must not replace a frozen pre-cutoff validation audit"
+  );
+  const legacyMt5Fingerprint =
+    "mt5_read_only|MT5 read-only candle feed - research eligible|1000|2026-07-14T09:40:00.000Z|29387.8|2026-07-17T23:55:00.000Z|28569.44";
+  const canonicalMt5Fingerprint =
+    "mt5_read_only|mt5_read_only_feed_MNQ_5m|MNQ|5m|1000|2026-07-14T09:40:00.000Z|29387.8|2026-07-17T23:55:00.000Z|28569.44";
+  assert.equal(
+    matchValidationProvenance(
+      { ...frozenValidationIdentity, sourceFingerprint: legacyMt5Fingerprint },
+      { ...frozenValidationIdentity, sourceFingerprint: canonicalMt5Fingerprint }
+    ).matched,
+    true,
+    "legacy display and canonical fingerprints for the exact same MT5 candle window must migrate safely"
+  );
+  assert.equal(
+    matchValidationProvenance(
+      { ...frozenValidationIdentity, sourceFingerprint: legacyMt5Fingerprint },
+      {
+        ...frozenValidationIdentity,
+        sourceFingerprint: canonicalMt5Fingerprint.replace("28569.44", "28570.44")
+      }
+    ).matched,
+    false,
+    "a boundary price change must not be accepted as the same canonical candle window"
+  );
 
   const mt5SourceStatus = {
     sourceProvider: "mt5_read_only",

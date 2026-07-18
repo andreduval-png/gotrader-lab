@@ -65,6 +65,7 @@ export interface CandleSourceIdentity {
 
 export interface ResolvedActiveCandleSource {
   candles: Candle[];
+  canonicalFingerprint: string;
   fallbackReason?: string;
   identity: CandleSourceIdentity;
   sourceLabel: string;
@@ -142,6 +143,11 @@ export const resolveActiveResearchCandleSource = (
   tradingViewFeed?: ActiveTradingViewMcpChartFeed,
   mt5Feed?: ActiveMt5ReadOnlyCandleFeed
 ): ResolvedActiveCandleSource => {
+  const canonical = resolveCanonicalCandleSourceManager({
+    preparedSource: source,
+    tradingViewFeed,
+    mt5Feed
+  });
   const researchSourceMode: ChartDisplaySourceMode = source.mode === "imported" ? "imported" : "mock";
   const tradingViewCandles = tradingViewMcpCandlesToGoTraderCandles(tradingViewFeed);
   const mt5Candles = mt5ReadOnlyCandlesToGoTraderCandles(mt5Feed);
@@ -158,6 +164,7 @@ export const resolveActiveResearchCandleSource = (
 
   return {
     candles,
+    canonicalFingerprint: canonical.activeResearchSource.fingerprint,
     identity,
     sourceLabel,
     sourceMode,
@@ -172,6 +179,11 @@ export const resolveActiveChartDisplayCandleSource = (
   mt5Feed?: ActiveMt5ReadOnlyCandleFeed
 ): ResolvedActiveCandleSource => {
   const researchSource = resolveActiveResearchCandleSource(source, tradingViewFeed, mt5Feed);
+  const canonical = resolveCanonicalCandleSourceManager({
+    preparedSource: source,
+    tradingViewFeed,
+    mt5Feed
+  });
   const tradingViewCandles = tradingViewMcpCandlesToGoTraderCandles(tradingViewFeed);
   const mt5Candles = mt5ReadOnlyCandlesToGoTraderCandles(mt5Feed);
   const chartDisplayUsesMt5ReadOnly = Boolean(mt5Feed?.activeForChart && mt5Candles.length);
@@ -192,6 +204,10 @@ export const resolveActiveChartDisplayCandleSource = (
 
   return {
     candles,
+    canonicalFingerprint:
+      chartDisplayUsesMt5ReadOnly || chartDisplayUsesTradingViewMcp
+        ? canonical.activeChartSource.fingerprint
+        : researchSource.canonicalFingerprint,
     fallbackReason,
     identity,
     sourceLabel,

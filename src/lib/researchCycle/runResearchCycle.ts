@@ -240,7 +240,7 @@ const sourceMetadataFor = ({
   return {
     activeSourceMode: activeResearchCandleSource.sourceMode,
     activeSourceLabel: activeResearchCandleSource.sourceLabel,
-    activeSourceFingerprint: activeResearchCandleSource.identity.dataFingerprint,
+    activeSourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
     candleCount: activeResearchCandleSource.identity.candleCount,
     firstTimestamp: activeResearchCandleSource.identity.firstTimestamp,
     lastTimestamp: activeResearchCandleSource.identity.lastTimestamp,
@@ -290,7 +290,7 @@ const evaluateResearchCycleSourceGuard = ({
   if (sourceMode === "mock") {
     return "active research source is mock/demo data. Autonomous Research requires an explicit eligible canonical source.";
   }
-  if (!activeResearchCandleSource.identity.dataFingerprint) {
+  if (!activeResearchCandleSource.canonicalFingerprint) {
     return `active research source ${sourceLabel} is missing a source fingerprint.`;
   }
   if (candleCount < minimumCandleCount) {
@@ -434,6 +434,7 @@ const summarizeBacktest = (result: BacktestResult): ResearchCycleBacktestSummary
 const summarizeValidation = (report: ValidationSuiteReport): ResearchCycleValidationSummary => ({
   validationId: report.id,
   generatedAt: report.generatedAt,
+  provenance: report.provenance,
   readinessStatus: report.calibration.readinessStatus,
   readinessScore: report.calibration.readinessScore,
   strongestScenario: report.calibration.strongestScenario,
@@ -1140,7 +1141,7 @@ export async function runResearchCycle({
       requestedSymbol: generatedThesis.thesis.symbol,
       brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
       timeframe: generatedThesis.thesis.timeframe,
-      sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint,
+      sourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
       regime: generatedThesis.thesis.regimeClassification?.stableLabel ?? generatedThesis.thesis.marketRegime,
       evidenceQuality: generatedThesis.thesis.confidence * 100,
       direction: generatedThesis.thesis.finalBias,
@@ -1179,7 +1180,7 @@ export async function runResearchCycle({
     });
 
     const sourceIsEligibleForPrediction =
-      Boolean(activeResearchCandleSource.identity.dataFingerprint) &&
+      Boolean(activeResearchCandleSource.canonicalFingerprint) &&
       !/mock|sample/i.test(activeCandleSource.mode);
     if (sourceIsEligibleForPrediction) {
       recordForwardScenarioPrediction(cycleForwardScenarioMap, {
@@ -1196,7 +1197,7 @@ export async function runResearchCycle({
             requestedSymbol: generatedThesis.thesis.symbol,
             brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
             timeframe: generatedThesis.thesis.timeframe,
-            sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint
+            sourceFingerprint: activeResearchCandleSource.canonicalFingerprint
           });
         }
       }
@@ -1305,7 +1306,7 @@ export async function runResearchCycle({
         requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? activeConfig.symbol,
         brokerSymbol: mt5ReadOnlyFeed?.brokerSymbol,
         timeframe: activeConfig.timeframe,
-        sourceFingerprint: activeResearchCandleSource.identity.dataFingerprint,
+        sourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
         parameterFingerprint: fingerprintValidationParameters(activeConfig),
         detectorProfileFingerprint: frozenProfile
           ? fingerprintValidationParameters(frozenProfile.frozenParameters)

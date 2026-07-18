@@ -18,6 +18,7 @@ import type { ResearchQualityReview } from "@/lib/researchQuality";
 import type { CalibrationProposal, CalibrationProposalChanges } from "@/lib/selfImprovement";
 import type { FuturesSymbol, MarketBias, Timeframe } from "@/lib/types";
 import type { ValidationSuiteReport } from "@/lib/validation";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type ResearchCycleStatus = "idle" | "running" | "completed" | "completed_with_warnings" | "failed" | "canceled";
 
@@ -103,6 +104,7 @@ export interface ResearchCycleBacktestSummary
 export interface ResearchCycleValidationSummary {
   validationId: string;
   generatedAt: string;
+  provenance?: ValidationProvenanceIdentity;
   readinessStatus: ValidationSuiteReport["calibration"]["readinessStatus"];
   readinessScore: number;
   strongestScenario: string;
