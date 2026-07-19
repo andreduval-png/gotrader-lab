@@ -257,6 +257,28 @@ async function main() {
   assert(cachedMt5Position >= 0 && importedPosition > cachedMt5Position, "walk-forward must resolve active MT5 before imported history");
   assert.match(walkForwardResolver, /SOURCE_RESOLUTION_TIMEOUT_MS\s*=\s*8_000/, "walk-forward source resolution must be bounded");
 
+  const operatorViewSource = fs.readFileSync(
+    path.join(projectRoot, "src", "components", "operator", "OperatorConsoleView.tsx"),
+    "utf8"
+  );
+  assert.match(
+    operatorViewSource,
+    /data-testid="operator-cycle-heartbeat"/,
+    "the Overview cycle-status section must expose the live heartbeat"
+  );
+  assert.match(
+    operatorViewSource,
+    /cycleActive\s*&&\s*"cycle-status-running"/,
+    "the Overview cycle-status panel must radiate only while the cycle is active"
+  );
+  for (const stage of ["activating_source", "building_market_read", "running_research", "finalizing"]) {
+    assert.match(
+      operatorViewSource,
+      new RegExp(`case ["']${stage}["']`),
+      `the Overview heartbeat must distinguish the ${stage} stage`
+    );
+  }
+
   console.log("GoTrader operator console snapshot test passed.");
   console.log(JSON.stringify({ source: active.source, results: active.results, authority: active.authority }, null, 2));
 }

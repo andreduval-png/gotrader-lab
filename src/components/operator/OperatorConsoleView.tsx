@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -23,7 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   runOperatorResearchCycle,
-  stopOperatorResearchCycle
+  stopOperatorResearchCycle,
+  type OperatorCycleStage
 } from "@/lib/operatorConsole";
 import type { LabState } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -56,10 +57,29 @@ const metricRows = (snapshot: ReturnType<typeof useOperatorConsole>["snapshot"])
   { label: "Profit factor", value: number(snapshot.results.profitFactor), note: snapshot.results.walkForwardStatus }
 ];
 
+const cycleHeartbeatFor = (stage: OperatorCycleStage) => {
+  switch (stage) {
+    case "activating_source":
+      return { rgb: "34 211 238", label: "Source pulse" };
+    case "building_market_read":
+      return { rgb: "96 165 250", label: "Market-read pulse" };
+    case "running_research":
+      return { rgb: "232 121 249", label: "Research pulse" };
+    case "finalizing":
+      return { rgb: "52 211 153", label: "Results pulse" };
+    default:
+      return { rgb: "34 211 238", label: "Cycle pulse" };
+  }
+};
+
 export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const { snapshot, refresh } = useOperatorConsole();
   const [commandError, setCommandError] = useState<string>();
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
+  const cycleHeartbeat = cycleHeartbeatFor(snapshot.cycle.stage);
+  const cycleHeartbeatStyle = {
+    "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
+  } as CSSProperties;
 
   const start = async () => {
     setCommandError(undefined);
@@ -111,24 +131,46 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
         </div>
 
         <div className="grid gap-px bg-white/10 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="bg-[#0b111b] px-5 py-5 sm:px-7">
+          <div
+            className={cn("relative bg-[#0b111b] px-5 py-5 sm:px-7", cycleActive && "cycle-status-running")}
+            data-cycle-running={cycleActive ? "true" : "false"}
+            style={cycleActive ? cycleHeartbeatStyle : undefined}
+          >
             <div className="flex items-start gap-3">
-              <div className={cn(
-                "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
-                cycleActive ? "border-sky-400/30 bg-sky-400/10 text-sky-300" :
+              {cycleActive ? (
+                <div
+                  className="cycle-heartbeat-beacon mt-1 shrink-0"
+                  data-testid="operator-cycle-heartbeat"
+                  role="status"
+                  aria-label={`${cycleHeartbeat.label}. ${snapshot.cycle.message}`}
+                >
+                  <span className="cycle-heartbeat-ring cycle-heartbeat-ring-primary" aria-hidden="true" />
+                  <span className="cycle-heartbeat-ring cycle-heartbeat-ring-secondary" aria-hidden="true" />
+                  <span className="cycle-heartbeat-core" aria-hidden="true">
+                    <Activity className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </span>
+                </div>
+              ) : (
+                <div className={cn(
+                  "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
                   snapshot.cycle.status === "completed" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" :
                     snapshot.cycle.status === "failed" || snapshot.cycle.status === "blocked" ? "border-amber-400/30 bg-amber-400/10 text-amber-300" :
                       "border-white/10 bg-white/[0.04] text-slate-400"
-              )}>
-                {cycleActive ? <Activity className="h-5 w-5" aria-hidden="true" /> :
-                  snapshot.cycle.status === "completed" ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> :
+                )}>
+                  {snapshot.cycle.status === "completed" ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> :
                     <BrainCircuit className="h-5 w-5" aria-hidden="true" />}
-              </div>
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cycle status</p>
                     <p className="mt-1 text-lg font-semibold capitalize text-slate-100">{snapshot.cycle.status.replace(/_/g, " ")}</p>
+                    {cycleActive ? (
+                      <p className="mt-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em]" style={{ color: `rgb(${cycleHeartbeat.rgb})` }}>
+                        {cycleHeartbeat.label}
+                      </p>
+                    ) : null}
                   </div>
                   <span className="text-sm font-semibold tabular-nums text-slate-300">{snapshot.cycle.progressPercent}%</span>
                 </div>
