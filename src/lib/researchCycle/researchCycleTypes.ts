@@ -163,6 +163,27 @@ export interface ResearchCycleEvidenceSummary {
   nextDataImprovement: string;
 }
 
+export interface ResearchCycleAutomatedEvidenceSummary {
+  replayOutcomeCount: number;
+  replayTargetFirstRate: number;
+  monteCarloUsableOutcomes: number;
+  monteCarloRobustness: string;
+  walkForwardVerdict?: string;
+  walkForwardOosTrades?: number;
+  walkForwardWindowsPassed?: number;
+  walkForwardWindowsTested?: number;
+  marketAnalysisDepthStatus?: string;
+  marketAnalysisTimeframesLoaded?: string[];
+  sourceFingerprint: string;
+  validationSourceFingerprint?: string;
+  researchOnly: true;
+  authority: {
+    executionAuthority: "none";
+    brokerAuthority: "none";
+    readinessOverrideAuthority: "none";
+  };
+}
+
 export interface ResearchCycleMaturitySummary {
   maturityScore: number;
   maturityGrade: string;
@@ -277,6 +298,7 @@ export interface ResearchCycleRun {
   edgeAuditorSummary?: EdgeAuditorReview;
   regimeSummary?: ResearchCycleRegimeSummary;
   evidenceSummary?: ResearchCycleEvidenceSummary;
+  automatedEvidenceSummary?: ResearchCycleAutomatedEvidenceSummary;
   maturitySummary?: ResearchCycleMaturitySummary;
   sourceMetadata?: ResearchCycleSourceMetadata;
   proposalStatus?: string;

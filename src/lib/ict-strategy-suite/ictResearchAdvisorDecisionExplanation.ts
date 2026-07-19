@@ -157,16 +157,15 @@ const readinessReasonFor = ({ currentRead }: IctResearchAdvisorDecisionExplanati
   return `Research readiness is ${token(currentRead.readinessSummary.researchReadiness)}, paper readiness is ${token(currentRead.readinessSummary.paperReadiness)}, and execution readiness is disabled. ${reason}`;
 };
 
-const walkForwardReasonFor = ({ currentRead, latestResearchState }: IctResearchAdvisorDecisionExplanationInput) => {
-  const replay = latestResearchState?.latestReplay;
-  if (!replay && !currentRead.latestReplayStatus) {
+const walkForwardReasonFor = ({ currentRead }: IctResearchAdvisorDecisionExplanationInput) => {
+  if (currentRead.latestWalkForwardVerdict) {
+    const verdict = token(currentRead.latestWalkForwardOosVerdict ?? currentRead.latestWalkForwardVerdict);
+    return `Walk-forward ${verdict}: ${currentRead.latestWalkForwardTradeCount ?? 0} OOS outcomes across ${currentRead.latestWalkForwardWindowsTested ?? 0} windows; ${currentRead.latestWalkForwardWindowsPassed ?? 0} passed. ${currentRead.latestWalkForwardReason ?? ""}`.trim();
+  }
+  if (!currentRead.latestReplayStatus) {
     return "Walk-forward insufficient because no completed replay/OOS sample is saved for this current read.";
   }
-  const totalSignals = replay?.totalSignals ?? 0;
-  if (totalSignals < 20) {
-    return `Walk-forward insufficient because only ${totalSignals} replay signals are saved; more independent windows are required.`;
-  }
-  return `Walk-forward context available from latest replay with ${totalSignals} signals and approved target-first rate ${pct(replay?.approvedTargetFirstRate)}.`;
+  return "Replay outcomes are saved, but matching walk-forward/OOS evidence is still required for this exact research identity.";
 };
 
 const evidenceReasonFor = ({ currentRead, latestResearchState }: IctResearchAdvisorDecisionExplanationInput) => {
@@ -210,8 +209,12 @@ export const buildResearchAdvisorDecisionExplanation = (
     : /insufficient/i.test(currentRead.latestMonteCarloReason ?? "")
       ? "insufficient"
       : "missing";
-  const walkForwardStatus = latestResearchState?.latestReplay || currentRead.latestReplayStatus ? "warning" : "insufficient";
-  const evidenceStatus = latestResearchState?.latestMonteCarlo && latestResearchState?.latestReplay ? "warning" : "weak";
+  const walkForwardStatus = currentRead.latestWalkForwardVerdict === "passed"
+    ? "ready"
+    : currentRead.latestWalkForwardVerdict
+      ? "warning"
+      : "insufficient";
+  const evidenceStatus = currentRead.latestMonteCarloStatus === "saved" && currentRead.latestReplayStatus ? "warning" : "weak";
 
   const sourceFacts = unique([
     `Source mode ${token(currentRead.packetSource)}`,

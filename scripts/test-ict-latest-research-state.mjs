@@ -25,6 +25,21 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictPhase2OrderBlocks.ts" },
   { root: sourceRoot, file: "ictPhase2BreadAndButter.ts" },
   { root: sourceRoot, file: "ictPhase2OneShotOneKill.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContextTypes.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContext.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetectionTypes.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetection.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognitionTypes.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognition.ts" },
+  { root: sourceRoot, file: "ictSelfImprovementTypes.ts" },
+  { root: sourceRoot, file: "ictSelfImprovement.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictAdvisorEngine.ts" },
   { root: sourceRoot, file: "ictCurrentReadTypes.ts" },
   { root: sourceRoot, file: "ictCurrentRead.ts" },
@@ -87,7 +102,11 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -98,6 +117,25 @@ function compileSuiteForNode() {
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_LATEST_RESEARCH_STATE_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
 }
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export const buildCurrentOpportunityContext = (input) => input;
+export const detectCurrentOpportunities = () => ({
+  generatedAt: new Date().toISOString(),
+  opportunities: [],
+  summary: { total: 0, tradeCandidates: 0, formingCandidates: 0, diagnosticContexts: 0, rejectedCandidates: 0, noTrade: 0 }
+});
+`,
+    "utf8"
+  );
+  fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export const buildForwardScenarioMapFromCurrentRead = () => undefined;\n", "utf8");
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    `export * from "./ictLatestResearchState.mjs";
+export * from "./ictCurrentRead.mjs";
 `,
     "utf8"
   );
@@ -361,7 +399,7 @@ async function main() {
   assert.equal(currentRead.latestMonteCarloRecommendedRiskPct, 0.35);
   assert.equal(currentRead.latestScorecardBestSymbol, "MNQ");
   assert.deepEqual(currentRead.latestScorecardResearchPreferredSymbols, ["MNQ"]);
-  assert.match(currentRead.latestResearchStateNote, /manual research result/i);
+  assert.match(currentRead.latestResearchStateNote, /compact research evidence/i);
   assert.equal(suite.assertIctCurrentReadIsCompact(currentRead).ok, true);
 
   const dashboardSource = fs.readFileSync(path.join(projectRoot, "src", "components", "advisor", "IctAdvisorSummaryPanel.tsx"), "utf8");

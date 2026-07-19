@@ -1,13 +1,18 @@
 import type { IctManualReplayReviewResult } from "./ictManualReplayReviewTypes";
 import type { IctMarketScorecard } from "./ictMarketScorecardTypes";
 import type { IctMonteCarloSummary } from "./ictMonteCarloTypes";
+import type { IctMarketAnalysisContext } from "./ictMarketAnalysisContextTypes";
+import type { WalkForwardRun } from "../walkForward";
 import type {
+  IctLatestMarketAnalysisSnapshot,
   IctLatestMonteCarloSnapshot,
   IctLatestReplaySnapshot,
+  IctLatestResearchIdentity,
   IctLatestResearchSource,
   IctLatestResearchState,
   IctLatestResearchStateJournalEvent,
-  IctLatestScorecardSnapshot
+  IctLatestScorecardSnapshot,
+  IctLatestWalkForwardSnapshot
 } from "./ictLatestResearchStateTypes";
 
 export const ICT_LATEST_RESEARCH_STATE_UPDATED_EVENT = "gotrader:ict-latest-research-state-updated";
@@ -42,6 +47,7 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 const round = (value: number, decimals = 4) => Number(value.toFixed(decimals));
 const copyStringList = (values: unknown) =>
   Array.isArray(values) ? values.filter((value): value is string => typeof value === "string").slice(0, 12) : [];
+const compactString = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : undefined;
 
 const publish = (state: IctLatestResearchState, source?: IctLatestResearchSource) => {
   if (typeof window !== "undefined") {
@@ -49,7 +55,37 @@ const publish = (state: IctLatestResearchState, source?: IctLatestResearchSource
   }
 };
 
-export const buildLatestReplaySnapshot = (result: IctManualReplayReviewResult): IctLatestReplaySnapshot => ({
+const compactIdentity = (identity: IctLatestResearchIdentity = {}): IctLatestResearchIdentity => ({
+  activeSourceFingerprint: typeof identity.activeSourceFingerprint === "string"
+    ? identity.activeSourceFingerprint
+    : undefined,
+  provenance: identity.provenance
+    ? {
+        strategyProfile: compactString(identity.provenance.strategyProfile),
+        strategyProfileVersion: compactString(identity.provenance.strategyProfileVersion),
+        proposalId: compactString(identity.provenance.proposalId),
+        candidateId: compactString(identity.provenance.candidateId),
+        sourceProvider: compactString(identity.provenance.sourceProvider),
+        requestedSymbol: compactString(identity.provenance.requestedSymbol),
+        brokerSymbol: compactString(identity.provenance.brokerSymbol),
+        timeframe: compactString(identity.provenance.timeframe),
+        sourceFingerprint: compactString(identity.provenance.sourceFingerprint),
+        parameterFingerprint: compactString(identity.provenance.parameterFingerprint),
+        detectorProfileFingerprint: compactString(identity.provenance.detectorProfileFingerprint),
+        validationRunId: compactString(identity.provenance.validationRunId),
+        walkForwardRunId: compactString(identity.provenance.walkForwardRunId),
+        validationCutoff: compactString(identity.provenance.validationCutoff),
+        dataRangeStart: compactString(identity.provenance.dataRangeStart),
+        dataRangeEnd: compactString(identity.provenance.dataRangeEnd)
+      }
+    : undefined
+});
+
+export const buildLatestReplaySnapshot = (
+  result: IctManualReplayReviewResult,
+  identity: IctLatestResearchIdentity = {}
+): IctLatestReplaySnapshot => ({
+  ...compactIdentity(identity),
   runId: result.runId,
   generatedAt: result.generatedAt,
   requestedSymbol: result.requestedSymbol,
@@ -63,7 +99,11 @@ export const buildLatestReplaySnapshot = (result: IctManualReplayReviewResult): 
   researchOnly: true
 });
 
-export const buildLatestMonteCarloSnapshot = (summary: IctMonteCarloSummary): IctLatestMonteCarloSnapshot => ({
+export const buildLatestMonteCarloSnapshot = (
+  summary: IctMonteCarloSummary,
+  identity: IctLatestResearchIdentity = {}
+): IctLatestMonteCarloSnapshot => ({
+  ...compactIdentity(identity),
   generatedAt: summary.generatedAt,
   source: summary.source,
   usableOutcomes: summary.input.usableOutcomes,
@@ -75,6 +115,50 @@ export const buildLatestMonteCarloSnapshot = (summary: IctMonteCarloSummary): Ic
   riskOfRuinPct: round(summary.performance.riskOfRuinPct),
   recommendedMaxRiskPerTradePct: round(summary.recommendation.recommendedMaxRiskPerTradePct),
   warnings: summary.recommendation.warnings.slice(0, 8),
+  researchOnly: true
+});
+
+export const buildLatestWalkForwardSnapshot = (
+  run: WalkForwardRun,
+  identity: IctLatestResearchIdentity = {}
+): IctLatestWalkForwardSnapshot => {
+  const stability = run.stability;
+  const verdict: IctLatestWalkForwardSnapshot["verdict"] = !stability || stability.verdict === "insufficient_evidence"
+    ? "needs_more_data"
+    : stability.verdict === "robust_research" ||
+        stability.verdict === "paper_demo_review_candidate" ||
+        stability.verdict === "promising"
+      ? "passed"
+      : "failed";
+  return {
+    ...compactIdentity({ ...identity, provenance: identity.provenance ?? run.provenance }),
+    runId: run.runId,
+    generatedAt: run.completedAt ?? run.startedAt,
+    verdict,
+    oosVerdict: stability?.verdict,
+    tradeCount: run.windows.reduce(
+      (total, window) => total + (window.metricsBySplit?.out_of_sample?.totalTrades ?? 0),
+      0
+    ),
+    windowsTested: run.actualWindowsGenerated,
+    oosWindowsPassed: stability?.outOfSampleWindowsPassed ?? 0,
+    warningFlags: [...run.warnings, ...(stability?.failReasons ?? [])].slice(0, 8),
+    reason: stability?.summary ?? "Walk-forward completed without a stability summary.",
+    researchOnly: true
+  };
+};
+
+export const buildLatestMarketAnalysisSnapshot = (input: {
+  context: IctMarketAnalysisContext;
+  sourceProvider: string;
+  sourceFingerprint?: string;
+}): IctLatestMarketAnalysisSnapshot => ({
+  generatedAt: input.context.generatedAt,
+  sourceProvider: input.sourceProvider,
+  sourceFingerprint: input.sourceFingerprint,
+  requestedSymbol: input.context.requestedSymbol,
+  brokerSymbol: input.context.brokerSymbol,
+  context: input.context,
   researchOnly: true
 });
 
@@ -93,6 +177,7 @@ export const buildLatestScorecardSnapshot = (scorecard: IctMarketScorecard): Ict
 const sanitizeReplaySnapshot = (snapshot?: Partial<IctLatestReplaySnapshot>): IctLatestReplaySnapshot | undefined => {
   if (!snapshot?.generatedAt) return undefined;
   return {
+    ...compactIdentity(snapshot),
     runId: typeof snapshot.runId === "string" ? snapshot.runId : undefined,
     generatedAt: String(snapshot.generatedAt),
     requestedSymbol: typeof snapshot.requestedSymbol === "string" ? snapshot.requestedSymbol : undefined,
@@ -110,6 +195,7 @@ const sanitizeReplaySnapshot = (snapshot?: Partial<IctLatestReplaySnapshot>): Ic
 const sanitizeMonteCarloSnapshot = (snapshot?: Partial<IctLatestMonteCarloSnapshot>): IctLatestMonteCarloSnapshot | undefined => {
   if (!snapshot?.generatedAt || !snapshot.robustnessRating) return undefined;
   return {
+    ...compactIdentity(snapshot),
     generatedAt: String(snapshot.generatedAt),
     source: String(snapshot.source ?? "manual_replay_review"),
     usableOutcomes: finite(snapshot.usableOutcomes) ? Math.max(0, Math.round(snapshot.usableOutcomes)) : 0,
@@ -123,6 +209,90 @@ const sanitizeMonteCarloSnapshot = (snapshot?: Partial<IctLatestMonteCarloSnapsh
       ? round(snapshot.recommendedMaxRiskPerTradePct)
       : undefined,
     warnings: copyStringList(snapshot.warnings),
+    researchOnly: true
+  };
+};
+
+const sanitizeWalkForwardSnapshot = (
+  snapshot?: Partial<IctLatestWalkForwardSnapshot>
+): IctLatestWalkForwardSnapshot | undefined => {
+  if (!snapshot?.generatedAt || !snapshot.verdict) return undefined;
+  return {
+    ...compactIdentity(snapshot),
+    runId: typeof snapshot.runId === "string" ? snapshot.runId : undefined,
+    generatedAt: String(snapshot.generatedAt),
+    verdict: snapshot.verdict,
+    oosVerdict: typeof snapshot.oosVerdict === "string" ? snapshot.oosVerdict : undefined,
+    tradeCount: finite(snapshot.tradeCount) ? Math.max(0, Math.round(snapshot.tradeCount)) : 0,
+    windowsTested: finite(snapshot.windowsTested) ? Math.max(0, Math.round(snapshot.windowsTested)) : 0,
+    oosWindowsPassed: finite(snapshot.oosWindowsPassed) ? Math.max(0, Math.round(snapshot.oosWindowsPassed)) : 0,
+    warningFlags: copyStringList(snapshot.warningFlags),
+    reason: typeof snapshot.reason === "string" ? snapshot.reason : "Walk-forward evidence unavailable.",
+    researchOnly: true
+  };
+};
+
+const sanitizeMarketAnalysisSnapshot = (
+  snapshot?: Partial<IctLatestMarketAnalysisSnapshot>
+): IctLatestMarketAnalysisSnapshot | undefined => {
+  const context = snapshot?.context;
+  if (!snapshot?.generatedAt || !context?.generatedAt || !snapshot.sourceProvider) return undefined;
+  const analysisTimeframes = Array.isArray(context.analysisTimeframes)
+    ? context.analysisTimeframes.slice(0, 8).map((item) => ({
+        timeframe: item.timeframe,
+        requestedLookbackDays: finite(item.requestedLookbackDays) ? item.requestedLookbackDays : 0,
+        availableLookbackDays: finite(item.availableLookbackDays) ? item.availableLookbackDays : 0,
+        candleCount: finite(item.candleCount) ? Math.max(0, Math.round(item.candleCount)) : 0,
+        dataDepthStatus: item.dataDepthStatus,
+        sourceMethod: String(item.sourceMethod ?? "unknown"),
+        role: item.role,
+        firstTimestamp: typeof item.firstTimestamp === "string" ? item.firstTimestamp : undefined,
+        lastTimestamp: typeof item.lastTimestamp === "string" ? item.lastTimestamp : undefined,
+        chunkCount: finite(item.chunkCount) ? Math.max(0, Math.round(item.chunkCount)) : undefined,
+        warning: typeof item.warning === "string" ? item.warning : undefined
+      }))
+    : [];
+  const safeContext: IctMarketAnalysisContext = {
+    researchOnly: true,
+    requestedSymbol: String(context.requestedSymbol ?? snapshot.requestedSymbol ?? "MNQ"),
+    brokerSymbol: String(context.brokerSymbol ?? snapshot.brokerSymbol ?? "USTECH"),
+    displayTimeframe: String(context.displayTimeframe ?? "5m"),
+    displayTimeframeRole: "chart_display_reference_only",
+    analysisTimeframes,
+    analysisTimeframesRequested: Array.isArray(context.analysisTimeframesRequested)
+      ? context.analysisTimeframesRequested.slice(0, 8)
+      : [],
+    analysisTimeframesLoaded: Array.isArray(context.analysisTimeframesLoaded)
+      ? context.analysisTimeframesLoaded.slice(0, 8)
+      : [],
+    requiredTimeframesLoaded: context.requiredTimeframesLoaded === true,
+    chartDisplayCandleCount: finite(context.chartDisplayCandleCount)
+      ? Math.max(0, Math.round(context.chartDisplayCandleCount))
+      : 0,
+    analysisDepthStatus: context.analysisDepthStatus,
+    multiTimeframeContextStatus: context.multiTimeframeContextStatus,
+    analysisTimeframesUsed: Array.isArray(context.analysisTimeframesUsed)
+      ? context.analysisTimeframesUsed.slice(0, 8)
+      : [],
+    missingTimeframes: Array.isArray(context.missingTimeframes) ? context.missingTimeframes.slice(0, 8) : [],
+    htfBiasSource: Array.isArray(context.htfBiasSource) ? context.htfBiasSource.slice(0, 8) : [],
+    sessionModelSourceTimeframe: context.sessionModelSourceTimeframe,
+    confirmationSourceTimeframe: context.confirmationSourceTimeframe,
+    weeklyBiasStatus: context.weeklyBiasStatus,
+    weeklyBiasDirection: context.weeklyBiasDirection,
+    weeklyBiasReason: String(context.weeklyBiasReason ?? "Weekly bias unavailable."),
+    warnings: copyStringList(context.warnings),
+    generatedAt: String(context.generatedAt),
+    authority,
+    safety
+  };
+  return {
+    generatedAt: String(snapshot.generatedAt),
+    sourceProvider: String(snapshot.sourceProvider),
+    sourceFingerprint: typeof snapshot.sourceFingerprint === "string" ? snapshot.sourceFingerprint : undefined,
+    requestedSymbol: safeContext.requestedSymbol,
+    brokerSymbol: safeContext.brokerSymbol,
+    context: safeContext,
     researchOnly: true
   };
 };
@@ -150,13 +320,17 @@ export const sanitizeLatestResearchState = (
   if (!state) return undefined;
   const latestReplay = sanitizeReplaySnapshot(state.latestReplay);
   const latestMonteCarlo = sanitizeMonteCarloSnapshot(state.latestMonteCarlo);
+  const latestWalkForward = sanitizeWalkForwardSnapshot(state.latestWalkForward);
+  const latestMarketAnalysis = sanitizeMarketAnalysisSnapshot(state.latestMarketAnalysis);
   const latestScorecard = sanitizeScorecardSnapshot(state.latestScorecard);
-  if (!latestReplay && !latestMonteCarlo && !latestScorecard) return undefined;
+  if (!latestReplay && !latestMonteCarlo && !latestWalkForward && !latestMarketAnalysis && !latestScorecard) return undefined;
   return {
     updatedAt: typeof state.updatedAt === "string" ? state.updatedAt : generatedNow(),
     researchOnly: true,
     latestReplay,
     latestMonteCarlo,
+    latestWalkForward,
+    latestMarketAnalysis,
     latestScorecard,
     authority,
     safety
@@ -182,6 +356,8 @@ export const buildIctLatestResearchStateJournalEvent = (
   source,
   hasReplay: Boolean(state.latestReplay),
   hasMonteCarlo: Boolean(state.latestMonteCarlo),
+  hasWalkForward: Boolean(state.latestWalkForward),
+  hasMarketAnalysis: Boolean(state.latestMarketAnalysis),
   hasScorecard: Boolean(state.latestScorecard),
   monteCarloRobustnessRating: state.latestMonteCarlo?.robustnessRating,
   riskOfRuinPct: state.latestMonteCarlo?.riskOfRuinPct,
@@ -225,7 +401,7 @@ export const appendIctLatestResearchStateJournalEvent = (event: IctLatestResearc
 };
 
 export const saveLatestResearchStatePatch = (
-  patch: Partial<Pick<IctLatestResearchState, "latestReplay" | "latestMonteCarlo" | "latestScorecard">>,
+  patch: Partial<Pick<IctLatestResearchState, "latestReplay" | "latestMonteCarlo" | "latestWalkForward" | "latestMarketAnalysis" | "latestScorecard">>,
   source: IctLatestResearchSource = "current_read"
 ) => {
   const current = readLatestResearchState();

@@ -20,6 +20,9 @@ export type EvidenceCategory =
   | "LLM advisory review"
   | "agent debate"
   | "backtest results"
+  | "replay outcomes"
+  | "walk-forward OOS"
+  | "Monte Carlo robustness"
   | "validation results"
   | "readiness inputs";
 
@@ -87,4 +90,11 @@ export interface EvidenceLedgerInput {
   readinessState?: string;
   proposalId?: string;
   smtState?: "bullish_confirmation" | "bearish_confirmation" | "conflict" | "none" | "unavailable";
+  replayOutcomeCount?: number;
+  walkForwardOosTradeCount?: number;
+  walkForwardWindowsPassed?: number;
+  walkForwardWindowsTested?: number;
+  walkForwardVerdict?: string;
+  monteCarloUsableOutcomes?: number;
+  monteCarloRobustness?: "strong" | "moderate" | "weak" | "insufficient_data" | string;
 }

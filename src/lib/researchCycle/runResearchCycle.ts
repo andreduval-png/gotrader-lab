@@ -54,7 +54,8 @@ import {
   buildIctAdvisorPacketFromRuntime,
   buildIctMarketAnalysisContextBundle
 } from "@/lib/ict-strategy-suite";
-import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite";
+import type { IctAdvisorPacket, IctMarketAnalysisContext } from "@/lib/ict-strategy-suite";
+import { buildAndSaveAutomatedCycleEvidence } from "@/lib/ict-strategy-suite/ictAutomatedCycleEvidence";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import { buildCanonicalPerformanceMetricsFromRun, canonicalMetricsForRun } from "@/lib/performance/canonicalMetrics";
 import { calculateResearchMaturity } from "@/lib/maturity";
@@ -862,6 +863,7 @@ export async function runResearchCycle({
   };
 
   const snapshot = () => ({ ...run, steps: steps.map((step) => ({ ...step })) });
+  let cycleMarketAnalysisContext: IctMarketAnalysisContext | undefined;
   const notify = () => onUpdate?.(snapshot());
   const setStep = (stepId: ResearchCycleStepId, patch: Partial<ResearchCycleStepResult>) => {
     steps = steps.map((step) => (step.stepId === stepId ? { ...step, ...patch } : step));
@@ -1036,6 +1038,7 @@ export async function runResearchCycle({
             activeResearchCandleSource.sourceMode === "mt5_read_only"
               ? await buildIctMarketAnalysisContextBundle({ snapshot: runtimeSnapshot })
               : undefined;
+          cycleMarketAnalysisContext = marketAnalysisContextBundle?.context;
           const advisorPacket: IctAdvisorPacket = await buildIctAdvisorPacketFromRuntime(runtimeSnapshot, {
             marketAnalysisContextBundle
           });
@@ -1571,6 +1574,51 @@ export async function runResearchCycle({
       });
     }
 
+    try {
+      const evidenceBacktest = detectorEvidenceContext?.baseline ?? backtestResult;
+      const automatedEvidence = buildAndSaveAutomatedCycleEvidence({
+        backtestResult: evidenceBacktest,
+        cycleId: run.cycleId,
+        generatedAt: now(),
+        requestedSymbol: validationReport?.provenance?.requestedSymbol ?? generatedThesis.thesis.symbol,
+        brokerSymbol:
+          validationReport?.provenance?.brokerSymbol ??
+          detectorEvidenceContext?.brokerSymbol ??
+          mt5ReadOnlyFeed?.brokerSymbol ??
+          generatedThesis.thesis.symbol,
+        sourceProvider: activeResearchCandleSource.sourceMode,
+        activeSourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
+        provenance: validationReport?.provenance,
+        walkForwardRun: cycleWalkForwardRun,
+        marketAnalysisContext: cycleMarketAnalysisContext
+      });
+      run.automatedEvidenceSummary = {
+        replayOutcomeCount: automatedEvidence.outcomeCount,
+        replayTargetFirstRate: automatedEvidence.replay.targetFirstRate ?? 0,
+        monteCarloUsableOutcomes: automatedEvidence.monteCarlo.usableOutcomes,
+        monteCarloRobustness: automatedEvidence.monteCarlo.robustnessRating,
+        walkForwardVerdict: automatedEvidence.walkForward?.verdict,
+        walkForwardOosTrades: automatedEvidence.walkForward?.tradeCount,
+        walkForwardWindowsPassed: automatedEvidence.walkForward?.oosWindowsPassed,
+        walkForwardWindowsTested: automatedEvidence.walkForward?.windowsTested,
+        marketAnalysisDepthStatus: automatedEvidence.marketAnalysis?.context.analysisDepthStatus,
+        marketAnalysisTimeframesLoaded: automatedEvidence.marketAnalysis?.context.analysisTimeframesLoaded,
+        sourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
+        validationSourceFingerprint: validationReport?.provenance?.sourceFingerprint,
+        researchOnly: true,
+        authority: {
+          executionAuthority: "none",
+          brokerAuthority: "none",
+          readinessOverrideAuthority: "none"
+        }
+      };
+    } catch (error) {
+      run.candleWindowWarnings = [
+        ...(run.candleWindowWarnings ?? []),
+        `Automated evidence persistence failed safely: ${error instanceof Error ? error.message : "unknown error"}. Manual replay and Monte Carlo remain available.`
+      ];
+    }
+
     startStep("research_quality");
     await yieldToBrowser();
     throwIfCanceled();
@@ -1660,13 +1708,15 @@ export async function runResearchCycle({
       checklist: {
         ...runbookBefore.checklist,
         aiLabThesisGenerated: true,
+        schedulerOneCycleCompleted: true,
+        signalLogged: true,
         brokerExecutionSkipped: true
       }
     };
     saveSimulationRunbookState(runbookAfter);
     passStep("simulation_verification", {
       summary: "Simulation runbook recorded research pipeline completion.",
-      detail: "Marked research-safe checklist items (thesis generated, broker execution skipped). Positions/trades/shutdown remain operator-verified."
+      detail: "Marked research-safe checklist items (thesis generated, one cycle completed, signal logged, broker execution skipped). Positions/trades/shutdown remain operator-verified."
     });
 
     startStep("readiness_gate");
@@ -1724,7 +1774,14 @@ export async function runResearchCycle({
       debateSessionId: run.agentDebateConsensus?.sessionId,
       validationId: run.validationSummary?.validationId,
       researchQualityId: run.researchQualitySummary?.reviewId,
-      readinessState: readinessSnapshot.state
+      readinessState: readinessSnapshot.state,
+      replayOutcomeCount: run.automatedEvidenceSummary?.replayOutcomeCount,
+      walkForwardOosTradeCount: run.automatedEvidenceSummary?.walkForwardOosTrades,
+      walkForwardWindowsPassed: run.automatedEvidenceSummary?.walkForwardWindowsPassed,
+      walkForwardWindowsTested: run.automatedEvidenceSummary?.walkForwardWindowsTested,
+      walkForwardVerdict: run.automatedEvidenceSummary?.walkForwardVerdict,
+      monteCarloUsableOutcomes: run.automatedEvidenceSummary?.monteCarloUsableOutcomes,
+      monteCarloRobustness: run.automatedEvidenceSummary?.monteCarloRobustness
     });
     // Post-validation review: the packet now includes the completed
     // validation report, research-quality review, and readiness snapshot.
@@ -1853,7 +1910,14 @@ export async function runResearchCycle({
       researchQualityId: run.researchQualitySummary?.reviewId,
       readinessState: readinessSnapshot.state,
       proposalId: run.createdProposalId,
-      smtState: run.backtestSummary?.grinchSummary?.latestScore?.smtState
+      smtState: run.backtestSummary?.grinchSummary?.latestScore?.smtState,
+      replayOutcomeCount: run.automatedEvidenceSummary?.replayOutcomeCount,
+      walkForwardOosTradeCount: run.automatedEvidenceSummary?.walkForwardOosTrades,
+      walkForwardWindowsPassed: run.automatedEvidenceSummary?.walkForwardWindowsPassed,
+      walkForwardWindowsTested: run.automatedEvidenceSummary?.walkForwardWindowsTested,
+      walkForwardVerdict: run.automatedEvidenceSummary?.walkForwardVerdict,
+      monteCarloUsableOutcomes: run.automatedEvidenceSummary?.monteCarloUsableOutcomes,
+      monteCarloRobustness: run.automatedEvidenceSummary?.monteCarloRobustness
     });
     run.evidenceSummary = {
       evidenceScore: cycleEvidenceSummary.overallScore,

@@ -4,6 +4,7 @@ export type IctMonteCarloSource =
   | "manual_replay_review"
   | "market_scorecard"
   | "real_replay_runner"
+  | "research_cycle_backtest"
   | "synthetic_test";
 
 export type IctMonteCarloRobustnessRating =

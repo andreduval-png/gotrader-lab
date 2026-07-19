@@ -45,6 +45,13 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIndexSmtTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRiskTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRisk.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictReplayValidation.ts" },
   { root: sourceRoot, file: "ictReplayDiagnostics.ts" },
   { root: sourceRoot, file: "ictApprovedSetupProfile.ts" },
@@ -98,7 +105,11 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -109,6 +120,26 @@ function compileSuiteForNode() {
 export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_CURRENT_READ_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
 }
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export const buildCurrentOpportunityContext = (input) => input;
+export const detectCurrentOpportunities = () => ({
+  generatedAt: new Date().toISOString(),
+  opportunities: [],
+  summary: { total: 0, tradeCandidates: 0, formingCandidates: 0, diagnosticContexts: 0, rejectedCandidates: 0, noTrade: 0 }
+});
+`,
+    "utf8"
+  );
+  fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export const buildForwardScenarioMapFromCurrentRead = () => undefined;\n", "utf8");
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    `export * from "./ictAdvisorEngine.mjs";
+export * from "./ictCurrentRead.mjs";
+export * from "./ictSignalContract.mjs";
 `,
     "utf8"
   );
@@ -249,6 +280,63 @@ async function main() {
   assert.equal(read.authority.readinessOverrideAuthority, "none");
   assert.equal(suite.assertIctCurrentReadIsCompact(read).ok, true, "current read must remain compact and safe");
   assert.doesNotMatch(JSON.stringify(read), /"candles"\s*:|"snapshot"\s*:|"accountNumber"\s*:|"orderId"\s*:|"positionId"\s*:|"secret"\s*:/i);
+
+  const deepContext = {
+    ...packet.marketAnalysisContext,
+    analysisTimeframes: ["W1", "D1", "H4", "H1", "M15", "M5"].map((timeframe) => ({
+      timeframe,
+      requestedLookbackDays: 90,
+      availableLookbackDays: 89,
+      candleCount: 100,
+      dataDepthStatus: "sufficient",
+      sourceMethod: "mt5_chunked_history",
+      role: timeframe === "W1" ? "weekly_bias" : timeframe === "D1" ? "daily_bias" : timeframe === "M15" ? "session_model" : timeframe === "M5" ? "confirmation_refinement" : "htf_bias"
+    })),
+    analysisTimeframesRequested: ["W1", "D1", "H4", "H1", "M15", "M5"],
+    analysisTimeframesLoaded: ["W1", "D1", "H4", "H1", "M15", "M5"],
+    requiredTimeframesLoaded: true,
+    analysisDepthStatus: "sufficient",
+    multiTimeframeContextStatus: "built",
+    analysisTimeframesUsed: ["W1", "D1", "H4", "H1", "M15", "M5"],
+    missingTimeframes: [],
+    htfBiasSource: ["W1", "D1", "H4", "H1"],
+    weeklyBiasStatus: "loaded",
+    weeklyBiasDirection: "bullish",
+    weeklyBiasReason: "MT5-derived weekly bias.",
+    generatedAt: new Date().toISOString()
+  };
+  const deepState = {
+    updatedAt: deepContext.generatedAt,
+    researchOnly: true,
+    latestMarketAnalysis: {
+      generatedAt: deepContext.generatedAt,
+      sourceProvider: packet.activeSource.provider,
+      sourceFingerprint: packet.activeSource.sourceFingerprint,
+      requestedSymbol: packet.requestedSymbol,
+      brokerSymbol: packet.brokerSymbol,
+      context: deepContext,
+      researchOnly: true
+    },
+    authority: read.authority,
+    safety: {
+      rawCandlesExcluded: true,
+      rawSnapshotsExcluded: true,
+      accountDataExcluded: true,
+      orderDataExcluded: true,
+      positionDataExcluded: true,
+      secretsExcluded: true
+    }
+  };
+  const deepRead = suite.buildIctCurrentReadFromPacket(packet, deepState);
+  assert.equal(deepRead.analysisDepthStatus, "sufficient", "matching cycle context should hydrate sufficient depth");
+  assert.deepEqual(deepRead.missingTimeframes, [], "matching cycle context should restore W1/D1/H4 coverage");
+  assert.equal(deepRead.weeklyBiasStatus, "loaded", "matching cycle context should restore weekly bias");
+  assert.equal(deepRead.weeklyBiasDirection, "bullish");
+  const mismatchedDeepRead = suite.buildIctCurrentReadFromPacket(packet, {
+    ...deepState,
+    latestMarketAnalysis: { ...deepState.latestMarketAnalysis, brokerSymbol: "US30" }
+  });
+  assert.ok(mismatchedDeepRead.missingTimeframes.includes("W1"), "mismatched source lineage must not hydrate deep context");
 
   const missingSource = sourceFor("mt5:MNQ:USTECH:5m:missing", "5m", [], "missing_current_read_fp");
   globalThis.__ICT_CURRENT_READ_TEST_SOURCES = new Map([[missingSource.sourceId, missingSource]]);

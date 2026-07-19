@@ -1,6 +1,7 @@
 import { defaultBacktestConfig, loadBacktestConfig, sanitizeBacktestConfig } from "@/lib/backtesting";
 import { latestAutoResearchCycle, loadAutoResearchState, AUTO_RESEARCH_STORAGE_KEY } from "@/lib/autoResearch";
 import { buildEvidenceLedger } from "@/lib/evidence";
+import { readLatestResearchState } from "@/lib/ict-strategy-suite/ictLatestResearchState";
 import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
 import {
   getLLMReadinessImpact,
@@ -964,6 +965,19 @@ export async function resolveResearchRuntimeSnapshot(
   const autoResearchState = loadAutoResearchState();
   const latestAutoResearch = latestAutoResearchCycle(autoResearchState);
   const activeImportId = getActiveImportedCandleSetId();
+  const latestResearchState = readLatestResearchState();
+  const matchingReplay = latestResearchState?.latestReplay?.provenance &&
+    matchActiveResearchIdentity(activeResearchIdentity, latestResearchState.latestReplay.provenance).matched
+      ? latestResearchState.latestReplay
+      : undefined;
+  const matchingMonteCarlo = latestResearchState?.latestMonteCarlo?.provenance &&
+    matchActiveResearchIdentity(activeResearchIdentity, latestResearchState.latestMonteCarlo.provenance).matched
+      ? latestResearchState.latestMonteCarlo
+      : undefined;
+  const matchingLatestWalkForward = latestResearchState?.latestWalkForward?.provenance &&
+    matchActiveResearchIdentity(activeResearchIdentity, latestResearchState.latestWalkForward.provenance).matched
+      ? latestResearchState.latestWalkForward
+      : undefined;
   const evidenceLedgerSummary = buildEvidenceLedger({
     dataMode: runtimeResearchMode,
     sourceLabel: runtimeResearchSourceLabel,
@@ -979,7 +993,14 @@ export async function resolveResearchRuntimeSnapshot(
     researchQualityId: matchingResearchQuality?.id,
     readinessState: readinessSnapshot.state,
     proposalId: latestProposal?.proposalId,
-    smtState: grinchPhase4SmtSummary?.smtState
+    smtState: grinchPhase4SmtSummary?.smtState,
+    replayOutcomeCount: matchingReplay?.totalSignals,
+    walkForwardOosTradeCount: matchingLatestWalkForward?.tradeCount,
+    walkForwardWindowsPassed: matchingLatestWalkForward?.oosWindowsPassed,
+    walkForwardWindowsTested: matchingLatestWalkForward?.windowsTested,
+    walkForwardVerdict: matchingLatestWalkForward?.verdict,
+    monteCarloUsableOutcomes: matchingMonteCarlo?.usableOutcomes,
+    monteCarloRobustness: matchingMonteCarlo?.robustnessRating
   });
   const researchMaturitySummary = calculateResearchMaturity({
     activeCalibrationId: activeConfig.activeCalibrationId,

@@ -264,6 +264,67 @@ export function buildEvidenceLedger(input: EvidenceLedgerInput): EvidenceLedgerS
       limitations: ["Backtests are simulation-only and must not be treated as execution permission."]
     }),
     entry({
+      category: "replay outcomes",
+      label: input.replayOutcomeCount
+        ? `${input.replayOutcomeCount} identity-bound replay outcome(s)`
+        : "No matching replay outcomes",
+      sourceType: resultSource(input, (input.replayOutcomeCount ?? 0) > 0),
+      completeness: ratio(input.replayOutcomeCount ?? 0, 30),
+      freshness: (input.replayOutcomeCount ?? 0) > 0 ? 0.82 : 0.05,
+      reliability: (input.replayOutcomeCount ?? 0) >= 20 ? 0.78 : (input.replayOutcomeCount ?? 0) > 0 ? 0.52 : 0.05,
+      coverage: ratio(input.replayOutcomeCount ?? 0, 30),
+      timestamp: input.latestCycleTimestamp,
+      notes: (input.replayOutcomeCount ?? 0) > 0
+        ? "Completed-cycle simulated outcomes were saved with the active research identity."
+        : "A completed cycle must save replay outcomes before robustness can be assessed.",
+      limitations: ["Replay outcomes remain simulation evidence and cannot create readiness or execution authority."]
+    }),
+    entry({
+      category: "walk-forward OOS",
+      label: input.walkForwardVerdict
+        ? `Walk-forward ${input.walkForwardVerdict}`
+        : "No matching walk-forward OOS result",
+      sourceType: resultSource(input, Boolean(input.walkForwardVerdict)),
+      completeness: Math.min(
+        ratio(input.walkForwardOosTradeCount ?? 0, 20),
+        ratio(input.walkForwardWindowsTested ?? 0, 2)
+      ),
+      freshness: input.walkForwardVerdict ? 0.82 : 0.05,
+      reliability: input.walkForwardVerdict === "passed" ? 0.86 : input.walkForwardVerdict ? 0.48 : 0.05,
+      coverage: Math.min(
+        ratio(input.walkForwardOosTradeCount ?? 0, 20),
+        ratio(input.walkForwardWindowsPassed ?? 0, 2)
+      ),
+      timestamp: input.latestCycleTimestamp,
+      notes: input.walkForwardVerdict
+        ? `${input.walkForwardOosTradeCount ?? 0} OOS outcome(s); ${input.walkForwardWindowsPassed ?? 0}/${input.walkForwardWindowsTested ?? 0} windows passed.`
+        : "No provenance-matched OOS result is available for the active research identity.",
+      limitations: ["Walk-forward evidence only counts when provenance matches the exact profile, parameters, source, and validation run."]
+    }),
+    entry({
+      category: "Monte Carlo robustness",
+      label: input.monteCarloRobustness
+        ? `Monte Carlo ${input.monteCarloRobustness}`
+        : "No matching Monte Carlo result",
+      sourceType: resultSource(input, Boolean(input.monteCarloRobustness)),
+      completeness: ratio(input.monteCarloUsableOutcomes ?? 0, 30),
+      freshness: input.monteCarloRobustness ? 0.82 : 0.05,
+      reliability:
+        input.monteCarloRobustness === "strong"
+          ? 0.88
+          : input.monteCarloRobustness === "moderate"
+            ? 0.68
+            : input.monteCarloRobustness
+              ? 0.4
+              : 0.05,
+      coverage: ratio(input.monteCarloUsableOutcomes ?? 0, 30),
+      timestamp: input.latestCycleTimestamp,
+      notes: input.monteCarloRobustness
+        ? `${input.monteCarloUsableOutcomes ?? 0} usable outcome(s) produced ${input.monteCarloRobustness} robustness.`
+        : "Monte Carlo has not been run for the latest matching replay sample.",
+      limitations: ["Monte Carlo estimates robustness; it does not approve risk, readiness, or execution."]
+    }),
+    entry({
       category: "validation results",
       label: input.validationId ? `Validation ${input.validationId}` : "No validation report",
       sourceType: resultSource(input, Boolean(input.validationId)),
@@ -317,6 +378,15 @@ export function buildEvidenceLedger(input: EvidenceLedgerInput): EvidenceLedgerS
     sourceCounts.unavailable > 0 ? "Unavailable evidence areas reduce confidence and should be shown to LLM reviewers." : undefined
   ].filter((warning): warning is string => Boolean(warning));
 
+  const automatedEvidenceNextAction =
+    (input.replayOutcomeCount ?? 0) <= 0
+      ? "Complete a research cycle to save identity-bound replay outcomes."
+      : !input.walkForwardVerdict
+        ? "Run provenance-matched walk-forward validation across independent windows."
+        : !input.monteCarloRobustness
+          ? "Run Monte Carlo on the matching replay/OOS outcome sample."
+          : undefined;
+
   return {
     generatedAt,
     overallScore,
@@ -332,11 +402,12 @@ export function buildEvidenceLedger(input: EvidenceLedgerInput): EvidenceLedgerS
         ? "LLM context must treat planned/unavailable market context as missing evidence, not confirmation."
         : "LLM context can use the current evidence ledger as supporting research context.",
     nextDataImprovement:
-      weakestEvidenceArea?.sourceType === "unavailable"
+      automatedEvidenceNextAction ??
+      (weakestEvidenceArea?.sourceType === "unavailable"
         ? `Add or import ${weakestEvidenceArea.category.toLowerCase()} evidence when available.`
         : weakestEvidenceArea
           ? `Improve ${weakestEvidenceArea.category.toLowerCase()} coverage or freshness.`
-          : "Maintain imported OHLCV and validation evidence.",
+          : "Maintain imported OHLCV and validation evidence."),
     entries,
     safetyNotice: "Evidence quality can reduce readiness confidence, but cannot approve readiness or enable execution."
   };

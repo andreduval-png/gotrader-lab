@@ -95,9 +95,43 @@ const entryZoneLabel = (entryZone?: IctAdvisorSignal["entryZone"]) =>
 const pct = (value?: number) => (typeof value === "number" && Number.isFinite(value) ? `${Math.round(value * 100)}%` : undefined);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-const latestResearchSummaryFor = (latestState?: IctLatestResearchState) => {
-  const latestReplay = latestState?.latestReplay;
-  const latestMonteCarlo = latestState?.latestMonteCarlo;
+const sameToken = (left?: string, right?: string) =>
+  Boolean(left && right && left.trim().toLowerCase() === right.trim().toLowerCase());
+
+const latestEvidenceMatchesPacket = (
+  evidence:
+    | IctLatestResearchState["latestReplay"]
+    | IctLatestResearchState["latestMonteCarlo"]
+    | IctLatestResearchState["latestWalkForward"]
+    | undefined,
+  packet?: IctAdvisorPacket
+) => {
+  if (!evidence || !packet) return false;
+  if (evidence.activeSourceFingerprint && evidence.activeSourceFingerprint !== packet.activeSource.sourceFingerprint) {
+    return false;
+  }
+  const provenance = evidence.provenance;
+  if (!provenance) {
+    const requested = "requestedSymbol" in evidence ? evidence.requestedSymbol : undefined;
+    const broker = "brokerSymbol" in evidence ? evidence.brokerSymbol : undefined;
+    const timeframe = "primaryTimeframe" in evidence ? evidence.primaryTimeframe : undefined;
+    return (!requested || sameToken(requested, packet.requestedSymbol)) &&
+      (!broker || sameToken(broker, packet.brokerSymbol)) &&
+      (!timeframe || sameToken(timeframe, packet.primaryTimeframe));
+  }
+  return (!provenance.sourceProvider || sameToken(provenance.sourceProvider, packet.activeSource.provider)) &&
+    (!provenance.requestedSymbol || sameToken(provenance.requestedSymbol, packet.requestedSymbol)) &&
+    (!provenance.brokerSymbol || sameToken(provenance.brokerSymbol, packet.brokerSymbol)) &&
+    (!provenance.timeframe || sameToken(provenance.timeframe, packet.primaryTimeframe));
+};
+
+const latestResearchSummaryFor = (latestState?: IctLatestResearchState, packet?: IctAdvisorPacket) => {
+  const replayMatches = latestEvidenceMatchesPacket(latestState?.latestReplay, packet);
+  const monteCarloMatches = latestEvidenceMatchesPacket(latestState?.latestMonteCarlo, packet);
+  const walkForwardMatches = latestEvidenceMatchesPacket(latestState?.latestWalkForward, packet);
+  const latestReplay = replayMatches ? latestState?.latestReplay : undefined;
+  const latestMonteCarlo = monteCarloMatches ? latestState?.latestMonteCarlo : undefined;
+  const latestWalkForward = walkForwardMatches ? latestState?.latestWalkForward : undefined;
   const latestScorecard = latestState?.latestScorecard;
   const bestScorecardSymbol =
     latestScorecard?.bestApprovedTargetFirstSymbol ??
@@ -107,6 +141,16 @@ const latestResearchSummaryFor = (latestState?: IctLatestResearchState) => {
     latestReplayStatus: latestReplay
       ? `target-first ${pct(latestReplay.approvedTargetFirstRate ?? latestReplay.targetFirstRate) ?? "n/a"}`
       : undefined,
+    latestWalkForwardVerdict: latestWalkForward?.verdict,
+    latestWalkForwardOosVerdict: latestWalkForward?.oosVerdict,
+    latestWalkForwardTradeCount: latestWalkForward?.tradeCount,
+    latestWalkForwardWindowsTested: latestWalkForward?.windowsTested,
+    latestWalkForwardWindowsPassed: latestWalkForward?.oosWindowsPassed,
+    latestWalkForwardReason: latestWalkForward
+      ? latestWalkForward.reason
+      : latestState?.latestWalkForward
+        ? "Saved walk-forward evidence belongs to a different research identity and was excluded."
+        : "No matching walk-forward evidence has been saved yet.",
     latestMonteCarloRobustness: latestMonteCarlo?.robustnessRating,
     latestMonteCarloRiskOfRuinPct: latestMonteCarlo?.riskOfRuinPct,
     latestMonteCarloRecommendedRiskPct: latestMonteCarlo?.recommendedMaxRiskPerTradePct,
@@ -115,20 +159,69 @@ const latestResearchSummaryFor = (latestState?: IctLatestResearchState) => {
     latestMonteCarloStatus: latestMonteCarlo ? "saved" as const : "missing" as const,
     latestMonteCarloReason: latestMonteCarlo
       ? `Saved Monte Carlo ${latestMonteCarlo.robustnessRating}; ${latestMonteCarlo.usableOutcomes} usable outcomes.`
-      : "No saved Monte Carlo - run replay then Monte Carlo.",
+      : latestState?.latestMonteCarlo
+        ? "Saved Monte Carlo belongs to a different source fingerprint or research identity and was excluded."
+        : "No saved Monte Carlo - the next completed research cycle will save replay outcomes and run bounded Monte Carlo automatically.",
     recommendedMaxRiskStatus: typeof latestMonteCarlo?.recommendedMaxRiskPerTradePct === "number"
       ? "available" as const
       : "unavailable" as const,
     recommendedMaxRiskReason: typeof latestMonteCarlo?.recommendedMaxRiskPerTradePct === "number"
       ? "Recommended max risk comes from the latest saved Monte Carlo summary."
-      : "Recommended max risk unavailable - no saved Monte Carlo.",
+      : latestState?.latestMonteCarlo
+        ? "Recommended max risk unavailable because saved Monte Carlo does not match the active research identity."
+        : "Recommended max risk unavailable until the completed cycle saves Monte Carlo evidence.",
     latestScorecardBestSymbol: bestScorecardSymbol,
     latestScorecardResearchPreferredSymbols: latestScorecard?.researchPreferredSymbols,
     latestResearchStateUpdatedAt: latestState?.updatedAt,
     latestResearchStateNote: latestState
-      ? "Latest manual research result; not live signal generation and not a readiness override."
+      ? "Latest compact research evidence; identity matching is required and it cannot override readiness."
       : undefined
   } satisfies Partial<IctCurrentRead>;
+};
+
+const packetWithLatestMarketAnalysis = (
+  packet: IctAdvisorPacket,
+  latestState?: IctLatestResearchState
+): IctAdvisorPacket => {
+  const latest = latestState?.latestMarketAnalysis;
+  if (!latest) return packet;
+  const ageMs = Date.now() - Date.parse(latest.generatedAt);
+  const matchesLineage =
+    sameToken(latest.sourceProvider, packet.activeSource.provider) &&
+    sameToken(latest.requestedSymbol, packet.requestedSymbol) &&
+    sameToken(latest.brokerSymbol, packet.brokerSymbol) &&
+    Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 12 * 60 * 60 * 1000;
+  const currentLoaded = packet.marketAnalysisContext?.analysisTimeframesLoaded.length ?? 0;
+  if (!matchesLineage || latest.context.analysisTimeframesLoaded.length <= currentLoaded) return packet;
+  const context = {
+    ...latest.context,
+    warnings: [
+      ...latest.context.warnings,
+      `Deep multi-timeframe context reused from completed research cycle ${latest.generatedAt}; selected chart timeframe remains display/reference only.`
+    ].slice(0, 12)
+  };
+  return {
+    ...packet,
+    marketAnalysisContext: context,
+    compactSummary: {
+      ...packet.compactSummary,
+      displayTimeframe: context.displayTimeframe,
+      displayTimeframeRole: context.displayTimeframeRole,
+      analysisTimeframesRequested: context.analysisTimeframesRequested,
+      analysisTimeframesLoaded: context.analysisTimeframesLoaded,
+      requiredTimeframesLoaded: context.requiredTimeframesLoaded,
+      analysisDepthStatus: context.analysisDepthStatus,
+      multiTimeframeContextStatus: context.multiTimeframeContextStatus,
+      analysisTimeframesUsed: context.analysisTimeframesUsed,
+      missingTimeframes: context.missingTimeframes,
+      htfBiasSource: context.htfBiasSource,
+      sessionModelSourceTimeframe: context.sessionModelSourceTimeframe,
+      confirmationSourceTimeframe: context.confirmationSourceTimeframe,
+      weeklyBiasStatus: context.weeklyBiasStatus,
+      weeklyBiasDirection: context.weeklyBiasDirection,
+      weeklyBiasReason: context.weeklyBiasReason
+    }
+  };
 };
 
 const fvgStatusFor = (signal?: IctAdvisorSignal) => {
@@ -629,8 +722,9 @@ export const buildUnavailableIctCurrentRead = (
   return currentRead;
 };
 
-export const buildIctCurrentReadFromPacket = (packet?: IctAdvisorPacket, latestState?: IctLatestResearchState): IctCurrentRead => {
-  if (!packet) return buildUnavailableIctCurrentRead(undefined, latestState);
+export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, latestState?: IctLatestResearchState): IctCurrentRead => {
+  if (!packetInput) return buildUnavailableIctCurrentRead(undefined, latestState);
+  const packet = packetWithLatestMarketAnalysis(packetInput, latestState);
   const phase1Signals = packet.signals.filter((signal) => signal.phase === "phase_1");
   const phase2Signals = packet.signals.filter((signal) => signal.phase === "phase_2");
   const bestPhase1 = bestSignalFrom(phase1Signals);
@@ -947,7 +1041,7 @@ export const buildIctCurrentReadFromPacket = (packet?: IctAdvisorPacket, latestS
     fvgStatus: fvgStatusFor(recommended),
     displacementStatus: displacementStatusFor(recommended),
     entryZone: entryZoneLabel(recommended.entryZone),
-    ...latestResearchSummaryFor(latestState),
+    ...latestResearchSummaryFor(latestState, packet),
     sessionNarrativeProfile,
     sessionDirectionalRead: packet.sessionNarrative?.directionalRead ?? packet.compactSummary.sessionDirectionalRead,
     sessionNarrativeConfidence: packet.sessionNarrative?.confidence ?? packet.compactSummary.sessionNarrativeConfidence,

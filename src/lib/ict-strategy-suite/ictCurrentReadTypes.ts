@@ -123,6 +123,12 @@ export interface IctCurrentRead {
   displacementStatus?: string;
   entryZone?: string;
   latestReplayStatus?: string;
+  latestWalkForwardVerdict?: "passed" | "failed" | "needs_more_data";
+  latestWalkForwardOosVerdict?: string;
+  latestWalkForwardTradeCount?: number;
+  latestWalkForwardWindowsTested?: number;
+  latestWalkForwardWindowsPassed?: number;
+  latestWalkForwardReason?: string;
   latestMonteCarloRobustness?: IctMonteCarloRobustnessRating;
   latestMonteCarloRiskOfRuinPct?: number;
   latestMonteCarloRecommendedRiskPct?: number;
