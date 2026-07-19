@@ -13,6 +13,7 @@ import { TechnicalDetails } from "@/components/common/TechnicalDetails";
 import { IfvgForwardEvidenceCard } from "@/components/common/IfvgForwardEvidenceCard";
 import { ForwardScenarioMapCard } from "@/components/common/ForwardScenarioMapCard";
 import { OpenClawProposalIntentPanel } from "@/components/advisor/OpenClawProposalIntentPanel";
+import { ResearchEvidenceMemoryCard } from "@/components/self-improvement/ResearchEvidenceMemoryCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -1094,6 +1095,8 @@ export function SelfImprovementView() {
       <SafetyLockBanner message="Simulation self-improvement only. No broker execution, readiness override, paper/demo enablement, or real trades." />
 
       <WhyNotReadyCard context="self_improvement" snapshot={runtimeSnapshot} />
+
+      <ResearchEvidenceMemoryCard />
 
       <Card className="border-cyan-400/20 bg-cyan-400/5">
         <CardContent className="grid gap-3 p-4 text-sm text-cyan-50 md:grid-cols-5">

@@ -172,6 +172,25 @@ export interface CalibrationProposalMetricsSnapshot {
   activeCalibrationIdUsed?: string;
 }
 
+export interface CalibrationProposalLifetimeEvidenceContext {
+  identityKey: string;
+  strategyProfile: string;
+  cycleCount: number;
+  independentCycleDates: number;
+  sourceFingerprintCount: number;
+  totalTrades: number;
+  weightedAverageR: number;
+  totalRealizedR: number;
+  worstMaxDrawdownR: number;
+  positiveEdgeCycles: number;
+  oosTrades: number;
+  oosWindowsPassed: number;
+  oosWindowsTested: number;
+  recurringBlockers: string[];
+  latestReadinessState?: string;
+  evidenceAuthority: "historical_context_only";
+}
+
 export interface CalibrationProposal {
   proposalId: string;
   timestamp: string;
@@ -191,6 +210,8 @@ export interface CalibrationProposal {
   afterMetrics?: CalibrationProposalMetrics;
   comparisonResult?: CalibrationComparisonResult;
   metricsSnapshot?: CalibrationProposalMetricsSnapshot;
+  /** Long-lived compact context only; it cannot approve or apply this proposal. */
+  lifetimeEvidenceContext?: CalibrationProposalLifetimeEvidenceContext;
   baselineConfig: ResolvedBacktestConfig;
   proposedConfig: ResolvedBacktestConfig;
   testedAt?: string;

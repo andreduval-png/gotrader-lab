@@ -307,6 +307,12 @@ export interface ResearchCycleRun {
   promotionBlockers?: string[];
   createdProposalId?: string;
   latestGeneratedProposal?: CalibrationProposal;
+  /** Immutable compact evidence record written after cycle completion. */
+  evidenceRecordId?: string;
+  evidenceIdentityKey?: string;
+  evidenceStorageBackend?: "indexeddb" | "localStorage_fallback" | "memory";
+  /** Optional advisory-memory outbox reference. Delivery remains disabled by default. */
+  gbrainMemoryOutboxId?: string;
   failedStepId?: ResearchCycleStepId;
   failedStepDetails?: string;
   nextRecommendedAction: string;

@@ -20,6 +20,7 @@ import type {
   CalibrationProposalSource,
   CalibrationTargetProblem
 } from "@/lib/selfImprovement/selfImprovementTypes";
+import { loadResearchEvidenceAggregateIndex } from "@/lib/researchEvidenceLedger";
 import { uid } from "@/lib/utils";
 import { loadLatestResearchQualityReview } from "@/lib/researchQuality";
 import { loadLatestValidationReport } from "@/lib/validation";
@@ -169,6 +170,42 @@ const reasonFor = (targetProblem: CalibrationTargetProblem) => {
   return `Internal proposal created because ${targetProblem.replace(/_/g, " ")} needs baseline simulation testing.`;
 };
 
+const lifetimeEvidenceFor = (
+  currentConfig: ResolvedBacktestConfig,
+  validationReport: NonNullable<ReturnType<typeof loadLatestValidationReport>>
+): CalibrationProposal["lifetimeEvidenceContext"] => {
+  const provenance = validationReport.provenance;
+  const strategyProfile = provenance?.strategyProfile ?? currentConfig.strategyProfile;
+  const aggregate = loadResearchEvidenceAggregateIndex().aggregates.find((item) =>
+    item.identity.strategyProfile === strategyProfile &&
+    (!provenance?.strategyProfileVersion || item.identity.strategyProfileVersion === provenance.strategyProfileVersion) &&
+    (!provenance?.parameterFingerprint || item.identity.parameterFingerprint === provenance.parameterFingerprint) &&
+    (!provenance?.sourceProvider || item.identity.sourceProvider === provenance.sourceProvider) &&
+    (!provenance?.requestedSymbol || item.identity.requestedSymbol === provenance.requestedSymbol) &&
+    (!provenance?.brokerSymbol || item.identity.brokerSymbol === provenance.brokerSymbol) &&
+    (!provenance?.timeframe || item.identity.timeframe === provenance.timeframe)
+  );
+  if (!aggregate) return undefined;
+  return {
+    identityKey: aggregate.identity.identityKey,
+    strategyProfile: aggregate.identity.strategyProfile,
+    cycleCount: aggregate.cycleCount,
+    independentCycleDates: aggregate.independentCycleDates,
+    sourceFingerprintCount: aggregate.sourceFingerprintCount,
+    totalTrades: aggregate.totalTrades,
+    weightedAverageR: aggregate.weightedAverageR,
+    totalRealizedR: aggregate.totalRealizedR,
+    worstMaxDrawdownR: aggregate.worstMaxDrawdownR,
+    positiveEdgeCycles: aggregate.positiveEdgeCycles,
+    oosTrades: aggregate.oosTrades,
+    oosWindowsPassed: aggregate.oosWindowsPassed,
+    oosWindowsTested: aggregate.oosWindowsTested,
+    recurringBlockers: aggregate.recurringBlockers.map((item) => `${item.blocker} (${item.occurrences})`),
+    latestReadinessState: aggregate.latestReadinessState,
+    evidenceAuthority: "historical_context_only"
+  };
+};
+
 export function createCalibrationProposal(source: CalibrationProposalSource = "openclaw"): CalibrationProposal {
   const currentConfig = safeConfig(resolveActiveBacktestConfig().config ?? loadBacktestConfig() ?? defaultBacktestConfig);
   // Fail closed: proposals must be grounded in a real validation report, never
@@ -183,6 +220,7 @@ export function createCalibrationProposal(source: CalibrationProposalSource = "o
   const targetProblem = detectTargetProblem();
   const proposedChanges = proposedChangesFor(targetProblem, currentConfig);
   const proposedConfig = applyProposalChangesToConfig(currentConfig, proposedChanges);
+  const lifetimeEvidenceContext = lifetimeEvidenceFor(currentConfig, validationReport);
 
   return {
     proposalId: uid("calibration_proposal"),
@@ -201,9 +239,13 @@ export function createCalibrationProposal(source: CalibrationProposalSource = "o
     safetyNotes: [
       "Simulation-only proposal.",
       "No broker settings, execution permissions, readiness overrides, or paper/live trading modes can be changed.",
+      lifetimeEvidenceContext
+        ? `Historical context covers ${lifetimeEvidenceContext.cycleCount} compatible cycle(s) and ${lifetimeEvidenceContext.totalTrades} simulated trade(s); it does not create readiness evidence by itself.`
+        : "No compatible lifetime evidence aggregate is available yet; this proposal remains grounded in the current validation report only.",
       "User approval is required before active simulation calibration settings are updated."
     ],
     beforeMetrics,
+    lifetimeEvidenceContext,
     baselineConfig: currentConfig,
     proposedConfig,
     approvalRequired: true

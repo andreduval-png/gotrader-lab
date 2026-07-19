@@ -24,7 +24,7 @@ GoTrader treats `garrytan/gbrain` as an optional memory and synthesis reference,
 
 ## Current Implementation
 
-GoTrader now has a native research-memory contract in `src/lib/researchMemory`. It creates compact packets only. It does not send anything to gbrain, does not add a gbrain dependency, and does not change the research cycle, chart source, walk-forward, readiness, or safety gates.
+GoTrader has a native research-memory contract in `src/lib/researchMemory` and an authoritative append-only evidence ledger in `src/lib/researchEvidenceLedger`. Completed cycles now create compact evidence records and queue gbrain-compatible Markdown documents. Delivery remains disabled by default and loopback-only; no gbrain dependency or browser token is added. This does not change chart source, walk-forward, readiness, or safety gates.
 
 Created packet types:
 
@@ -81,7 +81,8 @@ OpenClaw can eventually read gbrain memory as advisory context for calibration, 
 ```text
 GoTrader deterministic cycle
   -> compact research-memory packet
-  -> optional gbrain write connector [PLANNED]
+  -> disabled-by-default local gbrain outbox [IMPLEMENTED]
+  -> optional trusted loopback writer [OPERATOR CONFIGURATION REQUIRED]
   -> gbrain search/think synthesis [PLANNED]
   -> OpenClaw advisory context [PLANNED]
   -> GoTrader explanation/proposal review only
@@ -104,7 +105,7 @@ gbrain is optional. If gbrain is missing, offline, unconfigured, or rate-limited
 
 A future connector may add:
 
-- `researchMemoryClient.ts` for optional gbrain MCP/HTTP writes
+- an operator-managed trusted loopback writer for optional gbrain MCP/HTTP writes
 - a dry-run validator that rejects packets containing candles or forbidden authority
 - a queue for best-effort packet writes
 - read-side gap-analysis queries for OpenClaw advisory context
@@ -114,3 +115,5 @@ The connector should be optional and disabled by default. It must not become a r
 ## Safety Boundary
 
 gbrain receives compact research summaries only. It has no execution authority, no broker authority, and no readiness override authority. GoTrader must never expose account, order, position, password, API-key, screenshot, or raw candle-array data through the research-memory packet.
+
+See `docs/research-evidence-memory.md` for the implemented native ledger, deterministic aggregate, Self-Improvement linkage, and gbrain outbox behavior.

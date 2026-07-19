@@ -64,6 +64,7 @@ export type {
   CalibrationProposalChanges,
   CalibrationProposalIntent,
   CalibrationProposalMetricsSnapshot,
+  CalibrationProposalLifetimeEvidenceContext,
   CalibrationProposalMetrics,
   CalibrationProposalIntentDetails,
   CalibrationProposalReplayReview,

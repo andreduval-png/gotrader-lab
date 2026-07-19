@@ -27,6 +27,12 @@ import { createCandleSourceFingerprint } from "@/lib/candleSources";
 import { buildEvidenceLedger } from "@/lib/evidence";
 import type { EvidenceLedgerInput } from "@/lib/evidence";
 import {
+  appendResearchEvidenceRecord,
+  buildResearchEvidenceMemoryPacket,
+  buildResearchEvidenceRecord
+} from "@/lib/researchEvidenceLedger";
+import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
+import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
   recordLLMResponseImport,
@@ -2045,6 +2051,20 @@ export async function runResearchCycle({
     run.canonicalMetrics = buildCanonicalPerformanceMetricsFromRun(run, validationReport);
     run.nextRecommendedAction = nextActionFor(run);
     run.resultSummary = resultSummaryFor(run);
+    try {
+      const evidenceRecord = buildResearchEvidenceRecord(run);
+      const appendResult = await appendResearchEvidenceRecord(evidenceRecord);
+      const outboxEntry = queueGbrainMemoryPacket(buildResearchEvidenceMemoryPacket(evidenceRecord));
+      run.evidenceRecordId = evidenceRecord.evidenceId;
+      run.evidenceIdentityKey = evidenceRecord.identity.identityKey;
+      run.evidenceStorageBackend = appendResult.backend;
+      run.gbrainMemoryOutboxId = outboxEntry.outboxId;
+    } catch (error) {
+      run.candleWindowWarnings = uniqueText([
+        ...(run.candleWindowWarnings ?? []),
+        `Persistent research evidence failed safely: ${error instanceof Error ? error.message : "unknown error"}. Readiness and execution authority were not changed.`
+      ]);
+    }
     saveResearchCycleRun(snapshot());
     notify();
     return snapshot();
