@@ -105,4 +105,130 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: rgba(148, 163, 184, 0.58);
   }
+
+  .cycle-status-running {
+    position: relative;
+    border-color: rgb(var(--cycle-heartbeat-rgb) / 0.34);
+    box-shadow:
+      0 0 0 1px rgb(var(--cycle-heartbeat-rgb) / 0.08),
+      0 10px 34px rgb(var(--cycle-heartbeat-rgb) / 0.08);
+    animation: cycle-status-breathe 2.4s ease-in-out infinite;
+  }
+
+  .cycle-status-running::after {
+    position: absolute;
+    inset: -1px;
+    border: 1px solid rgb(var(--cycle-heartbeat-rgb) / 0.38);
+    border-radius: inherit;
+    content: "";
+    pointer-events: none;
+    animation: cycle-card-radiate 2.4s ease-out infinite;
+  }
+
+  .cycle-heartbeat {
+    display: flex;
+    min-width: 12rem;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid rgb(var(--cycle-heartbeat-rgb) / 0.22);
+    border-radius: 0.65rem;
+    background: rgb(var(--cycle-heartbeat-rgb) / 0.07);
+    padding: 0.45rem 0.7rem;
+  }
+
+  .cycle-heartbeat-beacon {
+    position: relative;
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+  }
+
+  .cycle-heartbeat-core {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border: 1px solid rgb(var(--cycle-heartbeat-rgb) / 0.52);
+    border-radius: 999px;
+    color: rgb(var(--cycle-heartbeat-rgb));
+    background: rgb(var(--cycle-heartbeat-rgb) / 0.13);
+    box-shadow: 0 0 16px rgb(var(--cycle-heartbeat-rgb) / 0.32);
+    animation: cycle-heartbeat-core 1.2s ease-in-out infinite;
+  }
+
+  .cycle-heartbeat-ring {
+    position: absolute;
+    inset: 0.15rem;
+    border: 1px solid rgb(var(--cycle-heartbeat-rgb) / 0.52);
+    border-radius: 999px;
+    opacity: 0;
+    animation: cycle-heartbeat-radiate 2.4s ease-out infinite;
+  }
+
+  .cycle-heartbeat-ring-secondary {
+    animation-delay: 1.2s;
+  }
+}
+
+@keyframes cycle-heartbeat-core {
+  0%, 100% {
+    transform: scale(0.92);
+  }
+  18% {
+    transform: scale(1.08);
+  }
+  34% {
+    transform: scale(0.98);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes cycle-heartbeat-radiate {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.72);
+  }
+  72%, 100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
+@keyframes cycle-card-radiate {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  78%, 100% {
+    opacity: 0;
+    transform: scale(1.008, 1.025);
+  }
+}
+
+@keyframes cycle-status-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgb(var(--cycle-heartbeat-rgb) / 0.08),
+      0 10px 34px rgb(var(--cycle-heartbeat-rgb) / 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgb(var(--cycle-heartbeat-rgb) / 0.2),
+      0 12px 42px rgb(var(--cycle-heartbeat-rgb) / 0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cycle-status-running,
+  .cycle-status-running::after,
+  .cycle-heartbeat-core,
+  .cycle-heartbeat-ring {
+    animation: none;
+  }
 }

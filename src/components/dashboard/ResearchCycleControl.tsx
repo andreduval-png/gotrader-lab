@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, Play, ShieldCheck } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CircleDashed, Loader2, Play, ShieldCheck } from "lucide-react";
 
 import { SafetyLockBanner } from "@/components/common/SafetyLockBanner";
 import { TechnicalDetails } from "@/components/common/TechnicalDetails";
@@ -103,6 +103,27 @@ const stepIcon = (status: ResearchCycleStepStatus) => {
 };
 
 const formatStatus = (status?: string) => (status ?? "idle").replace(/_/g, " ");
+const cycleHeartbeatFor = (stepId?: ResearchCycleStepResult["stepId"]) => {
+  switch (stepId) {
+    case "backtest":
+    case "validation":
+    case "walk_forward":
+      return { rgb: "96 165 250", phase: "Validation pulse" };
+    case "llm_advisory":
+    case "auto_research":
+    case "self_improvement":
+      return { rgb: "232 121 249", phase: "Research pulse" };
+    case "research_quality":
+    case "simulation_verification":
+      return { rgb: "251 191 36", phase: "Quality pulse" };
+    case "readiness_gate":
+    case "communications_audit":
+      return { rgb: "52 211 153", phase: "Readiness pulse" };
+    case "thesis_generation":
+    default:
+      return { rgb: "34 211 238", phase: "Context pulse" };
+  }
+};
 const formatPercent = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(0)}%` : "n/a";
 const passLikeReadinessPhrases = ["passed", "controlled", "exists", "broker execution skipped", "is paper-demo candidate"];
@@ -390,6 +411,11 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
       percent: steps.length ? Math.round((terminalSteps / steps.length) * 100) : 0
     };
   }, [latestRun]);
+  const activeCycleStep = safeArray(latestRun?.steps).find((step) => step.status === "running");
+  const cycleHeartbeat = cycleHeartbeatFor(activeCycleStep?.stepId);
+  const cycleHeartbeatStyle = {
+    "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
+  } as CSSProperties;
 
   const importedExpectedButMissing =
     !cycleResearchUsesExternal &&
@@ -492,7 +518,13 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
     );
 
   return (
-    <Card id="research-cycle" data-testid="research-cycle-control" className="border-cyan-400/25 bg-cyan-950/20 scroll-mt-24">
+    <Card
+      id="research-cycle"
+      data-testid="research-cycle-control"
+      data-cycle-running={busy ? "true" : "false"}
+      className={`border-cyan-400/25 bg-cyan-950/20 scroll-mt-24 ${busy ? "cycle-status-running" : ""}`}
+      style={busy ? cycleHeartbeatStyle : undefined}
+    >
       <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2 text-base text-cyan-50">
@@ -503,9 +535,36 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
             One sequence: thesis → backtest → validation → walk-forward OOS → quality → proposal → readiness. LLM advisory is required for promotion, not for research completion.
           </p>
         </div>
-        <Badge variant={statusVariant(latestRun?.status)} className="w-fit capitalize">
-          {formatStatus(latestRun?.status)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-3">
+          {busy ? (
+            <div
+              className="cycle-heartbeat"
+              data-testid="research-cycle-heartbeat"
+              role="status"
+              aria-live="polite"
+              aria-label={`Research cycle running. ${activeCycleStep?.label ?? "Initializing cycle"}.`}
+            >
+              <span className="cycle-heartbeat-beacon" aria-hidden="true">
+                <span className="cycle-heartbeat-ring cycle-heartbeat-ring-primary" />
+                <span className="cycle-heartbeat-ring cycle-heartbeat-ring-secondary" />
+                <span className="cycle-heartbeat-core">
+                  <Activity className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </span>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {cycleHeartbeat.phase}
+                </span>
+                <span className="block max-w-48 truncate text-xs font-medium text-slate-100">
+                  {activeCycleStep?.label ?? "Initializing cycle"}
+                </span>
+              </span>
+            </div>
+          ) : null}
+          <Badge variant={statusVariant(latestRun?.status)} className="w-fit capitalize">
+            {busy ? "running" : formatStatus(latestRun?.status)}
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <SafetyLockBanner
