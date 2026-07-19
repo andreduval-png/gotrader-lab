@@ -1,4 +1,5 @@
 import type { CIOSynthesisResult, InternalAgentOpinion } from "@/lib/agents/agentTypes";
+import { summarizeInternalAgentParticipation } from "@/lib/agents/agentEvidencePolicy";
 import type { FuturesSymbol, ICTContext, MarketBias, ThesisInput } from "@/lib/types";
 import { clamp } from "@/lib/utils";
 
@@ -79,20 +80,24 @@ function buildLevels(input: ThesisInput, finalBias: MarketBias, ictContext: ICTC
 }
 
 export function synthesizeCIO(input: ThesisInput, ictContext: ICTContext, opinions: InternalAgentOpinion[]): CIOSynthesisResult {
-  const totalWeight = opinions.reduce((sum, opinion) => sum + opinion.weight, 0) || 1;
+  const participation = summarizeInternalAgentParticipation(opinions);
+  const activeOpinions = participation.activeOpinions;
+  const totalWeight = activeOpinions.reduce((sum, opinion) => sum + opinion.weight, 0) || 1;
   const weightedDirectionalScore =
-    opinions.reduce((sum, opinion) => sum + biasToScore(opinion.bias) * opinion.confidence * opinion.weight, 0) / totalWeight;
-  const finalBias = scoreToBias(weightedDirectionalScore);
-  const avgConfidence = opinions.reduce((sum, opinion) => sum + opinion.confidence * opinion.weight, 0) / totalWeight;
-  const confidence = clamp(0.38 + Math.abs(weightedDirectionalScore) * 0.46 + avgConfidence * 0.24, 0.35, 0.88);
+    activeOpinions.reduce((sum, opinion) => sum + biasToScore(opinion.bias) * opinion.confidence * opinion.weight, 0) / totalWeight;
+  const finalBias = activeOpinions.length ? scoreToBias(weightedDirectionalScore) : "neutral";
+  const avgConfidence = activeOpinions.reduce((sum, opinion) => sum + opinion.confidence * opinion.weight, 0) / totalWeight;
+  const rawConfidence = 0.38 + Math.abs(weightedDirectionalScore) * 0.46 + avgConfidence * 0.24;
+  const evidenceCoverageCap = 0.3 + participation.evidenceCoverage * 0.58;
+  const confidence = activeOpinions.length ? clamp(Math.min(rawConfidence, evidenceCoverageCap), 0.2, 0.88) : 0.2;
   const levels = buildLevels(input, finalBias, ictContext);
-  const aligned = opinions.filter((opinion) => opinion.bias === finalBias);
-  const warnings = opinions.flatMap((opinion) => opinion.warningFactors);
+  const aligned = activeOpinions.filter((opinion) => opinion.bias === finalBias);
+  const warnings = [...new Set(opinions.flatMap((opinion) => opinion.warningFactors))];
   const topFactors = aligned.flatMap((opinion) => opinion.supportingFactors).slice(0, 5);
   const thesisSummary =
     finalBias === "neutral"
-      ? `${input.symbol} ${input.timeframe} remains neutral because internal agents do not show enough weighted directional agreement.`
-      : `${input.symbol} ${input.timeframe} CIO thesis is ${finalBias}; ${aligned.length} internal agent(s) align with the weighted synthesis.`;
+      ? `${input.symbol} ${input.timeframe} remains neutral because evidence-participating agents do not show enough weighted directional agreement.`
+      : `${input.symbol} ${input.timeframe} CIO thesis is ${finalBias}; ${aligned.length} evidence-participating agent(s) align with the weighted synthesis.`;
   const riskNotes =
     finalBias === "neutral"
       ? "Simulation remains neutral until internal agents agree on structure, timing, and risk/reward."
@@ -110,12 +115,15 @@ export function synthesizeCIO(input: ThesisInput, ictContext: ICTContext, opinio
     finalBias,
     confidence,
     thesisSummary,
-    reasoningSummary: `CIO synthesized ${opinions.length} deterministic internal agents. Weighted score ${weightedDirectionalScore.toFixed(2)}. ${invalidationLogic} ${targetLogic}`,
+    reasoningSummary: `CIO synthesized ${participation.activeAgentCount} active agent(s); ${participation.abstainingAgentCount} abstained. Evidence coverage ${Math.round(participation.evidenceCoverage * 100)}%. Weighted score ${weightedDirectionalScore.toFixed(2)}. ${invalidationLogic} ${targetLogic}`,
     riskNotes,
     invalidationLevel: levels.invalidationLevel,
     targetLiquidity: levels.targetLiquidity,
     entryZone: levels.entryZone,
     riskReward: levels.riskReward,
+    activeAgentCount: participation.activeAgentCount,
+    abstainingAgentCount: participation.abstainingAgentCount,
+    evidenceCoverage: Number(participation.evidenceCoverage.toFixed(4)),
     cioOpinion: {
       agentId: "cio-agent",
       name: "CIO Agent",
@@ -123,6 +131,10 @@ export function synthesizeCIO(input: ThesisInput, ictContext: ICTContext, opinio
       bias: finalBias,
       confidence,
       weight: 1,
+      configuredWeight: 1,
+      evidenceStatus: participation.evidenceCoverage >= 0.75 ? "derived" : participation.activeAgentCount ? "limited" : "unavailable",
+      synthesisRole: participation.activeAgentCount ? "vote" : "abstain",
+      abstentionReason: participation.activeAgentCount ? undefined : "No internal agent had eligible evidence for synthesis.",
       reasoning: `${thesisSummary} ${ictContext.narrativeSummary}`,
       supportingFactors: topFactors.length ? topFactors : ["No dominant directional factor; preserving neutral research posture"],
       warningFactors: warnings.slice(0, 5),

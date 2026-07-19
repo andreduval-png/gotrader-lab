@@ -35,7 +35,11 @@ export interface InternalAgentRunContext {
   regimeClassification?: RegimeClassification;
 }
 
-export interface InternalAgentOpinion {
+export type InternalAgentEvidenceStatus = "verified" | "derived" | "limited" | "unavailable";
+
+export type InternalAgentSynthesisRole = "vote" | "abstain" | "veto";
+
+export interface InternalAgentRawOpinion {
   agentId: InternalAgentId;
   name: string;
   layer: AgentLayer;
@@ -49,12 +53,19 @@ export interface InternalAgentOpinion {
   ictTags: ICTConcept[];
 }
 
+export interface InternalAgentOpinion extends InternalAgentRawOpinion {
+  configuredWeight: number;
+  evidenceStatus: InternalAgentEvidenceStatus;
+  synthesisRole: InternalAgentSynthesisRole;
+  abstentionReason?: string;
+}
+
 export interface InternalAgentDefinition {
   agentId: Exclude<InternalAgentId, "cio-agent">;
   name: string;
   layer: AgentLayer;
   weight: number;
-  run(context: InternalAgentRunContext): InternalAgentOpinion;
+  run(context: InternalAgentRunContext): InternalAgentRawOpinion;
 }
 
 export interface CIOSynthesisResult {
@@ -67,5 +78,8 @@ export interface CIOSynthesisResult {
   targetLiquidity: number;
   entryZone: [number, number];
   riskReward: number;
+  activeAgentCount: number;
+  abstainingAgentCount: number;
+  evidenceCoverage: number;
   cioOpinion: InternalAgentOpinion;
 }

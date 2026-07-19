@@ -314,6 +314,10 @@ export interface AgentDebateMessage {
   stance: MarketBias;
   confidence: number;
   weight?: number;
+  configuredWeight?: number;
+  evidenceStatus?: "verified" | "derived" | "limited" | "unavailable";
+  synthesisRole?: "vote" | "abstain" | "veto";
+  abstentionReason?: string;
   message: string;
   supportingFactors?: string[];
   warningFactors?: string[];
@@ -337,6 +341,9 @@ export interface TradeThesis {
   targetLiquidity: number;
   riskNotes: string;
   reasoningSummary: string;
+  activeAgentCount?: number;
+  abstainingAgentCount?: number;
+  agentEvidenceCoverage?: number;
   ictContext: ICTContext;
   simulatedTradePlan: SimulatedTradePlan;
   createdAt: string;

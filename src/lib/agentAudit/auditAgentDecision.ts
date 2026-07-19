@@ -105,6 +105,9 @@ export function auditDeterministicAgentDecision(message: AgentDebateMessage, the
   const warningFactors = safeArray(message.warningFactors);
   const recommendation = message.recommendation ?? message.message;
   const weight = message.weight ?? 1;
+  const evidenceStatus = message.evidenceStatus ?? "limited";
+  const synthesisRole = message.synthesisRole ?? "vote";
+  const abstained = synthesisRole === "abstain";
   return createAgentDecisionTrace({
     agentId: message.agentId,
     agentName: message.agentName,
@@ -115,22 +118,39 @@ export function auditDeterministicAgentDecision(message: AgentDebateMessage, the
       thesis ? `Confluence ${(thesis.ictContext.confluenceScore * 100).toFixed(0)}%` : undefined,
       `Message stance ${message.stance}`
     ].filter((item): item is string => Boolean(item)),
-    evidenceUsed: supportingFactors,
-    evidenceMissing: supportingFactors.length ? warningFactors : ["No supporting factors were attached to this decision."],
+    evidenceUsed: abstained ? [] : supportingFactors,
+    evidenceMissing: abstained
+      ? [message.abstentionReason ?? "Agent abstained because eligible evidence was unavailable.", ...warningFactors]
+      : supportingFactors.length
+        ? warningFactors
+        : ["No supporting factors were attached to this decision."],
     evidenceIgnored: thesis?.ictContext.bias !== message.stance && message.stance !== "neutral"
       ? [`Agent stance ${message.stance} differs from ICT bias ${thesis?.ictContext.bias}.`]
       : [],
-    assumptions: ["Deterministic agent uses mock ICT facts only.", "Research signal remains simulation-only."],
+    assumptions: [
+      evidenceStatus === "verified"
+        ? "Deterministic agent uses verified compact context."
+        : evidenceStatus === "derived"
+          ? "Deterministic agent uses canonical candle-derived ICT facts."
+          : evidenceStatus === "limited"
+            ? "Deterministic agent evidence is limited and confidence is capped."
+            : "Deterministic agent did not vote because evidence was unavailable.",
+      "Research signal remains simulation-only."
+    ],
     thresholdsUsed: [
       `confidence ${(message.confidence * 100).toFixed(0)}%`,
-      `weight ${weight.toFixed(2)}`
+      `active weight ${weight.toFixed(2)}`,
+      `configured weight ${(message.configuredWeight ?? weight).toFixed(2)}`,
+      `evidence status ${evidenceStatus}`,
+      `synthesis role ${synthesisRole}`
     ],
     confidenceAfter: message.confidence,
     finalBias: message.stance,
-    finalRecommendation: recommendation,
+    finalRecommendation: abstained ? "Abstained from CIO synthesis; no directional evidence contribution." : recommendation,
     riskWarnings: warningFactors,
     decisionRulesApplied: [
-      "Use structured ICT context facts.",
+      "Use only eligible structured context facts.",
+      "Abstain when required evidence is unavailable.",
       "Attach supporting and warning factors.",
       "Do not exceed advisory research authority."
     ],
@@ -140,7 +160,7 @@ export function auditDeterministicAgentDecision(message: AgentDebateMessage, the
       "Readiness override authority none"
     ],
     possibleFailureModes: [
-      "Mock data may not represent live market regimes.",
+      "Limited or stale context may not represent the active market regime.",
       "Agent may overweight one ICT concept.",
       "Confidence may be high despite missing external validation."
     ],

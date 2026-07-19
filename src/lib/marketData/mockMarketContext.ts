@@ -36,39 +36,44 @@ export function createMockMarketContext(
         updatedAt: new Date().toISOString()
       },
       tickDataStatus: "planned",
-      volumeProfile: {
-        vwap: Number((current - unit * 0.15).toFixed(2)),
-        anchoredVwap: Number((current - unit * 0.4).toFixed(2)),
-        vpoc: Number((current - unit * 0.25).toFixed(2)),
-        vah: Number((current + unit * 1.1).toFixed(2)),
-        val: Number((current - unit * 1.2).toFixed(2)),
-        volumeProfileStatus: "available_mock",
-        notes: ["Mock VWAP/profile values are placeholders for UI and agent contract testing."]
-      },
-      priorDay: {
+      volumeProfile: imported
+        ? {
+            volumeProfileStatus: "planned",
+            notes: ["Verified VWAP and volume-profile evidence is not connected for this canonical candle source."]
+          }
+        : {
+            vwap: Number((current - unit * 0.15).toFixed(2)),
+            anchoredVwap: Number((current - unit * 0.4).toFixed(2)),
+            vpoc: Number((current - unit * 0.25).toFixed(2)),
+            vah: Number((current + unit * 1.1).toFixed(2)),
+            val: Number((current - unit * 1.2).toFixed(2)),
+            volumeProfileStatus: "available_mock",
+            notes: ["Mock VWAP/profile values are placeholders for UI and agent contract testing."]
+          },
+      priorDay: imported ? {} : {
         high: Number((current + unit * 1.4).toFixed(2)),
         low: Number((current - unit * 1.8).toFixed(2)),
         close: Number((current - unit * 0.2).toFixed(2))
       },
-      priorWeek: {
+      priorWeek: imported ? {} : {
         high: Number((current + unit * 3.2).toFixed(2)),
         low: Number((current - unit * 3.8).toFixed(2)),
         close: Number((current - unit * 0.7).toFixed(2))
       },
-      priorMonth: {
+      priorMonth: imported ? {} : {
         high: Number((current + unit * 6).toFixed(2)),
         low: Number((current - unit * 7).toFixed(2)),
         close: Number((current + unit * 1.1).toFixed(2))
       },
-      overnight: {
+      overnight: imported ? {} : {
         high: Number((current + unit * 0.9).toFixed(2)),
         low: Number((current - unit * 1.1).toFixed(2))
       },
-      globexRange: {
+      globexRange: imported ? {} : {
         high: Number((current + unit * 1.2).toFixed(2)),
         low: Number((current - unit * 1.4).toFixed(2))
       },
-      levels: [
+      levels: imported ? [] : [
         { label: "Prior day high", value: Number((current + unit * 1.4).toFixed(2)), source: "mock", timeframe: "day" },
         { label: "Prior day low", value: Number((current - unit * 1.8).toFixed(2)), source: "mock", timeframe: "day" },
         { label: "Overnight high", value: Number((current + unit * 0.9).toFixed(2)), source: "mock", timeframe: "overnight" },
@@ -86,17 +91,17 @@ export function createMockMarketContext(
       notes: ["DOM, footprint, delta, cumulative delta, and large print detection are future offline/file-import modules."]
     },
     positioning: {
-      putCallRatio: 1.02,
-      gammaLevels: [
+      putCallRatio: imported ? undefined : 1.02,
+      gammaLevels: imported ? [] : [
         { label: "Mock positive gamma shelf", price: Number((current + unit * 2).toFixed(2)), strength: "medium" },
         { label: "Mock dealer gamma flip", price: Number((current - unit * 0.8).toFixed(2)), strength: "high" }
       ],
-      dealerGammaFlip: Number((current - unit * 0.8).toFixed(2)),
+      dealerGammaFlip: imported ? undefined : Number((current - unit * 0.8).toFixed(2)),
       netPositioningBias: "neutral",
       status: "planned"
     },
     macro: {
-      economicCalendar: [
+      economicCalendar: imported ? [] : [
         {
           id: "mock-cpi",
           name: "CPI",
@@ -112,21 +117,21 @@ export function createMockMarketContext(
           status: "mock"
         }
       ],
-      fedFundsImpliedPath: "Mock path: one cut priced over the next two meetings.",
-      dxy: 104.2,
-      vix: 16.8,
-      twoYearYield: 4.72,
-      tenYearYield: 4.39,
+      fedFundsImpliedPath: imported ? undefined : "Mock path: one cut priced over the next two meetings.",
+      dxy: imported ? undefined : 104.2,
+      vix: imported ? undefined : 16.8,
+      twoYearYield: imported ? undefined : 4.72,
+      tenYearYield: imported ? undefined : 4.39,
       macroRiskBias: "neutral",
       status: "planned"
     },
     intermarket: {
-      esNqRatio: 0.279,
+      esNqRatio: imported ? undefined : 0.279,
       ymEsDivergence: "unknown",
-      bondFuturesContext: "Mock neutral bond futures context.",
-      crudeGoldRiskContext: "Mock commodity context is neutral.",
-      dxyNqRelationship: "neutral",
-      vixEquityRelationship: "neutral",
+      bondFuturesContext: imported ? undefined : "Mock neutral bond futures context.",
+      crudeGoldRiskContext: imported ? undefined : "Mock commodity context is neutral.",
+      dxyNqRelationship: imported ? "unknown" : "neutral",
+      vixEquityRelationship: imported ? "unknown" : "neutral",
       status: "planned"
     },
     availableModules: [
@@ -136,20 +141,31 @@ export function createMockMarketContext(
         status: "available_mock",
         summary: `${candles.length} ${imported ? "imported historical" : "mock"} candle(s) available for ${symbol} ${timeframe}.`
       },
-      {
+      ...(!imported ? [{
         id: "mock-session-levels",
         name: "Mock session levels",
-        status: "available_mock",
+        status: "available_mock" as const,
         summary: "Prior day, overnight, and Globex levels are mocked for adapter contract testing."
       },
       {
         id: "mock-volume-profile",
         name: "Mock VWAP/volume profile",
-        status: "available_mock",
+        status: "available_mock" as const,
         summary: "VWAP, anchored VWAP, VPOC, VAH, and VAL are placeholder research inputs."
-      }
+      }] : [])
     ],
     missingModules: [
+      ...(imported ? [{
+        id: "session-levels",
+        name: "Canonical session reference levels",
+        status: "planned" as const,
+        summary: "Session levels must be derived from the active canonical candles before an agent may vote."
+      }, {
+        id: "volume-profile",
+        name: "Verified VWAP and volume profile",
+        status: "planned" as const,
+        summary: "No verified VWAP/profile adapter is connected for this source."
+      }] : []),
       {
         id: "tick-data",
         name: "Tick data",

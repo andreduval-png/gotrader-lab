@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Download, FileJson, FlaskConical, MessagesSquare, Play, ShieldAlert, Sparkles } from "lucide-react";
+import { Download, FileJson, FlaskConical, MessagesSquare, ShieldAlert, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BridgeStatusCard } from "@/components/bridge/BridgeStatusCard";
 import { TechnicalDetails } from "@/components/common/TechnicalDetails";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +39,6 @@ interface ResearchActions {
   saveThesis(input: ThesisInput): { debateSession: DebateSession; thesis: TradeThesis } | undefined;
   recordSignalExport(thesisId: string, decision: "approved" | "rejected"): void;
   recordHandoffExport(entry: Omit<GoTraderHandoffAuditEntry, "id">): void;
-  scoreThesis(thesisId: string): void;
 }
 
 const symbolOptions = ["ES", "NQ", "MES", "MNQ"].map((value) => ({ label: value, value }));
@@ -142,12 +141,6 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
             : "Unable to create simulated go-trader export.";
         window.alert(message);
       }
-    }
-  };
-
-  const scoreOutcome = () => {
-    if (activeThesis) {
-      actions.scoreThesis(activeThesis.id);
     }
   };
 
@@ -292,13 +285,13 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
                 <Sparkles className="h-4 w-4" aria-hidden="true" />
                 Generate thesis
               </Button>
-              <Button variant="secondary" onClick={scoreOutcome} disabled={!activeThesis}>
-                <Play className="h-4 w-4" aria-hidden="true" />
-                Score simulated outcome
-              </Button>
+              <Link to="/replay" className={buttonVariants({ variant: "secondary" })}>
+                <FlaskConical className="h-4 w-4" aria-hidden="true" />
+                Open Replay Validation
+              </Link>
             </div>
             <div className="rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
-              User confirmation is required before saving prompt mutations or exporting simulated signals.
+              Agent performance changes only from replay or observed paper outcomes. A thesis cannot score itself.
             </div>
           </CardContent>
         </Card>
@@ -625,7 +618,7 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
         <Card>
           <CardHeader>
             <CardTitle>Agent Debate</CardTitle>
-            <CardDescription>Layered market views generated before CIO synthesis.</CardDescription>
+            <CardDescription>Only evidence-participating agents vote; unavailable agents remain visible as abstentions.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {activeDebate.messages.map((message) => (
@@ -638,6 +631,8 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
                   <div className="flex flex-wrap justify-end gap-2">
                     <Badge variant={biasVariant(message.stance)}>{message.stance}</Badge>
                     <Badge variant="secondary">{formatPercent(message.confidence)}</Badge>
+                    {message.evidenceStatus ? <Badge variant="muted">{message.evidenceStatus}</Badge> : null}
+                    {message.synthesisRole === "abstain" ? <Badge variant="warning">abstained</Badge> : null}
                     {typeof message.weight === "number" ? <Badge variant="muted">weight {formatPercent(message.weight)}</Badge> : null}
                   </div>
                 </div>

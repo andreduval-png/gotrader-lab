@@ -1,8 +1,4 @@
-import {
-  identifyWeakestAgent,
-  performanceFromRecommendations,
-  scoreRecommendation
-} from "@/lib/scoring";
+import { identifyWeakestAgent } from "@/lib/scoring";
 import { runAgents, synthesizeCIO } from "@/lib/agents";
 import { buildICTContext } from "@/lib/ict";
 import { buildMarketContext } from "@/lib/marketData";
@@ -12,7 +8,6 @@ import type {
   AgentDebateMessage,
   DebateSession,
   LabState,
-  MarketOutcome,
   PromptMutation,
   Recommendation,
   SimulatedTradePlan,
@@ -62,6 +57,10 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
       stance: opinion.bias,
       confidence: opinion.confidence,
       weight: opinion.weight,
+      configuredWeight: opinion.configuredWeight,
+      evidenceStatus: opinion.evidenceStatus,
+      synthesisRole: opinion.synthesisRole,
+      abstentionReason: opinion.abstentionReason,
       message: opinion.reasoning,
       supportingFactors: opinion.supportingFactors,
       warningFactors: opinion.warningFactors,
@@ -101,6 +100,9 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
     targetLiquidity: plan.targetLiquidity,
     riskNotes: plan.stopRiskNotes,
     reasoningSummary: cioSynthesis.reasoningSummary,
+    activeAgentCount: cioSynthesis.activeAgentCount,
+    abstainingAgentCount: cioSynthesis.abstainingAgentCount,
+    agentEvidenceCoverage: cioSynthesis.evidenceCoverage,
     ictContext,
     simulatedTradePlan: plan,
     createdAt,
@@ -126,63 +128,6 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
     thesis,
     recommendations
   };
-}
-
-export function applySimulatedOutcome(state: LabState, thesis: TradeThesis): LabState {
-  const direction = thesis.finalBias === "bearish" ? -1 : thesis.finalBias === "bullish" ? 1 : 0;
-  // Deterministic outcome sizing: random price moves would silently corrupt
-  // agent weights/hit-rate learning with noise that never happened in market data.
-  const confidenceMove = Math.round(thesis.confidence * 70) * direction;
-  const outcome: MarketOutcome = {
-    id: uid("outcome"),
-    symbol: thesis.symbol,
-    timeframe: thesis.timeframe,
-    session: thesis.session,
-    resolvedAt: new Date().toISOString(),
-    actualBias: thesis.finalBias,
-    priceMove: confidenceMove,
-    maxAdverseExcursion: Number((Math.abs(confidenceMove) * 0.25).toFixed(2)),
-    maxFavorableExcursion: Number((Math.abs(confidenceMove) * 1.2).toFixed(2)),
-    liquidityTargetReached: thesis.finalBias !== "neutral",
-    invalidationHit: false,
-    notes: "Generated local simulated outcome for research scoring."
-  };
-
-  const scoredRecommendations = state.recommendations.map((recommendation) => {
-    const session = state.debateSessions.find((debate) => debate.recommendationIds.includes(recommendation.id));
-    if (session?.cioThesisId !== thesis.id) {
-      return recommendation;
-    }
-    return {
-      ...recommendation,
-      simulatedOutcomeId: outcome.id,
-      score: scoreRecommendation(recommendation, outcome)
-    };
-  });
-
-  const updatedAgents = state.agents.map((agent) => {
-    const snapshot = performanceFromRecommendations(agent, scoredRecommendations, [...state.outcomes, outcome]);
-    return {
-      ...agent,
-      hitRate: snapshot.hitRate,
-      drawdown: snapshot.drawdown,
-      sharpeLike: snapshot.sharpeLike,
-      confidenceCalibration: snapshot.confidenceCalibration,
-      confidenceHistory: [
-        ...agent.confidenceHistory.slice(-5),
-        { date: new Date().toISOString(), value: clamp(agent.confidence * 0.8 + snapshot.confidenceCalibration * 0.2, 0.25, 0.95) }
-      ]
-    };
-  });
-
-  const updatedState = {
-    ...state,
-    agents: updatedAgents,
-    outcomes: [...state.outcomes, outcome],
-    recommendations: scoredRecommendations
-  };
-
-  return proposePromptMutation(updatedState);
 }
 
 export function proposePromptMutation(state: LabState): LabState {

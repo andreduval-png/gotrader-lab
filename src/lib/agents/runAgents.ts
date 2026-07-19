@@ -1,4 +1,5 @@
 import { researchAgentRegistry } from "@/lib/agents/agentRegistry";
+import { applyInternalAgentEvidencePolicy } from "@/lib/agents/agentEvidencePolicy";
 import type { InternalAgentOpinion } from "@/lib/agents/agentTypes";
 import type { Candle, ICTContext, ThesisInput } from "@/lib/types";
 import { buildMarketContext } from "@/lib/marketData";
@@ -18,10 +19,9 @@ export function runAgents(input: ThesisInput, ictContext: ICTContext, candles?: 
     timeframe: input.timeframe
   });
   return researchAgentRegistry.map((agent) => {
-    const opinion = agent.run({ input, ictContext, marketContext, regimeClassification });
-    return {
-      ...opinion,
-      weight: regimeAdjustedAgentWeight(opinion.agentId, opinion.weight, regimeClassification)
-    };
+    const context = { input, ictContext, marketContext, regimeClassification };
+    const opinion = agent.run(context);
+    const regimeWeight = regimeAdjustedAgentWeight(opinion.agentId, opinion.weight, regimeClassification);
+    return applyInternalAgentEvidencePolicy(opinion, context, regimeWeight);
   });
 }

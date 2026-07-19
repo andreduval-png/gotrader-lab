@@ -10,7 +10,7 @@ import {
   rejectMutation,
   rollbackPromptVersion
 } from "@/lib/storage";
-import { applySimulatedOutcome, generateThesis } from "@/lib/simulation";
+import { generateThesis } from "@/lib/simulation";
 import type {
   AdvisoryPacketAuditEntry,
   AdvisoryResponseAuditEntry,
@@ -73,12 +73,6 @@ export function useLabState() {
       },
       recordAdvisoryResponse(entry: Omit<AdvisoryResponseAuditEntry, "id">) {
         commit((current) => recordAdvisoryResponse(current, entry));
-      },
-      scoreThesis(thesisId: string) {
-        commit((current) => {
-          const thesis = current.tradeTheses.find((item) => item.id === thesisId);
-          return thesis ? applySimulatedOutcome(current, thesis) : current;
-        });
       },
       rollbackPrompt(promptVersionId: string) {
         commit((current) => rollbackPromptVersion(current, promptVersionId));

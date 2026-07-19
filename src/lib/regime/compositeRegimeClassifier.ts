@@ -59,6 +59,10 @@ const crossCount = (candles: Candle[], reference: number) =>
   }, 0);
 
 const activeHighImpactEvent = (input: RegimeClassifierInput, timestamp: string) => {
+  const macroStatus = input.marketContext?.macro.status;
+  if (!macroStatus || macroStatus === "planned" || macroStatus === "missing" || macroStatus === "later_advanced" || macroStatus === "available_mock") {
+    return undefined;
+  }
   const events = input.marketContext?.macro.economicCalendar ?? [];
   const nowMs = new Date(timestamp).getTime();
   return events.find((event) => {

@@ -7,7 +7,9 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
   if (!thesis) {
     return [];
   }
-  const aligned = safeArray(debateMessages).filter((message) => message.stance === thesis.finalBias);
+  const active = safeArray(debateMessages).filter((message) => message.synthesisRole !== "abstain" && (message.weight ?? 1) > 0);
+  const abstaining = safeArray(debateMessages).filter((message) => message.synthesisRole === "abstain" || (message.weight ?? 1) <= 0);
+  const aligned = active.filter((message) => message.stance === thesis.finalBias);
   const warnings = safeArray(debateMessages).flatMap((message) => safeArray(message.warningFactors));
 
   return [
@@ -20,7 +22,9 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
         `final bias ${thesis.finalBias}`,
         `ICT bias ${thesis.ictContext.bias}`,
         `ICT confluence ${(thesis.ictContext.confluenceScore * 100).toFixed(0)}%`,
-        `aligned agents ${aligned.length}/${safeArray(debateMessages).length}`
+        `aligned active agents ${aligned.length}/${active.length}`,
+        `abstaining agents ${abstaining.length}`,
+        `agent evidence coverage ${Math.round((thesis.agentEvidenceCoverage ?? 0) * 100)}%`
       ],
       evidenceUsed: [
         thesis.reasoningSummary,
@@ -31,7 +35,7 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
       evidenceIgnored: thesis.finalBias !== thesis.ictContext.bias && thesis.finalBias !== "neutral"
         ? [`CIO final bias ${thesis.finalBias} differs from ICT context bias ${thesis.ictContext.bias}.`]
         : [],
-      assumptions: ["CIO synthesis combines deterministic internal agent weights.", "All output remains simulation research."],
+      assumptions: ["CIO synthesis combines only evidence-participating internal agent weights.", "All output remains simulation research."],
       thresholdsUsed: [
         `confidence ${(thesis.confidence * 100).toFixed(0)}%`,
         `risk/reward ${thesis.simulatedTradePlan.riskReward.toFixed(2)}R`
@@ -41,7 +45,8 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
       finalRecommendation: thesis.thesisSummary,
       riskWarnings: [thesis.riskNotes, ...warnings],
       decisionRulesApplied: [
-        "Synthesize weighted internal agent views.",
+        "Synthesize weighted evidence-participating internal agent views.",
+        "Exclude abstaining agents from the directional denominator.",
         "Require invalidation, target, and risk notes.",
         "Keep output in simulation mode."
       ],
@@ -53,7 +58,7 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
       ],
       possibleFailureModes: [
         "Agent agreement may be fragile.",
-        "Mock data may not contain enough regime diversity.",
+        "Available evidence may not contain enough regime diversity.",
         "Risk/reward can be valid but still fail validation."
       ],
       relatedEntityId: thesis.id,

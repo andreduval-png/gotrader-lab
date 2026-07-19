@@ -237,7 +237,10 @@ function buildDecision(
   });
   const agentOpinions = runAgents(input, ictContext, historicalCandles).map((opinion) => ({
     ...opinion,
-    weight: config.agentWeights[opinion.agentId as BacktestAgentWeightId] ?? opinion.weight
+    weight: opinion.synthesisRole === "abstain"
+      ? 0
+      : config.agentWeights[opinion.agentId as BacktestAgentWeightId] ?? opinion.weight,
+    configuredWeight: config.agentWeights[opinion.agentId as BacktestAgentWeightId] ?? opinion.configuredWeight
   }));
   const cioSynthesis = synthesizeCIO(input, ictContext, agentOpinions);
   const plan = buildSimulatedPlan(decisionIndex, input, cioSynthesis, config, ictContext.fairValueGaps);

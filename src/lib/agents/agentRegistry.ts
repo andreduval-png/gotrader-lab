@@ -127,7 +127,7 @@ export const researchAgentRegistry: InternalAgentDefinition[] = [
       const confidence = clamp(0.42 + ictContext.liquiditySweeps.length * 0.08 + ictContext.confluenceBreakdown.confidence * 0.22, 0.35, 0.9);
       const supportingFactors = latestSweep
         ? [latestSweep.description, `${ictContext.liquiditySweeps.length} sweep(s) detected`]
-        : ["No confirmed liquidity sweep in the mock candle window"];
+        : ["No confirmed liquidity sweep in the canonical candle window"];
       const warningFactors = latestSweep ? [] : ["Liquidity agent is neutral until a sweep rejects back through the level"];
 
       return {
@@ -139,7 +139,7 @@ export const researchAgentRegistry: InternalAgentDefinition[] = [
         weight: 0.15,
         reasoning: latestSweep
           ? `Latest liquidity event is a ${latestSweep.direction} sweep at ${latestSweep.sweptLevel}.`
-          : "No deterministic sweep confirmation is present in the mock sample.",
+          : "No deterministic sweep confirmation is present in the active candle sample.",
         supportingFactors,
         warningFactors,
         recommendation:
@@ -498,7 +498,7 @@ export const researchAgentRegistry: InternalAgentDefinition[] = [
       const bias = inKillZone ? ictContext.bias : "neutral";
       const confidence = clamp((inKillZone ? 0.55 : 0.36) + ictContext.confluenceBreakdown.confidence * 0.18, 0.3, 0.82);
       const supportingFactors = [`Input session: ${input.session}`, `Detected kill zone: ${ictContext.killZone}`];
-      const warningFactors = inKillZone ? [] : ["Current mock timestamp is outside an ICT kill-zone tag"];
+      const warningFactors = inKillZone ? [] : ["Current candle timestamp is outside an ICT kill-zone tag"];
 
       return {
         agentId: "session-timing-agent",
@@ -767,8 +767,11 @@ export const researchAgentRegistry: InternalAgentDefinition[] = [
     weight: 0.08,
     run({ input, ictContext, marketContext, regimeClassification }) {
       const regimeDrivenBias = regimeBias[input.marketRegime];
+      const verifiedVix = marketContext.macro.status === "planned" || marketContext.macro.status === "available_mock"
+        ? undefined
+        : marketContext.macro.vix;
       const highVol =
-        (marketContext.macro.vix ?? 0) >= 20 ||
+        (verifiedVix ?? 0) >= 20 ||
         input.marketRegime === "volatile" ||
         input.marketRegime === "news-driven" ||
         regimeClassification?.stableLabel === "event_high_vol" ||
@@ -778,7 +781,7 @@ export const researchAgentRegistry: InternalAgentDefinition[] = [
       const supportingFactors = [
         `Market regime: ${input.marketRegime}`,
         `Composite regime: ${regimeClassification?.stableLabel ?? "unavailable"}`,
-        `VIX: ${marketContext.macro.vix ?? "n/a"}`,
+        `VIX: ${verifiedVix ?? "not connected"}`,
         `ICT confidence: ${Math.round(ictContext.confluenceBreakdown.confidence * 100)}%`
       ];
       const warningFactors = [
