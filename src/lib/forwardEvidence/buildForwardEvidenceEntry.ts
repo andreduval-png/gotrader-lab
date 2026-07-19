@@ -1,5 +1,6 @@
 import {
   FORWARD_EVIDENCE_AUTHORITY,
+  forwardEvidenceCollectionCutoff,
   type ForwardEvidenceEntry,
   type ForwardEvidenceEntryInput,
   type ForwardEvidenceTargetReference
@@ -108,7 +109,9 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
   const blockedFields = findForwardEvidenceBlockedFields(input);
   const setupTimestamp = validTimestamp(input.setupTimestamp) ?? frozen.validationCutoff;
   const timestamp = validTimestamp(input.timestamp) ?? new Date().toISOString();
-  const beforeOrAtCutoff = Date.parse(setupTimestamp) <= Date.parse(frozen.validationCutoff);
+  const collectionCutoff = forwardEvidenceCollectionCutoff(frozen);
+  const beforeOrAtCutoff = Date.parse(setupTimestamp) <= Date.parse(collectionCutoff);
+  const issuedBeforeSetup = Date.parse(timestamp) < Date.parse(setupTimestamp);
   const unsafeAuthority =
     input.authority?.executionAuthority !== undefined && input.authority.executionAuthority !== "none" ||
     input.authority?.brokerAuthority !== undefined && input.authority.brokerAuthority !== "none" ||
@@ -123,7 +126,8 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
   const forwardWindowId = compactText(input.forwardWindowId, 120);
   const rejectionReasons = [
     blockedFields.length ? `unsafe fields removed: ${blockedFields.join(", ")}` : "",
-    beforeOrAtCutoff ? "setup is not after the frozen validation cutoff" : "",
+    beforeOrAtCutoff ? "setup is not after the frozen profile collection cutoff" : "",
+    issuedBeforeSetup ? "observation was issued before the setup candle closed" : "",
     unsafeAuthority ? "unsafe authority requested" : "",
     !sourceFingerprint ? "source fingerprint missing" : "",
     invalidIndependentDate ? "independent date is invalid" : "",

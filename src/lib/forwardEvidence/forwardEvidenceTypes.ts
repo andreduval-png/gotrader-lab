@@ -187,6 +187,13 @@ export interface ForwardEvidenceLedgerEvaluation {
   authority: typeof FORWARD_EVIDENCE_AUTHORITY;
 }
 
+export const forwardEvidenceCollectionCutoff = (
+  profile: Pick<FrozenResearchProfile, "frozenAt" | "validationCutoff">
+) => new Date(Math.max(
+  Date.parse(profile.frozenAt),
+  Date.parse(profile.validationCutoff)
+)).toISOString();
+
 export type ForwardEvidenceCycleSampleClassification =
   | "no_cycle_sample"
   | "different_profile"

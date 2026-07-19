@@ -31,6 +31,8 @@ const compile = (sourceRelative, outputName, replacements = []) => {
 
 const afterCutoff = (day, hour = 14) =>
   new Date(Date.UTC(2026, 6, 15 + day, hour)).toISOString();
+const afterV4Freeze = (minute = 0) =>
+  new Date(Date.UTC(2026, 6, 20, 14, minute)).toISOString();
 
 async function main() {
   fs.rmSync(outRoot, { recursive: true, force: true });
@@ -78,6 +80,11 @@ async function main() {
     "buildForwardEvidenceGatewayReport.mjs",
     [["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]]
   );
+  compile(
+    "src/lib/forwardEvidence/forwardEvidenceCollectorStatus.ts",
+    "forwardEvidenceCollectorStatus.mjs",
+    [["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]]
+  );
 
   const registry = await import(pathToFileURL(path.join(outRoot, "frozenProfileRegistry.mjs")).href);
   const builder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceEntry.mjs")).href);
@@ -85,6 +92,7 @@ async function main() {
   const ifvgPolicy = await import(pathToFileURL(path.join(outRoot, "ifvgForwardEvidencePolicy.mjs")).href);
   const intakeAudit = await import(pathToFileURL(path.join(outRoot, "auditForwardEvidenceCycleSample.mjs")).href);
   const gatewayReportBuilder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceGatewayReport.mjs")).href);
+  const collector = await import(pathToFileURL(path.join(outRoot, "forwardEvidenceCollectorStatus.mjs")).href);
   const frozen = registry.ifvgFreshRetestV3FrozenProfile;
   const frozenV4 = registry.ifvgShallowRetestV4FrozenProfile;
 
@@ -116,6 +124,38 @@ async function main() {
   assert.equal(frozenV4.walkForwardRequirements.minimumOosWindows, 2);
   assert.equal(frozenV4.profileVersion, "v4");
   assert.equal(frozenV4.validationCutoff, frozen.validationCutoff);
+  assert.equal(
+    collector.validateForwardEvidenceCandleIdentity({
+      source: "mt5",
+      brokerSymbol: "USTECH",
+      requestedSymbol: "MNQ",
+      timeframe: "5m",
+      timestamp: afterV4Freeze(),
+      receivedAt: afterV4Freeze(1),
+      sourceFingerprint: "mt5_v4_identity",
+      closed: true,
+      executionAuthority: "none",
+      brokerAuthority: "read_only",
+      readinessOverrideAuthority: "none"
+    }, frozenV4).valid,
+    true
+  );
+  assert.deepEqual(
+    collector.validateForwardEvidenceCandleIdentity({
+      source: "mt5",
+      brokerSymbol: "US30",
+      requestedSymbol: "YM",
+      timeframe: "5m",
+      timestamp: afterV4Freeze(),
+      receivedAt: afterV4Freeze(1),
+      sourceFingerprint: "mt5_wrong_series",
+      closed: true,
+      executionAuthority: "none",
+      brokerAuthority: "read_only",
+      readinessOverrideAuthority: "none"
+    }, frozenV4),
+    { valid: false, reason: "broker_symbol_mismatch" }
+  );
   assert.equal(frozenV4.evidence.completedTrades, 68);
   assert.equal(frozenV4.evidence.oosTrades, 21);
   assert.equal(frozenV4.evidence.oosAverageR, 5.404);
@@ -186,7 +226,7 @@ async function main() {
     candidate: {
       side: "short",
       sourceFingerprint: "mt5_ifvg_v4_forward_001",
-      retestCandle: { timestamp: afterCutoff(1) },
+      retestCandle: { timestamp: afterV4Freeze() },
       ifvgBounds: { low: 200, high: 202, midpoint: 201 },
       stop: 203,
       target: 196,
@@ -195,7 +235,7 @@ async function main() {
       missingConditions: [],
       warnings: []
     }
-  }, { observedAt: afterCutoff(1, 15) });
+  }, { observedAt: afterV4Freeze(1) });
   assert.ok(v4PendingObservation);
   assert.equal(v4PendingObservation.profileId, frozenV4.profileId);
   assert.equal(v4PendingObservation.profileVersion, "v4");
@@ -209,14 +249,14 @@ async function main() {
   assert.equal(v4Isolation.totalForwardOutcomes, 1, "v4 evaluation must count only v4 observations");
   const wrongProfileResolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
     [v4PendingObservation],
-    { timestamp: afterCutoff(1, 16), high: 204, low: 195 },
-    { profileId: frozen.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterCutoff(1, 16) }
+    { timestamp: afterV4Freeze(5), high: 204, low: 195 },
+    { profileId: frozen.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterV4Freeze(5) }
   );
   assert.equal(wrongProfileResolution.entries[0].outcome, "pending", "v3 resolution must not mutate v4 entries");
   const v4Resolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
     [v4PendingObservation],
-    { timestamp: afterCutoff(1, 16), high: 202, low: 195 },
-    { profileId: frozenV4.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterCutoff(1, 16) }
+    { timestamp: afterV4Freeze(5), high: 202, low: 195 },
+    { profileId: frozenV4.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterV4Freeze(5) }
   );
   assert.equal(v4Resolution.entries[0].outcome, "target_first");
 
@@ -254,7 +294,21 @@ async function main() {
     realizedR: 3
   });
   assert.equal(preCutoff.outcome, "rejected");
-  assert.match(preCutoff.blockerSummary, /not after the frozen validation cutoff/i);
+  assert.match(preCutoff.blockerSummary, /not after the frozen profile collection cutoff/i);
+
+  const preV4Freeze = builder.buildForwardEvidenceEntry({
+    profileId: frozenV4.profileId,
+    sourceFingerprint: "mt5_pre_v4_freeze",
+    evidenceOrigin: "live_closed_candle",
+    causalAtIssue: true,
+    setupTimestamp: "2026-07-18T14:00:00.000Z",
+    timestamp: "2026-07-18T14:01:00.000Z",
+    independentDate: "2026-07-18",
+    forwardWindowId: "ifvg_v4_forward_2026_07_h2",
+    direction: "short"
+  });
+  assert.equal(preV4Freeze.outcome, "rejected");
+  assert.match(preV4Freeze.blockerSummary, /profile collection cutoff/i);
 
   const unsafeEntry = builder.buildForwardEvidenceEntry({
     sourceFingerprint: "mt5_forward_fp_unsafe",
@@ -384,11 +438,13 @@ async function main() {
   const runtimeSource = fs.readFileSync(path.join(root, "src/lib/forwardEvidence/ifvgForwardEvidenceRuntime.ts"), "utf8");
   const evidenceCardSource = fs.readFileSync(path.join(root, "src/components/common/IfvgForwardEvidenceCard.tsx"), "utf8");
   assert.match(appSource, /subscribeIfvgV4ForwardEvidenceToMt5PushFeed/);
+  assert.match(runtimeSource, /validateForwardEvidenceCandleIdentity/);
   assert.match(runtimeSource, /profileId:\s*profile\.profileId/);
   assert.match(runtimeSource, /entry\.profileId === profile\.profileId/);
   assert.doesNotMatch(runtimeSource, /executionAuthority:\s*["'](?!none)/);
   assert.match(evidenceCardSource, /getFrozenResearchProfile/);
   assert.match(evidenceCardSource, /evaluateForwardEvidenceLedger\(entries, frozen\.profileId\)/);
+  assert.match(evidenceCardSource, /ifvg-forward-collector-status/);
   assert.doesNotMatch(evidenceCardSource, /IFVG v3 Frozen Profile/);
 
   const approvalSource = fs.readFileSync(
@@ -412,6 +468,8 @@ async function main() {
       accountOrderPositionSerialized: false,
       ifvgForwardObservationIssued: true,
       ifvgV4ForwardObservationIssued: true,
+      exactSourceIdentityRequired: true,
+      preFreezeV4ObservationRejected: true,
       crossProfileCreditBlocked: true,
       ifvgForwardOutcomeResolved: targetResolution.entries[0].outcome,
       replayedCycleTradesCreditedForward: threeTradeCycleAudit.creditedForwardOutcomes,

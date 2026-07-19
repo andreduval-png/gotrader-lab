@@ -5,5 +5,6 @@ export * from "./evaluateForwardEvidenceLedger";
 export * from "./forwardEvidenceStorage";
 export * from "./ifvgForwardEvidencePolicy";
 export * from "./ifvgForwardEvidenceRuntime";
+export * from "./forwardEvidenceCollectorStatus";
 export * from "./auditForwardEvidenceCycleSample";
 export * from "./buildForwardEvidenceGatewayReport";

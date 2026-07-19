@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
+  FORWARD_EVIDENCE_COLLECTOR_UPDATED_EVENT,
   FORWARD_EVIDENCE_UPDATED_EVENT,
   auditForwardEvidenceCycleSample,
   buildForwardEvidenceGatewayReport,
   evaluateForwardEvidenceLedger,
   getFrozenResearchProfile,
+  forwardEvidenceCollectionCutoff,
   ifvgFreshRetestV3FrozenProfile,
+  loadForwardEvidenceCollectorStatuses,
   loadForwardEvidenceLedger
 } from "@/lib/forwardEvidence";
 import {
@@ -27,6 +30,7 @@ export function IfvgForwardEvidenceCard({
   context?: "dashboard" | "self_improvement";
 }) {
   const [entries, setEntries] = useState(() => loadForwardEvidenceLedger());
+  const [collectorStatuses, setCollectorStatuses] = useState(() => loadForwardEvidenceCollectorStatuses());
   const [latestCycle, setLatestCycle] = useState(() => latestResearchCycleRun(loadResearchCycleState()));
   const frozen = useMemo(() => {
     const cycleProfile = getFrozenResearchProfile(
@@ -43,6 +47,7 @@ export function IfvgForwardEvidenceCard({
     () => evaluateForwardEvidenceLedger(entries, frozen.profileId),
     [entries, frozen.profileId]
   );
+  const collectorStatus = collectorStatuses[frozen.profileId];
   const cycleAudit = useMemo(
     () => auditForwardEvidenceCycleSample(
       latestCycle
@@ -70,14 +75,21 @@ export function IfvgForwardEvidenceCard({
 
   useEffect(() => {
     const refreshEvidence = () => setEntries(loadForwardEvidenceLedger());
+    const refreshCollector = () => setCollectorStatuses(loadForwardEvidenceCollectorStatuses());
     const refreshCycle = () => setLatestCycle(latestResearchCycleRun(loadResearchCycleState()));
+    const refreshStoredEvidence = () => {
+      refreshEvidence();
+      refreshCollector();
+    };
     window.addEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refreshEvidence);
+    window.addEventListener(FORWARD_EVIDENCE_COLLECTOR_UPDATED_EVENT, refreshCollector);
     window.addEventListener(RESEARCH_CYCLE_UPDATED_EVENT, refreshCycle);
-    window.addEventListener("storage", refreshEvidence);
+    window.addEventListener("storage", refreshStoredEvidence);
     return () => {
       window.removeEventListener(FORWARD_EVIDENCE_UPDATED_EVENT, refreshEvidence);
+      window.removeEventListener(FORWARD_EVIDENCE_COLLECTOR_UPDATED_EVENT, refreshCollector);
       window.removeEventListener(RESEARCH_CYCLE_UPDATED_EVENT, refreshCycle);
-      window.removeEventListener("storage", refreshEvidence);
+      window.removeEventListener("storage", refreshStoredEvidence);
     };
   }, []);
 
@@ -88,7 +100,7 @@ export function IfvgForwardEvidenceCard({
           <div>
             <CardTitle>{frozen.profileId.replace(/_/g, " ")} Frozen Profile</CardTitle>
             <CardDescription>
-              Untouched forward evidence only after {dateTime(frozen.validationCutoff)}.
+              Untouched forward evidence only after {dateTime(forwardEvidenceCollectionCutoff(frozen))}.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -131,6 +143,27 @@ export function IfvgForwardEvidenceCard({
                 ? ` Draft a fork as ${frozen.suggestedForkProfileId}; it remains validation-only and cannot auto-apply.`
                 : " Any further refinement requires a separately versioned research profile and new validation."}
             </span>
+          ) : null}
+        </div>
+        <div className="rounded-md border border-border bg-background/45 p-3 text-sm" data-testid="ifvg-forward-collector-status">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Forward collector</p>
+            <Badge variant={collectorStatus?.subscriptionActive ? "success" : "warning"}>
+              {collectorStatus?.subscriptionActive ? "listening" : "not active"}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {collectorStatus
+              ? `${readable(collectorStatus.state)}; ${collectorStatus.processedClosedCandles} closed candle(s) processed, ${collectorStatus.issuedObservations} observation(s) issued, ${collectorStatus.resolvedOutcomes} outcome update(s).`
+              : "Collector has not initialized in this browser session."}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {collectorStatus?.lastCandleTimestamp
+              ? `Last eligible close checked ${dateTime(collectorStatus.lastCandleTimestamp)} with ${collectorStatus.lastHistoryCandleCount} internal history candles.`
+              : "Waiting for the next canonical MNQ/USTECH 5m closed candle."}
+          </p>
+          {collectorStatus?.blockerReason ? (
+            <p className="mt-1 text-xs text-amber-200">Reason: {readable(collectorStatus.blockerReason)}</p>
           ) : null}
         </div>
         <div className="rounded-md border border-border bg-background/45 p-3 text-sm" data-testid="ifvg-forward-cycle-audit">

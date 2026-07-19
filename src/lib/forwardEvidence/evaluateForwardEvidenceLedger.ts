@@ -1,5 +1,6 @@
 import {
   FORWARD_EVIDENCE_AUTHORITY,
+  forwardEvidenceCollectionCutoff,
   type ForwardEvidenceEntry,
   type ForwardEvidenceLedgerEvaluation,
   type ForwardEvidenceProfileId,
@@ -41,12 +42,13 @@ export const evaluateForwardEvidenceLedger = (
   profileId: ForwardEvidenceProfileId = ifvgFreshRetestV3FrozenProfile.profileId
 ): ForwardEvidenceLedgerEvaluation => {
   const frozen = getFrozenResearchProfile(profileId) ?? ifvgFreshRetestV3FrozenProfile;
+  const collectionCutoff = forwardEvidenceCollectionCutoff(frozen);
   const postCutoffEntries = entries
     .filter(
       (entry) =>
         entry.profileId === frozen.profileId &&
         entry.profileVersion === frozen.profileVersion &&
-        Date.parse(entry.setupTimestamp) > Date.parse(frozen.validationCutoff)
+        Date.parse(entry.setupTimestamp) > Date.parse(collectionCutoff)
     )
     .sort((left, right) => Date.parse(left.setupTimestamp) - Date.parse(right.setupTimestamp));
   const causallyVerified = (entry: ForwardEvidenceEntry) => {
@@ -112,7 +114,7 @@ export const evaluateForwardEvidenceLedger = (
   return {
     profileId: frozen.profileId,
     profileVersion: frozen.profileVersion,
-    cutoff: frozen.validationCutoff,
+    cutoff: collectionCutoff,
     totalForwardOutcomes: forwardEntries.length,
     completedForwardOutcomes: completed.length,
     pendingOutcomes: pending.length,
