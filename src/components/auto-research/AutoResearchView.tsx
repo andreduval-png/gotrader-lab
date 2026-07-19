@@ -155,6 +155,16 @@ const CandidateTable = ({ candidates }: { candidates: AutoResearchCandidateResul
               {candidate.candidateFamily ? (
                 <Badge className="mt-2" variant="secondary">{formatToken(candidate.candidateFamily)}</Badge>
               ) : null}
+              {candidate.lifetimeEvidenceDecision ? (
+                <div className="mt-2">
+                  <Badge
+                    variant={candidate.lifetimeEvidenceDecision.disposition === "deprioritize_failed_identity" ? "danger" : "muted"}
+                    title={candidate.lifetimeEvidenceDecision.reason}
+                  >
+                    memory: {formatToken(candidate.lifetimeEvidenceDecision.disposition)}
+                  </Badge>
+                </div>
+              ) : null}
               {candidate.calibrationFamilyReport?.reversalExpansion ? (
                 <div className="mt-2 max-w-md rounded-md border border-amber-300/20 bg-amber-300/10 p-2 text-xs text-amber-100">
                   <div className="flex flex-wrap gap-1">
@@ -331,6 +341,7 @@ export function AutoResearchView() {
         candleWindow: `${activeCandleSource.researchWindowCandles} raw window / ${activeCandleSource.processedCandleCount} processed ${activeCandleSource.appliedSettings.targetTimeframe} candles`,
         activeCalibrationIdUsed: activeCalibrationId,
         forwardScenarioMap: runtimeSnapshot ? buildForwardScenarioMapFromRuntime(runtimeSnapshot) : undefined,
+        researchIdentity: runtimeSnapshot?.researchIdentity.active,
         signal: controller.signal,
         onCheckpoint: setLiveCheckpoint,
         timeoutMs: activeCandleSource.mode === "imported" ? 25_000 : 45_000
@@ -405,6 +416,34 @@ export function AutoResearchView() {
       </Card>
 
       <AutonomySafetyPolicyPanel latestAutoResearch={latestCycle} snapshot={runtimeSnapshot} />
+
+      {latestCycle?.lifetimeExperimentPlan ? (
+        <Card className="border-emerald-300/20 bg-emerald-300/5" data-testid="auto-research-lifetime-plan">
+          <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>Lifetime Evidence Experiment Plan</CardTitle>
+              <CardDescription>{latestCycle.lifetimeExperimentPlan.summary}</CardDescription>
+            </div>
+            <Badge variant="success">authority none</Badge>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm md:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Evidence records</p>
+              <p className="mt-1 font-mono">{latestCycle.lifetimeExperimentPlan.aggregateRecordsAvailable}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Recurring blockers</p>
+              <p className="mt-1">
+                {latestCycle.lifetimeExperimentPlan.recurringBlockers.map((item) => formatToken(item.family)).join(", ") || "none compatible"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Skipped failed identities</p>
+              <p className="mt-1 font-mono">{latestCycle.lifetimeExperimentPlan.excludedCandidateIds.length}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {latestFollowUpPlan ? (
         <Card className="border-amber-300/25 bg-amber-300/10">

@@ -1275,6 +1275,18 @@ export async function runResearchCycle({
         candleWindow: `${activeCandleSource.researchWindowCandles} raw window / ${activeCandleSource.processedCandleCount} processed ${activeCandleSource.appliedSettings.targetTimeframe} candles`,
         activeCalibrationIdUsed: activeResearchConfig.activeCalibrationId,
         forwardScenarioMap: cycleForwardScenarioMap,
+        researchIdentity: {
+          strategyProfile: activeConfig.strategyProfile,
+          sourceProvider: activeResearchCandleSource.sourceMode,
+          requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? generatedThesis.thesis.symbol,
+          brokerSymbol:
+            mt5ReadOnlyFeed?.brokerSymbol ??
+            activeCandleSource.metadata?.symbol ??
+            generatedThesis.thesis.symbol,
+          timeframe: generatedThesis.thesis.timeframe,
+          sourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
+          parameterFingerprint: fingerprintValidationParameters(activeConfig)
+        },
         signal,
         timeoutMs: autoResearchTimeoutMs ?? (activeCandleSource.mode === "imported" && !advancedFullResearchMode ? 25_000 : 45_000),
         checkpointPersistence: autoResearchCheckpointPersistence,

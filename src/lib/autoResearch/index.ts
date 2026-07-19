@@ -29,6 +29,10 @@ export {
 } from "@/lib/autoResearch/generateCandidateConfigs";
 export { scoreCandidateConfig } from "@/lib/autoResearch/scoreCandidateConfig";
 export { selectBestCandidate } from "@/lib/autoResearch/selectBestCandidate";
+export {
+  classifyLifetimeBlocker,
+  prioritizeCandidatesWithLifetimeEvidence
+} from "@/lib/autoResearch/prioritizeCandidatesWithLifetimeEvidence";
 export { generateTradeQualityCandidateConfigs } from "@/lib/autoResearch/tradeQualityOptimizer";
 export type {
   AutoResearchCandidateConfig,
@@ -40,6 +44,10 @@ export type {
   AutoResearchCycle,
   AutoResearchCycleStatus,
   AutoResearchFailedGate,
+  AutoResearchLifetimeBlockerFamily,
+  AutoResearchLifetimeCandidateDecision,
+  AutoResearchLifetimeEvidenceDisposition,
+  AutoResearchLifetimeExperimentPlan,
   AutoResearchProgressSnapshot,
   AutoResearchResultCategory,
   AutoResearchRunOptions,

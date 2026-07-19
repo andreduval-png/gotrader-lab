@@ -12,6 +12,7 @@ import {
 import { generateTradeQualityCandidateConfigs } from "@/lib/autoResearch/tradeQualityOptimizer";
 import { scoreCandidateConfig } from "@/lib/autoResearch/scoreCandidateConfig";
 import { selectBestCandidate } from "@/lib/autoResearch/selectBestCandidate";
+import { prioritizeCandidatesWithLifetimeEvidence } from "@/lib/autoResearch/prioritizeCandidatesWithLifetimeEvidence";
 import type {
   AutoResearchCandidateResult,
   AutoResearchCandidateConfig,
@@ -74,6 +75,7 @@ import {
   saveScenarioSelectionReasoning,
   selectScenarioFamilyFromBlockers
 } from "@/lib/autonomousResearch";
+import { loadResearchEvidenceAggregateIndex } from "@/lib/researchEvidenceLedger";
 
 export const AUTO_RESEARCH_STORAGE_KEY = "gotrader_ai_lab_auto_research_state";
 export const AUTO_RESEARCH_UPDATED_EVENT = "gotrader-ai-lab-auto-research-updated";
@@ -251,6 +253,7 @@ const compactCandidate = (candidate: AutoResearchCandidateResult): AutoResearchC
     changedParameters: safeArray(source.changedParameters),
     candidateFamily: source.candidateFamily,
     candidateFamilyMetadata: source.candidateFamilyMetadata,
+    lifetimeEvidenceDecision: source.lifetimeEvidenceDecision,
     profileWalkForward: source.profileWalkForward,
     readinessEstimate: compactReadinessEstimate(source.readinessEstimate),
     metrics: {
@@ -946,6 +949,7 @@ const evaluateFrozenDetectorCandidate = (
     changedParameters: candidate.changedParameters,
     candidateFamily: candidate.candidateFamily,
     candidateFamilyMetadata: candidate.candidateFamilyMetadata,
+    lifetimeEvidenceDecision: candidate.lifetimeEvidenceDecision,
     backtestResult,
     readinessEstimate: detectorReadinessEstimate(profileWalkForward),
     metrics,
@@ -1028,6 +1032,7 @@ const evaluateCandidate = (
       changedParameters: candidate.changedParameters,
       candidateFamily: candidate.candidateFamily,
       candidateFamilyMetadata: candidate.candidateFamilyMetadata,
+      lifetimeEvidenceDecision: candidate.lifetimeEvidenceDecision,
       backtestResult,
       validationReport,
       researchQualityReview,
@@ -1917,29 +1922,41 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
     let tradeQualityCandidateConfigs: ReturnType<typeof generateTradeQualityCandidateConfigs> = [];
     let tradeQualityBestCandidate: AutoResearchCandidateResult | undefined;
     let tradeQualitySummary: AutoResearchCycle["tradeQualitySummary"] | undefined;
+    let lifetimeExperimentPlan: AutoResearchCycle["lifetimeExperimentPlan"] | undefined;
+    const lifetimeEvidenceIndex = loadResearchEvidenceAggregateIndex();
 
     for (let passIndex = 0; passIndex < totalPasses; passIndex += 1) {
       const passNumber = passIndex + 1;
       const passFailedGates = passNumber === 1 ? [] : failedGatesForNextPass;
-      const passCandidateConfigs =
-        passNumber === 1
-          ? prioritizeAutoResearchCandidatesByForwardScenario(
-              [
-                ...generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount),
-                ...generateAgentUsefulnessCandidateConfigs(
-                  baselineConfig,
-                  safeArray(loadLatestResearchQualityReview()?.agentUsefulness),
-                  2
-                )
-              ],
-              options.forwardScenarioMap
+      let passCandidateConfigs: AutoResearchCandidateConfig[];
+      if (passNumber === 1) {
+        const forwardPrioritized = prioritizeAutoResearchCandidatesByForwardScenario(
+          [
+            ...generateCandidateConfigs(baselineConfig, options.searchMode, options.maxCandidateCount),
+            ...generateAgentUsefulnessCandidateConfigs(
+              baselineConfig,
+              safeArray(loadLatestResearchQualityReview()?.agentUsefulness),
+              2
             )
-          : generateAdaptiveCandidateConfigs({
-              baseline: baselineConfig,
-              failedGates: passFailedGates,
-              passNumber: passNumber - 1,
-              maxCandidateCount: Math.min(options.maxCandidateCount, 10)
-            });
+          ],
+          options.forwardScenarioMap
+        );
+        const lifetimePrioritized = prioritizeCandidatesWithLifetimeEvidence({
+          candidates: forwardPrioritized,
+          aggregateIndex: lifetimeEvidenceIndex,
+          activeIdentity: options.researchIdentity,
+          searchMode: options.searchMode
+        });
+        passCandidateConfigs = lifetimePrioritized.candidates;
+        lifetimeExperimentPlan = lifetimePrioritized.plan;
+      } else {
+        passCandidateConfigs = generateAdaptiveCandidateConfigs({
+          baseline: baselineConfig,
+          failedGates: passFailedGates,
+          passNumber: passNumber - 1,
+          maxCandidateCount: Math.min(options.maxCandidateCount, 10)
+        });
+      }
 
       allCandidateConfigs.push(...passCandidateConfigs);
       checkpoint({
@@ -2336,6 +2353,7 @@ export async function runAutoResearchCycle(options: AutoResearchRunOptions): Pro
       closestCandidates,
       candidatesTested: candidateResults.length,
       candidateScores,
+      lifetimeExperimentPlan,
       selectedCandidateId,
       finalResultCategory,
       noSafePaperDemoCandidateFound,

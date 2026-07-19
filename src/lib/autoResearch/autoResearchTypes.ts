@@ -21,6 +21,7 @@ import type { ValidationSuiteReport } from "@/lib/validation";
 import type { WalkForwardFollowUpSearchPlan } from "@/lib/walkForward/walkForwardTypes";
 import type { DetectorProfileWalkForwardResult } from "@/lib/walkForward/detectorProfileWalkForwardTypes";
 import type { ForwardScenarioMap } from "@/lib/forwardScenario";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export type AutoResearchSearchMode =
   | "quick"
@@ -133,6 +134,62 @@ export interface AutoResearchCandidateConfig {
   changedParameters: string[];
   candidateFamily?: AutoResearchCandidateFamily;
   candidateFamilyMetadata?: AutoResearchCandidateFamilyMetadata;
+  lifetimeEvidenceDecision?: AutoResearchLifetimeCandidateDecision;
+}
+
+export type AutoResearchLifetimeEvidenceDisposition =
+  | "prioritize_unresolved_blocker"
+  | "prioritize_positive_identity"
+  | "explore_unseen_identity"
+  | "neutral_insufficient_history"
+  | "deprioritize_failed_identity"
+  | "regression_diagnostic_only";
+
+export type AutoResearchLifetimeBlockerFamily =
+  | "evidence_depth"
+  | "risk_stability"
+  | "session_consistency"
+  | "confidence_calibration"
+  | "context_quality"
+  | "validation_depth"
+  | "other";
+
+export interface AutoResearchLifetimeCandidateDecision {
+  disposition: AutoResearchLifetimeEvidenceDisposition;
+  priorityScore: number;
+  compatibleIdentityFound: boolean;
+  compatibleIdentityKey?: string;
+  historicalCycles: number;
+  historicalTrades: number;
+  independentCycleDates: number;
+  weightedAverageR?: number;
+  positiveEdgeCycles: number;
+  negativeEdgeCycles: number;
+  targetedBlockerFamilies: AutoResearchLifetimeBlockerFamily[];
+  reason: string;
+  excludedFromNormalSearch: boolean;
+  historicalContextOnly: true;
+}
+
+export interface AutoResearchLifetimeExperimentPlan {
+  generatedAt: string;
+  activeIdentity?: ValidationProvenanceIdentity;
+  aggregateRecordsAvailable: number;
+  compatibleActiveProfileFound: boolean;
+  recurringBlockers: Array<{
+    blocker: string;
+    occurrences: number;
+    family: AutoResearchLifetimeBlockerFamily;
+  }>;
+  prioritizedCandidateIds: string[];
+  excludedCandidateIds: string[];
+  summary: string;
+  researchOnly: true;
+  authority: {
+    executionAuthority: "none";
+    brokerAuthority: "none";
+    readinessOverrideAuthority: "none";
+  };
 }
 
 export interface AutoResearchScoringCriteria {
@@ -244,6 +301,7 @@ export interface AutoResearchCandidateResult {
   rejectionReasons: string[];
   candidateFamily?: AutoResearchCandidateFamily;
   candidateFamilyMetadata?: AutoResearchCandidateFamilyMetadata;
+  lifetimeEvidenceDecision?: AutoResearchLifetimeCandidateDecision;
 }
 
 export interface AutoResearchCandidateScoreSummary {
@@ -376,6 +434,7 @@ export interface AutoResearchCycle {
   rejectedCandidates: AutoResearchCandidateResult[];
   candidatesTested: number;
   candidateScores: AutoResearchCandidateScoreSummary[];
+  lifetimeExperimentPlan?: AutoResearchLifetimeExperimentPlan;
   selectedCandidateId?: string;
   finalResultCategory: AutoResearchResultCategory | "no_safe_paper_demo_candidate_found";
   noSafePaperDemoCandidateFound: boolean;
@@ -421,6 +480,7 @@ export interface AutoResearchRunOptions {
   candleWindow?: string;
   activeCalibrationIdUsed?: string;
   forwardScenarioMap?: ForwardScenarioMap;
+  researchIdentity?: ValidationProvenanceIdentity;
   onCandidateEvaluated?: (progress: AutoResearchProgressSnapshot) => void;
   onCheckpoint?: (checkpoint: AutoResearchExecutionCheckpoint) => void;
   checkpointPersistence?: "storage" | "memory_only";

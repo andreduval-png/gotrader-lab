@@ -46,6 +46,18 @@ The aggregate tracks lifetime cycle/trade totals, independent cycle dates, sourc
 
 Self-Improvement proposal creation reads this aggregate. It uses it only as historical context. A lifetime aggregate does not become validation evidence and cannot approve or apply a proposal.
 
+## Auto Research Experiment Selection
+
+Auto Research reads the materialized aggregate before its initial bounded candidate pass. It only matches exact strategy profile and parameter fingerprints against the active source provider, requested symbol, broker symbol, and timeframe.
+
+- positive compatible identities are prioritized for another independent confirmation cycle
+- unseen identities remain bounded experiments
+- experiments that address recurring blocker families receive higher priority
+- exact identities with at least 20 trades, at least three independent cycle dates, non-positive weighted average R, and repeated negative-edge cycles are skipped in normal searches
+- deep searches retain those failed identities only as regression diagnostics
+
+Historical ranking cannot change candidate metrics, create evidence, promote readiness, apply calibration, or grant authority.
+
 ## gbrain Advisory Outbox
 
 Each native evidence record is also converted to the existing compact GoTrader research-memory contract and queued as Markdown for a future local gbrain writer.
@@ -94,6 +106,7 @@ Run:
 
 ```powershell
 npm.cmd run test:research-evidence-memory
+npm.cmd run test:auto-research-lifetime-memory
 npm.cmd run build
 ```
 
