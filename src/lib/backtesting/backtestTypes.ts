@@ -22,6 +22,7 @@ export type BacktestStrategyProfile =
   | "agent_consensus"
   | "ifvg_filtered_v2_research"
   | "ifvg_fresh_retest_v3_research"
+  | "ifvg_fresh_retest_v4_candidate"
   | "cmd_high_displacement_v2_research";
 export type BacktestAgentWeightId = Exclude<InternalAgentId, "cio-agent">;
 export type BacktestAgentWeights = Record<BacktestAgentWeightId, number>;

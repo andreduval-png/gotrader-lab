@@ -594,6 +594,69 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
     authority: STRATEGY_LIBRARY_AUTHORITY
   },
   {
+    id: "ifvg_fresh_retest_v4_candidate",
+    name: "IFVG Shallow Retest v4 Candidate",
+    family: "ifvg",
+    status: "evidence_building",
+    detectorStatus: "executable_research",
+    description:
+      "Research-only fork of frozen IFVG v3. It adds one causal condition: a fresh clean retest may penetrate no more than 66% of the IFVG zone. Historical development and frozen OOS diagnostics reduced max drawdown, but untouched forward evidence is still required.",
+    side: "both",
+    supportedSymbols: ["MNQ", "NQ", "USTECH", "US30", "YM", "US500", "ES", "XAUUSD", "EURUSD.pro", "BTCUSD"],
+    primaryTimeframes: ["5m"],
+    higherTimeframes: ["15m", "1h", "4h", "1d"],
+    sourceRequirements: mt5ResearchSource,
+    requiredConditions: [
+      {
+        id: "ifvg_v3_base",
+        label: "IFVG v3 causal base",
+        description: "The frozen v3 validation-eligible, fresh clean retest conditions must pass without modification.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      },
+      {
+        id: "shallow_retest_depth",
+        label: "Shallow IFVG retest",
+        description: "Retest penetration must be at or below 66% of the IFVG zone using only information available at entry.",
+        requiredFor: ["intake", "replay", "paper_watchlist", "paper_demo"]
+      }
+    ],
+    invalidationRules: [
+      "Use the unchanged v3 structural invalidation beyond the IFVG.",
+      "Same-bar target and stop ambiguity resolves stop-first in replay."
+    ],
+    targetRules: [
+      "Use the unchanged prior directional liquidity target available before entry.",
+      "Minimum planned reward/risk remains 2R."
+    ],
+    minimumRR: 2,
+    sessionRules: [
+      "No session filter is added by v4; session remained diagnostic in the one-variable audit."
+    ],
+    regimeRules: [
+      "Mock/sample sources cannot create candidates or evidence.",
+      "Historical validation cannot replace untouched post-registration forward evidence."
+    ],
+    validationRequirements: compactValidation,
+    paperDemoRequirements: [
+      {
+        id: "ifvg_v4_forward_validation",
+        label: "Untouched IFVG v4 forward validation",
+        required: true,
+        detail: "Collect forward-only outcomes, rerun evidence/maturity review, and pass the normal Paper-Demo checklist. Historical selection cannot promote this profile."
+      }
+    ],
+    forbiddenPromotionReasons: [
+      "retest penetration above 66 percent",
+      "stale retest signal",
+      "invalid trade construction",
+      "negative modeled-cost expectancy",
+      "forward evidence missing",
+      "mock/sample source",
+      "Paper-Demo checklist incomplete"
+    ],
+    authority: STRATEGY_LIBRARY_AUTHORITY
+  },
+  {
     id: "turtle_soup_v1",
     name: "Turtle Soup v1",
     family: "turtle_soup",
@@ -1395,6 +1458,9 @@ export const suggestStrategyIdForRecognition = (input: {
   }
   if (input.family === "camerons_model" || /cameron/.test(text)) {
     return "camerons_model_research_v1";
+  }
+  if (/ifvg.*shallow.*retest|ifvg.*v4/.test(text)) {
+    return "ifvg_fresh_retest_v4_candidate";
   }
   if (/ifvg[_\s-]*fresh[_\s-]*retest|fresh.*ifvg.*retest|ifvg.*v3/.test(text)) {
     return "ifvg_fresh_retest_v3_research";

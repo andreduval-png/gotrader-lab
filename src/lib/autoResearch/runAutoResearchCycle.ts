@@ -913,7 +913,7 @@ const detectorScoreBreakdown = (
     stabilityImproved: walkForward.verdict === "passed",
     sufficientSample: walkForward.totalOosTrades >= 40,
     rationale:
-      "IFVG v3 uses frozen detector-profile OOS scoring. This score cannot create readiness, a proposal, or execution authority."
+      "IFVG detector profiles use chronological detector-profile OOS scoring. This score cannot create readiness, a proposal, or execution authority."
   };
 };
 
@@ -982,7 +982,10 @@ const evaluateCandidate = (
   }
 
   try {
-    if (candidate.config.strategyProfile === "ifvg_fresh_retest_v3_research") {
+    if (
+      candidate.config.strategyProfile === "ifvg_fresh_retest_v3_research" ||
+      candidate.config.strategyProfile === "ifvg_fresh_retest_v4_candidate"
+    ) {
       return evaluateFrozenDetectorCandidate(candidate, candles, sourceProvider);
     }
     const { trainCandles } = splitTrainHoldout(candles);

@@ -75,6 +75,7 @@ export * from "./ictIfvgTypes";
 export * from "./ictIfvg";
 export * from "./ictIfvgFilteredV2";
 export * from "./ictIfvgFreshRetestV3";
+export * from "./ictIfvgShallowRetestV4";
 export * from "./ictResearchReportTypes";
 export * from "./ictResearchReport";
 export * from "../currentOpportunity";

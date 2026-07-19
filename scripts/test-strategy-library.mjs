@@ -161,7 +161,7 @@ async function main() {
   const evidence = await import(pathToFileURL(path.join(outRoot, "strategyEvidence.mjs")).href);
 
   const definitions = registry.listStrategyDefinitions();
-  assert.equal(definitions.length, 21);
+  assert.equal(definitions.length, 22);
   const newStrategyIds = [
     "silver_bullet_v1",
     "silver_bullet_v2_refined_research",
@@ -171,6 +171,7 @@ async function main() {
     "ifvg_v1",
     "ifvg_filtered_v2_research",
     "ifvg_fresh_retest_v3_research",
+    "ifvg_fresh_retest_v4_candidate",
     "cmd_high_displacement_v2_research",
     "turtle_soup_v1",
     "crt_research_v1",
@@ -202,7 +203,17 @@ async function main() {
   assert.equal(registry.getStrategyDefinition("ifvg_filtered_v2_research").detectorStatus, "executable_research");
   assert.equal(registry.getStrategyDefinition("ifvg_filtered_v2_research").status, "replay_required");
   assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v3_research").detectorStatus, "executable_research");
-  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v3_research").status, "replay_required");
+  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v3_research").status, "evidence_building");
+  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v4_candidate").detectorStatus, "executable_research");
+  assert.equal(registry.getStrategyDefinition("ifvg_fresh_retest_v4_candidate").status, "evidence_building");
+  assert.equal(
+    registry.getStrategyDefinition("ifvg_fresh_retest_v4_candidate").paperDemoRequirements.some((item) => item.id === "ifvg_v4_forward_validation"),
+    true
+  );
+  assert.equal(
+    registry.suggestStrategyIdForRecognition({ candidateFamilies: ["ifvg_fresh_retest_v4_candidate"] }),
+    "ifvg_fresh_retest_v4_candidate"
+  );
   assert.deepEqual(
     registry.getStrategyDefinition("ifvg_filtered_v2_research").validationRequirements.map((item) => item.id),
     ["replay_required", "walk_forward_required", "evidence_required", "paper_demo_gate_required"]
@@ -219,7 +230,7 @@ async function main() {
       `ifvg filtered v2 should forbid promotion reason ${reason}`
     );
   }
-  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research", "cmd_high_displacement_v2_research"].includes(id))) {
+  for (const strategyId of newStrategyIds.filter((id) => !["silver_bullet_v1", "silver_bullet_v2_refined_research", "nasdaq_london_raid_ny_reversal_v1", "nasdaq_london_raid_ny_reversal_v2_filtered_research", "turtle_soup_v1", "cisd_v1", "ifvg_v1", "ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research", "ifvg_fresh_retest_v4_candidate", "cmd_high_displacement_v2_research"].includes(id))) {
     assert.equal(registry.getStrategyDefinition(strategyId).detectorStatus, "research_only_placeholder");
   }
   assert.ok(registry.getStrategyDefinition("ict_cmd_short_paper_watchlist_v1"));

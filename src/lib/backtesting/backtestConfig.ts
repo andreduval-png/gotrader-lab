@@ -82,6 +82,7 @@ const validStrategyProfiles: BacktestStrategyProfile[] = [
   "agent_consensus",
   "ifvg_filtered_v2_research",
   "ifvg_fresh_retest_v3_research",
+  "ifvg_fresh_retest_v4_candidate",
   "cmd_high_displacement_v2_research"
 ];
 

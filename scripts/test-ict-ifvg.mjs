@@ -15,7 +15,8 @@ const sourceFiles = [
   "ictIfvgTypes.ts",
   "ictIfvg.ts",
   "ictIfvgFilteredV2.ts",
-  "ictIfvgFreshRetestV3.ts"
+  "ictIfvgFreshRetestV3.ts",
+  "ictIfvgShallowRetestV4.ts"
 ];
 
 function compileForNode() {
@@ -214,6 +215,7 @@ async function main() {
   const ifvg = await import(pathToFileURL(path.join(outRoot, "ictIfvg.mjs")).href);
   const filteredV2 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFilteredV2.mjs")).href);
   const freshRetestV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")).href);
+  const shallowRetestV4 = await import(pathToFileURL(path.join(outRoot, "ictIfvgShallowRetestV4.mjs")).href);
 
   const base = {
     sourceProvider: "mt5_read_only",
@@ -269,6 +271,44 @@ async function main() {
   assert.equal(compactFreshLong.sourceFingerprint, base.sourceFingerprint);
   assert.doesNotMatch(JSON.stringify(compactFreshLong), /"candles"\s*:|"rawCandles"\s*:|"retestCandle"\s*:/i);
   assertSafe(compactFreshLong);
+
+  const bounds = filteredLongBase.ifvgBounds;
+  assert.ok(bounds, "fixture must include IFVG bounds");
+  const zoneSize = bounds.high - bounds.low;
+  const shallowCandidate = {
+    ...filteredLongBase,
+    retestCandle: {
+      ...filteredLongBase.retestCandle,
+      low: bounds.high - zoneSize * 0.6,
+      close: Math.max(filteredLongBase.retestCandle.close, bounds.midpoint)
+    }
+  };
+  const shallowV4 = shallowRetestV4.assessIctIfvgShallowRetestV4(
+    { ...base, candles: filteredLongCandles, contextCandles: contextBullish },
+    shallowCandidate
+  );
+  assert.equal(shallowV4.strategyId, "ifvg_fresh_retest_v4_candidate");
+  assert.equal(shallowV4.baseV3Eligible, true);
+  assert.equal(shallowV4.shallowRetest, true);
+  assert.equal(shallowV4.eligible, true);
+  assert.equal(shallowV4.paperDemoEligible, false);
+  assertSafe(shallowV4);
+
+  const deepCandidate = {
+    ...filteredLongBase,
+    retestCandle: {
+      ...filteredLongBase.retestCandle,
+      low: bounds.high - zoneSize * 0.9,
+      close: Math.max(filteredLongBase.retestCandle.close, bounds.midpoint)
+    }
+  };
+  const deepV4 = shallowRetestV4.assessIctIfvgShallowRetestV4(
+    { ...base, candles: filteredLongCandles, contextCandles: contextBullish },
+    deepCandidate
+  );
+  assert.equal(deepV4.eligible, false);
+  assert.equal(deepV4.blockers.includes("shallow_retest_depth_required"), true);
+  assertSafe(deepV4);
 
   const staleFilteredCandles = [...filteredLongCandles, ...overlapFiller(90, 3, 98)];
   const staleFilteredBase = ifvg.evaluateIctIfvg({ ...base, candles: staleFilteredCandles, contextCandles: contextBullish });
@@ -395,6 +435,12 @@ async function main() {
       longEligible: freshLong.eligible,
       staleBlocked: !staleFreshV3.eligible,
       researchOnly: freshLong.researchOnly
+    },
+    shallowRetestV4: {
+      shallowEligible: shallowV4.eligible,
+      deepBlocked: !deepV4.eligible,
+      paperDemoEligible: shallowV4.paperDemoEligible,
+      researchOnly: shallowV4.researchOnly
     },
     authority: authorityNone,
     safety: {

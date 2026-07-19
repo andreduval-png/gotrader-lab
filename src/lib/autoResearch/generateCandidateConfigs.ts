@@ -13,7 +13,15 @@ const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 const candidateFamilyMetadataFor = (family?: AutoResearchCandidateFamily) =>
-  family === "ifvg_fresh_retest_v3_research"
+  family === "ifvg_fresh_retest_v4_candidate"
+    ? {
+        id: "ifvg_fresh_retest_v4_candidate" as const,
+        label: "IFVG Shallow Retest v4 Candidate",
+        target: "Fresh clean IFVG retest with no more than 66% zone penetration",
+        researchOnly: true as const,
+        autoApplyAllowed: false as const
+      }
+    : family === "ifvg_fresh_retest_v3_research"
     ? {
         id: "ifvg_fresh_retest_v3_research" as const,
         label: "IFVG Fresh Retest v3 Research",
@@ -156,6 +164,23 @@ export function generateCandidateConfigs(
 
   if (isAnyMode(searchMode, ["balanced", "quick", "standard", "deep", "conservative", "conservative_only"])) {
     candidates.push(
+      candidate(
+        baseline,
+        searchMode,
+        "IFVG v4 fresh shallow retest candidate",
+        "Evaluate the independently validated shallow-retest fork without mutating the frozen IFVG v3 profile.",
+        {
+          strategyProfile: "ifvg_fresh_retest_v4_candidate",
+          warmupCandles: 100,
+          decisionInterval: 1,
+          maxBarsToResolveTrade: 48,
+          visibleWindow: 80,
+          allowLong: true,
+          allowShort: true
+        },
+        ["strategyProfile", "warmupCandles", "decisionInterval", "maxBarsToResolveTrade", "allowLong", "allowShort"],
+        "ifvg_fresh_retest_v4_candidate"
+      ),
       candidate(
         baseline,
         searchMode,

@@ -74,6 +74,7 @@ export type AutoResearchCandidateFamily =
   | "baseline"
   | "ifvg_filtered_v2_research"
   | "ifvg_fresh_retest_v3_research"
+  | "ifvg_fresh_retest_v4_candidate"
   | "cmd_high_displacement_v2_research"
   | "grinch_model_balanced"
   | "grinch_model_strict"

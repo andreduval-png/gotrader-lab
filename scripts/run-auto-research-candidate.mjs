@@ -591,7 +591,12 @@ const compileLibraryBundle = () => {
 };
 
 const variantForCandidate = (candidate) => {
-  if (["ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research", "cmd_high_displacement_v2_research"].includes(candidate.candidateFamily)) {
+  if ([
+    "ifvg_filtered_v2_research",
+    "ifvg_fresh_retest_v3_research",
+    "ifvg_fresh_retest_v4_candidate",
+    "cmd_high_displacement_v2_research"
+  ].includes(candidate.candidateFamily)) {
     return "balanced";
   }
   const label = String(candidate.label || "").toLowerCase();
@@ -867,7 +872,12 @@ const summarizeCandidate = ({
 }) => {
   const grinch = reportGrinch(backtestResult);
   const strategySummary = backtestResult.summary.strategyProfileSummary;
-  const isDetectorProfile = ["ifvg_filtered_v2_research", "ifvg_fresh_retest_v3_research", "cmd_high_displacement_v2_research"].includes(strategySummary?.strategyProfile);
+  const isDetectorProfile = [
+    "ifvg_filtered_v2_research",
+    "ifvg_fresh_retest_v3_research",
+    "ifvg_fresh_retest_v4_candidate",
+    "cmd_high_displacement_v2_research"
+  ].includes(strategySummary?.strategyProfile);
   const strategyMissingEvidence = Object.entries(strategySummary?.blockerCounts ?? {})
     .sort((left, right) => right[1] - left[1])
     .slice(0, 8)

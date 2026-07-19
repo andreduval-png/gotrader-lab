@@ -92,6 +92,7 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIfvg.ts" },
   { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
   { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
+  { root: sourceRoot, file: "ictIfvgShallowRetestV4.ts" },
   { root: sourceRoot, file: "ictResearchReportTypes.ts" },
   { root: sourceRoot, file: "ictRealReplayRunner.ts" },
   { root: sourceRoot, file: "ictManualReplayReview.ts" },

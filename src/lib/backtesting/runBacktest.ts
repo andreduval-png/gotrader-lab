@@ -20,6 +20,7 @@ import { buildICTContext, tagSession } from "@/lib/ict";
 import { assessIctCmdHighDisplacementV2 } from "@/lib/ict-strategy-suite/ictCmdHighDisplacementV2";
 import { assessIctIfvgFilteredV2 } from "@/lib/ict-strategy-suite/ictIfvgFilteredV2";
 import { assessIctIfvgFreshRetestV3 } from "@/lib/ict-strategy-suite/ictIfvgFreshRetestV3";
+import { assessIctIfvgShallowRetestV4 } from "@/lib/ict-strategy-suite/ictIfvgShallowRetestV4";
 import { buildMarketContext } from "@/lib/marketData";
 import { classifyMarketRegime } from "@/lib/regime";
 import { summarizeTradeOutcomes } from "@/lib/statistics/tradeMetrics";
@@ -487,7 +488,7 @@ const scoreIfvgFilteredTrade = ({
   decisionIndex: number;
   candles: Candle[];
   config: ResolvedBacktestConfig;
-  profileId: "ifvg_filtered_v2_research" | "ifvg_fresh_retest_v3_research";
+  profileId: "ifvg_filtered_v2_research" | "ifvg_fresh_retest_v3_research" | "ifvg_fresh_retest_v4_candidate";
 }): SimulatedTradeRecord | undefined => {
   if (
     candidate.side === "flat" ||
@@ -575,7 +576,7 @@ const scoreIfvgFilteredTrade = ({
     maxAdverseExcursion: round(Math.max(0, ...adverse), 3),
     rMultiple,
     riskReward: round(targetR, 3),
-    reason: `${profileId === "ifvg_filtered_v2_research" ? "IFVG filtered v2 clean retest + displacement" : "IFVG fresh clean retest v3"}; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
+    reason: `${profileId === "ifvg_filtered_v2_research" ? "IFVG filtered v2 clean retest + displacement" : profileId === "ifvg_fresh_retest_v4_candidate" ? "IFVG v4 fresh shallow clean retest candidate" : "IFVG fresh clean retest v3"}; ${outcome.replace(/_/g, " ")}; ${frictionR.toFixed(2)}R modeled cost.`,
     simulatedTradePlan: {
       id: `bt_${profileId}_plan_${decisionIndex}`,
       symbol: config.symbol,
@@ -624,9 +625,11 @@ const runIfvgResearchBacktest = (
       timeframe: resolved.timeframe,
       generatedAt: sample[decisionIndex].timestamp
     };
-    const assessment = resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
-      ? assessIctIfvgFreshRetestV3(detectorInput)
-      : assessIctIfvgFilteredV2(detectorInput);
+    const assessment = resolved.strategyProfile === "ifvg_fresh_retest_v4_candidate"
+      ? assessIctIfvgShallowRetestV4(detectorInput)
+      : resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
+        ? assessIctIfvgFreshRetestV3(detectorInput)
+        : assessIctIfvgFilteredV2(detectorInput);
     const key = candidateKeyFor(assessment.candidate);
     if (!assessment.candidate.originalFvgCandle || seen.has(key)) {
       if (assessment.candidate.originalFvgCandle && seen.has(key)) duplicateCandidates += 1;
@@ -672,9 +675,11 @@ const runIfvgResearchBacktest = (
       decisionIndex,
       candles: sample,
       config: resolved,
-      profileId: resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
-        ? "ifvg_fresh_retest_v3_research"
-        : "ifvg_filtered_v2_research"
+      profileId: resolved.strategyProfile === "ifvg_fresh_retest_v4_candidate"
+        ? "ifvg_fresh_retest_v4_candidate"
+        : resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
+          ? "ifvg_fresh_retest_v3_research"
+          : "ifvg_filtered_v2_research"
     });
     if (!trade) {
       blockerCounts.insufficient_outcome_window = (blockerCounts.insufficient_outcome_window ?? 0) + 1;
@@ -897,7 +902,11 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
   const sample = scopedCandles.length
     ? scopedCandles
     : candles.map((candle) => ({ ...candle, symbol: resolved.symbol, timeframe: resolved.timeframe }));
-  if (resolved.strategyProfile === "ifvg_filtered_v2_research" || resolved.strategyProfile === "ifvg_fresh_retest_v3_research") {
+  if (
+    resolved.strategyProfile === "ifvg_filtered_v2_research" ||
+    resolved.strategyProfile === "ifvg_fresh_retest_v3_research" ||
+    resolved.strategyProfile === "ifvg_fresh_retest_v4_candidate"
+  ) {
     return runIfvgResearchBacktest(sample, resolved);
   }
   if (resolved.strategyProfile === "cmd_high_displacement_v2_research") {
