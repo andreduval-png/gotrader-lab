@@ -82,6 +82,7 @@ import type {
   ResearchCycleValidationSummary
 } from "@/lib/researchCycle/researchCycleTypes";
 import { runDetectorProfileBacktest } from "@/lib/researchCycle/runDetectorProfileBacktest";
+import { notifyResearchCycleObserver } from "@/lib/researchCycle/safeResearchCycleObserver";
 import { generateThesis } from "@/lib/simulation";
 import {
   loadSimulationRunbookState,
@@ -870,7 +871,7 @@ export async function runResearchCycle({
 
   const snapshot = () => ({ ...run, steps: steps.map((step) => ({ ...step })) });
   let cycleMarketAnalysisContext: IctMarketAnalysisContext | undefined;
-  const notify = () => onUpdate?.(snapshot());
+  const notify = () => notifyResearchCycleObserver(onUpdate, snapshot());
   const setStep = (stepId: ResearchCycleStepId, patch: Partial<ResearchCycleStepResult>) => {
     steps = steps.map((step) => (step.stepId === stepId ? { ...step, ...patch } : step));
     run.steps = steps;
@@ -1483,9 +1484,9 @@ export async function runResearchCycle({
           });
         }
       });
-      saveLatestValidationReport(validationReport);
       run.validationReport = validationReport;
       run.validationSummary = summarizeValidation(validationReport);
+      saveLatestValidationReport(validationReport);
       if (backtestResult.summary.totalTrades > 0) {
         run.tradeQualityDiagnostics = diagnoseTradeQuality({ result: backtestResult, validation: validationReport });
       }

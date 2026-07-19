@@ -85,6 +85,7 @@
     "test:ict-monte-carlo": "node scripts/test-ict-monte-carlo.mjs",
     "test:ict-latest-research-state": "node scripts/test-ict-latest-research-state.mjs",
     "test:autonomous-evidence-pipeline": "node scripts/test-autonomous-evidence-pipeline.mjs",
+    "test:autonomous-storage-resilience": "node scripts/test-autonomous-storage-resilience.mjs",
     "test:ict-signal-contract": "node scripts/test-ict-signal-contract.mjs",
     "test:ict-paper-signal-simulator": "node scripts/test-ict-paper-signal-simulator.mjs",
     "test:ict-session-narrative": "node scripts/test-ict-session-narrative.mjs",

@@ -2,12 +2,8 @@ import type {
   CalibrationReport,
   ValidationAgentWeightRecommendation,
   ValidationReadinessStatus,
-  ValidationSuiteReport,
   ValidationScenarioResult
 } from "@/lib/validation/validationTypes";
-
-export const VALIDATION_REPORT_STORAGE_KEY = "gotrader_ai_lab_latest_validation_report";
-export const VALIDATION_REPORT_UPDATED_EVENT = "gotrader-ai-lab-validation-report-updated";
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
@@ -190,27 +186,4 @@ export function buildCalibrationReport(scenarios: ValidationScenarioResult[], ge
     ...readiness,
     generatedAt
   };
-}
-
-export function saveLatestValidationReport(report: ValidationSuiteReport) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(VALIDATION_REPORT_STORAGE_KEY, JSON.stringify(report));
-  window.dispatchEvent(new CustomEvent(VALIDATION_REPORT_UPDATED_EVENT, { detail: report }));
-}
-
-export function loadLatestValidationReport(): ValidationSuiteReport | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-  const raw = window.localStorage.getItem(VALIDATION_REPORT_STORAGE_KEY);
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(raw) as ValidationSuiteReport;
-  } catch {
-    return undefined;
-  }
 }

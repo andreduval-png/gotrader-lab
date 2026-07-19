@@ -1,10 +1,12 @@
 export {
-  buildCalibrationReport,
+  buildCalibrationReport
+} from "@/lib/validation/calibrationReport";
+export {
   loadLatestValidationReport,
   saveLatestValidationReport,
   VALIDATION_REPORT_STORAGE_KEY,
   VALIDATION_REPORT_UPDATED_EVENT
-} from "@/lib/validation/calibrationReport";
+} from "@/lib/validation/validationReportStorage";
 export {
   getValidationScenarioDefinitions,
   runValidationSuite,
