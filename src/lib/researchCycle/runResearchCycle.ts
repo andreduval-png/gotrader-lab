@@ -23,6 +23,7 @@ import {
 } from "@/lib/backtesting";
 import type { BacktestResult, ResolvedBacktestConfig } from "@/lib/backtesting";
 import { recordResearchCycleCommunication } from "@/lib/communications/communicationSpec";
+import { createCandleSourceFingerprint } from "@/lib/candleSources";
 import { buildEvidenceLedger } from "@/lib/evidence";
 import type { EvidenceLedgerInput } from "@/lib/evidence";
 import {
@@ -73,6 +74,7 @@ import type {
   ResearchCycleThesisSummary,
   ResearchCycleValidationSummary
 } from "@/lib/researchCycle/researchCycleTypes";
+import { runDetectorProfileBacktest } from "@/lib/researchCycle/runDetectorProfileBacktest";
 import { generateThesis } from "@/lib/simulation";
 import {
   loadSimulationRunbookState,
@@ -96,7 +98,14 @@ import {
 } from "@/lib/validationProvenance";
 import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
 import { reviewEdgeStatistics } from "@/lib/agents/edgeAuditorAgent";
-import { runWalkForwardValidation, walkForwardProvenanceReview } from "@/lib/walkForward";
+import {
+  adaptDetectorProfileWalkForwardRun,
+  loadPreparedCanonicalWalkForwardCandleSource,
+  runDetectorProfileWalkForward,
+  runWalkForwardValidation,
+  saveWalkForwardRun,
+  walkForwardProvenanceReview
+} from "@/lib/walkForward";
 import {
   recordEvidenceUpdateInValidationChain,
   recordWalkForwardRunInValidationChain
@@ -755,7 +764,7 @@ export async function runResearchCycle({
   const dataSourceLabel = activeResearchCandleSource.sourceLabel;
   const evidenceDataMode = evidenceDataModeFor(activeResearchCandleSource.sourceMode, activeCandleSource.mode);
   const latestResearchCandle = researchCandles[researchCandles.length - 1];
-  const activeConfig = activeResearchUsesExternalReadOnly && latestResearchCandle
+  const sourceAlignedConfig = activeResearchUsesExternalReadOnly && latestResearchCandle
     ? sanitizeBacktestConfig({
         ...baseActiveConfig,
         symbol: latestResearchCandle.symbol,
@@ -768,6 +777,20 @@ export async function runResearchCycle({
           timeframe: activeCandleSource.appliedSettings.targetTimeframe
         })
       : baseActiveConfig;
+  const activeFrozenProfile = getFrozenResearchProfile(sourceAlignedConfig.strategyProfile);
+  const activeConfig = activeFrozenProfile
+    ? sanitizeBacktestConfig({
+        ...sourceAlignedConfig,
+        strategyProfile: activeFrozenProfile.profileId,
+        warmupCandles: activeFrozenProfile.frozenParameters.warmupCandles,
+        decisionInterval: activeFrozenProfile.frozenParameters.decisionInterval,
+        maxBarsToResolveTrade: activeFrozenProfile.frozenParameters.maxBarsToResolveTrade,
+        visibleWindow: activeFrozenProfile.frozenParameters.visibleWindow,
+        targetRMultiple: activeFrozenProfile.frozenParameters.minimumRR,
+        allowLong: activeFrozenProfile.frozenParameters.allowLong,
+        allowShort: activeFrozenProfile.frozenParameters.allowShort
+      })
+    : sourceAlignedConfig;
   const run: ResearchCycleRun = {
     cycleId,
     startedAt: now(),
@@ -992,7 +1015,7 @@ export async function runResearchCycle({
         try {
           const runtimeSnapshot = await resolveResearchRuntimeSnapshot({ labState: workingState });
           const marketAnalysisContextBundle =
-            activeCandleSource.mode === "mt5_read_only"
+            activeResearchCandleSource.sourceMode === "mt5_read_only"
               ? await buildIctMarketAnalysisContextBundle({ snapshot: runtimeSnapshot })
               : undefined;
           const advisorPacket: IctAdvisorPacket = await buildIctAdvisorPacketFromRuntime(runtimeSnapshot, {
@@ -1137,7 +1160,7 @@ export async function runResearchCycle({
 
     const cycleForwardScenarioMap = buildForwardScenarioMap({
       timestamp: run.startedAt,
-      sourceProvider: activeCandleSource.mode,
+      sourceProvider: activeResearchCandleSource.sourceMode,
       requestedSymbol: generatedThesis.thesis.symbol,
       brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
       timeframe: generatedThesis.thesis.timeframe,
@@ -1181,19 +1204,19 @@ export async function runResearchCycle({
 
     const sourceIsEligibleForPrediction =
       Boolean(activeResearchCandleSource.canonicalFingerprint) &&
-      !/mock|sample/i.test(activeCandleSource.mode);
+      !/mock|sample/i.test(activeResearchCandleSource.sourceMode);
     if (sourceIsEligibleForPrediction) {
       recordForwardScenarioPrediction(cycleForwardScenarioMap, {
         modelVersion: activeConfig.strategyProfile ?? "research_cycle:v1",
         maxBarsToResolve: 48
       });
-      if (activeCandleSource.mode === "mt5_read_only" && generatedThesis.thesis.timeframe.toLowerCase() === "5m") {
+      if (activeResearchCandleSource.sourceMode === "mt5_read_only" && generatedThesis.thesis.timeframe.toLowerCase() === "5m") {
         const latestClosedTimestamp = researchCandles.at(-1)?.timestamp;
         if (latestClosedTimestamp) {
           recordFrozenMarketEpisodeProfileObservationsFromClosedCandle({
             candles: researchCandles,
             closedCandleTimestamp: latestClosedTimestamp,
-            sourceProvider: "mt5_read_only",
+            sourceProvider: activeResearchCandleSource.sourceMode,
             requestedSymbol: generatedThesis.thesis.symbol,
             brokerSymbol: activeCandleSource.metadata?.symbol ?? generatedThesis.thesis.symbol,
             timeframe: generatedThesis.thesis.timeframe,
@@ -1295,29 +1318,122 @@ export async function runResearchCycle({
     await yieldToBrowser();
     throwIfCanceled();
     let validationReport: ValidationSuiteReport | undefined;
+    let detectorEvidenceContext:
+      | {
+          baseline: BacktestResult;
+          candles: typeof researchCandles;
+          sourceProvider: string;
+          sourceFingerprint: string;
+          sourceLabel: string;
+          brokerSymbol?: string;
+          requestedLookbackDays: number;
+          availableLookbackDays: number;
+          rawCandleCount: number;
+          processedCandleCount: number;
+        }
+      | undefined;
     try {
       const frozenProfile = getFrozenResearchProfile(activeConfig.strategyProfile);
+      let validationCandles = researchCandles;
+      let validationSourceProvider: string = activeResearchCandleSource.sourceMode;
+      let validationSourceFingerprint = activeResearchCandleSource.canonicalFingerprint;
+      let validationSourceLabel = activeResearchCandleSource.sourceLabel;
+      let validationBrokerSymbol = mt5ReadOnlyFeed?.brokerSymbol;
+
+      if (frozenProfile && activeResearchCandleSource.sourceMode === "mt5_read_only") {
+        setStep("validation", {
+          status: "running",
+          summary: `Loading explicit ${frozenProfile.historicalValidationDays}-day MT5 history for the frozen detector profile.`
+        });
+        const deepSource = await loadPreparedCanonicalWalkForwardCandleSource({
+          windowMode: "latest",
+          windowSize: 50000,
+          targetTimeframe: "5m",
+          sessionFilter: "all",
+          advancedMode: true
+        }, {
+          allowMt5DeepHistory: true,
+          requestedLookbackDays: frozenProfile.historicalValidationDays
+        });
+        const cutoff = Date.parse(frozenProfile.validationCutoff);
+        const historicalCandles = deepSource.candles.filter((candle) => {
+          const timestamp = Date.parse(candle.timestamp);
+          return Number.isFinite(timestamp) && (!Number.isFinite(cutoff) || timestamp <= cutoff);
+        });
+        if (historicalCandles.length >= 5_000) {
+          validationCandles = historicalCandles;
+          validationSourceProvider = deepSource.provider;
+          validationSourceLabel = `${deepSource.label} / frozen through ${frozenProfile.validationCutoff}`;
+          validationBrokerSymbol = deepSource.brokerSymbol ?? frozenProfile.brokerSymbol;
+          validationSourceFingerprint = createCandleSourceFingerprint({
+            candles: historicalCandles,
+            provider: deepSource.provider,
+            sourceId: `${frozenProfile.profileId}:${frozenProfile.validationCutoff}`,
+            symbol: frozenProfile.requestedSymbol,
+            timeframe: frozenProfile.timeframe
+          });
+          const firstTime = Date.parse(historicalCandles[0]?.timestamp ?? "");
+          const lastTime = Date.parse(historicalCandles.at(-1)?.timestamp ?? "");
+          const availableLookbackDays =
+            Number.isFinite(firstTime) && Number.isFinite(lastTime)
+              ? Math.max(0, (lastTime - firstTime) / 86_400_000)
+              : 0;
+          const baseline = await runDetectorProfileBacktest({
+            candles: historicalCandles,
+            config: activeConfig,
+            signal
+          });
+          detectorEvidenceContext = {
+            baseline,
+            candles: historicalCandles,
+            sourceProvider: deepSource.provider,
+            sourceFingerprint: validationSourceFingerprint,
+            sourceLabel: validationSourceLabel,
+            brokerSymbol: validationBrokerSymbol,
+            requestedLookbackDays: frozenProfile.historicalValidationDays,
+            availableLookbackDays,
+            rawCandleCount: deepSource.rawCandleCount,
+            processedCandleCount: historicalCandles.length
+          };
+          run.validationEvidenceCandleCount = historicalCandles.length;
+          run.validationEvidenceLookbackDays = availableLookbackDays;
+          run.validationEvidenceRequestedLookbackDays = frozenProfile.historicalValidationDays;
+          run.validationEvidenceSourceFingerprint = validationSourceFingerprint;
+          run.candleWindowWarnings = [
+            ...(run.candleWindowWarnings ?? []),
+            `Frozen ${frozenProfile.profileId} validation used ${historicalCandles.length.toLocaleString()} compact MT5 candles across ${availableLookbackDays.toFixed(1)} days. The tactical current read remains ${researchCandles.length.toLocaleString()} candles.`
+          ];
+        } else {
+          run.candleWindowWarnings = [
+            ...(run.candleWindowWarnings ?? []),
+            `Explicit MT5 history returned only ${historicalCandles.length.toLocaleString()} pre-cutoff candles; detector-specific validation stayed on the tactical source.`
+          ];
+        }
+      }
       const cycleValidationProvenance = buildValidationProvenanceIdentity({
         strategyProfile: activeConfig.strategyProfile,
         strategyProfileVersion: frozenProfile?.profileVersion,
         proposalId: run.createdProposalId,
         candidateId: run.latestGeneratedProposal?.sourceCandidateId,
-        sourceProvider: activeResearchCandleSource.sourceMode,
+        sourceProvider: validationSourceProvider,
         requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? activeConfig.symbol,
-        brokerSymbol: mt5ReadOnlyFeed?.brokerSymbol,
+        brokerSymbol: validationBrokerSymbol,
         timeframe: activeConfig.timeframe,
-        sourceFingerprint: activeResearchCandleSource.canonicalFingerprint,
-        parameterFingerprint: fingerprintValidationParameters(activeConfig),
+        sourceFingerprint: validationSourceFingerprint,
+        parameterFingerprint: frozenProfile
+          ? fingerprintValidationParameters(frozenProfile.frozenParameters)
+          : fingerprintValidationParameters(activeConfig),
         detectorProfileFingerprint: frozenProfile
           ? fingerprintValidationParameters(frozenProfile.frozenParameters)
           : undefined,
         validationCutoff: frozenProfile?.validationCutoff,
-        dataRangeStart: researchCandles[0]?.timestamp,
-        dataRangeEnd: researchCandles.at(-1)?.timestamp
+        dataRangeStart: validationCandles[0]?.timestamp,
+        dataRangeEnd: validationCandles.at(-1)?.timestamp
       });
-      validationReport = await runValidationSuiteAsync(researchCandles, activeConfig, {
+      validationReport = await runValidationSuiteAsync(validationCandles, activeConfig, {
         signal,
         provenance: cycleValidationProvenance,
+        baselineResult: detectorEvidenceContext?.baseline,
         onScenarioComplete: (completed, total, scenario) => {
           setStep("validation", {
             status: "running",
@@ -1344,6 +1460,47 @@ export async function runResearchCycle({
     throwIfCanceled();
     let cycleWalkForwardRun: Awaited<ReturnType<typeof runWalkForwardValidation>> | undefined;
     try {
+      const frozenProfile = getFrozenResearchProfile(activeConfig.strategyProfile);
+      if (frozenProfile && detectorEvidenceContext && validationReport?.provenance) {
+        const tradeOutcomes = detectorEvidenceContext.baseline.trades.map((trade) => ({
+          openedAt: trade.openedAt,
+          rMultiple: trade.rMultiple,
+          outcome: trade.outcome
+        }));
+        const detectorWalkForward = runDetectorProfileWalkForward({
+          profileId: frozenProfile.profileId,
+          sourceProvider: detectorEvidenceContext.sourceProvider,
+          sourceFingerprint: detectorEvidenceContext.sourceFingerprint,
+          sourceStart: detectorEvidenceContext.candles[0]?.timestamp ?? "",
+          sourceEnd: detectorEvidenceContext.candles.at(-1)?.timestamp ?? "",
+          proposalId: run.createdProposalId,
+          candidateId: run.latestGeneratedProposal?.sourceCandidateId,
+          requestedSymbol: frozenProfile.requestedSymbol,
+          brokerSymbol: detectorEvidenceContext.brokerSymbol ?? frozenProfile.brokerSymbol,
+          timeframe: frozenProfile.timeframe,
+          parameterFingerprint: validationReport.provenance.parameterFingerprint,
+          detectorProfileFingerprint: validationReport.provenance.detectorProfileFingerprint,
+          validationRunId: validationReport.provenance.validationRunId,
+          trades: tradeOutcomes
+        });
+        const developmentStart = Date.parse(detectorWalkForward.developmentEnd);
+        const historicalEnd = Date.parse(detectorWalkForward.sourceEnd);
+        const oosTrades = tradeOutcomes.filter((trade) => {
+          const openedAt = Date.parse(trade.openedAt);
+          return Number.isFinite(openedAt) && openedAt >= developmentStart && openedAt <= historicalEnd;
+        });
+        cycleWalkForwardRun = adaptDetectorProfileWalkForwardRun({
+          result: detectorWalkForward,
+          config: activeConfig,
+          oosTrades,
+          sourceLabel: detectorEvidenceContext.sourceLabel,
+          rawCandleCount: detectorEvidenceContext.rawCandleCount,
+          processedCandleCount: detectorEvidenceContext.processedCandleCount,
+          availableLookbackDays: detectorEvidenceContext.availableLookbackDays,
+          requestedLookbackDays: detectorEvidenceContext.requestedLookbackDays
+        });
+        saveWalkForwardRun(cycleWalkForwardRun);
+      } else {
       cycleWalkForwardRun = await runWalkForwardValidation({
         mode: advancedFullResearchMode ? "standard" : "safe",
         maxWindows: advancedFullResearchMode ? 5 : 3,
@@ -1360,6 +1517,7 @@ export async function runResearchCycle({
           });
         }
       });
+      }
       recordWalkForwardRunInValidationChain(cycleWalkForwardRun);
       const oosEdge = cycleWalkForwardRun.stability?.edgeStatistics;
       run.edgeAuditorSummary = reviewEdgeStatistics(
@@ -1519,9 +1677,6 @@ export async function runResearchCycle({
     startStep("llm_advisory");
     await yieldToBrowser();
     throwIfCanceled();
-    const llmAdvisoryRequiredNow = safeArray(readinessSnapshot.activeFailedRequirements).some(
-      (item) => item.id === "llm-advisory-review"
-    );
     if (skipLlmAdvisory) {
       run.llmBridgeAvailable = false;
       run.llmAdvisoryUnavailable = true;
@@ -1529,14 +1684,6 @@ export async function runResearchCycle({
       skipStep(
         "llm_advisory",
         "LLM advisory skipped for autonomous stability mode; deterministic research continued."
-      );
-    } else if (!llmAdvisoryRequiredNow) {
-      run.llmBridgeAvailable = false;
-      run.llmAdvisoryUnavailable = true;
-      run.llmAdvisoryUnavailableReason = "deferred_until_evidence_ready";
-      skipStep(
-        "llm_advisory",
-        "LLM advisory deferred until the active deterministic evidence blockers pass."
       );
     } else {
     const llmMarketContext = buildMarketContext({
@@ -1547,10 +1694,10 @@ export async function runResearchCycle({
     });
     const llmEvidenceQualitySummary = buildEvidenceLedger({
       dataMode: evidenceDataMode,
-      sourceLabel: dataSourceLabel,
-      rawCandleCount: run.rawCandleCount ?? researchCandles.length,
-      processedCandleCount: run.processedCandleCount ?? researchCandles.length,
-      researchWindow: run.researchWindowCandles ?? researchCandles.length,
+      sourceLabel: detectorEvidenceContext?.sourceLabel ?? dataSourceLabel,
+      rawCandleCount: detectorEvidenceContext?.rawCandleCount ?? run.rawCandleCount ?? researchCandles.length,
+      processedCandleCount: detectorEvidenceContext?.processedCandleCount ?? run.processedCandleCount ?? researchCandles.length,
+      researchWindow: detectorEvidenceContext?.processedCandleCount ?? run.researchWindowCandles ?? researchCandles.length,
       latestCycleId: run.cycleId,
       latestCycleTimestamp: run.startedAt,
       debateSessionId: run.agentDebateConsensus?.sessionId,
@@ -1632,6 +1779,20 @@ export async function runResearchCycle({
     }
     }
 
+    // Research Quality reads the persisted advisory-review gate. Recompute it
+    // after a successful current-cycle review so this cycle can progress
+    // without requiring an otherwise identical second run.
+    if (validationReport && run.llmRun?.advisoryPassed) {
+      researchQualityReview = analyzeValidationResults(validationReport);
+      saveLatestResearchQualityReview(researchQualityReview);
+      run.researchQualityReview = researchQualityReview;
+      run.researchQualitySummary = summarizeQuality(researchQualityReview);
+      passStep("research_quality", {
+        summary: `Research quality refreshed after advisory review: ${researchQualityReview.readinessGrade}.`,
+        detail: researchQualityReview.recommendedNextStep
+      });
+    }
+
     readinessSnapshot = evaluateReadinessGate({
       validation: validationReport,
       quality: researchQualityReview,
@@ -1658,10 +1819,10 @@ export async function runResearchCycle({
     run.canonicalMetrics = buildCanonicalPerformanceMetricsFromRun(run, validationReport);
     const cycleEvidenceSummary = buildEvidenceLedger({
       dataMode: evidenceDataMode,
-      sourceLabel: dataSourceLabel,
-      rawCandleCount: run.rawCandleCount ?? researchCandles.length,
-      processedCandleCount: run.processedCandleCount ?? researchCandles.length,
-      researchWindow: run.researchWindowCandles ?? researchCandles.length,
+      sourceLabel: detectorEvidenceContext?.sourceLabel ?? dataSourceLabel,
+      rawCandleCount: detectorEvidenceContext?.rawCandleCount ?? run.rawCandleCount ?? researchCandles.length,
+      processedCandleCount: detectorEvidenceContext?.processedCandleCount ?? run.processedCandleCount ?? researchCandles.length,
+      researchWindow: detectorEvidenceContext?.processedCandleCount ?? run.researchWindowCandles ?? researchCandles.length,
       latestCycleId: run.cycleId,
       latestCycleTimestamp: run.completedAt ?? run.startedAt,
       latestLLMRunId: run.llmRun?.runId,
@@ -1694,8 +1855,8 @@ export async function runResearchCycle({
         dataSourceMode: cycle.dataSourceMode,
         researchPreset: cycle.researchPreset,
         candleWindow: metrics?.candleWindow ?? `${cycle.researchWindowCandles ?? 0} raw / ${cycle.processedCandleCount ?? 0} processed`,
-        rawCandleCount: metrics?.rawCandleCount ?? cycle.rawCandleCount,
-        processedCandleCount: metrics?.processedCandleCount ?? cycle.processedCandleCount,
+        rawCandleCount: cycle.validationEvidenceCandleCount ?? metrics?.rawCandleCount ?? cycle.rawCandleCount,
+        processedCandleCount: cycle.validationEvidenceCandleCount ?? metrics?.processedCandleCount ?? cycle.processedCandleCount,
         totalTrades: metrics?.totalTrades ?? cycle.backtestSummary?.totalTrades,
         winRate: metrics?.winRate ?? cycle.backtestSummary?.winRate,
         averageR: metrics?.averageR ?? cycle.backtestSummary?.averageR,

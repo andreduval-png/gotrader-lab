@@ -1780,6 +1780,7 @@ export function MissionControlShell({ state }: { state: LabState }) {
       noImprovementStop: Number(noImprovementStop),
       safeImportedDataMode: true,
       advancedFullResearchMode,
+      runLlmAdvisory: advancedFullResearchMode,
       autoApplyPolicyEnabled
     };
     setAbortController(controller);

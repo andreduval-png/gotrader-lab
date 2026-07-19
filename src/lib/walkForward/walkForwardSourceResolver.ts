@@ -137,7 +137,13 @@ const preparedDeepMt5Source = async (
       targetTimeframe: timeframe === "15m" || timeframe === "1m" ? timeframe : "5m",
       windowSize: Math.min(50000, gotraderCandles.length)
     },
-    true
+    true,
+    {
+      // Explicit operator-started detector validation needs the complete
+      // chronological range. Dashboard and Advisor tactical reads keep their
+      // existing browser caps and never use this override.
+      maximumWindowSize: 50000
+    }
   );
   const label = `MT5 read-only explicit ${requestedLookbackDays}-day range / ${prepared.processedCandleCount.toLocaleString()} ${prepared.appliedSettings.targetTimeframe}`;
   const preparedSource: PreparedCandleSource = {

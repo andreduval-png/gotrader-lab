@@ -103,6 +103,7 @@ export interface AutonomousResearchSettings {
   noImprovementStop: number;
   safeImportedDataMode: boolean;
   advancedFullResearchMode: boolean;
+  runLlmAdvisory: boolean;
   autoApplyPolicyEnabled: boolean;
   researchStrategyProfile?: BacktestStrategyProfile;
   maxResearchCandles?: number;

@@ -69,9 +69,63 @@ async function main() {
       ["@/lib/validationProvenance", "../validationProvenance/validationProvenance.mjs"]
     ]
   );
+  compile(
+    "src/lib/walkForward/detectorProfileWalkForwardAdapter.ts",
+    "walkForward/detectorProfileWalkForwardAdapter.mjs",
+    [["@/lib/statistics/edgeStatistics", "../statistics/edgeStatistics.mjs"]]
+  );
+  compile(
+    "src/lib/researchQuality/falsePositiveAnalysis.ts",
+    "researchQuality/falsePositiveAnalysis.mjs"
+  );
+  fs.mkdirSync(path.join(outRoot, "marketData"), { recursive: true });
+  fs.writeFileSync(
+    path.join(outRoot, "marketData", "historicalCandleImport.mjs"),
+    "export const loadActiveCandleSource = async () => ({ mode: 'mock', label: 'test', candles: [] });\n",
+    "utf8"
+  );
+  compile(
+    "src/lib/marketData/candleWindowing.ts",
+    "marketData/candleWindowing.mjs",
+    [["@/lib/marketData/historicalCandleImport", "./historicalCandleImport.mjs"]]
+  );
   const { runDetectorProfileWalkForward } = await import(
     pathToFileURL(path.join(outRoot, "walkForward", "detectorProfileWalkForward.mjs")).href
   );
+  const { adaptDetectorProfileWalkForwardRun } = await import(
+    pathToFileURL(path.join(outRoot, "walkForward", "detectorProfileWalkForwardAdapter.mjs")).href
+  );
+  const { analyzeFalsePositivePatterns } = await import(
+    pathToFileURL(path.join(outRoot, "researchQuality", "falsePositiveAnalysis.mjs")).href
+  );
+  const { prepareCandlesForResearch } = await import(
+    pathToFileURL(path.join(outRoot, "marketData", "candleWindowing.mjs")).href
+  );
+
+  const deepFixture = Array.from({ length: 12050 }, (_, index) => ({
+    id: `deep_${index}`,
+    symbol: "MNQ",
+    timeframe: "5m",
+    timestamp: new Date(Date.parse("2026-01-01T00:00:00.000Z") + index * 300000).toISOString(),
+    open: 20000 + index,
+    high: 20001 + index,
+    low: 19999 + index,
+    close: 20000.5 + index,
+    volume: 100
+  }));
+  const ordinaryPrepared = prepareCandlesForResearch(
+    deepFixture,
+    { windowSize: 50000, targetTimeframe: "5m", sessionFilter: "all", advancedMode: true },
+    true
+  );
+  const explicitDeepPrepared = prepareCandlesForResearch(
+    deepFixture,
+    { windowSize: 50000, targetTimeframe: "5m", sessionFilter: "all", advancedMode: true },
+    true,
+    { maximumWindowSize: 50000 }
+  );
+  assert.equal(ordinaryPrepared.processedCandleCount, 10000, "Ordinary browser research keeps the existing hard cap.");
+  assert.equal(explicitDeepPrepared.processedCandleCount, deepFixture.length, "Explicit detector validation keeps the complete compact history.");
 
   const sourceStart = "2026-01-01T00:00:00.000Z";
   const sourceEnd = "2026-06-30T00:00:00.000Z";
@@ -95,6 +149,67 @@ async function main() {
   assert.equal(safeResult.authority.brokerAuthority, "none");
   assert.equal(safeResult.authority.readinessOverrideAuthority, "none");
   assert.equal(safeResult.safety.readinessPromotionAllowed, false);
+  const adapted = adaptDetectorProfileWalkForwardRun({
+    result: safeResult,
+    config: {
+      strategyProfile: "ifvg_fresh_retest_v3_research",
+      symbol: "MNQ",
+      timeframe: "5m",
+      sessionFilter: "all",
+      marketRegime: "trend",
+      minimumConfluenceThreshold: 0.35,
+      minimumConfidenceThreshold: 0.42,
+      targetRMultiple: 2,
+      stopModel: "latest swing",
+      fixedTickStopSize: 48,
+      maxBarsToResolveTrade: 48,
+      allowLong: true,
+      allowShort: true,
+      agentWeights: {},
+      warmupCandles: 100,
+      decisionInterval: 1,
+      lookaheadCandles: 48,
+      visibleWindow: 80,
+      spreadTicks: 1,
+      slippageTicks: 1,
+      commissionTicks: 1
+    },
+    oosTrades,
+    sourceLabel: "MT5 read-only explicit detector history",
+    rawCandleCount: 35000,
+    processedCandleCount: 35000,
+    availableLookbackDays: 180,
+    requestedLookbackDays: 180
+  });
+  assert.equal(adapted.stability.verdict, "robust_research");
+  assert.equal(adapted.stability.edgeStatistics.provenance, "out_of_sample");
+  assert.equal(adapted.stability.edgeStatistics.sampleSize, 60);
+  assert.equal(adapted.provenance.validationRunId, safeResult.provenance.validationRunId);
+  assert.equal(adapted.provenance.sourceFingerprint, safeResult.sourceFingerprint);
+  assert.equal(adapted.preflight.authority.executionAuthority, "none");
+  assert.doesNotMatch(JSON.stringify(adapted), /"(?:candles|rawCandles|accountData|orders|positions)"\s*:/i);
+
+  const scenario = (overrides = {}) => ({
+    id: "conservative-confluence",
+    name: "Conservative confluence threshold",
+    category: "threshold",
+    totalTrades: 30,
+    winRate: 0.6,
+    averageR: 1.2,
+    maxDrawdown: 2,
+    worstTradeR: -1,
+    confidenceCalibration: { calibrationGap: 0.1, averageConfidence: 0.7 },
+    ...overrides
+  });
+  const ordinaryLosses = analyzeFalsePositivePatterns({ scenarios: [scenario(), scenario({ id: "swing-stop", name: "Swing stop" })] });
+  assert.equal(ordinaryLosses.length, 0, "An ordinary stopped trade is not a false-positive pattern family.");
+  const repeatedCalibration = analyzeFalsePositivePatterns({
+    scenarios: [
+      scenario({ confidenceCalibration: { calibrationGap: 0.3, averageConfidence: 0.9 } }),
+      scenario({ id: "high-confidence-only", name: "High confidence", confidenceCalibration: { calibrationGap: 0.25, averageConfidence: 0.85 } })
+    ]
+  });
+  assert.equal(repeatedCalibration.length, 1, "Repeated scenario manifestations should collapse to one root pattern.");
   const serialized = JSON.stringify(safeResult);
   for (const forbiddenKey of ["candles", "rawCandles", "accountData", "orders", "positions"]) {
     assert.equal(
@@ -179,6 +294,16 @@ async function main() {
           stressedAverageR: safeResult.additionalCost05R.averageR,
           edgeVerdict: safeResult.pooledOos.edgeVerdict
         },
+        adaptedRun: {
+          verdict: adapted.stability.verdict,
+          oosTrades: adapted.stability.edgeStatistics.sampleSize,
+          provenanceMatched: adapted.provenance.validationRunId === safeResult.provenance.validationRunId
+        },
+        deepHistoryPreparation: {
+          ordinaryBrowserCandles: ordinaryPrepared.processedCandleCount,
+          explicitDetectorCandles: explicitDeepPrepared.processedCandleCount
+        },
+        falsePositiveFamilies: repeatedCalibration.length,
         forwardOnly: {
           verdict: forwardOnly.verdict,
           nextAction: forwardOnly.nextAction

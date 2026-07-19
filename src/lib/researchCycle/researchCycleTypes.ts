@@ -243,6 +243,11 @@ export interface ResearchCycleRun {
   rawCandleCount?: number;
   researchWindowCandles?: number;
   processedCandleCount?: number;
+  /** Compact depth metadata for explicit historical validation; raw candles are never persisted here. */
+  validationEvidenceCandleCount?: number;
+  validationEvidenceLookbackDays?: number;
+  validationEvidenceRequestedLookbackDays?: number;
+  validationEvidenceSourceFingerprint?: string;
   researchTimeframe?: Timeframe;
   performanceMode?: ResearchPerformanceMode;
   researchPreset?: "mock" | "safe" | "standard" | "advanced";

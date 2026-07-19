@@ -1,4 +1,4 @@
-import { defaultBacktestConfig, runBacktest } from "@/lib/backtesting";
+import { defaultBacktestConfig, runBacktest, sanitizeBacktestConfig } from "@/lib/backtesting";
 import type { BacktestConfig, BacktestResult, SimulatedTradeRecord } from "@/lib/backtesting";
 import { buildCalibrationReport } from "@/lib/validation/calibrationReport";
 import type {
@@ -246,7 +246,64 @@ const scenarioResultFor = (definition: ValidationScenarioDefinition, result: Bac
 
 export interface ValidationSuiteRunOptions {
   provenance?: ValidationProvenanceIdentity;
+  /** Optional detector replay reused by equivalent frozen-profile scenarios. */
+  baselineResult?: BacktestResult;
 }
+
+const detectorProfileExecutionKey = (definition: ValidationScenarioDefinition) => {
+  const config = definition.config;
+  const profile = config.strategyProfile;
+  if (profile !== "ifvg_fresh_retest_v3_research" && profile !== "ifvg_filtered_v2_research") {
+    return undefined;
+  }
+  if (profile === "ifvg_fresh_retest_v3_research") {
+    // The v3 profile is frozen. Generic scenario definitions must not mutate
+    // its direction/session identity, and repeating the same causal detector
+    // over a 180-day browser array can block the UI for tens of seconds.
+    // Chronological robustness is measured separately by the detector-profile
+    // walk-forward validator.
+    return JSON.stringify({
+      profile,
+      maxBarsToResolveTrade: config.maxBarsToResolveTrade,
+      spreadTicks: config.spreadTicks,
+      slippageTicks: config.slippageTicks,
+      commissionTicks: config.commissionTicks
+    });
+  }
+  // IFVG profiles own their entry, full-candle invalidation, target, and
+  // confidence rules. Generic confluence and stop-model labels do not change
+  // detector behavior, so rerunning those equivalent scenarios only burns CPU.
+  return JSON.stringify({
+    profile,
+    sessionFilter: config.sessionFilter ?? "all",
+    allowLong: config.allowLong ?? true,
+    allowShort: config.allowShort ?? true,
+    maxBarsToResolveTrade: config.maxBarsToResolveTrade,
+    spreadTicks: config.spreadTicks,
+    slippageTicks: config.slippageTicks,
+    commissionTicks: config.commissionTicks
+  });
+};
+
+const resultForDefinition = (
+  candles: Candle[],
+  definition: ValidationScenarioDefinition,
+  cache: Map<string, BacktestResult>,
+  baselineResult?: BacktestResult
+) => {
+  const key = detectorProfileExecutionKey(definition);
+  if (!key) return runBacktest(candles, definition.config);
+  const cached = cache.get(key);
+  if (cached) return { ...cached, config: sanitizeBacktestConfig({ ...cached.config, ...definition.config }) };
+  const baselineKey = baselineResult
+    ? detectorProfileExecutionKey({ ...definition, config: baselineResult.config })
+    : undefined;
+  const result = baselineResult && baselineKey === key
+    ? baselineResult
+    : runBacktest(candles, definition.config);
+  cache.set(key, result);
+  return { ...result, config: sanitizeBacktestConfig({ ...result.config, ...definition.config }) };
+};
 
 const provenanceFor = (
   reportId: string,
@@ -276,8 +333,9 @@ export function runValidationSuite(
 ): ValidationSuiteReport {
   const generatedAt = new Date().toISOString();
   const id = `validation_${Date.now()}`;
+  const cache = new Map<string, BacktestResult>();
   const scenarios = scenariosFor(baseConfig).map((definition) =>
-    scenarioResultFor(definition, runBacktest(candles, definition.config))
+    scenarioResultFor(definition, resultForDefinition(candles, definition, cache, options.baselineResult))
   );
 
   return {
@@ -297,18 +355,23 @@ export async function runValidationSuiteAsync(
     signal?: AbortSignal;
     onScenarioComplete?: (completed: number, total: number, scenario: ValidationScenarioResult) => void;
     provenance?: ValidationProvenanceIdentity;
+    baselineResult?: BacktestResult;
   } = {}
 ): Promise<ValidationSuiteReport> {
   const generatedAt = new Date().toISOString();
   const id = `validation_${Date.now()}`;
   const definitions = scenariosFor(baseConfig);
   const scenarios: ValidationScenarioResult[] = [];
+  const cache = new Map<string, BacktestResult>();
 
   for (const definition of definitions) {
     if (options.signal?.aborted) {
       throw new Error("Validation suite canceled by user.");
     }
-    const scenario = scenarioResultFor(definition, runBacktest(candles, definition.config));
+    const scenario = scenarioResultFor(
+      definition,
+      resultForDefinition(candles, definition, cache, options.baselineResult)
+    );
     scenarios.push(scenario);
     options.onScenarioComplete?.(scenarios.length, definitions.length, scenario);
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));

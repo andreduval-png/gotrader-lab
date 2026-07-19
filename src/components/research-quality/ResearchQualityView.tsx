@@ -52,6 +52,23 @@ const formatRuntimePercent = (value?: number) =>
 const formatR = (value: number) => `${value.toFixed(2)}R`;
 const formatProfitFactor = (value: number | null) => (value === null ? "n/a" : value >= 99 ? "uncapped" : value.toFixed(2));
 
+const qualityDataSource = (snapshot?: ResearchRuntimeSnapshot) => {
+  const marketData = snapshot?.marketData;
+  if (marketData?.researchUsesMt5ReadOnly) {
+    return { label: "MT5 read-only CFD/proxy data", variant: "success" as const };
+  }
+  if (marketData?.isImportedDataActive) {
+    return { label: "imported historical data", variant: "success" as const };
+  }
+  if (marketData?.isMockDataActive) {
+    return { label: "mock/sample data", variant: "muted" as const };
+  }
+  return {
+    label: marketData?.activeResearchSourceLabel ?? "research source unavailable",
+    variant: "muted" as const
+  };
+};
+
 const downloadReview = (review: ResearchQualityReview) => {
   const blob = new Blob([JSON.stringify(review, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -86,6 +103,7 @@ export function ResearchQualityView() {
       : "missing validation";
   const isRecomputedPreview = Boolean(review && runtimeQualitySummary && review.id !== runtimeQualitySummary.reviewId);
   const runtimeWarnings = selectRuntimeWarnings(runtimeSnapshot);
+  const qualitySourceData = qualityDataSource(runtimeSnapshot);
 
   useEffect(() => {
     let mounted = true;
@@ -292,9 +310,7 @@ export function ResearchQualityView() {
               </CardHeader>
               <CardContent className="space-y-1 text-xs text-muted-foreground">
                 <div>Review generated {review.generatedAt}</div>
-                <Badge variant={runtimeSnapshot?.marketData.isImportedDataActive ? "success" : "muted"}>
-                  {runtimeSnapshot?.marketData.isImportedDataActive ? "imported data" : "mock data"}
-                </Badge>
+                <Badge variant={qualitySourceData.variant}>{qualitySourceData.label}</Badge>
               </CardContent>
             </Card>
             <Card>

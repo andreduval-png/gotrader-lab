@@ -43,6 +43,7 @@ const defaultSettings: AutonomousResearchSettings = {
   noImprovementStop: 1,
   safeImportedDataMode: true,
   advancedFullResearchMode: false,
+  runLlmAdvisory: false,
   autoApplyPolicyEnabled: false
 };
 
@@ -740,7 +741,7 @@ export async function runAutonomousResearchLoop({
         autoResearchCheckpointPersistence: "memory_only",
         advancedFullResearchMode: settings.advancedFullResearchMode,
         skipHeavyAudit: settings.safeImportedDataMode || !settings.advancedFullResearchMode,
-        skipLlmAdvisory: !settings.advancedFullResearchMode,
+        skipLlmAdvisory: !(settings.runLlmAdvisory || settings.advancedFullResearchMode),
         skipAutoResearch: !settings.advancedFullResearchMode,
         sourceGuard: {
           requireEligibleResearchSource: true,

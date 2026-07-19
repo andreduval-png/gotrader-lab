@@ -69,7 +69,7 @@ The packet may include ICT context, baseline deterministic debate, CIO thesis, v
 
 ## Required Reviewers
 
-The provider must return all 14 advisory reviewers:
+The provider must return all 16 advisory reviewers:
 
 1. LLM ICT Liquidity Reviewer
 2. LLM Market Structure Reviewer
@@ -85,13 +85,15 @@ The provider must return all 14 advisory reviewers:
 12. LLM Positioning/Gamma Reviewer
 13. LLM Volatility Regime Reviewer
 14. LLM Order Flow Planning Reviewer
+15. LLM Edge Auditor
+16. LLM Execution Risk Reviewer
 
 The futures market-context reviewers still return advisory responses when data is missing. The order-flow reviewer is
 planning-only until DOM, footprint, delta, cumulative delta, or large-print data exists.
 
 ## Stdout Contract
 
-On success, stdout contains JSON only: an array of 14 validated advisory responses, one for each required LLM agent.
+On success, stdout contains JSON only: an array of 16 validated advisory responses, one for each required LLM agent.
 
 In `--output-file` mode, the same validated JSON is written to the output file and stdout stays empty.
 

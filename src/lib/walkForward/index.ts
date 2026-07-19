@@ -23,6 +23,7 @@ export {
 } from "@/lib/walkForward/walkForwardStorage";
 export { runWalkForwardValidation } from "@/lib/walkForward/walkForwardOrchestrator";
 export { runDetectorProfileWalkForward } from "@/lib/walkForward/detectorProfileWalkForward";
+export { adaptDetectorProfileWalkForwardRun } from "@/lib/walkForward/detectorProfileWalkForwardAdapter";
 export type {
   DetectorProfileTradeOutcome,
   DetectorProfileWalkForwardInput,

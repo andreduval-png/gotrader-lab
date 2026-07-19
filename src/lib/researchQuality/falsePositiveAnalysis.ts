@@ -14,7 +14,7 @@ const mitigationFor = (scenario: ValidationScenarioResult) => {
   if (scenario.winRate < 0.5) {
     return "Require stronger ICT confluence before this scenario can graduate from research.";
   }
-  return "Keep as an observation and retest with a larger mock sample.";
+  return "Keep as an observation and retest with a larger independent sample.";
 };
 
 const patternFor = (scenario: ValidationScenarioResult) => {
@@ -34,13 +34,13 @@ const patternFor = (scenario: ValidationScenarioResult) => {
 };
 
 export function analyzeFalsePositivePatterns(report: ValidationSuiteReport): FalsePositivePattern[] {
-  return report.scenarios
+  const candidates = report.scenarios
     .filter(
       (scenario) =>
         scenario.totalTrades > 0 &&
         (scenario.winRate < 0.5 ||
           scenario.averageR < 0 ||
-          scenario.worstTradeR <= -0.75 ||
+          (scenario.worstTradeR <= -0.75 && scenario.maxDrawdown > 4) ||
           scenario.confidenceCalibration.calibrationGap >= 0.2)
     )
     .map((scenario) => ({
@@ -60,4 +60,22 @@ export function analyzeFalsePositivePatterns(report: ValidationSuiteReport): Fal
         Math.abs(Math.min(0, b.worstR)) -
         (a.estimatedFalsePositives + a.calibrationGap + Math.abs(Math.min(0, a.worstR)))
     );
+
+  // Scenario variants often expose the same underlying weakness. Count the
+  // root pattern once, retaining the worst manifestation, instead of treating
+  // every threshold/stop label as a distinct false-positive family.
+  const familyFor = (item: FalsePositivePattern) =>
+    item.calibrationGap >= 0.2
+      ? "confidence_calibration"
+      : item.averageConfidence > 0 && item.winRate < 0.5
+        ? "weak_hit_rate"
+        : item.worstR <= -0.75
+          ? "loss_tail"
+          : "negative_expectancy";
+  const distinct = new Map<string, FalsePositivePattern>();
+  for (const candidate of candidates) {
+    const family = familyFor(candidate);
+    if (!distinct.has(family)) distinct.set(family, candidate);
+  }
+  return [...distinct.values()];
 }

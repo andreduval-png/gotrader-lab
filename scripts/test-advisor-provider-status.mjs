@@ -182,6 +182,14 @@ async function main() {
     path.join(projectRoot, "scripts", "llm-local-bridge-server.mjs"),
     "utf8"
   );
+  const providerSource = fs.readFileSync(
+    path.join(projectRoot, "scripts", "gpt55-llm-agent-provider.mjs"),
+    "utf8"
+  );
+  const reviewerRosterSource = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "llm", "llmPromptTemplates.ts"),
+    "utf8"
+  );
   assert.ok(autonomousSource.includes("llmAdvisoryWasIntentionallyDeferred"));
   assert.ok(autonomousSource.includes('llmUnavailableReason === "deferred_until_evidence_ready"'));
   assert.ok(autonomousSource.includes('llmUnavailableReason === "skipped_for_autonomous_stability"'));
@@ -192,6 +200,17 @@ async function main() {
   assert.ok(researchCycleSource.includes("llmBridgeProcessAvailable"));
   assert.ok(bridgeSource.includes('import { loadLocalEnvironment } from "./local-env.mjs"'));
 
+  // 13. The local provider and frontend importer must require the same
+  // reviewer roster. A provider response is unusable when either side drifts.
+  const declaredAgentIds = (source) =>
+    [...source.matchAll(/agentId:\s*"([^"]+)"/g)].map((match) => match[1]);
+  const providerAgentIds = [...new Set(declaredAgentIds(providerSource))].sort();
+  const requiredAgentIds = [...new Set(declaredAgentIds(reviewerRosterSource))].sort();
+  assert.deepEqual(providerAgentIds, requiredAgentIds);
+  assert.equal(providerAgentIds.length, 16);
+  assert.ok(providerAgentIds.includes("llm-edge-auditor"));
+  assert.ok(providerAgentIds.includes("llm-execution-risk-reviewer"));
+
   console.log("test-advisor-provider-status: all assertions passed.");
   console.log("- unset URL -> openclaw_not_configured");
   console.log("- bridge stub markers/health -> openclaw_bridge_stub (not ordinary success)");
@@ -199,6 +218,7 @@ async function main() {
   console.log("- timeout -> openclaw_timeout; offline/invalid/request_failed -> openclaw_bridge_offline");
   console.log("- unsafe authority -> unsafe_response_rejected (blocked from proposal/validation state)");
   console.log("- provider configuration, bridge outage, and intentional deferral remain distinct");
+  console.log("- local provider and frontend importer share the same 16-reviewer roster");
   console.log("- authority remains none/none/none");
 }
 

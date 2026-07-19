@@ -149,7 +149,7 @@ const topStrengthsFor = (report: ValidationSuiteReport): ResearchQualityFinding[
     finding(
       "Auditable workflow",
       "Validation and quality review remain deterministic, local, and exportable.",
-      "All conclusions come from mock OHLC replay and local storage.",
+      "All conclusions come from canonical OHLC replay and compact local research records.",
       "green",
       []
     )
@@ -174,7 +174,7 @@ const thresholdSensitivityFor = (
         ? "Stricter filtering improved simulated quality."
         : scoreSpread <= -10
           ? "Stricter filtering reduced simulated quality or over-filtered opportunities."
-          : "Filter sensitivity is inconclusive in this mock sample."
+          : "Filter sensitivity is inconclusive in the current validation sample."
   };
 };
 
@@ -195,7 +195,7 @@ const invalidationTargetQualityFor = (report: ValidationSuiteReport): Invalidati
       worstTradeR: scenario.worstTradeR,
       verdict:
         scenario.averageR > 0 && scenario.maxDrawdown <= 3
-          ? "Usable in simulation; retest against broader mock samples."
+          ? "Usable in simulation; retest against broader independent samples."
           : "Weak or fragile; do not promote without further calibration."
     }));
 
@@ -278,7 +278,7 @@ const suggestedCalibrationChangesFor = (report: ValidationSuiteReport): Suggeste
 
 const nextStepFor = (grade: ResearchQualityReadinessGrade) => {
   if (grade === "Paper-Demo Candidate") {
-    return "Do not add broker code yet. Repeat validation on broader mock samples, then review paper-demo risk gates.";
+    return "Keep execution disabled. Repeat validation on broader independent samples, then review paper-demo risk gates.";
   }
   if (!isLLMAdvisoryReviewPassed()) {
     return "LLM advisory review required before Paper-Demo Candidate. Deterministic fallback can support Research Ready only.";

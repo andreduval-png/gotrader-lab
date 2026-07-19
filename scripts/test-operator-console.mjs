@@ -188,6 +188,11 @@ async function main() {
   assert.match(cycleSource, /advancedFullResearchMode:\s*false/, "operator cycle must use bounded research mode");
   assert.match(
     cycleSource,
+    /runLlmAdvisory:\s*true/,
+    "bounded operator cycles should request one advisory review without enabling full autonomous research"
+  );
+  assert.match(
+    cycleSource,
     /researchStrategyProfile:\s*"ifvg_fresh_retest_v3_research"/,
     "operator cycle must evaluate the frozen positive-edge IFVG v3 research profile"
   );
@@ -207,7 +212,8 @@ async function main() {
     /modelVersion:\s*"operator_market_scenario:v1"/,
     "operator scenario watches need an explicit non-execution model version"
   );
-  assert.match(cycleSource, /OPERATOR_RESEARCH_TIMEOUT_MS\s*=\s*120_000/, "operator cycle must have a responsiveness timeout");
+  assert.match(cycleSource, /OPERATOR_RESEARCH_TIMEOUT_MS\s*=\s*300_000/, "operator cycle must allow deep validation and a bounded advisory request");
+  assert.match(cycleSource, /exceeded five minutes/, "operator cycle must retain an explicit outer responsiveness timeout");
   assert.match(cycleSource, /recoverInterruptedState/, "orphaned running state must recover after a reload");
   assert.match(cycleSource, /status:\s*"canceled"/, "interrupted cycles must become terminal");
 
@@ -219,6 +225,20 @@ async function main() {
     autonomousSource,
     /frozenProfile\s*\?\s*1000\s*:\s*settings\.advancedFullResearchMode\s*\?\s*undefined\s*:\s*500/,
     "bounded autonomous cycles must use 1,000 candles only for a frozen profile and 500 otherwise"
+  );
+  assert.match(
+    autonomousSource,
+    /skipLlmAdvisory:\s*!\(settings\.runLlmAdvisory\s*\|\|\s*settings\.advancedFullResearchMode\)/,
+    "LLM advisory must be independently selectable from the full autonomous search mode"
+  );
+  const researchCycleSource = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "researchCycle", "runResearchCycle.ts"),
+    "utf8"
+  );
+  assert.doesNotMatch(
+    researchCycleSource,
+    /else if \(!llmAdvisoryRequiredNow\)/,
+    "an explicitly requested post-validation advisory must not be deferred behind candidate readiness blockers"
   );
 
   const validationSource = fs.readFileSync(

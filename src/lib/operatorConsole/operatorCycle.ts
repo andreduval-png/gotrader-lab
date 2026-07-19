@@ -23,7 +23,9 @@ import { prepareOperatorForwardScenario } from "./operatorForwardScenario";
 
 export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v1";
 export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
-const OPERATOR_RESEARCH_TIMEOUT_MS = 120_000;
+// The outer budget must accommodate deep detector validation plus the separately
+// bounded LLM advisory request without misclassifying a successful run as canceled.
+const OPERATOR_RESEARCH_TIMEOUT_MS = 300_000;
 
 const initialState = (): OperatorCycleState => ({
   status: "idle",
@@ -281,6 +283,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         noImprovementStop: 1,
         safeImportedDataMode: true,
         advancedFullResearchMode: false,
+        runLlmAdvisory: true,
         autoApplyPolicyEnabled: false,
         researchStrategyProfile: "ifvg_fresh_retest_v3_research",
         maxResearchCandles: 1000
@@ -301,7 +304,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = globalThis.setTimeout(() => {
         controller.abort();
-        reject(new Error("The guarded research cycle exceeded two minutes and was stopped to keep GoTrader responsive."));
+        reject(new Error("The guarded research cycle exceeded five minutes and was stopped to keep GoTrader responsive."));
       }, OPERATOR_RESEARCH_TIMEOUT_MS);
     });
     let autonomousRun: Awaited<typeof autonomousPromise>;

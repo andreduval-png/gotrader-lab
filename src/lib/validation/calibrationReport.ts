@@ -105,7 +105,7 @@ const weakRulesFor = (scenarios: ValidationScenarioResult[]) => {
   const averageCalibration = average(scenarios.map((scenario) => scenario.confidenceCalibration.score));
 
   if (conservative && aggressive && aggressive.score > conservative.score + 15) {
-    weakRules.push("Conservative confluence filtering underperformed the aggressive threshold in mock replay.");
+    weakRules.push("Conservative confluence filtering underperformed the aggressive threshold in canonical replay.");
   }
   if (fvgStop && swingStop && fvgStop.averageR < swingStop.averageR - 0.15) {
     weakRules.push("FVG invalidation stops underperformed latest-swing stops in simulated outcomes.");
@@ -128,7 +128,7 @@ const weakRulesFor = (scenarios: ValidationScenarioResult[]) => {
 
   return weakRules.length
     ? weakRules
-    : ["No single ICT rule failed decisively in this small mock dataset; expand validation before broker-demo planning."];
+    : ["No single ICT rule failed decisively in the current dataset; expand independent validation before paper-demo planning."];
 };
 
 const readinessFor = (scenarios: ValidationScenarioResult[]): Pick<CalibrationReport, "readinessScore" | "readinessStatus" | "recommendedNextStep"> => {
@@ -143,7 +143,7 @@ const readinessFor = (scenarios: ValidationScenarioResult[]): Pick<CalibrationRe
       readinessScore,
       readinessStatus: "green",
       recommendedNextStep:
-        "Continue simulation validation with larger mock samples and walk-forward splits before any paper-demo bridge implementation."
+        "Continue simulation validation with larger independent samples and walk-forward splits before paper-demo review."
     };
   }
 

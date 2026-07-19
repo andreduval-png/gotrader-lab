@@ -77,6 +77,16 @@ const requiredAgents = [
     agentId: "llm-order-flow-planning-reviewer",
     agentName: "LLM Order Flow Planning Reviewer",
     role: "Review missing DOM, footprint, delta, cumulative delta, and large-print evidence as planned later context only."
+  },
+  {
+    agentId: "llm-edge-auditor",
+    agentName: "LLM Edge Auditor",
+    role: "Review out-of-sample edge statistics, bootstrap expectancy, sample size, and overfitting flags before any calibration is trusted."
+  },
+  {
+    agentId: "llm-execution-risk-reviewer",
+    agentName: "LLM Execution Risk Reviewer",
+    role: "Review staged execution readiness, risk limits, kill switch state, and pre-trade checklist blockers without approving live orders."
   }
 ];
 const compactDashboardAgent = requiredAgents.find((agent) => agent.agentId === "llm-cio-synthesis-reviewer") ?? requiredAgents[0];

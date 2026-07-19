@@ -43,6 +43,23 @@ const formatProfitFactor = (value: number | null) => (value === null ? "n/a" : v
 const formatRuntimePercent = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? `${Math.round(value * 100)}%` : "n/a";
 
+const validationDataSource = (snapshot?: ResearchRuntimeSnapshot) => {
+  const marketData = snapshot?.marketData;
+  if (marketData?.researchUsesMt5ReadOnly) {
+    return { label: "MT5 read-only CFD/proxy data", variant: "success" as const };
+  }
+  if (marketData?.isImportedDataActive) {
+    return { label: "imported historical data", variant: "success" as const };
+  }
+  if (marketData?.isMockDataActive) {
+    return { label: "mock/sample data", variant: "muted" as const };
+  }
+  return {
+    label: marketData?.activeResearchSourceLabel ?? "research source unavailable",
+    variant: "muted" as const
+  };
+};
+
 const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 
 const downloadReport = (report: ValidationSuiteReport) => {
@@ -75,6 +92,7 @@ export function StrategyValidationView() {
       : "no validation report";
   const isRecomputedPreview = Boolean(report && runtimeValidationSummary && report.id !== runtimeValidationSummary.validationId);
   const runtimeWarnings = selectRuntimeWarnings(runtimeSnapshot);
+  const validationSourceData = validationDataSource(runtimeSnapshot);
 
   const suiteStats = useMemo(() => {
     if (!report) {
@@ -269,9 +287,7 @@ export function StrategyValidationView() {
               </CardHeader>
               <CardContent className="space-y-1 text-xs text-muted-foreground">
                 <div>Generated {report.generatedAt}</div>
-                <Badge variant={runtimeSnapshot?.marketData.isImportedDataActive ? "success" : "muted"}>
-                  {runtimeSnapshot?.marketData.isImportedDataActive ? "imported data" : "mock data"}
-                </Badge>
+                <Badge variant={validationSourceData.variant}>{validationSourceData.label}</Badge>
               </CardContent>
             </Card>
             <Card>

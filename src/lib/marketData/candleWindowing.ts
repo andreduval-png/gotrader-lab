@@ -29,6 +29,10 @@ export interface PreparedCandleSource extends CandleDataSource {
   warnings: string[];
 }
 
+export interface PrepareCandlesForResearchOptions {
+  maximumWindowSize?: number;
+}
+
 export const CANDLE_WINDOW_SETTINGS_UPDATED_EVENT = "gotrader-ai-lab-candle-window-settings-updated";
 export const SAFE_CANDLE_WINDOW_LIMIT = 5000;
 export const HARD_BROWSER_CANDLE_LIMIT = 10000;
@@ -313,25 +317,30 @@ export function aggregateCandles(candles: Candle[], targetTimeframe: ResearchTim
 export function prepareCandlesForResearch(
   candles: Candle[],
   settingsInput: Partial<CandleWindowSettings> = {},
-  imported = false
+  imported = false,
+  options: PrepareCandlesForResearchOptions = {}
 ) {
   const settings = sanitizeCandleWindowSettings(settingsInput);
   const warnings: string[] = [];
   const rawCandleCount = candles.length;
   const requestedWindowSize = settings.windowSize;
+  const maximumWindowSize = Math.max(
+    HARD_BROWSER_CANDLE_LIMIT,
+    Math.min(50000, Math.round(options.maximumWindowSize ?? HARD_BROWSER_CANDLE_LIMIT))
+  );
   const effectiveWindowSize =
     imported && !settings.advancedMode
       ? Math.min(requestedWindowSize, SAFE_CANDLE_WINDOW_LIMIT)
-      : Math.min(requestedWindowSize, HARD_BROWSER_CANDLE_LIMIT);
+      : Math.min(requestedWindowSize, maximumWindowSize);
 
   if (imported && requestedWindowSize > SAFE_CANDLE_WINDOW_LIMIT && !settings.advancedMode) {
     warnings.push(
       `Requested ${requestedWindowSize.toLocaleString()} candles; safe mode capped the research window at ${SAFE_CANDLE_WINDOW_LIMIT.toLocaleString()}. Enable Advanced mode only when you are intentionally stress-testing.`
     );
   }
-  if (imported && settings.advancedMode && requestedWindowSize > HARD_BROWSER_CANDLE_LIMIT) {
+  if (imported && settings.advancedMode && requestedWindowSize > maximumWindowSize) {
     warnings.push(
-      `Requested ${requestedWindowSize.toLocaleString()} candles; browser processing is hard-capped at ${HARD_BROWSER_CANDLE_LIMIT.toLocaleString()} to prevent page crashes.`
+      `Requested ${requestedWindowSize.toLocaleString()} candles; this research path is capped at ${maximumWindowSize.toLocaleString()} to prevent page crashes.`
     );
   }
 
