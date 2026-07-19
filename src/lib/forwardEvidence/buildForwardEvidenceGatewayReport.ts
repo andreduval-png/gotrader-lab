@@ -1,6 +1,7 @@
 import {
   FORWARD_EVIDENCE_AUTHORITY,
-  IFVG_FRESH_RETEST_V3_PROFILE_ID,
+  type ForwardEvidenceProfileId,
+  type ForwardEvidenceProfileVersion,
   type ForwardEvidenceLedgerEvaluation
 } from "./forwardEvidenceTypes";
 
@@ -8,8 +9,8 @@ export interface ForwardEvidenceGatewayReport {
   reportType: "gotrader_forward_evidence_gateway_report";
   reportVersion: "v1";
   generatedAt: string;
-  profileId: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
-  profileVersion: "v3";
+  profileId: ForwardEvidenceProfileId;
+  profileVersion: ForwardEvidenceProfileVersion;
   cutoff: string;
   completedForwardOutcomes: number;
   pendingOutcomes: number;
@@ -36,8 +37,8 @@ export const buildForwardEvidenceGatewayReport = (
   reportType: "gotrader_forward_evidence_gateway_report",
   reportVersion: "v1",
   generatedAt,
-  profileId: IFVG_FRESH_RETEST_V3_PROFILE_ID,
-  profileVersion: "v3",
+  profileId: evaluation.profileId,
+  profileVersion: evaluation.profileVersion,
   cutoff: evaluation.cutoff,
   completedForwardOutcomes: evaluation.completedForwardOutcomes,
   pendingOutcomes: evaluation.pendingOutcomes,

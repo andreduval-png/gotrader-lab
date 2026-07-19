@@ -25,6 +25,8 @@ export interface IctIfvgShallowRetestV4Assessment {
   strategyId: "ifvg_fresh_retest_v4_candidate";
   candidate: IctIfvgCandidate;
   baseV3Eligible: boolean;
+  cleanRetest: boolean;
+  signalFresh: boolean;
   retestPenetration?: number;
   maximumRetestPenetration: number;
   shallowRetest: boolean;
@@ -58,6 +60,8 @@ export const assessIctIfvgShallowRetestV4 = (
     strategyId: "ifvg_fresh_retest_v4_candidate",
     candidate: base.candidate,
     baseV3Eligible: base.eligible,
+    cleanRetest: base.cleanRetest,
+    signalFresh: base.signalFresh,
     retestPenetration,
     maximumRetestPenetration: IFVG_V4_MAX_RETEST_PENETRATION,
     shallowRetest,

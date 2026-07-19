@@ -1,11 +1,16 @@
 import { assessIctIfvgFreshRetestV3 } from "@/lib/ict-strategy-suite/ictIfvgFreshRetestV3";
+import { assessIctIfvgShallowRetestV4 } from "@/lib/ict-strategy-suite/ictIfvgShallowRetestV4";
 import { loadActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5/mt5ReadOnlyClient";
 import type { Mt5PushFeedEventBus } from "@/lib/mt5PushFeed/mt5PushFeedEventBus";
 import type { Mt5CanonicalCandle } from "@/lib/mt5PushFeed/mt5PushFeedTypes";
 import type { Candle, Timeframe } from "@/lib/types";
-import { ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
+import {
+  ifvgFreshRetestV3FrozenProfile,
+  ifvgShallowRetestV4FrozenProfile
+} from "./frozenProfileRegistry";
 import {
   buildIfvgV3ForwardObservation,
+  buildIfvgV4ForwardObservation,
   resolveIfvgV3ForwardEvidenceWithClosedCandle
 } from "./ifvgForwardEvidencePolicy";
 import { loadForwardEvidenceLedger, saveForwardEvidenceLedger } from "./forwardEvidenceStorage";
@@ -43,17 +48,23 @@ export interface IfvgV3ForwardEvidenceSubscription {
   resolvedOutcomeCount: () => number;
 }
 
-export function processIfvgV3ForwardEvidenceClosedCandle(
+type IfvgForwardAssessment = Parameters<typeof buildIfvgV3ForwardObservation>[0];
+type IfvgForwardProfile = typeof ifvgFreshRetestV3FrozenProfile | typeof ifvgShallowRetestV4FrozenProfile;
+
+const processIfvgForwardEvidenceClosedCandle = (
   closedCandle: Mt5CanonicalCandle,
-  historyProvider: (candle: Mt5CanonicalCandle) => Candle[] = defaultHistoryProvider
-) {
+  profile: IfvgForwardProfile,
+  assess: (input: Parameters<typeof assessIctIfvgFreshRetestV3>[0]) => IfvgForwardAssessment,
+  buildObservation: typeof buildIfvgV3ForwardObservation,
+  historyProvider: (candle: Mt5CanonicalCandle) => Candle[]
+) => {
   const history = historyProvider(closedCandle)
     .filter((candle) => Date.parse(candle.timestamp) <= Date.parse(closedCandle.timestamp))
     .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
   const current = loadForwardEvidenceLedger();
   const observedBarsByEntryId = Object.fromEntries(
     current
-      .filter((entry) => entry.outcome === "pending")
+      .filter((entry) => entry.profileId === profile.profileId && entry.outcome === "pending")
       .map((entry) => [
         entry.entryId,
         history.filter((candle) =>
@@ -63,14 +74,15 @@ export function processIfvgV3ForwardEvidenceClosedCandle(
       ])
   );
   const resolved = resolveIfvgV3ForwardEvidenceWithClosedCandle(current, closedCandle, {
+    profileId: profile.profileId,
     observedBarsByEntryId,
-    maximumBars: ifvgFreshRetestV3FrozenProfile.frozenParameters.maxBarsToResolveTrade,
+    maximumBars: profile.frozenParameters.maxBarsToResolveTrade,
     checkedAt: closedCandle.receivedAt
   });
 
   let observation;
-  if (history.length >= ifvgFreshRetestV3FrozenProfile.frozenParameters.warmupCandles) {
-    const assessment = assessIctIfvgFreshRetestV3({
+  if (history.length >= profile.frozenParameters.warmupCandles) {
+    const assessment = assess({
       candles: history,
       sourceProvider: "mt5_read_only",
       sourceFingerprint: closedCandle.sourceFingerprint,
@@ -79,7 +91,7 @@ export function processIfvgV3ForwardEvidenceClosedCandle(
       timeframe: closedCandle.timeframe,
       generatedAt: closedCandle.receivedAt
     });
-    observation = buildIfvgV3ForwardObservation(assessment, {
+    observation = buildObservation(assessment, {
       sourceFingerprint: closedCandle.sourceFingerprint,
       observedAt: closedCandle.receivedAt
     });
@@ -107,6 +119,32 @@ export function processIfvgV3ForwardEvidenceClosedCandle(
     historyCandleCount: history.length,
     authority: FORWARD_EVIDENCE_AUTHORITY
   };
+};
+
+export function processIfvgV3ForwardEvidenceClosedCandle(
+  closedCandle: Mt5CanonicalCandle,
+  historyProvider: (candle: Mt5CanonicalCandle) => Candle[] = defaultHistoryProvider
+) {
+  return processIfvgForwardEvidenceClosedCandle(
+    closedCandle,
+    ifvgFreshRetestV3FrozenProfile,
+    assessIctIfvgFreshRetestV3,
+    buildIfvgV3ForwardObservation,
+    historyProvider
+  );
+}
+
+export function processIfvgV4ForwardEvidenceClosedCandle(
+  closedCandle: Mt5CanonicalCandle,
+  historyProvider: (candle: Mt5CanonicalCandle) => Candle[] = defaultHistoryProvider
+) {
+  return processIfvgForwardEvidenceClosedCandle(
+    closedCandle,
+    ifvgShallowRetestV4FrozenProfile,
+    assessIctIfvgShallowRetestV4,
+    buildIfvgV4ForwardObservation,
+    historyProvider
+  );
 }
 
 export function subscribeIfvgV3ForwardEvidenceToMt5PushFeed(
@@ -121,6 +159,29 @@ export function subscribeIfvgV3ForwardEvidenceToMt5PushFeed(
     if (event.candle.timeframe.toLowerCase() !== ifvgFreshRetestV3FrozenProfile.timeframe) return;
     processed += 1;
     const result = processIfvgV3ForwardEvidenceClosedCandle(event.candle, historyProvider);
+    if (result.issued) issued += 1;
+    resolved += result.updatedEntryIds.length;
+  });
+  return {
+    unsubscribe,
+    processedCandleCount: () => processed,
+    issuedObservationCount: () => issued,
+    resolvedOutcomeCount: () => resolved
+  };
+}
+
+export function subscribeIfvgV4ForwardEvidenceToMt5PushFeed(
+  eventBus: Mt5PushFeedEventBus,
+  historyProvider: (candle: Mt5CanonicalCandle) => Candle[] = defaultHistoryProvider
+): IfvgV3ForwardEvidenceSubscription {
+  let processed = 0;
+  let issued = 0;
+  let resolved = 0;
+  const unsubscribe = eventBus.subscribe((event) => {
+    if (event.type !== "canonical.candle_closed" || !event.candle) return;
+    if (event.candle.timeframe.toLowerCase() !== ifvgShallowRetestV4FrozenProfile.timeframe) return;
+    processed += 1;
+    const result = processIfvgV4ForwardEvidenceClosedCandle(event.candle, historyProvider);
     if (result.issued) issued += 1;
     resolved += result.updatedEntryIds.length;
   });

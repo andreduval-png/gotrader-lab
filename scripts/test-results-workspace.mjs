@@ -31,9 +31,11 @@ assert.doesNotMatch(view, /priceMove\s*\*\s*1\.25/);
 assert.match(view, /Aggregate backtest metrics are intentionally not spread across calendar days/);
 assert.match(view, /Cumulative dated outcome move/);
 assert.match(view, /Latest active validation and frozen profile evidence are reported separately/);
-assert.match(view, /Frozen IFVG v3 chronological evidence/);
+assert.match(view, /Frozen profile chronological evidence/);
 assert.match(view, /Latest saved simulation and frozen profile evidence remain distinct/);
-assert.match(view, /Frozen IFVG v3 robustness/);
+assert.match(view, /readableProfile\(resultsSnapshot\.frozenProfile\.profileId\)/);
+assert.doesNotMatch(view, /Frozen IFVG v3/);
+assert.match(builder, /getFrozenResearchProfile\(activeFrozenProfileId/);
 
 for (const section of [
   "backtest:",

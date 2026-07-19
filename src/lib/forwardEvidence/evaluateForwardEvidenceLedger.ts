@@ -2,9 +2,10 @@ import {
   FORWARD_EVIDENCE_AUTHORITY,
   type ForwardEvidenceEntry,
   type ForwardEvidenceLedgerEvaluation,
+  type ForwardEvidenceProfileId,
   type ForwardEvidenceRecommendation
 } from "./forwardEvidenceTypes";
-import { ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
+import { getFrozenResearchProfile, ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
 
 export const FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS = Object.freeze({
   completedOutcomes: 40,
@@ -36,9 +37,10 @@ const maxDrawdownR = (values: number[]) => {
 };
 
 export const evaluateForwardEvidenceLedger = (
-  entries: ForwardEvidenceEntry[]
+  entries: ForwardEvidenceEntry[],
+  profileId: ForwardEvidenceProfileId = ifvgFreshRetestV3FrozenProfile.profileId
 ): ForwardEvidenceLedgerEvaluation => {
-  const frozen = ifvgFreshRetestV3FrozenProfile;
+  const frozen = getFrozenResearchProfile(profileId) ?? ifvgFreshRetestV3FrozenProfile;
   const postCutoffEntries = entries
     .filter(
       (entry) =>

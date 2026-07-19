@@ -1,5 +1,10 @@
 import { buildForwardEvidenceEntry } from "./buildForwardEvidenceEntry";
-import type { ForwardEvidenceEntry } from "./forwardEvidenceTypes";
+import {
+  IFVG_FRESH_RETEST_V3_PROFILE_ID,
+  IFVG_FRESH_RETEST_V4_FORK_ID,
+  type ForwardEvidenceEntry,
+  type ForwardEvidenceProfileId
+} from "./forwardEvidenceTypes";
 
 export interface IfvgV3ForwardAssessmentInput {
   eligible: boolean;
@@ -37,18 +42,26 @@ const newYorkDate = (timestamp: string) => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
-const forwardWindowFor = (date: string) => {
+const forwardWindowFor = (profileId: ForwardEvidenceProfileId, date: string) => {
   const [year, month, day] = date.split("-");
-  return `ifvg_v3_forward_${year}_${month}_${Number(day) <= 15 ? "h1" : "h2"}`;
+  const version = profileId === IFVG_FRESH_RETEST_V4_FORK_ID ? "v4" : "v3";
+  return `ifvg_${version}_forward_${year}_${month}_${Number(day) <= 15 ? "h1" : "h2"}`;
 };
 
-const deterministicEntryId = (timestamp: string, direction: "long" | "short") =>
-  `ifvg_v3_forward_${timestamp.replace(/[^0-9]/g, "")}_${direction}`;
+const deterministicEntryId = (
+  profileId: ForwardEvidenceProfileId,
+  timestamp: string,
+  direction: "long" | "short"
+) => {
+  const version = profileId === IFVG_FRESH_RETEST_V4_FORK_ID ? "v4" : "v3";
+  return `ifvg_${version}_forward_${timestamp.replace(/[^0-9]/g, "")}_${direction}`;
+};
 
-export function buildIfvgV3ForwardObservation(
+const buildIfvgForwardObservation = (
   assessment: IfvgV3ForwardAssessmentInput,
+  profileId: ForwardEvidenceProfileId,
   options: { sourceFingerprint?: string; observedAt?: string } = {}
-): ForwardEvidenceEntry | undefined {
+): ForwardEvidenceEntry | undefined => {
   const candidate = assessment.candidate;
   const setupTimestamp = candidate.retestCandle?.timestamp;
   if (
@@ -67,16 +80,17 @@ export function buildIfvgV3ForwardObservation(
   }
   const independentDate = newYorkDate(setupTimestamp);
   return buildForwardEvidenceEntry({
-    entryId: deterministicEntryId(setupTimestamp, candidate.side),
+    profileId,
+    entryId: deterministicEntryId(profileId, setupTimestamp, candidate.side),
     timestamp: options.observedAt,
     sourceFingerprint: options.sourceFingerprint ?? candidate.sourceFingerprint ?? "",
     evidenceOrigin: "live_closed_candle",
     causalAtIssue: true,
     setupTimestamp,
     independentDate,
-    forwardWindowId: forwardWindowFor(independentDate),
+    forwardWindowId: forwardWindowFor(profileId, independentDate),
     direction: candidate.side,
-    scenarioFamily: "ifvg_fresh_retest_v3_research",
+    scenarioFamily: profileId,
     entryZone: {
       lower: candidate.ifvgBounds.low,
       upper: candidate.ifvgBounds.high
@@ -93,9 +107,23 @@ export function buildIfvgV3ForwardObservation(
     missingEvidence: candidate.missingConditions,
     outcome: "pending",
     barsObserved: 0,
-    blockerSummary: "Frozen IFVG v3 forward observation. Research-only; no readiness promotion or execution authority.",
+    blockerSummary: `Frozen ${profileId} forward observation. Research-only; no readiness promotion or execution authority.`,
     notes: candidate.warnings.join(" ")
   });
+};
+
+export function buildIfvgV3ForwardObservation(
+  assessment: IfvgV3ForwardAssessmentInput,
+  options: { sourceFingerprint?: string; observedAt?: string } = {}
+): ForwardEvidenceEntry | undefined {
+  return buildIfvgForwardObservation(assessment, IFVG_FRESH_RETEST_V3_PROFILE_ID, options);
+}
+
+export function buildIfvgV4ForwardObservation(
+  assessment: IfvgV3ForwardAssessmentInput,
+  options: { sourceFingerprint?: string; observedAt?: string } = {}
+): ForwardEvidenceEntry | undefined {
+  return buildIfvgForwardObservation(assessment, IFVG_FRESH_RETEST_V4_FORK_ID, options);
 }
 
 const outcomeFor = (entry: ForwardEvidenceEntry, candle: CompactClosedCandle) => {
@@ -126,6 +154,7 @@ export function resolveIfvgV3ForwardEvidenceWithClosedCandle(
   entries: ForwardEvidenceEntry[],
   candle: CompactClosedCandle,
   options: {
+    profileId?: ForwardEvidenceProfileId;
     observedBarsByEntryId?: Record<string, number>;
     maximumBars?: number;
     checkedAt?: string;
@@ -135,6 +164,7 @@ export function resolveIfvgV3ForwardEvidenceWithClosedCandle(
   const maximumBars = Math.max(1, options.maximumBars ?? 48);
   const checkedAt = options.checkedAt ?? new Date().toISOString();
   const entriesAfterUpdate = entries.map((entry) => {
+    if (options.profileId && entry.profileId !== options.profileId) return entry;
     if (entry.outcome !== "pending" || Date.parse(candle.timestamp) <= Date.parse(entry.setupTimestamp)) {
       return entry;
     }

@@ -86,6 +86,7 @@ async function main() {
   const intakeAudit = await import(pathToFileURL(path.join(outRoot, "auditForwardEvidenceCycleSample.mjs")).href);
   const gatewayReportBuilder = await import(pathToFileURL(path.join(outRoot, "buildForwardEvidenceGatewayReport.mjs")).href);
   const frozen = registry.ifvgFreshRetestV3FrozenProfile;
+  const frozenV4 = registry.ifvgShallowRetestV4FrozenProfile;
 
   assert.equal(frozen.profileId, "ifvg_fresh_retest_v3_research");
   assert.equal(frozen.profileVersion, "v3");
@@ -109,6 +110,15 @@ async function main() {
   assert.equal(frozen.mutationPolicy, "frozen_profile_no_mutation");
   assert.equal(frozen.futureChangesPolicy, "fork_new_profile_version_only");
   assert.equal(frozen.autoPromotionAllowed, false);
+  assert.equal(frozenV4.profileId, "ifvg_fresh_retest_v4_candidate");
+  assert.equal(frozenV4.profileVersion, "v4");
+  assert.equal(frozenV4.validationCutoff, frozen.validationCutoff);
+  assert.equal(frozenV4.evidence.completedTrades, 68);
+  assert.equal(frozenV4.evidence.oosTrades, 21);
+  assert.equal(frozenV4.evidence.oosAverageR, 5.404);
+  assert.equal(frozenV4.evidence.monteCarloRobustness, "strong");
+  assert.equal(frozenV4.frozenParameters.maximumRetestPenetration, 0.66);
+  assert.equal(frozenV4.autoPromotionAllowed, false);
 
   const safeEntry = builder.buildForwardEvidenceEntry({
     sourceFingerprint: "mt5_forward_fp_001",
@@ -164,6 +174,48 @@ async function main() {
   assert.equal(pendingObservation.authority.brokerAuthority, "none");
   assert.equal(pendingObservation.authority.readinessOverrideAuthority, "none");
   assert.doesNotMatch(JSON.stringify(pendingObservation), /"(?:candles|rawCandles|accountData|orderData|positionData)"\s*:/i);
+
+  const v4PendingObservation = ifvgPolicy.buildIfvgV4ForwardObservation({
+    eligible: true,
+    cleanRetest: true,
+    signalFresh: true,
+    blockers: [],
+    candidate: {
+      side: "short",
+      sourceFingerprint: "mt5_ifvg_v4_forward_001",
+      retestCandle: { timestamp: afterCutoff(1) },
+      ifvgBounds: { low: 200, high: 202, midpoint: 201 },
+      stop: 203,
+      target: 196,
+      rr: 2,
+      presentConditions: ["fresh_clean_retest", "shallow_retest"],
+      missingConditions: [],
+      warnings: []
+    }
+  }, { observedAt: afterCutoff(1, 15) });
+  assert.ok(v4PendingObservation);
+  assert.equal(v4PendingObservation.profileId, frozenV4.profileId);
+  assert.equal(v4PendingObservation.profileVersion, "v4");
+  assert.equal(v4PendingObservation.forwardEligible, true);
+  assert.equal(v4PendingObservation.authority.executionAuthority, "none");
+  assert.doesNotMatch(JSON.stringify(v4PendingObservation), /"(?:candles|rawCandles|accountData|orderData|positionData)"\s*:/i);
+
+  const v3Isolation = evaluator.evaluateForwardEvidenceLedger([v4PendingObservation]);
+  const v4Isolation = evaluator.evaluateForwardEvidenceLedger([pendingObservation, v4PendingObservation], frozenV4.profileId);
+  assert.equal(v3Isolation.totalForwardOutcomes, 0, "v3 evaluation must not count v4 observations");
+  assert.equal(v4Isolation.totalForwardOutcomes, 1, "v4 evaluation must count only v4 observations");
+  const wrongProfileResolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
+    [v4PendingObservation],
+    { timestamp: afterCutoff(1, 16), high: 204, low: 195 },
+    { profileId: frozen.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterCutoff(1, 16) }
+  );
+  assert.equal(wrongProfileResolution.entries[0].outcome, "pending", "v3 resolution must not mutate v4 entries");
+  const v4Resolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
+    [v4PendingObservation],
+    { timestamp: afterCutoff(1, 16), high: 202, low: 195 },
+    { profileId: frozenV4.profileId, observedBarsByEntryId: { [v4PendingObservation.entryId]: 1 }, checkedAt: afterCutoff(1, 16) }
+  );
+  assert.equal(v4Resolution.entries[0].outcome, "target_first");
 
   const targetResolution = ifvgPolicy.resolveIfvgV3ForwardEvidenceWithClosedCandle(
     [pendingObservation],
@@ -325,6 +377,17 @@ async function main() {
   assert.equal(fork.autoApplyAllowed, false);
   assert.equal(fork.authority.readinessOverrideAuthority, "none");
 
+  const appSource = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
+  const runtimeSource = fs.readFileSync(path.join(root, "src/lib/forwardEvidence/ifvgForwardEvidenceRuntime.ts"), "utf8");
+  const evidenceCardSource = fs.readFileSync(path.join(root, "src/components/common/IfvgForwardEvidenceCard.tsx"), "utf8");
+  assert.match(appSource, /subscribeIfvgV4ForwardEvidenceToMt5PushFeed/);
+  assert.match(runtimeSource, /profileId:\s*profile\.profileId/);
+  assert.match(runtimeSource, /entry\.profileId === profile\.profileId/);
+  assert.doesNotMatch(runtimeSource, /executionAuthority:\s*["'](?!none)/);
+  assert.match(evidenceCardSource, /getFrozenResearchProfile/);
+  assert.match(evidenceCardSource, /evaluateForwardEvidenceLedger\(entries, frozen\.profileId\)/);
+  assert.doesNotMatch(evidenceCardSource, /IFVG v3 Frozen Profile/);
+
   const approvalSource = fs.readFileSync(
     path.join(root, "src/lib/selfImprovement/approveCalibrationProposal.ts"),
     "utf8"
@@ -335,6 +398,7 @@ async function main() {
   console.log(JSON.stringify({
     status: "passed",
     profile: frozen.profileId,
+    additionalProfile: frozenV4.profileId,
     cutoff: frozen.validationCutoff,
     preservedEvidence: frozen.evidence,
     thresholds: evaluator.FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
@@ -344,6 +408,8 @@ async function main() {
       rawCandlesSerialized: false,
       accountOrderPositionSerialized: false,
       ifvgForwardObservationIssued: true,
+      ifvgV4ForwardObservationIssued: true,
+      crossProfileCreditBlocked: true,
       ifvgForwardOutcomeResolved: targetResolution.entries[0].outcome,
       replayedCycleTradesCreditedForward: threeTradeCycleAudit.creditedForwardOutcomes,
       unverifiedHistoricalOutcomesExcluded: historicalOnly.unverifiedOutcomes,

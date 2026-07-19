@@ -6,6 +6,10 @@ export const FORWARD_EVIDENCE_AUTHORITY = {
 
 export const IFVG_FRESH_RETEST_V3_PROFILE_ID = "ifvg_fresh_retest_v3_research" as const;
 export const IFVG_FRESH_RETEST_V4_FORK_ID = "ifvg_fresh_retest_v4_candidate" as const;
+export type ForwardEvidenceProfileId =
+  | typeof IFVG_FRESH_RETEST_V3_PROFILE_ID
+  | typeof IFVG_FRESH_RETEST_V4_FORK_ID;
+export type ForwardEvidenceProfileVersion = "v3" | "v4";
 
 export type ForwardEvidenceOutcome =
   | "pending"
@@ -53,8 +57,8 @@ export interface FrozenProfileEvidenceSummary {
 }
 
 export interface FrozenResearchProfile {
-  profileId: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
-  profileVersion: "v3";
+  profileId: ForwardEvidenceProfileId;
+  profileVersion: ForwardEvidenceProfileVersion;
   frozenAt: string;
   validationCutoff: string;
   validationSourceDescription: string;
@@ -65,7 +69,7 @@ export interface FrozenResearchProfile {
   historicalValidationDays: 180;
   evidence: FrozenProfileEvidenceSummary;
   frozenParameters: Readonly<{
-    strategyProfile: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
+    strategyProfile: ForwardEvidenceProfileId;
     warmupCandles: 100;
     decisionInterval: 1;
     maxBarsToResolveTrade: 48;
@@ -78,10 +82,11 @@ export interface FrozenResearchProfile {
     requireCleanRetest: true;
     requireLatestClosedCandleRetest: true;
     allowPostEntryConfirmation: false;
+    maximumRetestPenetration?: number;
   }>;
   mutationPolicy: "frozen_profile_no_mutation";
   futureChangesPolicy: "fork_new_profile_version_only";
-  suggestedForkProfileId: typeof IFVG_FRESH_RETEST_V4_FORK_ID;
+  suggestedForkProfileId?: string;
   researchOnly: true;
   autoPromotionAllowed: false;
   authority: typeof FORWARD_EVIDENCE_AUTHORITY;
@@ -90,8 +95,8 @@ export interface FrozenResearchProfile {
 export interface ForwardEvidenceEntry {
   entryId: string;
   timestamp: string;
-  profileId: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
-  profileVersion: "v3";
+  profileId: ForwardEvidenceProfileId;
+  profileVersion: ForwardEvidenceProfileVersion;
   frozenAt: string;
   validationCutoff: string;
   sourceProvider: "mt5_read_only";
@@ -124,6 +129,7 @@ export interface ForwardEvidenceEntry {
 export interface ForwardEvidenceEntryInput {
   entryId?: string;
   timestamp?: string;
+  profileId?: ForwardEvidenceProfileId;
   sourceFingerprint: string;
   evidenceOrigin?: ForwardEvidenceOrigin;
   causalAtIssue?: boolean;
@@ -151,8 +157,8 @@ export interface ForwardEvidenceEntryInput {
 }
 
 export interface ForwardEvidenceLedgerEvaluation {
-  profileId: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
-  profileVersion: "v3";
+  profileId: ForwardEvidenceProfileId;
+  profileVersion: ForwardEvidenceProfileVersion;
   cutoff: string;
   totalForwardOutcomes: number;
   completedForwardOutcomes: number;
@@ -199,7 +205,7 @@ export interface ForwardEvidenceCycleSampleAudit {
 }
 
 export interface FrozenProfileMutationReview {
-  frozenProfileId?: typeof IFVG_FRESH_RETEST_V3_PROFILE_ID;
+  frozenProfileId?: ForwardEvidenceProfileId;
   blocked: boolean;
   directMutationAllowed: false;
   forkProposalAllowed: boolean;

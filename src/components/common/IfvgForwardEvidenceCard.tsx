@@ -8,6 +8,7 @@ import {
   auditForwardEvidenceCycleSample,
   buildForwardEvidenceGatewayReport,
   evaluateForwardEvidenceLedger,
+  getFrozenResearchProfile,
   ifvgFreshRetestV3FrozenProfile,
   loadForwardEvidenceLedger
 } from "@/lib/forwardEvidence";
@@ -27,7 +28,21 @@ export function IfvgForwardEvidenceCard({
 }) {
   const [entries, setEntries] = useState(() => loadForwardEvidenceLedger());
   const [latestCycle, setLatestCycle] = useState(() => latestResearchCycleRun(loadResearchCycleState()));
-  const evaluation = useMemo(() => evaluateForwardEvidenceLedger(entries), [entries]);
+  const frozen = useMemo(() => {
+    const cycleProfile = getFrozenResearchProfile(
+      latestCycle?.validationSummary?.provenance?.strategyProfile ?? ""
+    );
+    if (cycleProfile) return cycleProfile;
+    const latestLedgerProfile = [...entries]
+      .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))
+      .map((entry) => getFrozenResearchProfile(entry.profileId))
+      .find(Boolean);
+    return latestLedgerProfile ?? ifvgFreshRetestV3FrozenProfile;
+  }, [entries, latestCycle]);
+  const evaluation = useMemo(
+    () => evaluateForwardEvidenceLedger(entries, frozen.profileId),
+    [entries, frozen.profileId]
+  );
   const cycleAudit = useMemo(
     () => auditForwardEvidenceCycleSample(
       latestCycle
@@ -42,15 +57,13 @@ export function IfvgForwardEvidenceCard({
     ),
     [entries, latestCycle]
   );
-  const frozen = ifvgFreshRetestV3FrozenProfile;
-
   const exportGatewayEvidence = () => {
     const report = buildForwardEvidenceGatewayReport(evaluation);
     const blob = new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "ifvg-v3-forward-evidence.json";
+    anchor.download = `${frozen.profileId}-forward-evidence.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -69,11 +82,11 @@ export function IfvgForwardEvidenceCard({
   }, []);
 
   return (
-    <Card className="border-cyan-300/20 bg-cyan-300/5" data-testid="ifvg-v3-frozen-profile-card">
+    <Card className="border-cyan-300/20 bg-cyan-300/5" data-testid="ifvg-frozen-profile-card">
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>IFVG v3 Frozen Profile</CardTitle>
+            <CardTitle>{frozen.profileId.replace(/_/g, " ")} Frozen Profile</CardTitle>
             <CardDescription>
               Untouched forward evidence only after {dateTime(frozen.validationCutoff)}.
             </CardDescription>
@@ -110,10 +123,13 @@ export function IfvgForwardEvidenceCard({
           </div>
         </div>
         <div className="rounded-md border border-cyan-300/20 bg-cyan-300/5 p-3 text-sm text-cyan-50">
-          IFVG v3 is frozen. Further changes require a new profile version and forward evidence.
+          {frozen.profileId.replace(/_/g, " ")} is frozen. Further changes require a new profile version and forward evidence.
           {context === "self_improvement" ? (
             <span className="mt-1 block text-xs text-cyan-100/75">
-              Direct mutation is blocked. Draft a fork as {frozen.suggestedForkProfileId}; it remains validation-only and cannot auto-apply.
+              Direct mutation is blocked.
+              {frozen.suggestedForkProfileId
+                ? ` Draft a fork as ${frozen.suggestedForkProfileId}; it remains validation-only and cannot auto-apply.`
+                : " Any further refinement requires a separately versioned research profile and new validation."}
             </span>
           ) : null}
         </div>

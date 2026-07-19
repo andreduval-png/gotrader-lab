@@ -4,7 +4,7 @@ import {
   type ForwardEvidenceEntryInput,
   type ForwardEvidenceTargetReference
 } from "./forwardEvidenceTypes";
-import { ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
+import { getFrozenResearchProfile, ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
 
 const forbiddenKeys = new Set([
   "candles",
@@ -103,7 +103,8 @@ const entryId = () =>
   `forward_evidence_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): ForwardEvidenceEntry => {
-  const frozen = ifvgFreshRetestV3FrozenProfile;
+  const frozen = getFrozenResearchProfile(input.profileId ?? ifvgFreshRetestV3FrozenProfile.profileId) ??
+    ifvgFreshRetestV3FrozenProfile;
   const blockedFields = findForwardEvidenceBlockedFields(input);
   const setupTimestamp = validTimestamp(input.setupTimestamp) ?? frozen.validationCutoff;
   const timestamp = validTimestamp(input.timestamp) ?? new Date().toISOString();

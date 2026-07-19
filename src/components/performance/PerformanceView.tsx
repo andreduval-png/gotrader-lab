@@ -79,6 +79,7 @@ const pct = (value?: number, digits = 1) =>
   typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "n/a";
 const rValue = (value?: number | null, digits = 2) =>
   typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(digits)}R` : "n/a";
+const readableProfile = (profileId: string) => profileId.replace(/_/g, " ");
 
 interface CalendarCell {
   date: Date;
@@ -210,9 +211,9 @@ export function PerformanceView({ state }: { state: LabState }) {
         <section className="space-y-4" data-testid="results-tab-overview">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <ResultMetricCard
-              label="Frozen IFVG v3"
+              label="Frozen research profile"
               value={`${resultsSnapshot.frozenProfile.historicalTrades} trades`}
-              detail={`${pct(resultsSnapshot.frozenProfile.historicalTargetFirstRate)} target-first / ${rValue(resultsSnapshot.frozenProfile.historicalAverageR)}`}
+              detail={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} / ${pct(resultsSnapshot.frozenProfile.historicalTargetFirstRate)} target-first / ${rValue(resultsSnapshot.frozenProfile.historicalAverageR)}`}
               tone="positive"
             />
             <ResultMetricCard
@@ -262,7 +263,7 @@ export function PerformanceView({ state }: { state: LabState }) {
                 <StatTile label="Paper-Demo" value={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / broker disconnected`} />
               </div>
               <p className="mt-4 rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm leading-6 text-emerald-100">
-                Frozen IFVG v3 historical replay, chronological OOS, and Monte Carlo evidence are preserved separately. Forward reassessment still requires untouched post-cutoff outcomes.
+                {readableProfile(resultsSnapshot.frozenProfile.profileId)} historical replay, chronological OOS, and Monte Carlo evidence are preserved separately. Forward reassessment still requires untouched post-cutoff outcomes.
               </p>
               <p className="mt-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
                 {resultsSnapshot.validation.nextAction}
@@ -293,7 +294,7 @@ export function PerformanceView({ state }: { state: LabState }) {
           />
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">latest run: {resultsSnapshot.walkForward.status.replace(/_/g, " ")}</Badge>
-            <Badge variant="secondary">frozen IFVG v3: OOS passed</Badge>
+            <Badge variant="secondary">{readableProfile(resultsSnapshot.frozenProfile.profileId)}: OOS passed</Badge>
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Latest active validation run</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -306,7 +307,7 @@ export function PerformanceView({ state }: { state: LabState }) {
             />
             <ResultMetricCard label="Verdict" value={resultsSnapshot.walkForward.verdict.replace(/_/g, " ")} detail={resultsSnapshot.walkForward.runId ?? "no saved WF run"} />
           </div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frozen IFVG v3 chronological evidence</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frozen profile chronological evidence</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <ResultMetricCard label="OOS sample" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} detail={`${resultsSnapshot.frozenProfile.historicalUniqueDates} historical dates`} tone="positive" />
             <ResultMetricCard label="Rolling windows" value={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal}`} detail="positive chronological windows" tone="positive" />
@@ -361,7 +362,7 @@ export function PerformanceView({ state }: { state: LabState }) {
             <ResultMetricCard label="Risk of ruin" value={resultsSnapshot.monteCarlo.riskOfRuinPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.riskOfRuinPct.toFixed(2)}%`} detail="Research simulation only" />
           </div>
           <ResultPanel>
-            <PanelHeading icon={<Activity className="h-4 w-4" />} title="Frozen IFVG v3 robustness" subtitle="Validated historical profile; forward reassessment remains gated" />
+            <PanelHeading icon={<Activity className="h-4 w-4" />} title={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} robustness`} subtitle="Validated historical profile; forward reassessment remains gated" />
             <div className="mt-4 grid gap-2 md:grid-cols-4">
               <StatTile label="Monte Carlo" value={resultsSnapshot.frozenProfile.monteCarloRobustness.replace(/_/g, " ")} />
               <StatTile label="Historical outcomes" value={String(resultsSnapshot.frozenProfile.historicalTrades)} />

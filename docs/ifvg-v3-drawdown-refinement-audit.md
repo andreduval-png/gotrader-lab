@@ -55,6 +55,8 @@ Readiness and Paper-Demo promotion remain blocked. This audit cannot modify the 
 
 Collect untouched post-cutoff outcomes for `ifvg_fresh_retest_v4_candidate` before any evidence, maturity, or Paper-Demo review.
 
+The application now maintains profile-aware forward evidence. IFVG v3 and v4 observations share a compact store but are issued, resolved, evaluated, exported, and displayed under separate profile identities. Historical validation trades receive zero forward credit. V4 reassessment requires 40 completed forward outcomes across 20 independent dates and two forward windows; meeting those thresholds permits deterministic review only, never automatic promotion.
+
 ## Safety
 
 - executionAuthority: none

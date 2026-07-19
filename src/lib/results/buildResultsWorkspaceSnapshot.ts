@@ -1,6 +1,7 @@
 import {
   FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
   evaluateForwardEvidenceLedger,
+  getFrozenResearchProfile,
   ifvgFreshRetestV3FrozenProfile
 } from "@/lib/forwardEvidence";
 import { evaluatePredictionCalibration } from "@/lib/predictionLedger";
@@ -29,8 +30,11 @@ export function buildResultsWorkspaceSnapshot(
   const chain = input.validationChainEntry;
   const paperCandidates = input.paperDemoState.candidates;
   const latestChecklist = input.paperDemoState.dailyChecklists[0];
-  const forward = evaluateForwardEvidenceLedger(input.forwardEvidenceEntries);
-  const frozen = ifvgFreshRetestV3FrozenProfile;
+  const activeFrozenProfileId =
+    runtime?.latestResearchCycle.latestValidationSummary?.provenance?.strategyProfile ??
+    runtime?.activeConfig.resolvedBacktestConfig.strategyProfile;
+  const frozen = getFrozenResearchProfile(activeFrozenProfileId ?? "") ?? ifvgFreshRetestV3FrozenProfile;
+  const forward = evaluateForwardEvidenceLedger(input.forwardEvidenceEntries, frozen.profileId);
   const predictions = evaluatePredictionCalibration(input.predictionLedger.entries);
   const oos = walkForward?.stability?.edgeStatistics?.provenance === "out_of_sample"
     ? walkForward.stability.edgeStatistics

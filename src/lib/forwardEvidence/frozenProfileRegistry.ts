@@ -59,17 +59,72 @@ export const ifvgFreshRetestV3FrozenProfile: FrozenResearchProfile = Object.free
   authority: FORWARD_EVIDENCE_AUTHORITY
 });
 
+export const ifvgShallowRetestV4FrozenProfile: FrozenResearchProfile = Object.freeze({
+  profileId: IFVG_FRESH_RETEST_V4_FORK_ID,
+  profileVersion: "v4",
+  frozenAt: "2026-07-19T03:10:57.636Z",
+  validationCutoff: "2026-07-14T04:40:00.000Z",
+  validationSourceDescription:
+    "MT5 read-only USTECH CFD/proxy candles for MNQ-style research; one-variable shallow-retest fork checked on chronological development/OOS data.",
+  sourceProvider: "mt5_read_only",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timeframe: "5m",
+  historicalValidationDays: 180,
+  evidence: Object.freeze({
+    candleCount: 34_989,
+    completedTrades: 68,
+    targetFirstRate: 0.5882,
+    averageR: 3.314,
+    profitFactor: 7.639,
+    uniqueDates: 47,
+    positiveRollingWindows: 2,
+    totalRollingWindows: 2,
+    frozenOosWindowsPassed: 2,
+    frozenOosWindowCount: 2,
+    oosTrades: 21,
+    oosAverageR: 5.404,
+    oosProfitFactor: 14.603,
+    oosAdditionalCostR: 4.904,
+    monteCarloRobustness: "strong"
+  }),
+  frozenParameters: Object.freeze({
+    strategyProfile: IFVG_FRESH_RETEST_V4_FORK_ID,
+    warmupCandles: 100,
+    decisionInterval: 1,
+    maxBarsToResolveTrade: 48,
+    visibleWindow: 80,
+    minimumRR: 2,
+    allowLong: true,
+    allowShort: true,
+    requireValidationEligibleBaseIfvg: true,
+    requireUnusedZoneBeforeInversion: true,
+    requireCleanRetest: true,
+    requireLatestClosedCandleRetest: true,
+    allowPostEntryConfirmation: false,
+    maximumRetestPenetration: 0.66
+  }),
+  mutationPolicy: "frozen_profile_no_mutation",
+  futureChangesPolicy: "fork_new_profile_version_only",
+  researchOnly: true,
+  autoPromotionAllowed: false,
+  authority: FORWARD_EVIDENCE_AUTHORITY
+});
+
 export const frozenResearchProfileRegistry = Object.freeze({
-  [IFVG_FRESH_RETEST_V3_PROFILE_ID]: ifvgFreshRetestV3FrozenProfile
+  [IFVG_FRESH_RETEST_V3_PROFILE_ID]: ifvgFreshRetestV3FrozenProfile,
+  [IFVG_FRESH_RETEST_V4_FORK_ID]: ifvgShallowRetestV4FrozenProfile
 });
 
 export const getFrozenResearchProfile = (profileId: string) =>
   profileId === IFVG_FRESH_RETEST_V3_PROFILE_ID
     ? ifvgFreshRetestV3FrozenProfile
-    : undefined;
+    : profileId === IFVG_FRESH_RETEST_V4_FORK_ID
+      ? ifvgShallowRetestV4FrozenProfile
+      : undefined;
 
 export const isFrozenResearchProfile = (profileId?: string) =>
-  profileId === IFVG_FRESH_RETEST_V3_PROFILE_ID;
+  profileId === IFVG_FRESH_RETEST_V3_PROFILE_ID || profileId === IFVG_FRESH_RETEST_V4_FORK_ID;
 
 export const reviewFrozenProfileMutation = (input: {
   baseProfileId?: string;
@@ -89,13 +144,17 @@ export const reviewFrozenProfileMutation = (input: {
   }
 
   return {
-    frozenProfileId: IFVG_FRESH_RETEST_V3_PROFILE_ID,
+    frozenProfileId: input.baseProfileId === IFVG_FRESH_RETEST_V4_FORK_ID || input.targetProfileId === IFVG_FRESH_RETEST_V4_FORK_ID
+      ? IFVG_FRESH_RETEST_V4_FORK_ID
+      : IFVG_FRESH_RETEST_V3_PROFILE_ID,
     blocked: input.parameterMutationRequested || isFrozenResearchProfile(input.targetProfileId),
     directMutationAllowed: false,
-    forkProposalAllowed: true,
-    requiredForkProfileId: IFVG_FRESH_RETEST_V4_FORK_ID,
+    forkProposalAllowed: input.baseProfileId === IFVG_FRESH_RETEST_V3_PROFILE_ID,
+    requiredForkProfileId: input.baseProfileId === IFVG_FRESH_RETEST_V3_PROFILE_ID
+      ? IFVG_FRESH_RETEST_V4_FORK_ID
+      : undefined,
     reason:
-      "IFVG v3 is frozen. Further changes require a new profile version and forward evidence.",
+      "The IFVG research profile is frozen. Further changes require a new profile version and forward evidence.",
     authority: FORWARD_EVIDENCE_AUTHORITY
   };
 };
