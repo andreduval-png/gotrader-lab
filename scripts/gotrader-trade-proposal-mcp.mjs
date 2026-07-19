@@ -12,6 +12,7 @@ import {
 import {
   buildPaperDemoGatewayStatus,
   preparePaperDemoSimulation,
+  readRecentMt5DemoReceipts,
   readRecentPaperDemoReceipts
 } from "./gotrader-paper-demo-gateway-core.mjs";
 
@@ -73,7 +74,7 @@ server.registerTool(
   "gotrader_paper_demo_gateway_status",
   {
     description:
-      "Read the opt-in local Paper-Demo preparation gateway status. The gateway cannot submit broker orders or grant authority.",
+      "Read the opt-in Paper-Demo and MT5 demo-handoff status. The MCP cannot call MT5 or grant authority; the independent gateway must verify every queued demo request.",
     inputSchema: {}
   },
   async () => asToolResult(await buildPaperDemoGatewayStatus())
@@ -83,7 +84,7 @@ server.registerTool(
   "gotrader_prepare_paper_demo_simulation",
   {
     description:
-      "Prepare an already validated proposal for local paper-only review. Requires operator opt-in, readiness, forward evidence, and risk limits; never submits to a broker.",
+      "Prepare an already validated proposal for paper review. A separate explicit policy may also queue an immutable MT5 demo handoff; this MCP never calls MT5 or permits live execution.",
     inputSchema: {
       proposalId: z.string().min(1).describe("GoTrader MCP proposal identifier to review.")
     }
@@ -91,6 +92,21 @@ server.registerTool(
   async ({ proposalId }) => {
     const result = await preparePaperDemoSimulation(proposalId);
     return asToolResult(result, result.status === "blocked");
+  }
+);
+
+server.registerTool(
+  "gotrader_list_mt5_demo_receipts",
+  {
+    description:
+      "List compact status receipts from the independent MT5 demo gateway. Receipts exclude credentials, balances, raw broker responses, candles, account records, and broker state lists.",
+    inputSchema: {
+      limit: z.number().int().min(1).max(20).optional().default(10)
+    }
+  },
+  async ({ limit }) => {
+    const receipts = await readRecentMt5DemoReceipts({ limit });
+    return asToolResult({ receipts, count: receipts.length });
   }
 );
 

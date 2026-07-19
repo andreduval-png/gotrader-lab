@@ -59,11 +59,12 @@ export const routeBrokerForSymbol = ({
   const routingWarnings: string[] = [];
 
   if (assetClass === "futures" && futuresRoots.has(futureRoot)) {
-    broker = "topstepx";
-    reason = "Futures symbols route to the TopstepX readiness adapter; broker submission remains locked.";
+    broker = "mt5";
+    reason = "Futures-style research symbols route to mapped MT5 instruments through the independent demo gateway.";
+    routingWarnings.push("MNQ/NQ, ES, and YM-style research uses configured MT5 CFD/proxy symbols such as USTECH, US500, and US30.");
   } else if (mt5ForexCfdSymbols.has(normalizedSymbol)) {
     broker = "mt5";
-    reason = "Forex and CFD symbols route to the planned MT5 execution adapter.";
+    reason = "Forex and CFD symbols route to the independent MT5 demo gateway.";
   } else if (assetClass === "crypto") {
     broker = "none";
     reason = "Crypto market data is supported for research, but no broker execution adapter is approved.";
@@ -73,8 +74,8 @@ export const routeBrokerForSymbol = ({
   if (accountMode === "research") {
     routingWarnings.push("Research mode blocks all execution intents.");
   }
-  if (broker === "topstepx") {
-    routingWarnings.push("TopstepX has no sandbox. The independent adapter permits readiness probes only.");
+  if (broker === "mt5") {
+    routingWarnings.push("Only a positively verified MT5 demo account may receive a validated handoff; live accounts remain blocked.");
   }
   if (broker === "none") {
     routingWarnings.push("No broker adapter may execute this symbol.");

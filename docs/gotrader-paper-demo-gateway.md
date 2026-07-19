@@ -9,9 +9,10 @@ The local gateway is the second safe phase of the GoTrader control plane:
 3. The Paper-Demo gateway may prepare that scenario after every deterministic gate passes.
 4. GoTrader writes one hashed, immutable paper request to `.gotrader/paper-demo-outbox`.
 5. The independent `go-trader` paper consumer revalidates the request, simulates fills from MT5 read-only candles, and writes compact receipts to `.gotrader/paper-demo-receipts`.
-6. No broker submission is implemented in this phase.
+6. An optional, separately enabled MT5 demo handoff may also be written after those same gates pass.
+7. The sibling independent MT5 gateway must then verify an exact allowlisted demo account and its own risk policy before any protected pending order can be submitted.
 
-The gateway does not expose account, order, position, cancellation, closing, or broker-mutation tools. Its authority is always:
+The browser and research gateway do not expose account, order, position, cancellation, closing, or broker-mutation tools. The independent MT5 gateway owns the narrow demo broker operation. Research authority is always:
 
 ```text
 executionAuthority: none

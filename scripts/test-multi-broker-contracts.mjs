@@ -34,10 +34,10 @@ const forexRoute = brokerRouter.routeBrokerForSymbol({ symbol: "EUR/USD", accoun
 const cfdRoute = brokerRouter.routeBrokerForSymbol({ symbol: "US30", accountMode: "research" });
 const unknownRoute = brokerRouter.routeBrokerForSymbol({ symbol: "RANDOM", accountMode: "research" });
 
-assert(futuresRoute.broker === "topstepx", "MNQ should route to the TopstepX readiness adapter.");
+assert(futuresRoute.broker === "mt5", "MNQ should route to the primary MT5 demo gateway.");
 assert(
-  futuresRoute.routingWarnings.some((warning) => warning.includes("readiness probes only")),
-  "MNQ route should explain that TopstepX submission remains locked."
+  futuresRoute.routingWarnings.some((warning) => warning.includes("USTECH")),
+  "MNQ route should explain its MT5 CFD/proxy symbol mapping."
 );
 assert(forexRoute.broker === "mt5", "EUR/USD should route to MT5.");
 assert(cfdRoute.broker === "mt5", "US30 should route to MT5.");

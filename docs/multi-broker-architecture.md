@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Phase 1 adds contracts and safety policies for a future multi-broker GoTrader architecture. It does not connect brokers, place orders, create live credentials, or enable paper/live execution.
+GoTrader now uses MT5 as the primary demo broker boundary after deterministic validation. Live execution remains locked, and TopstepX/Tradovate remain future options.
 
 It also does not create a live chart-data feed. Lightweight Charts renders GoTrader candle sources, and the current app sources are imported historical, mock, or replay candles unless a separate read-only feed reports connected status.
 
@@ -10,7 +10,8 @@ The intended responsibility split is:
 
 - TradingView MCP is the eyes: chart analysis, levels, indicators, replay context, screenshots, and technical confirmation.
 - GoTrader is the brain: strategy evaluation, risk checks, broker routing, readiness gates, provenance, and journal records.
-- Tradovate and MT5 are the hands: future execution adapters only.
+- MT5 is the demo hand: an independent, fail-closed gateway that verifies a local demo account and executes only validated protected pending orders.
+- TopstepX and Tradovate are future hands and are not automatic fallbacks.
 
 TradingView MCP must never be treated as broker truth or execution authority. Broker quotes, account state, fills, margin, and order status must come from the broker adapter in a later phase.
 
@@ -27,8 +28,8 @@ Added:
 - TradingView MCP analysis-only evidence contracts.
 - TradingView authority normalization that downgrades buy/sell and any authority claims.
 - Broker route contracts for futures, forex, CFDs, crypto, and unknown symbols.
-- Tradovate planned futures adapter stubs.
-- MT5 planned forex/CFD adapter stubs.
+- Tradovate and TopstepX future/readiness adapter stubs.
+- MT5 demo gateway contract, outbox, route status, and independent Python consumer.
 - Research-mode execution intent/result blockers.
 - Broker journal event contract for blocked intents and future provenance.
 - Settings and Command Center planned/locked status indicators.
@@ -36,7 +37,7 @@ Added:
 
 ## Routing Rules
 
-Futures route to Tradovate:
+Futures-style research routes to configured MT5 CFD/proxy symbols for demo validation:
 
 - MNQ, MES, NQ, ES, YM, MYM, M2K
 
@@ -87,18 +88,15 @@ Risk Manager is mandatory. Execution adapters must never bypass it.
 
 ## What Remains Locked
 
-- Tradovate credentials
+- TopstepX and Tradovate credentials and submissions
 - MT5 credentials
-- broker quote/account checks
-- MT5 read-only quote/candle bridge
+- live-account MT5 submission
 - TradingView MCP live chart feed bridge
-- order placement
-- dry-run execution
-- paper trading
+- emergency close/flatten automation
 - live trading
 - readiness overrides
 - go-trader handoff automation
 
 ## Next Phase
 
-Phase 2 should add a local dry-run broker router that simulates route decisions and quote/account readiness checks without calling real brokers. It should still keep execution blocked unless an explicit dry-run mode is enabled and journaled.
+Next work should collect untouched MT5 demo outcomes, verify receipt/result ingestion, and keep the live-account gate locked. TopstepX and Tradovate should be addressed only after MT5 demo evidence is stable.

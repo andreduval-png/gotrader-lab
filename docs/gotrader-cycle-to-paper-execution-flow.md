@@ -4,9 +4,9 @@
 
 The implemented path follows this rule:
 
-> The LLM proposes and initiates. GoTrader validates and sizes. The independent paper gateway simulates and monitors.
+> The LLM proposes and initiates. GoTrader validates and sizes. The independent MT5 gateway executes and monitors on a positively verified demo account.
 
-The final clause is deliberately paper-only today. The gateway has no broker imports, credentials, or live mode. Current IFVG v3 evidence remains `not_ready`, so no request is emitted until deterministic readiness and untouched forward-evidence gates pass.
+The independent paper simulator remains the first outcome lane. A separate MT5 gateway can submit only protected demo pending orders and monitor their state. It rejects live accounts, defaults disabled, and has its own kill switch, exact account/server allowlists, risk sizing, one-active-order policy, immutable request validation, and reconciliation. Current IFVG v3 evidence remains `not_ready`, so no MT5 request is emitted until deterministic readiness and untouched forward-evidence gates pass.
 
 ## Process Diagram
 
@@ -32,26 +32,28 @@ flowchart TD
     N --> O{"Kill switch and paper risk policy pass?"}
     O -- "No" --> O1["Blocked; no request emitted"]
     O -- "Yes" --> P["Atomic SHA-256 paper request outbox"]
-    P --> Q["Independent go-trader paper gateway"]
+    P --> Q["Independent paper simulator"]
     Q --> R["Revalidate hash, expiry, authority, source, profile, and risk"]
-    R --> S{"Consumer checks pass?"}
-    S -- "No" --> S1["Compact blocked receipt"]
-    S -- "Yes" --> T["Read closed candles from MT5 read-only wrapper"]
-    T --> U["Simulate limit fill"]
-    U --> V["Monitor stop / target / expiry"]
-    V --> W["Compact paper outcome receipt"]
-    W --> X["Forward evidence and Results surfaces"]
-    X --> F
+    R --> S["Simulate and monitor from MT5 read-only candles"]
+    S --> T["Compact paper outcome receipt"]
+    T --> U["Forward evidence and Results surfaces"]
+    U --> F
 
-    Q -. "separate readiness boundary" .-> BA["Broker adapter readiness probe"]
-    BA --> BB["TopstepX auth + allowlisted account + MNQ contract check"]
-    BB --> BC["Compact readiness status; no credentials or account data persisted"]
-    BC --> BD["Submission locked: TopstepX has no sandbox"]
+    O -- "Yes + explicit demo handoff" --> BA["Atomic SHA-256 MT5 demo request outbox"]
+    BA --> BB["Independent MT5 Python gateway"]
+    BB --> BC{"Demo mode, exact login/server, symbol, risk, freshness, and hash pass?"}
+    BC -- "No" --> BD["Compact blocked receipt; no order"]
+    BC -- "Yes" --> BE["Recompute volume from MT5 tick metadata"]
+    BE --> BF["order_check protected non-crossing pending order"]
+    BF --> BG["Submit entry + stop + target + expiry atomically"]
+    BG --> BH["Reconcile pending, fill, close, cancel, or expiry"]
+    BH --> BI["Compact MT5 demo receipt"]
+    BI --> U
 
-    Y["TopstepX order adapter"]:::disabled
-    Z["Live account"]:::disabled
-    BD -. "not connected" .-> Y
-    Y -. "disabled" .-> Z
+    Y["Live MT5 account"]:::disabled
+    Z["TopstepX / Tradovate adapters"]:::disabled
+    BC -. "hard rejected" .-> Y
+    Z -. "future options; no fallback" .-> BB
 
     classDef disabled fill:#2b1f25,stroke:#d36b83,color:#f1c5cf,stroke-dasharray: 5 5;
 ```
@@ -77,8 +79,12 @@ python shared_scripts/gotrader_paper_gateway.py `
 
 The default policy is disabled with the kill switch active and zero risk capacity. The consumer only issues HTTP GET requests to the MT5 read-only wrapper. Ambiguous candles that touch both stop and target resolve to the stop, and the entry candle is not used to claim an outcome because intrabar ordering is unknown.
 
-## Broker Adapter Readiness Boundary
+## MT5 Demo Broker Boundary
 
-The sibling `go-trader` repository now contains `shared_scripts/gotrader_broker_adapter.py`. It provides a non-network local demo adapter and a TopstepX readiness probe that authenticates, verifies an allowlisted account, and resolves an active MNQ contract. It does not import the existing live adapter and cannot submit, cancel, modify, close, or reconcile broker state.
+The sibling `go-trader` repository contains `shared_scripts/gotrader_mt5_demo_gateway.py`. It is the only GoTrader component allowed to import `MetaTrader5`. It consumes the compact MT5 demo outbox, verifies the local terminal is logged into an exact allowlisted demo account and server, independently sizes the request, sends one protected pending order, and reconciles compact status receipts.
 
-TopstepX currently has no sandbox, so a real broker-demo submission route cannot be made safe merely by setting `live: false` on contract search. Broker submission remains locked until an account class can be positively verified, the deterministic forward-evidence gate passes, and a separately reviewed gateway can submit protected orders and reconcile acknowledgements independently. Neither the LLM nor the research app can grant that permission.
+Live MT5 accounts are hard blocked. TopstepX and Tradovate remain future options and are not automatic fallbacks. Neither the LLM nor the research app can grant broker authority, change the demo-account requirement, bypass risk checks, or promote readiness.
+
+See the exact setup and operator commands in the sibling repository at `docs/gotrader-mt5-demo-gateway.md`.
+
+The normal `Start-GoTrader.cmd` supervisor starts research and read-only services only. It deliberately does not auto-start the broker-capable MT5 demo gateway. Starting that process requires the separate explicit demo-account configuration and probe described in the runbook.

@@ -4023,9 +4023,9 @@ export function MissionControlShell({ state }: { state: LabState }) {
         <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/55 p-3 text-sm text-slate-200">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="font-semibold">Future multi-broker gates</p>
+              <p className="font-semibold">Broker gateway boundaries</p>
               <p className="mt-1 text-slate-400">
-                TradingView MCP is read-only chart evidence when connected. TopstepX readiness and MT5 execution remain locked.
+                MT5 is the primary demo gateway after deterministic validation. Live MT5 is locked; TopstepX and Tradovate remain future options.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -4035,9 +4035,9 @@ export function MissionControlShell({ state }: { state: LabState }) {
               <Badge variant={runtimeSnapshot?.tradingViewMcp.chartFeedAvailable ? "success" : "secondary"}>
                 TV chart feed {runtimeSnapshot?.tradingViewMcp.chartFeedAvailable ? "active" : "not active"}
               </Badge>
-              <Badge variant="warning">TopstepX {topstepXAdapterPlan.status.replace(/_/g, " ")}</Badge>
+              <Badge variant="secondary">TopstepX future {topstepXAdapterPlan.status.replace(/_/g, " ")}</Badge>
               <Badge variant="warning">MT5 read-only {mt5ReadOnlyStatusLabel}</Badge>
-              <Badge variant="warning">MT5 execution {mt5ExecutionAdapterPlan.status.replace(/_/g, " ")}</Badge>
+              <Badge variant="warning">MT5 demo {mt5ExecutionAdapterPlan.status.replace(/_/g, " ")}</Badge>
               <Badge variant="danger">execution disabled</Badge>
             </div>
           </div>
@@ -4266,11 +4266,11 @@ function buildPipelineStages(
       lastEvent: run?.completedAt
     },
     {
-      id: "topstepx",
-      label: "TopstepX Readiness Gate",
+      id: "mt5-demo-gateway",
+      label: "MT5 Demo Gateway",
       status: "locked",
-      task: "Independent readiness probe only. No broker submission or API authority exists in GoTrader.",
-      countLabel: "probe only"
+      task: "Independent demo-only gateway. Handoff stays locked until validation, forward evidence, and local demo-account checks pass.",
+      countLabel: "demo only"
     }
   ];
 }

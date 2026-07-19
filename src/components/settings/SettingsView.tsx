@@ -700,7 +700,7 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
               <Lock className="h-4 w-4 text-amber-200" aria-hidden="true" />
               <CardTitle>Multi-Broker Architecture</CardTitle>
             </div>
-            <CardDescription>Read-only data can connect through safe wrappers. Execution adapters remain planned and locked.</CardDescription>
+            <CardDescription>MT5 is the primary demo gateway. Live execution remains locked; TopstepX and Tradovate are future options.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {[
@@ -708,8 +708,8 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
               ["TradingView role", tradingViewMcpAdapterPlan.role],
               ["TradingView chart feed", tradingViewRuntime.chartFeedAvailable ? "active" : "not active"],
               ["TradingView live feed", "not connected"],
-              ["TopstepX", topstepXAdapterPlan.status],
-              ["MT5 execution", mt5ExecutionAdapterPlan.status],
+              ["MT5 demo gateway", mt5ExecutionAdapterPlan.status],
+              ["TopstepX future option", topstepXAdapterPlan.status],
               ["MT5 read-only data", mt5ReadOnlyStatusLabel],
               ["MT5 broker symbol", mt5BrokerSymbol],
               ["MT5 requested symbol", mt5RequestedSymbol],
@@ -740,8 +740,9 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
                 ? "TradingView MCP read-only chart candles are available for visual display, but they are not broker truth."
                 : "Charts are using imported/mock/replay data until a read-only market-data bridge is explicitly configured."}
               <span className="mt-1 block text-xs text-amber-100/80">
-                Chart analysis adapter: {formatBridgeValue(tradingViewRuntime.bridgeStatus)}. MT5 execution adapter locked;
-                read-only data {formatBridgeValue(mt5ReadOnlyStatusLabel)}. Execution authority: none.
+                Chart analysis adapter: {formatBridgeValue(tradingViewRuntime.bridgeStatus)}. MT5 demo handoff requires
+                deterministic readiness and independent demo-account verification; live MT5 is locked. Read-only data{" "}
+                {formatBridgeValue(mt5ReadOnlyStatusLabel)}. Research authority: none.
               </span>
             </div>
             <div className="grid gap-2 md:grid-cols-2">

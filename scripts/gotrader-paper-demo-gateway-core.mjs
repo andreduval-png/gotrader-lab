@@ -13,6 +13,8 @@ export const PAPER_DEMO_GATEWAY_AUTHORITY = TRADE_PROPOSAL_MCP_AUTHORITY;
 export const PAPER_DEMO_GATEWAY_PROFILE = "ifvg_fresh_retest_v3_research";
 export const PAPER_DEMO_EXECUTION_REQUEST_CONTRACT = "gotrader.paper_demo_execution_request";
 export const PAPER_DEMO_EXECUTION_REQUEST_VERSION = "1.0";
+export const MT5_DEMO_EXECUTION_REQUEST_CONTRACT = "gotrader.mt5_demo_execution_request";
+export const MT5_DEMO_EXECUTION_REQUEST_VERSION = "1.0";
 
 const DEFAULT_SIGNAL_MAX_AGE_MS = 5 * 60 * 1000;
 const DEFAULT_VALIDATION_REPORT = ".gotrader/ifvg-v3-profile-oos.json";
@@ -20,6 +22,8 @@ const DEFAULT_FORWARD_REPORT = ".gotrader/ifvg-v3-forward-evidence.json";
 const STATE_FILE = ".gotrader/paper-demo-gateway-state.json";
 const DEFAULT_OUTBOX_DIR = ".gotrader/paper-demo-outbox";
 const DEFAULT_RECEIPT_DIR = ".gotrader/paper-demo-receipts";
+const DEFAULT_MT5_DEMO_OUTBOX_DIR = ".gotrader/mt5-demo-outbox";
+const DEFAULT_MT5_DEMO_RECEIPT_DIR = ".gotrader/mt5-demo-receipts";
 
 const finitePositive = (value) => typeof value === "number" && Number.isFinite(value) && value > 0;
 const unique = (values) => [...new Set(values.filter(Boolean))];
@@ -74,6 +78,7 @@ export const loadPaperDemoGatewayPolicy = (env = process.env) => {
     1_000,
     Math.floor(Number(env.GOTRADER_PAPER_SIGNAL_MAX_AGE_MS || DEFAULT_SIGNAL_MAX_AGE_MS))
   );
+  const mt5DemoMaxRiskUsd = Number(env.GOTRADER_MT5_DEMO_HANDOFF_MAX_RISK_USD || 0);
   return {
     enabled: env.GOTRADER_PAPER_DEMO_GATEWAY_ENABLED === "true",
     killSwitchActive: env.GOTRADER_PAPER_DEMO_KILL_SWITCH !== "false",
@@ -86,6 +91,11 @@ export const loadPaperDemoGatewayPolicy = (env = process.env) => {
     forwardEvidenceReportPath: env.GOTRADER_PAPER_FORWARD_EVIDENCE_REPORT || DEFAULT_FORWARD_REPORT,
     outboxDir: env.GOTRADER_PAPER_DEMO_OUTBOX_DIR || DEFAULT_OUTBOX_DIR,
     receiptDir: env.GOTRADER_PAPER_DEMO_RECEIPT_DIR || DEFAULT_RECEIPT_DIR,
+    mt5DemoHandoffEnabled: env.GOTRADER_MT5_DEMO_HANDOFF_ENABLED === "true",
+    mt5DemoKillSwitchActive: env.GOTRADER_MT5_DEMO_HANDOFF_KILL_SWITCH !== "false",
+    mt5DemoMaxRiskUsd: finitePositive(mt5DemoMaxRiskUsd) ? mt5DemoMaxRiskUsd : 0,
+    mt5DemoOutboxDir: env.GOTRADER_MT5_DEMO_OUTBOX_DIR || DEFAULT_MT5_DEMO_OUTBOX_DIR,
+    mt5DemoReceiptDir: env.GOTRADER_MT5_DEMO_RECEIPT_DIR || DEFAULT_MT5_DEMO_RECEIPT_DIR,
     operatorConfigured: true,
     llmMayOverride: false
   };
@@ -250,6 +260,7 @@ export const evaluatePaperDemoPreparation = ({
     stop: proposal.stop,
     targets: proposal.targets,
     paperUnitsPreview: proposalEvaluation.sizingPreview.paperUnitsPreview,
+    riskBudgetUsd: proposalEvaluation.sizingPreview.riskBudgetUsd,
     status: "prepared_for_local_paper_simulation_review",
     paperOnly: true,
     executable: false,
@@ -343,6 +354,71 @@ export const verifyPaperDemoExecutionRequestHash = (request) => {
   return requestHash === sha256(payload);
 };
 
+export const buildMt5DemoExecutionRequest = ({
+  now = new Date().toISOString(),
+  policy,
+  preparation
+}) => {
+  if (!preparation || preparation.paperOnly !== true || preparation.executable !== false) {
+    throw new Error("A validated paper-only preparation is required before creating an MT5 demo request.");
+  }
+  if (!authorityIsNone(preparation.authority)) {
+    throw new Error("MT5 demo request authority must remain none/none/none.");
+  }
+  if (!policy?.mt5DemoHandoffEnabled || policy?.mt5DemoKillSwitchActive) {
+    throw new Error("MT5 demo handoff is not explicitly enabled.");
+  }
+  if (!finitePositive(policy?.mt5DemoMaxRiskUsd) || !finitePositive(preparation.riskBudgetUsd)) {
+    throw new Error("MT5 demo risk budget is not configured.");
+  }
+  const requestCreatedAt = preparation.preparedAt ?? now;
+  if (!Number.isFinite(Date.parse(requestCreatedAt))) throw new Error("MT5 demo request timestamp is invalid.");
+  const request = {
+    contract: MT5_DEMO_EXECUTION_REQUEST_CONTRACT,
+    version: MT5_DEMO_EXECUTION_REQUEST_VERSION,
+    requestId: preparation.preparationId,
+    proposalId: preparation.proposalId,
+    validationChainId: preparation.validationChainId,
+    createdAt: requestCreatedAt,
+    entryExpiresAt: preparation.expiresAt,
+    mode: "mt5_demo",
+    status: "ready_for_mt5_demo_gateway",
+    strategyProfileId: preparation.strategyProfileId,
+    source: {
+      provider: preparation.sourceProvider,
+      requestedSymbol: preparation.requestedSymbol,
+      brokerSymbol: preparation.brokerSymbol,
+      timeframe: preparation.timeframe,
+      fingerprint: preparation.sourceFingerprint
+    },
+    scenario: {
+      direction: preparation.direction,
+      instructionType: "limit_entry",
+      entry: preparation.entry,
+      stop: preparation.stop,
+      targets: preparation.targets,
+      maxRiskUsd: Math.min(preparation.riskBudgetUsd, policy.mt5DemoMaxRiskUsd)
+    },
+    permissions: {
+      mt5DemoSubmissionAllowed: true,
+      liveExecutionAllowed: false,
+      autoApplyAllowed: false,
+      readinessPromotionAllowed: false
+    },
+    safety: {
+      compactPayloadOnly: true,
+      rawCandlesIncluded: false,
+      credentialsIncluded: false,
+      demoAccountRequired: true,
+      liveAccountAllowed: false
+    },
+    authority: PAPER_DEMO_GATEWAY_AUTHORITY
+  };
+  return { ...request, requestHash: sha256(request) };
+};
+
+export const verifyMt5DemoExecutionRequestHash = verifyPaperDemoExecutionRequestHash;
+
 const assertCompactPaperArtifact = (artifact, label) => {
   const serialized = JSON.stringify(artifact);
   if (/"(?:candles|rawCandles|account|accounts|orders|positions|apiKey|password|secret|token)"\s*:/i.test(serialized)) {
@@ -377,6 +453,40 @@ export const writePaperDemoExecutionRequest = async (
   return { filePath, status: "queued" };
 };
 
+export const writeMt5DemoExecutionRequest = async (
+  request,
+  { outboxDir = DEFAULT_MT5_DEMO_OUTBOX_DIR, repoRoot = process.cwd() } = {}
+) => {
+  assertCompactPaperArtifact(request, "MT5 demo execution request");
+  if (!verifyMt5DemoExecutionRequestHash(request)) {
+    throw new Error("MT5 demo execution request hash validation failed.");
+  }
+  if (
+    request.contract !== MT5_DEMO_EXECUTION_REQUEST_CONTRACT ||
+    request.mode !== "mt5_demo" ||
+    request.permissions?.mt5DemoSubmissionAllowed !== true ||
+    request.permissions?.liveExecutionAllowed !== false ||
+    request.safety?.demoAccountRequired !== true ||
+    request.safety?.liveAccountAllowed !== false
+  ) {
+    throw new Error("MT5 demo execution request contract is invalid.");
+  }
+  const directory = resolveInsideRepo(repoRoot, outboxDir);
+  const filePath = path.join(directory, `${request.requestId}.json`);
+  await mkdir(directory, { recursive: true });
+  const existing = await readJsonFile(filePath);
+  if (existing) {
+    if (existing.requestHash !== request.requestHash || !verifyMt5DemoExecutionRequestHash(existing)) {
+      throw new Error("MT5 demo outbox request ID already exists with different content.");
+    }
+    return { filePath, status: "already_queued" };
+  }
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, filePath);
+  return { filePath, status: "queued" };
+};
+
 const listJsonFiles = async (directory) => {
   try {
     return (await readdir(directory)).filter((name) => name.endsWith(".json")).sort();
@@ -396,6 +506,38 @@ export const readRecentPaperDemoReceipts = async (
     const receipt = await readJsonFile(path.join(directory, name));
     if (!receipt || !authorityIsNone(receipt.authority)) continue;
     assertCompactPaperArtifact(receipt, "Paper-Demo receipt");
+    receipts.push(receipt);
+  }
+  return receipts;
+};
+
+const assertCompactMt5DemoReceipt = (receipt) => {
+  const serialized = JSON.stringify(receipt);
+  if (/"(?:candles|rawCandles|account|accounts|orders|positions|apiKey|password|secret|token|rawBrokerResponse)"\s*:/i.test(serialized)) {
+    throw new Error("MT5 demo receipt rejected unsafe fields.");
+  }
+  if (
+    receipt?.contract !== "gotrader.mt5_demo_execution_receipt" ||
+    !authorityIsNone(receipt?.researchAuthority) ||
+    receipt?.demoOnly !== true ||
+    receipt?.liveAccountAllowed !== false ||
+    receipt?.credentialsIncluded !== false ||
+    receipt?.rawBrokerResponseIncluded !== false
+  ) {
+    throw new Error("MT5 demo receipt safety contract is invalid.");
+  }
+};
+
+export const readRecentMt5DemoReceipts = async (
+  { limit = 20, receiptDir = DEFAULT_MT5_DEMO_RECEIPT_DIR, repoRoot = process.cwd() } = {}
+) => {
+  const directory = resolveInsideRepo(repoRoot, receiptDir);
+  const files = (await listJsonFiles(directory)).slice(-Math.max(1, Math.min(20, limit))).reverse();
+  const receipts = [];
+  for (const name of files) {
+    const receipt = await readJsonFile(path.join(directory, name));
+    if (!receipt) continue;
+    assertCompactMt5DemoReceipt(receipt);
     receipts.push(receipt);
   }
   return receipts;
@@ -448,6 +590,35 @@ export const preparePaperDemoSimulation = async (
       outboxDir: policy.outboxDir,
       repoRoot
     });
+    let mt5DemoRequest = {
+      status: policy.mt5DemoHandoffEnabled ? "blocked" : "disabled",
+      blocker: policy.mt5DemoHandoffEnabled
+        ? policy.mt5DemoKillSwitchActive
+          ? "mt5_demo_handoff_kill_switch_active"
+          : "mt5_demo_handoff_risk_not_configured"
+        : "mt5_demo_handoff_not_enabled",
+      demoSubmissionAllowed: false,
+      liveExecutionAllowed: false
+    };
+    if (
+      policy.mt5DemoHandoffEnabled &&
+      !policy.mt5DemoKillSwitchActive &&
+      finitePositive(policy.mt5DemoMaxRiskUsd)
+    ) {
+      const mt5Request = buildMt5DemoExecutionRequest({ now, policy, preparation: result.preparation });
+      const mt5Queued = await writeMt5DemoExecutionRequest(mt5Request, {
+        outboxDir: policy.mt5DemoOutboxDir,
+        repoRoot
+      });
+      mt5DemoRequest = {
+        requestId: mt5Request.requestId,
+        requestHash: mt5Request.requestHash,
+        status: mt5Queued.status,
+        blocker: null,
+        demoSubmissionAllowed: true,
+        liveExecutionAllowed: false
+      };
+    }
     return {
       ...result,
       gatewayRequest: {
@@ -457,7 +628,10 @@ export const preparePaperDemoSimulation = async (
         paperOnly: true,
         brokerSubmissionAllowed: false
       },
-      nextAction: "The immutable paper-only request is queued for independent simulation and monitoring. No broker submission was made."
+      mt5DemoRequest,
+      nextAction: mt5DemoRequest.demoSubmissionAllowed
+        ? "Paper simulation and a compact MT5 demo handoff are queued. The independent gateway must still verify the demo account and risk policy before submission."
+        : "The immutable paper-only request is queued for independent simulation and monitoring. MT5 demo submission remains disabled."
     };
   }
   return result;
@@ -469,6 +643,8 @@ export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot 
   const forwardReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.forwardEvidenceReportPath));
   const outboxCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.outboxDir))).length;
   const receiptCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.receiptDir))).length;
+  const mt5OutboxCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.mt5DemoOutboxDir))).length;
+  const mt5ReceiptCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.mt5DemoReceiptDir))).length;
   return {
     provider: "gotrader_local_paper_demo_gateway",
     stage: "paper_simulation_preparation",
@@ -479,9 +655,22 @@ export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot 
     validationEvidence: summarizeValidationReport(validationReport),
     forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
     brokerGateway: {
-      status: "disabled",
-      submissionSupported: false,
-      monitoringSupported: false
+      provider: "mt5_demo_gateway",
+      status: policy.mt5DemoHandoffEnabled
+        ? policy.mt5DemoKillSwitchActive
+          ? "kill_switch_active"
+          : finitePositive(policy.mt5DemoMaxRiskUsd)
+            ? "handoff_enabled_gateway_verification_required"
+            : "risk_not_configured"
+        : "disabled",
+      demoSubmissionSupported: true,
+      demoHandoffEnabled: policy.mt5DemoHandoffEnabled,
+      demoKillSwitchActive: policy.mt5DemoKillSwitchActive,
+      liveSubmissionSupported: false,
+      independentGatewayRequired: true,
+      monitoringSupported: true,
+      queuedRequestCount: mt5OutboxCount,
+      receiptCount: mt5ReceiptCount
     },
     paperGateway: {
       status: policy.enabled ? "operator_enabled" : "disabled",

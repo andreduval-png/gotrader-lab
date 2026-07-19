@@ -277,7 +277,13 @@ export const buildTradeProposalControlPlaneStatus = ({ sizingPolicy = loadPaperS
   allowedProfiles: TRADE_PROPOSAL_MCP_ALLOWED_PROFILES,
   llmRole: ["propose", "initiate_deterministic_validation"],
   goTraderRole: ["validate_source_identity", "validate_geometry", "validate_rr", "preview_operator_owned_paper_sizing"],
-  brokerGatewayRole: ["disabled", "no_submission", "no_monitoring_until_future_paper_phase"],
+  brokerGatewayRole: [
+    "independent_mt5_demo_gateway",
+    "disabled_by_default",
+    "no_direct_mcp_submission",
+    "compact_receipts_only",
+    "live_accounts_blocked"
+  ],
   sizingPolicy: {
     configured: sizingPolicy.configured,
     mode: sizingPolicy.mode,

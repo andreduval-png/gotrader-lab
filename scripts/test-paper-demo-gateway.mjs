@@ -5,15 +5,19 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  buildMt5DemoExecutionRequest,
   buildPaperDemoExecutionRequest,
   buildPaperDemoGatewayStatus,
   evaluatePaperDemoPreparation,
   loadPaperDemoGatewayPolicy,
   preparePaperDemoSimulation,
+  readRecentMt5DemoReceipts,
   readRecentPaperDemoReceipts,
   summarizeForwardEvidenceReport,
   summarizeValidationReport,
   verifyPaperDemoExecutionRequestHash,
+  verifyMt5DemoExecutionRequestHash,
+  writeMt5DemoExecutionRequest,
   writePaperDemoExecutionRequest
 } from "./gotrader-paper-demo-gateway-core.mjs";
 import { appendTradeProposalAudit, evaluateTradeProposal } from "./gotrader-trade-proposal-core.mjs";
@@ -118,6 +122,7 @@ assert.equal(prepared.status, "prepared_for_local_paper_simulation_review");
 assert.equal(prepared.brokerSubmissionAttempted, false);
 assert.equal(prepared.preparation.executable, false);
 assert.equal(prepared.preparation.paperOnly, true);
+assert.equal(prepared.preparation.riskBudgetUsd, 300);
 assert.deepEqual(prepared.authority, authorityNone);
 
 const duplicate = evaluatePaperDemoPreparation({
@@ -232,6 +237,8 @@ const integrated = await preparePaperDemoSimulation(proposal.proposalId, {
 assert.equal(integrated.status, "prepared_for_local_paper_simulation_review");
 assert.equal(integrated.gatewayRequest.status, "queued");
 assert.equal(integrated.gatewayRequest.brokerSubmissionAllowed, false);
+assert.equal(integrated.mt5DemoRequest.status, "disabled");
+assert.equal(integrated.mt5DemoRequest.liveExecutionAllowed, false);
 const persisted = JSON.parse(await readFile(path.join(tempRoot, ".gotrader", "paper-demo-gateway-state.json"), "utf8"));
 assert.equal(persisted.preparations.length, 1);
 assert.equal(persisted.preparations[0].brokerSubmissionAttempted, false);
@@ -250,6 +257,45 @@ assert.equal(queuedRequest.safety.rawCandlesIncluded, false);
 assert.equal(verifyPaperDemoExecutionRequestHash(queuedRequest), true);
 assert.deepEqual(queuedRequest.authority, authorityNone);
 
+const mt5EnabledEnv = {
+  ...env,
+  GOTRADER_MT5_DEMO_HANDOFF_ENABLED: "true",
+  GOTRADER_MT5_DEMO_HANDOFF_KILL_SWITCH: "false",
+  GOTRADER_MT5_DEMO_HANDOFF_MAX_RISK_USD: "25"
+};
+const mt5Integrated = await preparePaperDemoSimulation(proposal.proposalId, {
+  env: mt5EnabledEnv,
+  now: "2026-07-18T14:03:02.000Z",
+  repoRoot: tempRoot
+});
+assert.equal(mt5Integrated.status, "already_prepared");
+assert.equal(mt5Integrated.mt5DemoRequest.status, "queued");
+assert.equal(mt5Integrated.mt5DemoRequest.demoSubmissionAllowed, true);
+assert.equal(mt5Integrated.mt5DemoRequest.liveExecutionAllowed, false);
+const mt5QueuedRequest = JSON.parse(
+  await readFile(
+    path.join(tempRoot, ".gotrader", "mt5-demo-outbox", `${mt5Integrated.mt5DemoRequest.requestId}.json`),
+    "utf8"
+  )
+);
+assert.equal(mt5QueuedRequest.contract, "gotrader.mt5_demo_execution_request");
+assert.equal(mt5QueuedRequest.mode, "mt5_demo");
+assert.equal(mt5QueuedRequest.scenario.maxRiskUsd, 25);
+assert.equal(mt5QueuedRequest.permissions.mt5DemoSubmissionAllowed, true);
+assert.equal(mt5QueuedRequest.permissions.liveExecutionAllowed, false);
+assert.equal(mt5QueuedRequest.safety.demoAccountRequired, true);
+assert.equal(mt5QueuedRequest.safety.liveAccountAllowed, false);
+assert.equal(verifyMt5DemoExecutionRequestHash(mt5QueuedRequest), true);
+assert.deepEqual(mt5QueuedRequest.authority, authorityNone);
+
+const mt5Killed = await preparePaperDemoSimulation(proposal.proposalId, {
+  env: { ...mt5EnabledEnv, GOTRADER_MT5_DEMO_HANDOFF_KILL_SWITCH: "true" },
+  now: "2026-07-18T14:03:03.000Z",
+  repoRoot: tempRoot
+});
+assert.equal(mt5Killed.mt5DemoRequest.status, "blocked");
+assert.equal(mt5Killed.mt5DemoRequest.blocker, "mt5_demo_handoff_kill_switch_active");
+
 const duplicateIntegrated = await preparePaperDemoSimulation(proposal.proposalId, {
   env,
   now: "2026-07-18T14:03:01.000Z",
@@ -265,8 +311,26 @@ const rebuiltRequest = buildPaperDemoExecutionRequest({
   preparation: prepared.preparation
 });
 assert.equal(verifyPaperDemoExecutionRequestHash(rebuiltRequest), true);
+const rebuiltMt5Request = buildMt5DemoExecutionRequest({
+  now: "2026-07-18T14:03:00.000Z",
+  policy: {
+    ...enabledPolicy,
+    mt5DemoHandoffEnabled: true,
+    mt5DemoKillSwitchActive: false,
+    mt5DemoMaxRiskUsd: 25
+  },
+  preparation: prepared.preparation
+});
+assert.equal(verifyMt5DemoExecutionRequestHash(rebuiltMt5Request), true);
 await assert.rejects(
   () => writePaperDemoExecutionRequest({ ...rebuiltRequest, requestHash: "tampered" }, { repoRoot: tempRoot }),
+  /hash validation failed/
+);
+await assert.rejects(
+  () => writeMt5DemoExecutionRequest(
+    { ...rebuiltMt5Request, requestHash: "tampered" },
+    { repoRoot: tempRoot }
+  ),
   /hash validation failed/
 );
 
@@ -288,6 +352,44 @@ await writeFile(
 const receipts = await readRecentPaperDemoReceipts({ repoRoot: tempRoot });
 assert.equal(receipts.length, 1);
 assert.equal(receipts[0].brokerCallsMade, false);
+
+await mkdir(path.join(tempRoot, ".gotrader", "mt5-demo-receipts"), { recursive: true });
+await writeFile(
+  path.join(tempRoot, ".gotrader", "mt5-demo-receipts", `${mt5QueuedRequest.requestId}.json`),
+  JSON.stringify({
+    contract: "gotrader.mt5_demo_execution_receipt",
+    version: "1.0",
+    requestId: mt5QueuedRequest.requestId,
+    requestHash: mt5QueuedRequest.requestHash,
+    processedAt: now,
+    updatedAt: now,
+    status: "broker_demo_pending",
+    strategyProfileId: mt5QueuedRequest.strategyProfileId,
+    sourceFingerprint: mt5QueuedRequest.source.fingerprint,
+    brokerSymbol: "USTECH",
+    direction: "short",
+    entry: 28570,
+    stop: 28600,
+    target: 28510,
+    orderTicket: 7001,
+    volume: 0.1,
+    blockers: [],
+    demoOnly: true,
+    liveAccountAllowed: false,
+    credentialsIncluded: false,
+    rawBrokerResponseIncluded: false,
+    readinessPromotionApplied: false,
+    researchAuthority: authorityNone,
+    gatewayScope: "mt5_demo_only"
+  }),
+  "utf8"
+);
+const mt5Receipts = await readRecentMt5DemoReceipts({ repoRoot: tempRoot });
+assert.equal(mt5Receipts.length, 1);
+assert.equal(mt5Receipts[0].status, "broker_demo_pending");
+assert.equal(mt5Receipts[0].liveAccountAllowed, false);
+assert.equal(mt5Receipts[0].rawBrokerResponseIncluded, false);
+assert.deepEqual(mt5Receipts[0].researchAuthority, authorityNone);
 
 const exportedForwardReportPath = path.join(tempRoot, "exported-forward-report.json");
 await writeFile(exportedForwardReportPath, JSON.stringify({
@@ -324,10 +426,14 @@ assert.deepEqual(importedForwardReport.authority, authorityNone);
 const defaultPolicy = loadPaperDemoGatewayPolicy({});
 assert.equal(defaultPolicy.enabled, false);
 assert.equal(defaultPolicy.killSwitchActive, true);
+assert.equal(defaultPolicy.mt5DemoHandoffEnabled, false);
+assert.equal(defaultPolicy.mt5DemoKillSwitchActive, true);
 const currentStatus = await buildPaperDemoGatewayStatus({ repoRoot: process.cwd(), env: {} });
 assert.equal(currentStatus.enabled, false);
 assert.equal(currentStatus.killSwitchActive, true);
 assert.equal(currentStatus.brokerGateway.status, "disabled");
+assert.equal(currentStatus.brokerGateway.provider, "mt5_demo_gateway");
+assert.equal(currentStatus.brokerGateway.liveSubmissionSupported, false);
 assert.equal(currentStatus.paperGateway.immutableOutboxSupported, true);
 assert.equal(currentStatus.paperGateway.monitoringSupported, true);
 assert.deepEqual(currentStatus.authority, authorityNone);
@@ -347,6 +453,7 @@ console.log(JSON.stringify({
   currentGatewayReady: false,
   immutableOutboxVerified: verifyPaperDemoExecutionRequestHash(queuedRequest),
   receiptContractVerified: receipts.length === 1,
+  mt5ReceiptContractVerified: mt5Receipts.length === 1,
   brokerSubmissionAttempted: false,
   authority: authorityNone
 }, null, 2));

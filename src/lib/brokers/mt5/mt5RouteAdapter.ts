@@ -17,7 +17,7 @@ export const createMt5RouteAdapterResult = ({
     warnings: [
       ...route.routingWarnings,
       route.broker === "mt5"
-        ? "MT5 route is planned only. No MCP bridge, credentials, or orders are enabled."
+        ? "MT5 demo handoff is available only through the independent local gateway after deterministic readiness passes. Live MT5 remains locked."
         : "Symbol does not route to MT5."
     ]
   };

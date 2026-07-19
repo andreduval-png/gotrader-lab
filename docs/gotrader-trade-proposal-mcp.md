@@ -6,7 +6,7 @@ This local MCP implements the first safe slice of the operating model:
 
 > The LLM proposes and initiates. GoTrader validates and sizes. The broker gateway executes and monitors.
 
-Codex or Claude may submit a compact research proposal and initiate deterministic validation. GoTrader validates source identity, profile allowlisting, price geometry, minimum RR, safety fields, and an operator-owned paper sizing preview. A second fail-closed gateway may prepare a proposal for local Paper-Demo review only after readiness and untouched forward-evidence gates pass. The broker gateway remains disabled and no submission or monitoring call is made.
+Codex or Claude may submit a compact research proposal and initiate deterministic validation. GoTrader validates source identity, profile allowlisting, price geometry, minimum RR, safety fields, and an operator-owned paper sizing preview. A second fail-closed gate may prepare a proposal only after readiness and untouched forward-evidence gates pass. With a separate operator opt-in, it may also write an immutable MT5 demo handoff for the independent gateway; the MCP itself cannot call MT5.
 
 ## Current Boundary
 
@@ -16,7 +16,8 @@ Codex or Claude may submit a compact research proposal and initiate deterministi
 - Research identity: `MNQ` requested label, `USTECH` broker symbol, `5m`
 - Validation-chain reference: required, but resolved by GoTrader before progression
 - Paper sizing: preview only and disabled until the operator configures its local policy
-- Broker gateway: disabled
+- MT5 demo handoff: disabled by default with a default-active kill switch
+- Live MT5 gateway: unavailable
 - Execution authority: `none`
 - Broker authority: `none`
 - Readiness override authority: `none`
@@ -54,11 +55,15 @@ Returns up to 20 compact audit entries from `.gotrader/mcp-trade-proposals.jsonl
 
 ### `gotrader_paper_demo_gateway_status`
 
-Returns operator opt-in, kill-switch, evidence, policy, and disabled broker-gateway status.
+Returns operator opt-in, kill-switch, evidence, paper-simulator, and MT5 demo-handoff status.
 
 ### `gotrader_prepare_paper_demo_simulation`
 
-Attempts to prepare a safe proposal for local paper-only review. It independently checks GoTrader-generated validation and forward evidence, freshness, idempotency, sizing, daily limits, and the kill switch. It never submits to a broker.
+Attempts to prepare a safe proposal for local paper review. It independently checks GoTrader-generated validation and forward evidence, freshness, idempotency, sizing, daily limits, and the kill switch. When the separate MT5 demo handoff policy is enabled, it may write a compact request file; only the independent gateway can verify the demo account and submit it.
+
+### `gotrader_list_mt5_demo_receipts`
+
+Returns compact MT5 demo gateway status receipts for monitoring. It exposes request identity, scenario geometry, hashed source identity, compact ticket/volume, status, blockers, and the research authority contract. It rejects receipts containing credentials, balances, raw broker responses, candles, account records, or broker state lists.
 
 ## Codex CLI Setup
 
@@ -100,6 +105,6 @@ See `docs/gotrader-paper-demo-gateway.md` for the opt-in environment settings an
 
 GoTrader now owns compact validation-report lookup, operator paper-risk settings, idempotency, stale-signal rejection, a kill switch, and daily preparation limits. These controls currently end at local Paper-Demo preparation.
 
-The remaining future phase is broker-demo submission, acknowledgement, reconciliation, disconnect lockout, and compact state monitoring behind a separate explicit opt-in. It must remain GoTrader-controlled; an LLM may request evaluation but may not grant authority or bypass policy.
+The independent MT5 gateway now implements demo-account verification, protected pending-order submission, acknowledgement, expiry cancellation, reconciliation, and compact receipts behind a separate explicit opt-in. It remains GoTrader-controlled; an LLM may request evaluation but may not grant authority or bypass policy.
 
 Live execution remains out of scope until independent forward evidence and Paper-Demo operations prove the full lifecycle.

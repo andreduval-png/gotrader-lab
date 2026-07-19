@@ -108,7 +108,8 @@ for (const forbidden of ["rawCandles", "accountData", "orders", "positions", "ap
 const status = buildTradeProposalControlPlaneStatus();
 assert.equal(status.stage, "research_validation");
 assert.deepEqual(status.authority, authorityNone);
-assert(status.brokerGatewayRole.includes("disabled"));
+assert(status.brokerGatewayRole.includes("disabled_by_default"));
+assert(status.brokerGatewayRole.includes("independent_mt5_demo_gateway"));
 
 const client = new Client({ name: "gotrader-trade-proposal-test", version: "1.0.0" });
 const transport = new StdioClientTransport({
@@ -124,6 +125,7 @@ try {
   const toolNames = listed.tools.map((tool) => tool.name).sort();
   assert.deepEqual(toolNames, [
     "gotrader_control_plane_status",
+    "gotrader_list_mt5_demo_receipts",
     "gotrader_list_paper_demo_receipts",
     "gotrader_list_recent_trade_proposals",
     "gotrader_paper_demo_gateway_status",
@@ -164,6 +166,7 @@ console.log(
         "gotrader_control_plane_status",
         "gotrader_propose_trade_evaluation",
         "gotrader_list_recent_trade_proposals",
+        "gotrader_list_mt5_demo_receipts",
         "gotrader_list_paper_demo_receipts",
         "gotrader_paper_demo_gateway_status",
         "gotrader_prepare_paper_demo_simulation"
