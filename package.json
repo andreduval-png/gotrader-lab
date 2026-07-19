@@ -139,6 +139,7 @@
     "test:source-status": "node scripts/test-source-status.mjs",
     "test:operator-console": "node scripts/test-operator-console.mjs",
     "test:readiness-blocker-priority": "node scripts/test-readiness-blocker-priority.mjs",
+    "test:paper-demo-strategy-evidence": "node scripts/test-paper-demo-strategy-evidence.mjs",
     "test:validation-chain": "node scripts/test-validation-chain.mjs",
     "test:walk-forward-preflight": "node scripts/test-walk-forward-preflight.mjs",
     "test:detector-profile-walk-forward": "node scripts/test-detector-profile-walk-forward.mjs",

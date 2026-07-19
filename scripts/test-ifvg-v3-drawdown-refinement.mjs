@@ -588,7 +588,7 @@ async function main() {
     },
     profileDecision: acceptedVariant ? "draft_new_v4_research_fork_only" : "keep_v3_frozen_no_v4_registration",
     nextAction: acceptedVariant
-      ? "Collect untouched post-cutoff outcomes for ifvg_fresh_retest_v4_candidate before any evidence, maturity, or Paper-Demo review."
+      ? "Collect untouched post-cutoff outcomes for `ifvg_fresh_retest_v4_candidate` before any evidence, maturity, or Paper-Demo review. The forward ledger requires 40 completed outcomes across 20 independent dates and two forward windows; meeting those thresholds permits deterministic reassessment only, never automatic promotion."
       : "Keep IFVG v3 frozen. Collect forward-only outcomes and revisit risk sizing or exit-policy research separately; do not mine compound historical filters.",
     authority,
     safety

@@ -96,7 +96,10 @@ import {
   buildValidationProvenanceIdentity,
   fingerprintValidationParameters
 } from "@/lib/validationProvenance";
-import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
+import {
+  applyFrozenResearchProfileConfig,
+  getFrozenResearchProfile
+} from "@/lib/forwardEvidence";
 import { reviewEdgeStatistics } from "@/lib/agents/edgeAuditorAgent";
 import {
   adaptDetectorProfileWalkForwardRun,
@@ -341,7 +344,7 @@ const publish = (state: ResearchCycleState) => {
     } catch (error) {
       const compactState = {
         ...state,
-        runs: safeTopN(safeArray(state.runs), 1)
+        runs: safeTopN(safeArray(state.runs), 1).map((run) => compactResearchCycleRun(run, "aggressive"))
       };
       try {
         window.localStorage.setItem(RESEARCH_CYCLE_STORAGE_KEY, JSON.stringify(compactState));
@@ -540,15 +543,30 @@ const unavailableLLMRun = ({
   safetyNotice: "LLM agents are advisory only. They cannot execute trades or override readiness gates."
 });
 
-const compactResearchCycleRun = (run: ResearchCycleRun): ResearchCycleRun => ({
-  ...run,
-  steps: safeArray(run.steps).map((step) => ({ ...step })),
-  llmRun: compactLLMRun(run.llmRun),
-  autoResearchCycle: run.autoResearchCycle ? compactAutoResearchCycle(run.autoResearchCycle) : undefined,
-  validationReport: undefined,
-  researchQualityReview: undefined,
-  blockers: safeTopN(run.blockers, 8)
-});
+export function compactResearchCycleRun(
+  run: ResearchCycleRun,
+  mode: "standard" | "aggressive" = "standard"
+): ResearchCycleRun {
+  return {
+    ...run,
+    steps: safeArray(run.steps).map((step) => ({ ...step })),
+    llmRun: compactLLMRun(run.llmRun),
+    autoResearchCheckpoint: undefined,
+    autoResearchCycle:
+      mode === "standard" && run.autoResearchCycle
+        ? compactAutoResearchCycle(run.autoResearchCycle)
+        : undefined,
+    validationReport: undefined,
+    researchQualityReview: undefined,
+    backtestDiagnostics: safeTopN(run.backtestDiagnostics, mode === "aggressive" ? 3 : 20),
+    tradeQualityDiagnostics: safeTopN(run.tradeQualityDiagnostics, mode === "aggressive" ? 3 : 12),
+    activeCalibrationSourceTrace: safeTopN(run.activeCalibrationSourceTrace, mode === "aggressive" ? 4 : 12),
+    candleWindowWarnings: safeTopN(run.candleWindowWarnings, mode === "aggressive" ? 4 : 10),
+    blockers: safeTopN(run.blockers, 8),
+    promotionBlockers: safeTopN(run.promotionBlockers, 8),
+    latestGeneratedProposal: mode === "aggressive" ? undefined : run.latestGeneratedProposal
+  };
+}
 
 const nextActionFor = (run: ResearchCycleRun) => {
   if (run.status === "canceled") {
@@ -1334,6 +1352,9 @@ export async function runResearchCycle({
       | undefined;
     try {
       const frozenProfile = getFrozenResearchProfile(activeConfig.strategyProfile);
+      const validationConfig = frozenProfile
+        ? applyFrozenResearchProfileConfig(activeConfig)
+        : activeConfig;
       let validationCandles = researchCandles;
       let validationSourceProvider: string = activeResearchCandleSource.sourceMode;
       let validationSourceFingerprint = activeResearchCandleSource.canonicalFingerprint;
@@ -1380,7 +1401,7 @@ export async function runResearchCycle({
               : 0;
           const baseline = await runDetectorProfileBacktest({
             candles: historicalCandles,
-            config: activeConfig,
+            config: validationConfig,
             signal
           });
           detectorEvidenceContext = {
@@ -1430,7 +1451,7 @@ export async function runResearchCycle({
         dataRangeStart: validationCandles[0]?.timestamp,
         dataRangeEnd: validationCandles.at(-1)?.timestamp
       });
-      validationReport = await runValidationSuiteAsync(validationCandles, activeConfig, {
+      validationReport = await runValidationSuiteAsync(validationCandles, validationConfig, {
         signal,
         provenance: cycleValidationProvenance,
         baselineResult: detectorEvidenceContext?.baseline,
@@ -1491,7 +1512,7 @@ export async function runResearchCycle({
         });
         cycleWalkForwardRun = adaptDetectorProfileWalkForwardRun({
           result: detectorWalkForward,
-          config: activeConfig,
+          config: applyFrozenResearchProfileConfig(activeConfig),
           oosTrades,
           sourceLabel: detectorEvidenceContext.sourceLabel,
           rawCandleCount: detectorEvidenceContext.rawCandleCount,

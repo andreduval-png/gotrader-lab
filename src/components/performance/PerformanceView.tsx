@@ -150,7 +150,9 @@ export function PerformanceView({ state }: { state: LabState }) {
       if (mounted) {
         setRuntimeSnapshot(snapshot);
       }
-    }).catch(() => undefined);
+    }).catch((error) => {
+      console.error("Results runtime snapshot failed to resolve.", error);
+    });
     return () => {
       mounted = false;
     };

@@ -143,6 +143,8 @@ async function main() {
   assert.equal(safeResult.oosWindowCount, 2);
   assert.equal(safeResult.oosWindowsPassed, 2);
   assert.equal(safeResult.totalOosTrades, 60);
+  assert.equal(safeResult.requirements.minimumOosTrades, 40);
+  assert.equal(safeResult.requirements.minimumUniqueDates, 20);
   assert.equal(safeResult.pooledOos.edgeVerdict, "positive_edge");
   assert.ok(safeResult.additionalCost05R.averageR > 0);
   assert.equal(safeResult.authority.executionAuthority, "none");
@@ -184,10 +186,32 @@ async function main() {
   assert.equal(adapted.stability.verdict, "robust_research");
   assert.equal(adapted.stability.edgeStatistics.provenance, "out_of_sample");
   assert.equal(adapted.stability.edgeStatistics.sampleSize, 60);
+  assert.equal(adapted.stability.evidenceSummary.minimumTotalOosTrades, 40);
+  assert.equal(adapted.preflight.requiredOosTrades, 40);
   assert.equal(adapted.provenance.validationRunId, safeResult.provenance.validationRunId);
   assert.equal(adapted.provenance.sourceFingerprint, safeResult.sourceFingerprint);
   assert.equal(adapted.preflight.authority.executionAuthority, "none");
   assert.doesNotMatch(JSON.stringify(adapted), /"(?:candles|rawCandles|accountData|orders|positions)"\s*:/i);
+
+  const v4OosTrades = Array.from({ length: 21 }, (_, index) => ({
+    openedAt: timestamp(sourceStart, 120 + Math.floor((index * 59) / 20)),
+    rMultiple: 3,
+    outcome: "target_hit"
+  }));
+  const v4Result = runDetectorProfileWalkForward({
+    profileId: "ifvg_fresh_retest_v4_candidate",
+    sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5_v4_test_fp",
+    sourceStart,
+    sourceEnd,
+    trades: [...buildTrades({ start: sourceStart, fromDay: 0, days: 47 }), ...v4OosTrades]
+  });
+  assert.equal(v4Result.requirements.minimumOosTrades, 20);
+  assert.equal(v4Result.requirements.minimumUniqueDates, 10);
+  assert.equal(v4Result.requirements.minimumWindowPassRate, 1);
+  assert.equal(v4Result.verdict, "passed");
+  assert.equal(v4Result.oosWindowsPassed, 2);
+  assert.equal(v4Result.totalOosTrades, 21);
 
   const scenario = (overrides = {}) => ({
     id: "conservative-confluence",
@@ -298,6 +322,13 @@ async function main() {
           verdict: adapted.stability.verdict,
           oosTrades: adapted.stability.edgeStatistics.sampleSize,
           provenanceMatched: adapted.provenance.validationRunId === safeResult.provenance.validationRunId
+        },
+        v4Profile: {
+          verdict: v4Result.verdict,
+          windows: `${v4Result.oosWindowsPassed}/${v4Result.oosWindowCount}`,
+          oosTrades: v4Result.totalOosTrades,
+          requiredOosTrades: v4Result.requirements.minimumOosTrades,
+          requiredUniqueDates: v4Result.requirements.minimumUniqueDates
         },
         deepHistoryPreparation: {
           ordinaryBrowserCandles: ordinaryPrepared.processedCandleCount,

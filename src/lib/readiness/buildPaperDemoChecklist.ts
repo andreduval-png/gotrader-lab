@@ -1,5 +1,6 @@
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
 import { researchDecisionAuthorityNone } from "@/lib/researchDecisionLog";
+import { getFrozenResearchProfile } from "@/lib/forwardEvidence";
 import { safeTopN, uid } from "@/lib/utils";
 
 import type {
@@ -8,6 +9,10 @@ import type {
   PaperDemoChecklistItemStatus,
   PaperDemoChecklistSummary
 } from "./paperDemoChecklistTypes";
+import {
+  resolveProfileTradeSample,
+  resolveStrategyProfileEvidence
+} from "./strategyProfileEvidence";
 
 const MIN_RESEARCH_CANDLES = 400;
 const MIN_TRADE_SAMPLE = 30;
@@ -79,6 +84,27 @@ const latestTradeSample = (snapshot: ResearchRuntimeSnapshot) =>
   snapshot.performance.canonicalPerformanceMetrics?.totalTrades ??
   0;
 
+const activeStrategyProfile = (snapshot: ResearchRuntimeSnapshot) =>
+  snapshot.researchIdentity.active.strategyProfile ??
+  snapshot.activeConfig.resolvedBacktestConfig.strategyProfile;
+
+const activeFrozenProfile = (snapshot: ResearchRuntimeSnapshot) =>
+  getFrozenResearchProfile(activeStrategyProfile(snapshot));
+
+const frozenProfileSourceMatches = (snapshot: ResearchRuntimeSnapshot) => {
+  const frozen = activeFrozenProfile(snapshot);
+  const identity = snapshot.researchIdentity.active;
+  if (!frozen) return false;
+  return (
+    identity.strategyProfile === frozen.profileId &&
+    identity.strategyProfileVersion === frozen.profileVersion &&
+    identity.sourceProvider === frozen.sourceProvider &&
+    identity.requestedSymbol === frozen.requestedSymbol &&
+    identity.brokerSymbol === frozen.brokerSymbol &&
+    identity.timeframe === frozen.timeframe
+  );
+};
+
 const latestFalsePositiveRate = (snapshot: ResearchRuntimeSnapshot) => {
   const metrics = snapshot.performance.canonicalPerformanceMetrics;
   const trades = metrics?.totalTrades ?? latestTradeSample(snapshot);
@@ -126,17 +152,30 @@ const sourceProviderItem = (snapshot: ResearchRuntimeSnapshot) => {
 };
 
 const minimumTradeSampleItem = (snapshot: ResearchRuntimeSnapshot) => {
-  const trades = latestTradeSample(snapshot);
-  const pass = trades >= MIN_TRADE_SAMPLE;
+  const currentCycleTrades = latestTradeSample(snapshot);
+  const frozen = activeFrozenProfile(snapshot);
+  const sample = resolveProfileTradeSample({
+    currentCycleTrades,
+    frozenEvidenceTrades: frozen?.evidence.completedTrades,
+    frozenSourceMatches: frozenProfileSourceMatches(snapshot)
+  });
+  const pass = sample.count >= MIN_TRADE_SAMPLE;
 
   return item({
     id: "minimum_trade_sample",
     label: "Minimum trade sample reached",
     status: statusFor(pass),
-    currentValue: `${trades} simulated trade(s)`,
+    currentValue:
+      sample.source === "exact_profile_historical_validation"
+        ? `${sample.count} exact-profile historical trade(s); latest cycle ${sample.currentCycleTrades}`
+        : `${sample.count} latest-cycle simulated trade(s)`,
     requiredValue: `>= ${MIN_TRADE_SAMPLE} simulated trades`,
-    blockerReason: pass ? "Latest cycle sample is large enough for candidate review." : "Latest simulated trade sample is too small for Paper-Demo Candidate review.",
-    nextAction: pass ? "Keep sample provenance attached." : "Collect more eligible cycles or broaden validation before candidate review."
+    blockerReason: pass
+      ? "The active strategy identity has a sufficient provenance-matched sample."
+      : "The active strategy identity does not have a sufficient matching trade sample for Paper-Demo Candidate review.",
+    nextAction: pass
+      ? "Keep profile and source provenance attached; forward/OOS gates remain separate."
+      : "Collect more trades using the exact active profile and canonical source before candidate review."
   });
 };
 
@@ -159,14 +198,19 @@ const walkForwardOosTradesItem = (snapshot: ResearchRuntimeSnapshot) => {
 const walkForwardPassRateItem = (snapshot: ResearchRuntimeSnapshot) => {
   const passRate = walkForwardPassRate(snapshot);
   const verdict = snapshot.walkForward.verdict;
-  const pass = verdict === "paper_demo_review_candidate" || (snapshot.walkForward.windowsTested >= 3 && passRate >= 0.67);
+  const requiredWindows = snapshot.walkForward.stability?.evidenceSummary?.minimumWindows ?? 3;
+  const verdictSupportsReview = verdict === "robust_research" || verdict === "paper_demo_review_candidate";
+  const pass =
+    verdictSupportsReview &&
+    snapshot.walkForward.windowsTested >= requiredWindows &&
+    passRate >= 0.67;
 
   return item({
     id: "walk_forward_pass_rate",
     label: "Walk-forward pass rate acceptable",
     status: statusFor(pass, snapshot.walkForward.windowsTested > 0),
     currentValue: `${snapshot.walkForward.outOfSampleWindowsPassed}/${snapshot.walkForward.windowsTested} OOS windows, verdict ${formatToken(verdict)}`,
-    requiredValue: ">= 67% OOS windows passed or paper_demo_review_candidate verdict",
+    requiredValue: `>= ${requiredWindows} OOS windows, >= 67% passed, robust research or candidate verdict`,
     blockerReason: pass ? "Walk-forward pass rate supports review." : "Walk-forward stability is not strong enough for Paper-Demo Candidate review.",
     nextAction: pass ? "Keep walk-forward report linked." : snapshot.walkForward.recommendedNextAction
   });
@@ -220,18 +264,36 @@ const regimeItem = (snapshot: ResearchRuntimeSnapshot) => {
 const grinchIctItem = (snapshot: ResearchRuntimeSnapshot) => {
   const profile = snapshot.latestResearchCycle.activeGrinchProfileSummary;
   const grinch = snapshot.latestResearchCycle.grinchStrategyScore;
-  const pass = Boolean(profile && profile.profile !== "none" && !profile.noValidProfile && grinch?.setupQuality !== "blocked");
-  const warning = Boolean(profile && profile.profile !== "none");
   const blocker = profile?.hardGateReason ?? profile?.primaryRuleBlock ?? grinch?.hardGateReason;
+  const frozen = activeFrozenProfile(snapshot);
+  const resolved = resolveStrategyProfileEvidence({
+    strategyProfile: activeStrategyProfile(snapshot),
+    currentCycleTrades: latestTradeSample(snapshot),
+    validationMatched: snapshot.researchIdentity.validationMatched,
+    frozenEvidence: frozen
+      ? {
+          completedTrades: frozen.evidence.completedTrades,
+          oosTrades: frozen.evidence.oosTrades,
+          passedOosWindows: frozen.evidence.frozenOosWindowsPassed,
+          totalOosWindows: frozen.evidence.frozenOosWindowCount,
+          monteCarloRobustness: frozen.evidence.monteCarloRobustness
+        }
+      : undefined,
+    frozenSourceMatches: frozenProfileSourceMatches(snapshot),
+    grinchProfilePresent: Boolean(profile && profile.profile !== "none"),
+    grinchBlocked: Boolean(profile?.noValidProfile || grinch?.setupQuality === "blocked"),
+    grinchBlocker: blocker,
+    grinchDetail: profile?.detail
+  });
 
   return item({
     id: "grinch_ict_profile_evidence",
-    label: "Grinch/ICT profile evidence sufficient",
-    status: statusFor(pass, warning),
-    currentValue: `${profile?.profile ?? "none"}; ${profile?.state ?? "not present"}; blocker ${formatToken(blocker)}`,
-    requiredValue: "valid ICT foundation plus Grinch refinement profile, no hard gate blocker",
-    blockerReason: pass ? "Full-stack ICT/Grinch evidence is present." : "Grinch refinement evidence is not sufficient for candidate review.",
-    nextAction: pass ? "Keep profile diagnostics attached." : profile?.detail ?? "Wait for a cleaner Grinch profile or run diagnostic-only calibration."
+    label: resolved.label,
+    status: resolved.status,
+    currentValue: resolved.currentValue,
+    requiredValue: resolved.requiredValue,
+    blockerReason: resolved.blockerReason,
+    nextAction: resolved.nextAction
   });
 };
 

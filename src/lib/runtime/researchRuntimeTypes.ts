@@ -41,6 +41,10 @@ import type {
 import type { ActiveResearchCalibration, CalibrationProposal, CalibrationProposalChanges, CalibrationProposalMetricsSnapshot } from "@/lib/selfImprovement";
 import type { FuturesSymbol, Timeframe, TradeThesis } from "@/lib/types";
 import type { WalkForwardRun, WalkForwardStabilitySummary } from "@/lib/walkForward";
+import type {
+  ValidationProvenanceBlocker,
+  ValidationProvenanceIdentity
+} from "@/lib/validationProvenance";
 
 export type RuntimeDataPreset = "mock" | "safe" | "standard" | "advanced" | "custom";
 export type RuntimeBridgeStatus = "not_checked" | "running" | "not_running" | "unknown";
@@ -277,6 +281,21 @@ export interface RuntimeWalkForwardState {
   warnings: string[];
 }
 
+/** Compact provenance state for the exact strategy/source identity under review. */
+export interface RuntimeResearchIdentityState {
+  active: ValidationProvenanceIdentity;
+  source: "active_backtest_configuration" | "latest_research_cycle_validation";
+  validationStatus: "matched" | "blocked" | "legacy_unverified_provenance";
+  validationMatched: boolean;
+  validationBlockers: ValidationProvenanceBlocker[];
+  matchingValidationId?: string;
+  matchingResearchQualityReviewId?: string;
+  researchQualityMatched: boolean;
+  matchingWalkForwardRunId?: string;
+  latestWalkForwardRunId?: string;
+  latestWalkForwardMatches: boolean;
+}
+
 export interface RuntimeTradingViewMcpState {
   runtime: TradingViewMcpRuntimeState;
   status: TradingViewMcpStatus;
@@ -358,6 +377,7 @@ export interface ResearchRuntimeSnapshot {
   performance: RuntimePerformanceState;
   evidence: RuntimeEvidenceState;
   maturity: RuntimeMaturityState;
+  researchIdentity: RuntimeResearchIdentityState;
   walkForward: RuntimeWalkForwardState;
   tradingViewMcp: RuntimeTradingViewMcpState;
   mt5ReadOnly: RuntimeMt5ReadOnlyState;

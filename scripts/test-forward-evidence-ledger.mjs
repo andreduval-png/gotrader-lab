@@ -111,6 +111,9 @@ async function main() {
   assert.equal(frozen.futureChangesPolicy, "fork_new_profile_version_only");
   assert.equal(frozen.autoPromotionAllowed, false);
   assert.equal(frozenV4.profileId, "ifvg_fresh_retest_v4_candidate");
+  assert.equal(frozenV4.walkForwardRequirements.minimumOosTrades, 20);
+  assert.equal(frozenV4.walkForwardRequirements.minimumUniqueDates, 10);
+  assert.equal(frozenV4.walkForwardRequirements.minimumOosWindows, 2);
   assert.equal(frozenV4.profileVersion, "v4");
   assert.equal(frozenV4.validationCutoff, frozen.validationCutoff);
   assert.equal(frozenV4.evidence.completedTrades, 68);

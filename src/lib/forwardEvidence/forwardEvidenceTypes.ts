@@ -68,6 +68,14 @@ export interface FrozenResearchProfile {
   timeframe: "5m";
   historicalValidationDays: 180;
   evidence: FrozenProfileEvidenceSummary;
+  walkForwardRequirements: Readonly<{
+    minimumOosWindows: number;
+    minimumOosTrades: number;
+    minimumTradesPerWindow: number;
+    minimumUniqueDates: number;
+    minimumWindowPassRate: number;
+    maximumSingleDateShare: number;
+  }>;
   frozenParameters: Readonly<{
     strategyProfile: ForwardEvidenceProfileId;
     warmupCandles: 100;

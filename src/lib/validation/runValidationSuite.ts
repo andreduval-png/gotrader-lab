@@ -253,11 +253,16 @@ export interface ValidationSuiteRunOptions {
 const detectorProfileExecutionKey = (definition: ValidationScenarioDefinition) => {
   const config = definition.config;
   const profile = config.strategyProfile;
-  if (profile !== "ifvg_fresh_retest_v3_research" && profile !== "ifvg_filtered_v2_research") {
+  if (
+    profile !== "ifvg_fresh_retest_v3_research" &&
+    profile !== "ifvg_fresh_retest_v4_candidate" &&
+    profile !== "ifvg_filtered_v2_research"
+  ) {
     return undefined;
   }
-  if (profile === "ifvg_fresh_retest_v3_research") {
-    // The v3 profile is frozen. Generic scenario definitions must not mutate
+  if (profile === "ifvg_fresh_retest_v3_research" || profile === "ifvg_fresh_retest_v4_candidate") {
+    // Frozen IFVG profiles own their direction and session identity. Generic
+    // scenario definitions must not mutate
     // its direction/session identity, and repeating the same causal detector
     // over a 180-day browser array can block the UI for tens of seconds.
     // Chronological robustness is measured separately by the detector-profile

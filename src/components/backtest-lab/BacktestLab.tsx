@@ -33,7 +33,14 @@ import {
   sanitizeBacktestConfig,
   saveBacktestConfig
 } from "@/lib/backtesting";
-import type { BacktestAgentWeightId, BacktestSourcePreference, ResolvedBacktestConfig, ResolvedBacktestCandleSource } from "@/lib/backtesting";
+import type {
+  BacktestAgentWeightId,
+  BacktestSourcePreference,
+  BacktestStrategyProfile,
+  ResolvedBacktestConfig,
+  ResolvedBacktestCandleSource
+} from "@/lib/backtesting";
+import { applyFrozenResearchProfileConfig, isFrozenResearchProfile } from "@/lib/forwardEvidence";
 import { buildVwapOverlay, createTradingChartData } from "@/lib/charting";
 import {
   ACTIVE_RESEARCH_CALIBRATION_UPDATED_EVENT,
@@ -64,6 +71,13 @@ import type { FuturesSymbol, MarketRegime, Timeframe } from "@/lib/types";
 import { formatPercent, formatSigned, safeTopN } from "@/lib/utils";
 
 const symbolOptions = ["ES", "NQ", "MES", "MNQ"].map((value) => ({ label: value, value }));
+const strategyProfileOptions: Array<{ label: string; value: BacktestStrategyProfile }> = [
+  { label: "Agent consensus / Grinch ICT", value: "agent_consensus" },
+  { label: "IFVG v2 filtered research", value: "ifvg_filtered_v2_research" },
+  { label: "IFVG v3 fresh retest (frozen)", value: "ifvg_fresh_retest_v3_research" },
+  { label: "IFVG v4 shallow retest (frozen candidate)", value: "ifvg_fresh_retest_v4_candidate" },
+  { label: "CMD high displacement v2 research", value: "cmd_high_displacement_v2_research" }
+];
 const timeframeOptions = ["1m", "5m", "15m", "1h"].map((value) => ({ label: value, value }));
 const researchTimeframeOptions = ["1m", "5m", "15m"].map((value) => ({ label: value, value }));
 const windowSizeOptions = [
@@ -241,6 +255,11 @@ export function BacktestLab() {
 
   const patchConfig = (patch: Partial<ResolvedBacktestConfig>) => {
     setDraftConfig((current) => sanitizeBacktestConfig({ ...current, ...patch }));
+  };
+
+  const selectStrategyProfile = (strategyProfile: BacktestStrategyProfile) => {
+    const next = sanitizeBacktestConfig({ ...draftConfig, strategyProfile });
+    setDraftConfig(isFrozenResearchProfile(strategyProfile) ? applyFrozenResearchProfileConfig(next) : next);
   };
 
   const patchNumber = (key: keyof ResolvedBacktestConfig, value: string) => {
@@ -711,6 +730,20 @@ export function BacktestLab() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="backtest-strategy-profile">Research profile</Label>
+                <Select
+                  id="backtest-strategy-profile"
+                  value={draftConfig.strategyProfile}
+                  options={strategyProfileOptions}
+                  onChange={(event) => selectStrategyProfile(event.target.value as BacktestStrategyProfile)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {isFrozenResearchProfile(draftConfig.strategyProfile)
+                    ? "Frozen detector parameters are enforced for deep validation. Selecting the profile does not promote readiness or permit execution."
+                    : "Select the deterministic research family to backtest. Recognition alone is not evidence."}
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="backtest-symbol">Symbol</Label>
                 <Select

@@ -6,6 +6,7 @@ import {
   type FrozenProfileMutationReview,
   type FrozenResearchProfile
 } from "./forwardEvidenceTypes";
+import type { ResolvedBacktestConfig } from "@/lib/backtesting/backtestTypes";
 
 export const ifvgFreshRetestV3FrozenProfile: FrozenResearchProfile = Object.freeze({
   profileId: IFVG_FRESH_RETEST_V3_PROFILE_ID,
@@ -35,6 +36,14 @@ export const ifvgFreshRetestV3FrozenProfile: FrozenResearchProfile = Object.free
     oosProfitFactor: 8.081,
     oosAdditionalCostR: 2.958,
     monteCarloRobustness: "strong"
+  }),
+  walkForwardRequirements: Object.freeze({
+    minimumOosWindows: 2,
+    minimumOosTrades: 40,
+    minimumTradesPerWindow: 10,
+    minimumUniqueDates: 20,
+    minimumWindowPassRate: 0.6,
+    maximumSingleDateShare: 0.15
   }),
   frozenParameters: Object.freeze({
     strategyProfile: IFVG_FRESH_RETEST_V3_PROFILE_ID,
@@ -88,6 +97,14 @@ export const ifvgShallowRetestV4FrozenProfile: FrozenResearchProfile = Object.fr
     oosAdditionalCostR: 4.904,
     monteCarloRobustness: "strong"
   }),
+  walkForwardRequirements: Object.freeze({
+    minimumOosWindows: 2,
+    minimumOosTrades: 20,
+    minimumTradesPerWindow: 5,
+    minimumUniqueDates: 10,
+    minimumWindowPassRate: 1,
+    maximumSingleDateShare: 0.15
+  }),
   frozenParameters: Object.freeze({
     strategyProfile: IFVG_FRESH_RETEST_V4_FORK_ID,
     warmupCandles: 100,
@@ -122,6 +139,34 @@ export const getFrozenResearchProfile = (profileId: string) =>
     : profileId === IFVG_FRESH_RETEST_V4_FORK_ID
       ? ifvgShallowRetestV4FrozenProfile
       : undefined;
+
+/**
+ * Frozen detector validation always uses the audited profile parameters.
+ * Page-local controls may compare slices, but they cannot silently mutate the
+ * identity used for deep validation and OOS evidence.
+ */
+export const applyFrozenResearchProfileConfig = (
+  config: ResolvedBacktestConfig
+): ResolvedBacktestConfig => {
+  const profile = getFrozenResearchProfile(config.strategyProfile);
+  if (!profile) return config;
+
+  return {
+    ...config,
+    strategyProfile: profile.profileId,
+    symbol: profile.requestedSymbol,
+    timeframe: profile.timeframe,
+    sessionFilter: "all",
+    targetRMultiple: profile.frozenParameters.minimumRR,
+    maxBarsToResolveTrade: profile.frozenParameters.maxBarsToResolveTrade,
+    lookaheadCandles: profile.frozenParameters.maxBarsToResolveTrade,
+    allowLong: profile.frozenParameters.allowLong,
+    allowShort: profile.frozenParameters.allowShort,
+    warmupCandles: profile.frozenParameters.warmupCandles,
+    decisionInterval: profile.frozenParameters.decisionInterval,
+    visibleWindow: profile.frozenParameters.visibleWindow
+  };
+};
 
 export const isFrozenResearchProfile = (profileId?: string) =>
   profileId === IFVG_FRESH_RETEST_V3_PROFILE_ID || profileId === IFVG_FRESH_RETEST_V4_FORK_ID;

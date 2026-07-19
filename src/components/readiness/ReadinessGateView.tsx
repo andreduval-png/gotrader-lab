@@ -143,7 +143,9 @@ export function ReadinessGateView() {
     setRunbook(loadSimulationRunbookState());
     setApproval(loadManualApprovalRecord());
     setSelfImprovement(loadSelfImprovementState());
-    void resolveResearchRuntimeSnapshot().then(setRuntimeSnapshot).catch(() => undefined);
+    void resolveResearchRuntimeSnapshot().then(setRuntimeSnapshot).catch((error) => {
+      console.error("Readiness runtime snapshot failed to resolve.", error);
+    });
   };
 
   useEffect(() => {
@@ -542,8 +544,21 @@ export function ReadinessGateView() {
           <div className="rounded-lg border border-border bg-background/45 p-3 text-xs text-muted-foreground">
             <div className="font-medium text-foreground">Advanced detail: runtime snapshot diagnostics</div>
             <div>Snapshot ID: {runtimeSnapshot?.snapshotId ?? "not loaded"}</div>
-          <div>Metrics source: {selectRuntimeMetricSourceLabel(runtimeSnapshot)}</div>
-          <div>Source trace: {runtimeSnapshot?.diagnostics.sourceTrace.join(" + ") ?? "n/a"}</div>
+            <div>Metrics source: {selectRuntimeMetricSourceLabel(runtimeSnapshot)}</div>
+            <div>Source trace: {runtimeSnapshot?.diagnostics.sourceTrace.join(" + ") ?? "n/a"}</div>
+            <div>
+              Research identity: {runtimeSnapshot
+                ? `${runtimeSnapshot.researchIdentity.active.strategyProfile} / ${runtimeSnapshot.researchIdentity.active.parameterFingerprint}`
+                : "n/a"}
+            </div>
+            <div>
+              Matching validation: {runtimeSnapshot?.researchIdentity.matchingValidationId ?? "none"}; matching walk-forward: {runtimeSnapshot?.researchIdentity.matchingWalkForwardRunId ?? "none"}
+            </div>
+            {runtimeSnapshot?.researchIdentity.validationBlockers.length ? (
+              <div className="text-amber-100">
+                Identity blockers: {runtimeSnapshot.researchIdentity.validationBlockers.join("; ")}
+              </div>
+            ) : null}
             {runtimeWarnings.length ? (
               <div className="mt-2 text-amber-100">Warnings: {runtimeWarnings.join(" ")}</div>
             ) : (

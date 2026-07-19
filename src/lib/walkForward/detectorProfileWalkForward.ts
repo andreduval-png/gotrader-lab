@@ -70,15 +70,16 @@ export function runDetectorProfileWalkForward(
 ): DetectorProfileWalkForwardResult {
   const holdoutFraction = Math.min(0.5, Math.max(0.2, input.holdoutFraction ?? 1 / 3));
   const windowDays = Math.max(15, Math.round(input.windowDays ?? 30));
-  const minimumOosWindows = Math.max(2, input.minimumOosWindows ?? 2);
-  const minimumOosTrades = Math.max(20, input.minimumOosTrades ?? 40);
-  const minimumTradesPerWindow = Math.max(5, input.minimumTradesPerWindow ?? 10);
-  const minimumUniqueDates = Math.max(3, input.minimumUniqueDates ?? 20);
-  const minimumWindowPassRate = Math.min(1, Math.max(0.5, input.minimumWindowPassRate ?? 0.6));
-  const maximumSingleDateShare = Math.min(0.5, Math.max(0.05, input.maximumSingleDateShare ?? 0.15));
+  const frozenProfile = getFrozenResearchProfile(input.profileId);
+  const frozenRequirements = frozenProfile?.walkForwardRequirements;
+  const minimumOosWindows = Math.max(2, input.minimumOosWindows ?? frozenRequirements?.minimumOosWindows ?? 2);
+  const minimumOosTrades = Math.max(20, input.minimumOosTrades ?? frozenRequirements?.minimumOosTrades ?? 40);
+  const minimumTradesPerWindow = Math.max(5, input.minimumTradesPerWindow ?? frozenRequirements?.minimumTradesPerWindow ?? 10);
+  const minimumUniqueDates = Math.max(3, input.minimumUniqueDates ?? frozenRequirements?.minimumUniqueDates ?? 20);
+  const minimumWindowPassRate = Math.min(1, Math.max(0.5, input.minimumWindowPassRate ?? frozenRequirements?.minimumWindowPassRate ?? 0.6));
+  const maximumSingleDateShare = Math.min(0.5, Math.max(0.05, input.maximumSingleDateShare ?? frozenRequirements?.maximumSingleDateShare ?? 0.15));
   const start = Date.parse(input.sourceStart);
   const requestedEnd = Date.parse(input.sourceEnd);
-  const frozenProfile = getFrozenResearchProfile(input.profileId);
   const frozenCutoff = frozenProfile ? Date.parse(frozenProfile.validationCutoff) : Number.NaN;
   const inputRangeValid = Number.isFinite(start) && Number.isFinite(requestedEnd) && requestedEnd > start;
   const postCutoffForwardOnly =
@@ -258,6 +259,14 @@ export function runDetectorProfileWalkForward(
     totalOosTrades: pooled.trades,
     uniqueOosTradingDates: pooled.uniqueTradingDates,
     largestSingleDateShare: round(largestSingleDateShare, 4),
+    requirements: {
+      minimumOosWindows,
+      minimumOosTrades,
+      minimumTradesPerWindow,
+      minimumUniqueDates,
+      minimumWindowPassRate: round(minimumWindowPassRate, 4),
+      maximumSingleDateShare: round(maximumSingleDateShare, 4)
+    },
     pooledOos: {
       averageR: pooled.averageR,
       profitFactor: pooled.profitFactor,

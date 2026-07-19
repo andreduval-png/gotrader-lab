@@ -5,7 +5,7 @@ import type {
   GoTraderHandoffAuditEntry,
   LabState
 } from "@/lib/types";
-import { uid } from "@/lib/utils";
+import { safeTopN, uid } from "@/lib/utils";
 
 export interface LabStorageAdapter {
   load(): LabState;
@@ -73,6 +73,29 @@ const normalizeLabState = (state: Partial<LabState>): LabState => {
   };
 };
 
+export const compactLabStateForStorage = (
+  state: LabState,
+  mode: "standard" | "aggressive" = "standard"
+): LabState => {
+  const limit = (standard: number, aggressive: number) =>
+    mode === "aggressive" ? aggressive : standard;
+
+  return {
+    ...state,
+    promptVersions: safeTopN(state.promptVersions, limit(120, 40)),
+    recommendations: safeTopN(state.recommendations, limit(120, 30)),
+    outcomes: safeTopN(state.outcomes, limit(250, 60)),
+    performanceScores: safeTopN(state.performanceScores, limit(250, 80)),
+    promptMutations: safeTopN(state.promptMutations, limit(100, 25)),
+    debateSessions: safeTopN(state.debateSessions, limit(25, 5)),
+    tradeTheses: safeTopN(state.tradeTheses, limit(60, 15)),
+    handoffExports: safeTopN(state.handoffExports ?? [], limit(50, 10)),
+    advisoryPackets: safeTopN(state.advisoryPackets ?? [], limit(50, 10)),
+    advisoryResponses: safeTopN(state.advisoryResponses ?? [], limit(50, 10)),
+    userApprovals: safeTopN(state.userApprovals, limit(100, 25))
+  };
+};
+
 export class LocalStorageLabAdapter implements LabStorageAdapter {
   load(): LabState {
     if (!isBrowser()) {
@@ -105,8 +128,23 @@ export class LocalStorageLabAdapter implements LabStorageAdapter {
 
   save(state: LabState) {
     if (isBrowser()) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      window.dispatchEvent(new CustomEvent(LAB_STORAGE_UPDATED_EVENT, { detail: state }));
+      const compact = compactLabStateForStorage(state);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+        window.dispatchEvent(new CustomEvent(LAB_STORAGE_UPDATED_EVENT, { detail: compact }));
+      } catch (error) {
+        const aggressive = compactLabStateForStorage(state, "aggressive");
+        try {
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(aggressive));
+          window.dispatchEvent(new CustomEvent(LAB_STORAGE_UPDATED_EVENT, { detail: aggressive }));
+          console.warn("Lab history was pruned after browser storage reached its quota.");
+        } catch (retryError) {
+          console.warn("Lab state storage write skipped after safe pruning.", {
+            error: retryError instanceof Error ? retryError.message : String(retryError),
+            initialError: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
     }
   }
 

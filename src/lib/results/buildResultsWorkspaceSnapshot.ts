@@ -31,6 +31,7 @@ export function buildResultsWorkspaceSnapshot(
   const paperCandidates = input.paperDemoState.candidates;
   const latestChecklist = input.paperDemoState.dailyChecklists[0];
   const activeFrozenProfileId =
+    runtime?.researchIdentity?.active.strategyProfile ??
     runtime?.latestResearchCycle.latestValidationSummary?.provenance?.strategyProfile ??
     runtime?.activeConfig.resolvedBacktestConfig.strategyProfile;
   const frozen = getFrozenResearchProfile(activeFrozenProfileId ?? "") ?? ifvgFreshRetestV3FrozenProfile;

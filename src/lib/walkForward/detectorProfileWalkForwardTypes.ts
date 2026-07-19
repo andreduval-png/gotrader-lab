@@ -51,6 +51,14 @@ export interface DetectorProfileWalkForwardResult {
   totalOosTrades: number;
   uniqueOosTradingDates: number;
   largestSingleDateShare: number;
+  requirements: {
+    minimumOosWindows: number;
+    minimumOosTrades: number;
+    minimumTradesPerWindow: number;
+    minimumUniqueDates: number;
+    minimumWindowPassRate: number;
+    maximumSingleDateShare: number;
+  };
   pooledOos: {
     averageR: number;
     profitFactor: number;

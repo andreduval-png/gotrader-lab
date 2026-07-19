@@ -122,10 +122,16 @@ export function adaptDetectorProfileWalkForwardRun(input: {
   );
   const windows = windowsFor(result, config, input.sourceLabel);
   const enoughEvidence =
-    result.verdict === "passed" && result.totalOosTrades >= 20 && result.oosWindowCount >= 2;
+    result.verdict === "passed" &&
+    result.totalOosTrades >= result.requirements.minimumOosTrades &&
+    result.oosWindowCount >= result.requirements.minimumOosWindows;
   const evidenceReasons = [
-    result.totalOosTrades < 20 ? `Only ${result.totalOosTrades} OOS trades; 20 required.` : undefined,
-    result.oosWindowCount < 2 ? `Only ${result.oosWindowCount} OOS windows; 2 required.` : undefined,
+    result.totalOosTrades < result.requirements.minimumOosTrades
+      ? `Only ${result.totalOosTrades} OOS trades; ${result.requirements.minimumOosTrades} required.`
+      : undefined,
+    result.oosWindowCount < result.requirements.minimumOosWindows
+      ? `Only ${result.oosWindowCount} OOS windows; ${result.requirements.minimumOosWindows} required.`
+      : undefined,
     ...result.blockers
   ].filter((item): item is string => Boolean(item));
   const stabilityVerdict =
@@ -152,11 +158,11 @@ export function adaptDetectorProfileWalkForwardRun(input: {
     uniqueTradingDates: result.uniqueOosTradingDates,
     activeRollingWindowsPossible: result.oosWindowCount,
     estimatedOosTrades: result.totalOosTrades,
-    requiredCandidates: 20,
-    requiredReplayPassedCandidates: 20,
-    requiredUniqueTradingDates: 3,
-    requiredWindows: 2,
-    requiredOosTrades: 20,
+    requiredCandidates: result.requirements.minimumOosTrades,
+    requiredReplayPassedCandidates: result.requirements.minimumOosTrades,
+    requiredUniqueTradingDates: result.requirements.minimumUniqueDates,
+    requiredWindows: result.requirements.minimumOosWindows,
+    requiredOosTrades: result.requirements.minimumOosTrades,
     blockers: preflightBlockers(result),
     warnings: result.warnings,
     nextAction: result.nextAction,
@@ -237,14 +243,16 @@ export function adaptDetectorProfileWalkForwardRun(input: {
       summary: `${result.oosWindowsPassed}/${result.oosWindowCount} frozen chronological OOS windows passed; ${result.totalOosTrades} OOS trades; ${result.pooledOos.averageR.toFixed(2)}R average.`,
       failReasons: evidenceReasons,
       evidenceSummary: {
-        minimumWindows: 2,
-        preferredWindows: 3,
-        minimumOosTradesPerWindow: 5,
-        minimumTotalOosTrades: 20,
+        minimumWindows: result.requirements.minimumOosWindows,
+        preferredWindows: Math.max(3, result.requirements.minimumOosWindows),
+        minimumOosTradesPerWindow: result.requirements.minimumTradesPerWindow,
+        minimumTotalOosTrades: result.requirements.minimumOosTrades,
         requestedMaxWindows: Math.max(2, result.oosWindowCount),
         actualWindowsGenerated: result.oosWindowCount,
         totalOosTrades: result.totalOosTrades,
-        windowsBelowMinimumOosTrades: result.windows.filter((window) => window.oosTrades < 5).length,
+        windowsBelowMinimumOosTrades: result.windows.filter(
+          (window) => window.oosTrades < result.requirements.minimumTradesPerWindow
+        ).length,
         enoughEvidence,
         insufficientEvidenceReasons: enoughEvidence ? [] : evidenceReasons,
         windowGenerationNotes: ["Frozen detector-profile chronological holdout."]

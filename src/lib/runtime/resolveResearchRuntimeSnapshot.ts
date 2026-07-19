@@ -596,6 +596,30 @@ const runtimeNextActionFor = ({
   return readinessSnapshot.recommendedNextStep;
 };
 
+const RUNTIME_SOURCE_HYDRATION_TIMEOUT_MS = 4_000;
+
+const withRuntimeSourceTimeout = async <T>(
+  promise: Promise<T>,
+  fallback: () => T
+): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error("Runtime source hydration timed out.")),
+          RUNTIME_SOURCE_HYDRATION_TIMEOUT_MS
+        );
+      })
+    ]);
+  } catch {
+    return fallback();
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 export async function resolveResearchRuntimeSnapshot(
   options: ResolveResearchRuntimeSnapshotOptions = {}
 ): Promise<ResearchRuntimeSnapshot> {
@@ -614,8 +638,14 @@ export async function resolveResearchRuntimeSnapshot(
   const latestLLMRun = latestLLMAdvisoryRun(llmState);
   const providerStatus = providerStatusForMode(llmState.providerMode);
   const llmBridgeSnapshot = getLocalBridgeStatusSnapshot();
-  const importActivation = await resolveImportedCandleActivationState().catch(fallbackImportActivation);
-  const preparedCandleSource = options.preparedCandleSource ?? await loadPreparedCandleSource().catch(() => undefined);
+  const importActivation = await withRuntimeSourceTimeout(
+    resolveImportedCandleActivationState(),
+    fallbackImportActivation
+  );
+  const preparedCandleSource = options.preparedCandleSource ?? await withRuntimeSourceTimeout(
+    loadPreparedCandleSource(),
+    () => undefined
+  );
   const source = preparedCandleSource ?? {
     mode: "mock" as const,
     label: "Mock candles",
@@ -629,8 +659,16 @@ export async function resolveResearchRuntimeSnapshot(
     performanceMode: "safe" as const,
     warnings: ["Prepared candle source could not be loaded; runtime snapshot used an empty mock fallback."]
   };
-  const tradingViewChartFeed = await hydrateActiveTradingViewMcpChartFeed().catch(() => loadActiveTradingViewMcpChartFeed());
-  const mt5ReadOnlyFeed = await hydrateActiveMt5ReadOnlyCandleFeed().catch(() => loadActiveMt5ReadOnlyCandleFeed());
+  const [tradingViewChartFeed, mt5ReadOnlyFeed] = await Promise.all([
+    withRuntimeSourceTimeout(
+      hydrateActiveTradingViewMcpChartFeed(),
+      loadActiveTradingViewMcpChartFeed
+    ),
+    withRuntimeSourceTimeout(
+      hydrateActiveMt5ReadOnlyCandleFeed(),
+      loadActiveMt5ReadOnlyCandleFeed
+    )
+  ]);
   const marketData = marketStateFor(
     source,
     importActivation,
@@ -861,7 +899,7 @@ export async function resolveResearchRuntimeSnapshot(
   const latestCycleValidationMatchesStored = Boolean(
     validation?.id && latestCycle?.validationSummary?.validationId === validation.id
   );
-  const readinessValidation = attachMatchingCycleValidationProvenance(
+  const storedValidationWithCycleProvenance = attachMatchingCycleValidationProvenance(
     validation,
     latestCycle?.validationSummary
   );
@@ -870,38 +908,57 @@ export async function resolveResearchRuntimeSnapshot(
   // so retain the identity that actually produced the cycle's validation.
   const activeResearchIdentity =
     latestCycle?.validationSummary?.provenance ??
-    (latestCycleValidationMatchesStored ? readinessValidation?.provenance : undefined) ??
+    latestCycle?.validationReport?.provenance ??
+    (latestCycleValidationMatchesStored ? storedValidationWithCycleProvenance?.provenance : undefined) ??
     configuredResearchIdentity;
   const activeResearchIdentitySource =
     activeResearchIdentity === configuredResearchIdentity
       ? "active backtest configuration"
       : "latest research cycle validation";
+  const validationCandidates = [latestCycle?.validationReport, storedValidationWithCycleProvenance]
+    .filter((report): report is NonNullable<typeof report> => Boolean(report))
+    .filter((report, index, reports) => reports.findIndex((candidate) => candidate.id === report.id) === index);
+  const matchingReadinessValidation = validationCandidates.find((report) =>
+    matchActiveResearchIdentity(activeResearchIdentity, report.provenance).matched
+  );
+  const researchQualityCandidates = [latestCycle?.researchQualityReview, researchQuality]
+    .filter((review): review is NonNullable<typeof review> => Boolean(review))
+    .filter((review, index, reviews) => reviews.findIndex((candidate) => candidate.id === review.id) === index);
+  const matchingResearchQuality = matchingReadinessValidation
+    ? researchQualityCandidates.find(
+        (review) => review.sourceValidationId === matchingReadinessValidation.id
+      )
+    : undefined;
+  const validationForIdentityReview = matchingReadinessValidation ?? validationCandidates[0];
   const activeValidationIdentityReview = matchActiveResearchIdentity(
     activeResearchIdentity,
-    readinessValidation?.provenance
+    validationForIdentityReview?.provenance
   );
   const matchingWalkForward =
-    activeValidationIdentityReview.matched && readinessValidation?.provenance
+    matchingReadinessValidation?.provenance
       ? walkForwardState.runs.find((run) =>
-          walkForwardProvenanceReview(readinessValidation.provenance!, run).matched
+          walkForwardProvenanceReview(matchingReadinessValidation.provenance!, run).matched
         )
       : undefined;
+  const latestWalkForwardMatches = Boolean(
+    latestWalkForward?.runId && matchingWalkForward?.runId === latestWalkForward.runId
+  );
   const readinessEdgeStatistics = (() => {
     const oos = matchingWalkForward?.stability?.edgeStatistics;
     return oos?.provenance === "out_of_sample" ? oos : undefined;
   })();
   const readinessSnapshot = evaluateReadinessGate({
-    validation: readinessValidation,
-    quality: researchQuality,
+    validation: matchingReadinessValidation,
+    quality: matchingResearchQuality,
     runbook,
     edgeStatistics: readinessEdgeStatistics,
     provenanceExpectation: activeValidationIdentityReview.matched
-      ? readinessValidation?.provenance
+      ? matchingReadinessValidation?.provenance
       : activeResearchIdentity,
     walkForwardRun: matchingWalkForward
   });
-  const canonicalPerformanceMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
-  const derivedMetrics = normalizeCycleMetricsForDisplay(latestCycle, validation);
+  const canonicalPerformanceMetrics = normalizeCycleMetricsForDisplay(latestCycle, matchingReadinessValidation);
+  const derivedMetrics = normalizeCycleMetricsForDisplay(latestCycle, matchingReadinessValidation);
   const canonicalMismatchWarnings = detectCanonicalMetricsMismatch(latestCycle?.canonicalMetrics, derivedMetrics);
   const completedRunbookItems = countCompletedRunbookItems(runbook);
   const autoResearchState = loadAutoResearchState();
@@ -918,8 +975,8 @@ export async function resolveResearchRuntimeSnapshot(
     latestLLMRunId: latestLLMRun?.runId,
     llmAdvisoryPassed: latestLLMRun?.advisoryPassed,
     debateSessionId: latestCycle?.agentDebateConsensus?.sessionId,
-    validationId: latestCycle?.validationSummary?.validationId ?? validation?.id,
-    researchQualityId: latestCycle?.researchQualitySummary?.reviewId ?? researchQuality?.id,
+    validationId: matchingReadinessValidation?.id,
+    researchQualityId: matchingResearchQuality?.id,
     readinessState: readinessSnapshot.state,
     proposalId: latestProposal?.proposalId,
     smtState: grinchPhase4SmtSummary?.smtState
@@ -930,7 +987,7 @@ export async function resolveResearchRuntimeSnapshot(
     evidenceQualityScore: evidenceLedgerSummary.overallScore,
     proposals: selfImprovement.proposals,
     latestReadinessState: readinessSnapshot.state,
-    latestWalkForwardRun: latestWalkForward,
+    latestWalkForwardRun: matchingWalkForward,
     cycles: safeArray(researchCycleState.runs).map((run) => {
       const metrics = canonicalMetricsForRun(run);
       return {
@@ -977,6 +1034,7 @@ export async function resolveResearchRuntimeSnapshot(
     `latest cycle: ${latestCycle?.cycleId ?? "none"}`,
     `latest auto research: ${latestAutoResearch?.cycleId ?? "none"}`,
     `latest walk-forward: ${latestWalkForward?.runId ?? "none"}`,
+    `matching walk-forward: ${matchingWalkForward?.runId ?? "none"}`,
     `latest proposal: ${latestProposal?.proposalId ?? "none"}`,
     `latest LLM run: ${latestLLMRun?.runId ?? "none"}`,
     `Grinch Phase 1: ${summarizeGrinchPhase1(grinchPhase1Summary)}`,
@@ -989,6 +1047,15 @@ export async function resolveResearchRuntimeSnapshot(
     `readiness: ${readinessSnapshot.state}`
   ];
   const staleStateWarnings = [
+    !activeValidationIdentityReview.matched
+      ? `Stored validation is excluded from readiness because it does not match the active research identity: ${activeValidationIdentityReview.blockers.join(", ") || "identity mismatch"}.`
+      : undefined,
+    matchingReadinessValidation && !matchingResearchQuality
+      ? `Stored research quality is excluded from readiness because it was not generated from matching validation ${matchingReadinessValidation.id}.`
+      : undefined,
+    latestWalkForward && !latestWalkForwardMatches
+      ? `Latest walk-forward ${latestWalkForward.runId} is excluded from readiness because it does not match the active validation identity.`
+      : undefined,
     latestCycle?.validationSummary && validation && latestCycle.validationSummary.validationId !== validation.id
       ? `Latest research cycle validation ${latestCycle.validationSummary.validationId} differs from stored latest validation ${validation.id}.`
       : undefined,
@@ -1000,18 +1067,18 @@ export async function resolveResearchRuntimeSnapshot(
       : undefined
   ].filter((warning): warning is string => Boolean(warning));
   const walkForwardWarnings = [
-    !latestWalkForward ? "No walk-forward validation exists; proposals and readiness are based on selected-window evidence only." : undefined,
-    latestWalkForward?.stability?.verdict === "insufficient_evidence"
-      ? "Latest walk-forward validation has insufficient evidence; increase windows or OOS trades before judging strategy quality."
+    !matchingWalkForward ? "No identity-matched walk-forward validation exists; readiness cannot borrow evidence from another profile or source." : undefined,
+    matchingWalkForward?.stability?.verdict === "insufficient_evidence"
+      ? "Identity-matched walk-forward validation has insufficient evidence; increase windows or OOS trades before judging strategy quality."
       : undefined,
-    latestWalkForward?.stability?.verdict === "fail" ? "Latest walk-forward validation failed; targeted follow-up research is required." : undefined,
-    latestWalkForward?.stability?.overfitRisk === "high" ? "Latest walk-forward validation reports high overfit risk." : undefined,
-    latestWalkForward?.stability &&
-    latestWalkForward.stability.verdict !== "insufficient_evidence" &&
-    latestWalkForward.stability.outOfSampleWindowsPassed < latestWalkForward.stability.windowCount
+    matchingWalkForward?.stability?.verdict === "fail" ? "Identity-matched walk-forward validation failed; targeted follow-up research is required." : undefined,
+    matchingWalkForward?.stability?.overfitRisk === "high" ? "Identity-matched walk-forward validation reports high overfit risk." : undefined,
+    matchingWalkForward?.stability &&
+    matchingWalkForward.stability.verdict !== "insufficient_evidence" &&
+    matchingWalkForward.stability.outOfSampleWindowsPassed < matchingWalkForward.stability.windowCount
       ? "Walk-forward needs more OOS consistency before maturity can advance."
       : undefined,
-    latestWalkForward && latestWalkForward.dataSource !== "imported" ? "Latest walk-forward validation did not use imported historical data." : undefined
+    matchingWalkForward && matchingWalkForward.dataSource !== "imported" ? "Identity-matched walk-forward validation did not use imported historical data." : undefined
   ].filter((warning): warning is string => Boolean(warning));
 
   const mismatchWarnings = buildMismatchWarnings({
@@ -1024,8 +1091,8 @@ export async function resolveResearchRuntimeSnapshot(
     latestCycleId: latestCycle?.cycleId,
     latestProposal,
     marketData,
-    researchQuality,
-    validation
+    researchQuality: matchingResearchQuality,
+    validation: matchingReadinessValidation
   });
   const activeBaselineFingerprint = createRunFingerprint({
     runId: activeConfig.activeCalibrationId ?? "active-baseline",
@@ -1137,13 +1204,13 @@ export async function resolveResearchRuntimeSnapshot(
       (item) => item.id === "llm-advisory-review"
     ),
     walkForwardRecommendedNextAction:
-      latestWalkForward?.stability?.recommendedNextAction ?? "Run walk-forward validation on imported data before trusting a calibration.",
-    walkForwardVerdict: latestWalkForward?.stability?.verdict
+      matchingWalkForward?.stability?.recommendedNextAction ?? "Run walk-forward validation for the active research identity before trusting a calibration.",
+    walkForwardVerdict: matchingWalkForward?.stability?.verdict
   });
   const runtimeNextAction = runtimeNextActionFor({
     latestCycle,
     latestProposal,
-    latestWalkForward,
+    latestWalkForward: matchingWalkForward,
     marketData,
     proposalCurrency,
     readinessSnapshot
@@ -1172,7 +1239,11 @@ export async function resolveResearchRuntimeSnapshot(
       latestThesisSummary: latestCycle?.thesisSummary ?? thesisFallback(labState),
       latestBacktestSummary: latestCycle?.backtestSummary,
       latestValidationSummary: latestCycle?.validationSummary,
-      latestResearchQualitySummary: latestCycle?.researchQualitySummary,
+      latestResearchQualitySummary:
+        latestCycle?.researchQualitySummary &&
+        matchingResearchQuality?.id === latestCycle.researchQualitySummary.reviewId
+          ? latestCycle.researchQualitySummary
+          : undefined,
       latestReadinessSummary: latestCycle?.readinessSnapshot,
       grinchPhase1Summary,
       grinchPhase2ReversalSummary,
@@ -1235,27 +1306,43 @@ export async function resolveResearchRuntimeSnapshot(
       maturityScore: researchMaturitySummary.score,
       nextMaturityRequirement: researchMaturitySummary.nextMaturityRequirement
     },
+    researchIdentity: {
+      active: activeResearchIdentity,
+      source:
+        activeResearchIdentitySource === "active backtest configuration"
+          ? "active_backtest_configuration"
+          : "latest_research_cycle_validation",
+      validationStatus: activeValidationIdentityReview.status,
+      validationMatched: activeValidationIdentityReview.matched,
+      validationBlockers: activeValidationIdentityReview.blockers,
+      matchingValidationId: matchingReadinessValidation?.id,
+      matchingResearchQualityReviewId: matchingResearchQuality?.id,
+      researchQualityMatched: Boolean(matchingResearchQuality),
+      matchingWalkForwardRunId: matchingWalkForward?.runId,
+      latestWalkForwardRunId: latestWalkForward?.runId,
+      latestWalkForwardMatches
+    },
     walkForward: {
-      latestRun: latestWalkForward,
-      latestRunId: latestWalkForward?.runId,
-      latestStatus: latestWalkForward?.status,
-      latestTimestamp: latestWalkForward?.completedAt ?? latestWalkForward?.startedAt,
-      dataPreset: latestWalkForward?.walkForwardDataPreset,
-      stability: latestWalkForward?.stability,
-      stabilityScore: latestWalkForward?.stability?.stabilityScore,
-      verdict: latestWalkForward?.stability?.verdict,
-      overfitRisk: latestWalkForward?.stability?.overfitRisk,
-      windowsTested: latestWalkForward?.stability?.windowCount ?? 0,
-      outOfSampleWindowsPassed: latestWalkForward?.stability?.outOfSampleWindowsPassed ?? 0,
+      latestRun: matchingWalkForward,
+      latestRunId: matchingWalkForward?.runId,
+      latestStatus: matchingWalkForward?.status,
+      latestTimestamp: matchingWalkForward?.completedAt ?? matchingWalkForward?.startedAt,
+      dataPreset: matchingWalkForward?.walkForwardDataPreset,
+      stability: matchingWalkForward?.stability,
+      stabilityScore: matchingWalkForward?.stability?.stabilityScore,
+      verdict: matchingWalkForward?.stability?.verdict,
+      overfitRisk: matchingWalkForward?.stability?.overfitRisk,
+      windowsTested: matchingWalkForward?.stability?.windowCount ?? 0,
+      outOfSampleWindowsPassed: matchingWalkForward?.stability?.outOfSampleWindowsPassed ?? 0,
       proposalValidated: Boolean(
         latestProposal?.proposalId &&
-          latestWalkForward?.proposalId &&
-          latestWalkForward.proposalId === latestProposal.proposalId
+          matchingWalkForward?.proposalId &&
+          matchingWalkForward.proposalId === latestProposal.proposalId
       ),
-      failureDiagnostics: latestWalkForward?.failureDiagnostics ?? latestWalkForward?.stability?.diagnostics,
-      followUpPlan: latestWalkForward?.followUpPlan ?? latestWalkForward?.stability?.followUpPlan,
+      failureDiagnostics: matchingWalkForward?.failureDiagnostics ?? matchingWalkForward?.stability?.diagnostics,
+      followUpPlan: matchingWalkForward?.followUpPlan ?? matchingWalkForward?.stability?.followUpPlan,
       recommendedNextAction:
-        latestWalkForward?.stability?.recommendedNextAction ?? "Run walk-forward validation on imported data before trusting a calibration.",
+        matchingWalkForward?.stability?.recommendedNextAction ?? "Run walk-forward validation for the active research identity before trusting a calibration.",
       warnings: walkForwardWarnings
     },
     tradingViewMcp,
