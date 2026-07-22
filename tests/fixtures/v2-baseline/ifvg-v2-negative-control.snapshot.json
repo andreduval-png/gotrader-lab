@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "gotrader-v2-normalized-snapshot-v1",
+  "payload": [
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "expectedBlockers": [],
+      "expectedDetectionState": "trade_plan_constructed",
+      "expectedOosSummary": {
+        "independentBehavior": "degraded",
+        "promotionAllowed": false,
+        "verdict": "insufficient_data"
+      },
+      "expectedReplaySummary": {
+        "currentWindowCandidates": 16,
+        "currentWindowTargetFirstRate": 0.6875,
+        "currentWindowUniqueDates": 15,
+        "independentWindowCandidates": 6,
+        "independentWindowInvalidationFirstRate": 0.6667,
+        "independentWindowTargetFirstRate": 0.3333
+      },
+      "expectedResearchLifecycleState": "replay_required",
+      "expectedResultType": "trade_candidate",
+      "expectedTradeGeometry": {
+        "entry": 95,
+        "rr": 3.3012,
+        "side": "long",
+        "stop": 93.9095,
+        "target": 98.6
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "costModel": "historical_audit_cost_model; additional_0.5R sensitivity where stated",
+        "dataWindowEnd": "2026-06-12T14:55:00.000Z",
+        "dataWindowStart": "2026-06-12T13:00:00.000Z",
+        "detectorVersion": "v2",
+        "fixtureId": "ifvg_v2_negative_control",
+        "lastClosedCandle": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "ifvg_filtered_v2_research|default_frozen_parameters",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "f6dbe33489a122d36995c5eb260d763917d186b3",
+        "sourceFingerprint": "mt5|MNQ|USTECH|5m|ifvg_fixture",
+        "sourceProvider": "mt5_read_only",
+        "strategyId": "ifvg_filtered_v2_research",
+        "timeframeSet": [
+          "5m",
+          "15m",
+          "1h"
+        ]
+      },
+      "provenanceNotes": [
+        "Independent-window behavior is transcribed from docs/ifvg-v2-causal-validation-audit.md.",
+        "A locally valid detector candidate does not convert this negative control into a positive model."
+      ],
+      "schemaVersion": "gotrader-v2-baseline-fixture-v1"
+    }
+  ]
+}

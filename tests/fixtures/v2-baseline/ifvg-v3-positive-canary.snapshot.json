@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "gotrader-v2-normalized-snapshot-v1",
+  "payload": [
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "expectedBlockers": [],
+      "expectedDetectionState": "trade_plan_constructed",
+      "expectedOosSummary": {
+        "additionalHalfRCostAverageR": 2.958,
+        "authorityCreated": false,
+        "averageR": 3.458,
+        "profitFactor": 8.081,
+        "totalWindows": 2,
+        "trades": 64,
+        "uniqueDates": 34,
+        "verdict": "passed",
+        "windowsPassed": 2
+      },
+      "expectedReplaySummary": {
+        "averageR": 2.805,
+        "completedResearchTrades": 172,
+        "historicalReference": "docs/ifvg-fresh-retest-v3-validation-audit.md",
+        "maximumDrawdownR": 8.966,
+        "positiveRollingWindows": 11,
+        "profitFactor": 5.979,
+        "sourceFingerprintRecordedInAudit": false,
+        "targetFirstRate": 0.5523,
+        "totalRollingWindows": 11,
+        "uniqueTradingDates": 95
+      },
+      "expectedResearchLifecycleState": "evidence_building",
+      "expectedResultType": "trade_candidate",
+      "expectedTradeGeometry": {
+        "entry": 95,
+        "rr": 3.3012,
+        "side": "long",
+        "stop": 93.9095,
+        "target": 98.6
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "positive_canary",
+        "costModel": "historical_audit_cost_model; additional_0.5R sensitivity where stated",
+        "dataWindowEnd": "2026-06-12T14:55:00.000Z",
+        "dataWindowStart": "2026-06-12T13:00:00.000Z",
+        "detectorVersion": "v3",
+        "fixtureId": "ifvg_v3_valid",
+        "lastClosedCandle": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "ifvg_fresh_retest_v3_research|default_frozen_parameters",
+        "profileVersion": "v3",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "f6dbe33489a122d36995c5eb260d763917d186b3",
+        "sourceFingerprint": "mt5|MNQ|USTECH|5m|ifvg_fixture",
+        "sourceProvider": "mt5_read_only",
+        "strategyId": "ifvg_fresh_retest_v3_research",
+        "timeframeSet": [
+          "5m",
+          "15m",
+          "1h"
+        ]
+      },
+      "provenanceNotes": [
+        "Detector geometry is generated from the bounded deterministic fixture in this script.",
+        "Historical replay/OOS metrics are transcribed from the committed validation audit; that audit did not record its source fingerprint.",
+        "The positive canary remains research-only and is not a readiness or execution claim."
+      ],
+      "schemaVersion": "gotrader-v2-baseline-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "expectedBlockers": [
+        "Price did not retest and respect the inverted FVG zone.",
+        "No next draw-on-liquidity target in IFVG direction.",
+        "entry_missing",
+        "target_missing",
+        "invalidation_missing",
+        "rr_unavailable",
+        "base_ifvg_not_validation_eligible",
+        "clean_retest_required",
+        "stale_retest_signal"
+      ],
+      "expectedDetectionState": "forming",
+      "expectedResearchLifecycleState": "replay_required",
+      "expectedResultType": "forming_candidate",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "positive_canary",
+        "costModel": "historical_audit_cost_model; additional_0.5R sensitivity where stated",
+        "dataWindowEnd": "2026-06-12T15:30:00.000Z",
+        "dataWindowStart": "2026-06-12T13:30:00.000Z",
+        "detectorVersion": "v3",
+        "fixtureId": "ifvg_v3_forming",
+        "lastClosedCandle": "2026-06-12T15:30:00.000Z",
+        "parameterFingerprint": "ifvg_fresh_retest_v3_research|default_frozen_parameters",
+        "profileVersion": "v3",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "f6dbe33489a122d36995c5eb260d763917d186b3",
+        "sourceFingerprint": "mt5|MNQ|USTECH|5m|ifvg_fixture",
+        "sourceProvider": "mt5_read_only",
+        "strategyId": "ifvg_fresh_retest_v3_research",
+        "timeframeSet": [
+          "5m",
+          "15m",
+          "1h"
+        ]
+      },
+      "provenanceNotes": [
+        "No clean current retest exists; the fixture must not create a validation-chain entry."
+      ],
+      "schemaVersion": "gotrader-v2-baseline-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "expectedBlockers": [
+        "IFVG direction is against available HTF context.",
+        "base_ifvg_not_validation_eligible"
+      ],
+      "expectedDetectionState": "rejected",
+      "expectedResearchLifecycleState": "replay_required",
+      "expectedResultType": "rejected_trade_candidate",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "positive_canary",
+        "costModel": "historical_audit_cost_model; additional_0.5R sensitivity where stated",
+        "dataWindowEnd": "2026-06-12T14:55:00.000Z",
+        "dataWindowStart": "2026-06-12T13:00:00.000Z",
+        "detectorVersion": "v3",
+        "fixtureId": "ifvg_v3_rejected",
+        "lastClosedCandle": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "ifvg_fresh_retest_v3_research|default_frozen_parameters",
+        "profileVersion": "v3",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "f6dbe33489a122d36995c5eb260d763917d186b3",
+        "sourceFingerprint": "mt5|MNQ|USTECH|5m|ifvg_fixture",
+        "sourceProvider": "mt5_read_only",
+        "strategyId": "ifvg_fresh_retest_v3_research",
+        "timeframeSet": [
+          "5m",
+          "15m",
+          "1h"
+        ]
+      },
+      "provenanceNotes": [
+        "Opposing higher-timeframe context remains an explicit blocker."
+      ],
+      "schemaVersion": "gotrader-v2-baseline-fixture-v1"
+    }
+  ]
+}
