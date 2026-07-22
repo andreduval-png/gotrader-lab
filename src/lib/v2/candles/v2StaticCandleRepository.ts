@@ -58,7 +58,9 @@ export function createV2StaticCandleRepository({
         timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion,
         timeContractId: source.timeContractId,
         timeContractVersion: source.timeContractVersion,
-        timeContractVerificationStatus: source.timeContractVerificationStatus
+        timeContractVerificationStatus: source.timeContractVerificationStatus,
+        terminalClockClassificationVersion: source.terminalClockClassificationVersion,
+        timeVerificationScope: source.timeVerificationScope
       });
     },
     async getAvailableTimeframes(sourceIdentity: V2SourceIdentity) {
@@ -82,6 +84,8 @@ export function createV2StaticCandleRepository({
         timeContractId: source.timeContractId,
         timeContractVersion: source.timeContractVersion,
         timeContractVerificationStatus: source.timeContractVerificationStatus,
+        terminalClockClassificationVersion: source.terminalClockClassificationVersion,
+        timeVerificationScope: source.timeVerificationScope,
         shadowOnly: true as const
       });
     }

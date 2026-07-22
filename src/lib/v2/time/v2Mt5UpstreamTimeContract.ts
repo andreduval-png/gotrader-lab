@@ -12,6 +12,18 @@ import {
 const providerBases = new Set(["epoch_utc", "mt5_server_wall_clock", "iso_with_offset", "unknown"]);
 const dstPolicies = new Set(["iana_timezone_rules", "fixed_offset", "provider_declared", "unknown"]);
 const verificationStatuses = new Set(["verified", "configured_unverified", "observed_candidate", "unknown"]);
+const terminalBasisClassifications = new Set([
+  "verified_utc_epoch",
+  "verified_trade_server_wall_clock",
+  "verified_symbol_quote_time_basis",
+  "verified_terminal_calculated_server_time",
+  "current_offset_verified_only",
+  "conflicting_terminal_evidence",
+  "insufficient_evidence",
+  "unknown"
+]);
+const terminalEvidenceStatuses = new Set(["verified_current_live", "verified_historical", "candidate", "conflicting", "missing"]);
+const verificationScopes = new Set(["none", "current_live", "historical"]);
 const sensitiveKey = /(?:account|balance|equity|margin|position|order|deal|credential|password|secret|token|apiKey|login)/i;
 
 const freezeText = (values: readonly string[]) => Object.freeze([...new Set(values)]);
@@ -96,6 +108,9 @@ export function policyFromVerifiedV2Mt5TimeContract(
   if (contract.verificationStatus !== "verified") {
     throw new Error("A verified MT5 upstream time contract is required before creating a normalization policy.");
   }
+  if (contract.version !== "1.0.0" && contract.historicalDstPolicyVerified !== true) {
+    throw new Error("Historical DST policy verification is required before creating a Phase 1.7 normalization policy.");
+  }
   return createV2TimeNormalizationPolicy({
     policyId: contract.contractId,
     version: contract.version,
@@ -137,6 +152,7 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   if (!verificationStatuses.has(String(contract.verificationStatus))) blockers.push("verification_status_invalid");
   if (!validIso(contract.systemTimeUtc)) blockers.push("system_time_utc_invalid");
   if (contract.serverTimeUtc && !validIso(contract.serverTimeUtc)) blockers.push("server_time_utc_invalid");
+  if (contract.terminalProbeCapturedAt && !validIso(contract.terminalProbeCapturedAt)) blockers.push("terminal_probe_captured_at_invalid");
   if (contract.providerTimezone && !validIanaTimezone(contract.providerTimezone)) blockers.push("provider_timezone_invalid");
   if (
     contract.providerUtcOffsetMinutes !== undefined &&
@@ -145,6 +161,34 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   if (contract.providerTimezone && contract.providerUtcOffsetMinutes !== undefined) {
     blockers.push("timezone_and_fixed_offset_are_mutually_exclusive");
   }
+  if (
+    contract.terminalObservedOffsetMinutes !== undefined &&
+    (!Number.isInteger(contract.terminalObservedOffsetMinutes) || Math.abs(contract.terminalObservedOffsetMinutes) > 840)
+  ) blockers.push("terminal_observed_offset_invalid");
+  if (
+    contract.terminalBasisClassification !== undefined &&
+    !terminalBasisClassifications.has(String(contract.terminalBasisClassification))
+  ) blockers.push("terminal_basis_classification_invalid");
+  if (contract.terminalEvidenceStatus !== undefined && !terminalEvidenceStatuses.has(String(contract.terminalEvidenceStatus))) {
+    blockers.push("terminal_evidence_status_invalid");
+  }
+  if (contract.timeVerificationScope !== undefined && !verificationScopes.has(String(contract.timeVerificationScope))) {
+    blockers.push("time_verification_scope_invalid");
+  }
+  if (contract.strategySessionTimezone !== undefined && contract.strategySessionTimezone !== "America/New_York") {
+    blockers.push("strategy_session_timezone_invalid");
+  }
+  if (contract.currentLiveTimeBasisVerified === true && contract.timeVerificationScope === "none") {
+    blockers.push("current_live_verification_scope_invalid");
+  }
+  if (contract.historicalDstPolicyVerified === true && contract.timeVerificationScope !== "historical") {
+    blockers.push("historical_verification_scope_invalid");
+  }
+  if (
+    contract.version !== "1.0.0" &&
+    contract.verificationStatus === "verified" &&
+    contract.historicalDstPolicyVerified !== true
+  ) blockers.push("verified_contract_requires_historical_time_scope");
   if (contract.readOnly !== true || contract.marketDataOnly !== true) blockers.push("read_only_market_data_contract_required");
   try {
     assertV2Authority(contract.authority);
@@ -166,9 +210,12 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   const policy = normalized?.verificationStatus === "verified"
     ? policyFromVerifiedV2Mt5TimeContract(normalized)
     : undefined;
+  const phase2Eligible = accepted && normalized?.verificationStatus === "verified" && (
+    normalized.version === "1.0.0" || normalized.historicalDstPolicyVerified === true
+  );
   return Object.freeze({
     status: accepted ? "accepted" as const : "blocked" as const,
-    phase2Eligible: accepted && normalized?.verificationStatus === "verified",
+    phase2Eligible,
     verificationStatus: verificationStatuses.has(String(contract.verificationStatus))
       ? contract.verificationStatus as V2Mt5ReadOnlyTimeContract["verificationStatus"]
       : "unknown",
@@ -185,6 +232,10 @@ export function v2Mt5TimeContractIdentityFields(
   return Object.freeze({
     timeContractId: contract.contractId,
     timeContractVersion: contract.version,
-    timeContractVerificationStatus: contract.verificationStatus
+    timeContractVerificationStatus: contract.verificationStatus,
+    ...(contract.terminalClockClassificationVersion
+      ? { terminalClockClassificationVersion: contract.terminalClockClassificationVersion }
+      : {}),
+    ...(contract.timeVerificationScope ? { timeVerificationScope: contract.timeVerificationScope } : {})
   });
 }

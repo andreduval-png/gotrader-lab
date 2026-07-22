@@ -34,6 +34,8 @@ export interface V2MarketDataIdentity {
   timeContractId?: string;
   timeContractVersion?: string;
   timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: "none" | "current_live" | "historical";
   identitySchemaVersion: string;
   canonicalHashVersion: string;
   identityHash: string;

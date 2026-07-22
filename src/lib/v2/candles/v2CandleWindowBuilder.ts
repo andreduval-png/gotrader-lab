@@ -158,7 +158,9 @@ export async function buildV2CanonicalCandleWindow({
   timeNormalizationPolicyVersion,
   timeContractId,
   timeContractVersion,
-  timeContractVerificationStatus
+  timeContractVerificationStatus,
+  terminalClockClassificationVersion,
+  timeVerificationScope
 }: {
   adapterId: string;
   adapterVersion: string;
@@ -174,6 +176,8 @@ export async function buildV2CanonicalCandleWindow({
   timeContractId?: string;
   timeContractVersion?: string;
   timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: "none" | "current_live" | "historical";
 }): Promise<Readonly<V2CanonicalCandleWindow>> {
   if (!v2SourceIdentityMatches(query.source, source)) {
     throw new V2CandleRepositoryError("source_identity_mismatch", "The requested V2 source identity does not match the adapter source.");
@@ -224,6 +228,8 @@ export async function buildV2CanonicalCandleWindow({
     timeContractId,
     timeContractVersion,
     timeContractVerificationStatus,
+    terminalClockClassificationVersion,
+    timeVerificationScope,
     timeframeFingerprints: { [normalizedQuery.timeframe]: source.sourceFingerprint },
     dataWindowStart: first?.openTime ?? fallbackBoundary,
     dataWindowEnd: last?.closeTime ?? fallbackBoundary,

@@ -13,6 +13,7 @@ import json
 import os
 import signal
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +22,13 @@ from urllib.parse import parse_qs, unquote, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import MetaTrader5 as mt5
+
+from v2_mt5_terminal_clock import (
+    TerminalClockObservationError,
+    classify_terminal_clock,
+    compact_terminal_evidence,
+    read_observation,
+)
 
 
 AUTHORITY = {
@@ -32,7 +40,7 @@ DEFAULT_TERMINAL_PATH = r"C:\Program Files\MetaTrader 5\terminal64.exe"
 MAX_CANDLES = 5000
 MT5_LOCK = threading.Lock()
 TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract"
-TIME_CONTRACT_VERSION = "1.0.0"
+TIME_CONTRACT_VERSION = "1.1.0"
 OFFICIAL_TIME_SOURCE = "metatrader5_official_documentation"
 ALLOWED_VERIFICATION_SOURCES = {
     OFFICIAL_TIME_SOURCE,
@@ -226,6 +234,7 @@ def build_time_contract(
     terminal_version: str | None,
     mt5_package_version: str | None,
     observations: list[dict[str, Any]] | None = None,
+    terminal_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     configured_timezone = environment.get("MT5_PROVIDER_TIMEZONE", "").strip() or None
     configured_offset_raw = environment.get("MT5_PROVIDER_UTC_OFFSET_MINUTES", "").strip()
@@ -303,10 +312,30 @@ def build_time_contract(
         and ((configured_timezone and (seasonal_verified or declared_verified)) or fixed_verified)
     )
 
+    terminal_evidence = terminal_evidence or {}
+    terminal_basis = terminal_evidence.get("terminalBasisClassification")
+    terminal_current_live_verified = terminal_evidence.get("currentLiveTimeBasisVerified") is True
+    terminal_conflicting = terminal_basis == "conflicting_terminal_evidence"
+    if terminal_conflicting:
+        warnings.append("The terminal-side clock probe conflicts with the Python MT5 timestamp basis.")
+
+    historical_dst_verified = bool(epoch_verified or wall_clock_verified)
+    current_live_verified = bool(historical_dst_verified or terminal_current_live_verified)
+    terminal_evidence = {
+        **terminal_evidence,
+        "currentLiveTimeBasisVerified": current_live_verified,
+        "historicalDstPolicyVerified": historical_dst_verified,
+        "timeVerificationScope": "historical" if historical_dst_verified else "current_live" if current_live_verified else "none",
+    }
+
     if blockers:
         verification_status = "unknown"
-    elif epoch_verified or wall_clock_verified:
+    elif historical_dst_verified:
         verification_status = "verified"
+    elif terminal_conflicting:
+        verification_status = "unknown"
+    elif current_live_verified:
+        verification_status = "observed_candidate"
     elif configured:
         verification_status = "configured_unverified"
     elif tick_is_recent and observed_offset not in {None, 0} and tick_candle_agreement:
@@ -327,6 +356,7 @@ def build_time_contract(
         | ({"tick_candle_basis_comparison"} if tick_candle_agreement else set())
         | ({"winter_summer_observations"} if seasonal_verified else set())
         | ({"repeated_fixed_offset_observations"} if fixed_verified else set())
+        | ({"terminal_clock_probe_current_live"} if terminal_current_live_verified else set())
     )
     contract = {
         "contractId": TIME_CONTRACT_ID,
@@ -356,12 +386,17 @@ def build_time_contract(
         "terminalBuild": terminal_build,
         "terminalVersion": terminal_version,
         "mt5PackageVersion": mt5_package_version,
+        "strategySessionTimezone": "America/New_York",
+        "currentLiveTimeBasisVerified": current_live_verified,
+        "historicalDstPolicyVerified": historical_dst_verified,
+        "timeVerificationScope": "historical" if historical_dst_verified else "current_live" if current_live_verified else "none",
         "readOnly": True,
         "marketDataOnly": True,
         "blockers": sorted(set(blockers)),
         "warnings": sorted(set(warnings)),
         "authority": AUTHORITY,
         **AUTHORITY,
+        **terminal_evidence,
     }
     return {key: value for key, value in contract.items() if value is not None}
 
@@ -417,18 +452,46 @@ class Mt5ReadOnlyState:
     def time_contract(self, symbol: str = "USTECH", timeframe_value: int = mt5.TIMEFRAME_M5) -> dict[str, Any]:
         if not self.ensure_connected():
             raise RuntimeError(self.last_error or "MT5 terminal is unavailable")
+        system_before_ms = time.time_ns() // 1_000_000
         with MT5_LOCK:
             terminal = mt5.terminal_info()
             terminal_version_tuple = mt5.version()
             tick = mt5.symbol_info_tick(symbol)
             rates = mt5.copy_rates_from_pos(symbol, timeframe_value, 0, 1)
             error = mt5.last_error()
+        system_after_ms = time.time_ns() // 1_000_000
         if tick is None:
             raise RuntimeError(f"MT5 time-contract tick unavailable for {symbol}: {error}")
         raw_candle_time = int(rates[-1]["time"]) if rates is not None and len(rates) else None
         terminal_version = None
         if terminal_version_tuple:
             terminal_version = ".".join(str(item) for item in terminal_version_tuple)
+        terminal_evidence: dict[str, Any] = {}
+        if terminal is not None:
+            try:
+                observation = read_observation(
+                    common_data_path=str(getattr(terminal, "commondata_path", "")),
+                    terminal_data_path=str(getattr(terminal, "data_path", "")),
+                )
+                classification = classify_terminal_clock(
+                    observation=observation,
+                    system_utc_before_ms=system_before_ms,
+                    system_utc_after_ms=system_after_ms,
+                    python_tick_raw=int(tick.time),
+                    python_tick_msc_raw=int(getattr(tick, "time_msc", 0)) or None,
+                    python_latest_m5_bar_raw=raw_candle_time or 0,
+                )
+                terminal_evidence = compact_terminal_evidence(classification, observation)
+            except TerminalClockObservationError as probe_error:
+                terminal_evidence = {
+                    "terminalEvidenceStatus": "missing",
+                    "timeVerificationScope": "none",
+                    "currentLiveTimeBasisVerified": False,
+                    "historicalDstPolicyVerified": False,
+                    "terminalClockClassificationVersion": "1.0.0",
+                    "terminalProbeBlockers": [str(probe_error)],
+                    "terminalProbeWarnings": ["Run the manual GoTraderClockProbe script to collect terminal-side time evidence."],
+                }
         return build_time_contract(
             environment=dict(os.environ),
             raw_tick_time=int(tick.time),
@@ -439,6 +502,7 @@ class Mt5ReadOnlyState:
             terminal_version=terminal_version,
             mt5_package_version=str(getattr(mt5, "__version__", "")) or None,
             observations=load_time_verification_observations(dict(os.environ)),
+            terminal_evidence=terminal_evidence,
         )
 
 

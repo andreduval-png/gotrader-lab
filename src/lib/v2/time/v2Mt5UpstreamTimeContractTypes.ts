@@ -1,8 +1,14 @@
 import type { V2Authority } from "../authority/v2Authority";
 import type { V2TimeNormalizationPolicy } from "./v2TimeNormalizationTypes";
+import type {
+  V2Mt5PythonTransportBasis,
+  V2Mt5TerminalEvidenceStatus,
+  V2Mt5TimeVerificationScope,
+  V2Mt5TimestampBasisClassification
+} from "./v2Mt5TerminalClockTypes";
 
 export const V2_MT5_TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract";
-export const V2_MT5_TIME_CONTRACT_VERSION = "1.0.0";
+export const V2_MT5_TIME_CONTRACT_VERSION = "1.1.0";
 
 export type V2Mt5TimeContractVerificationStatus =
   | "verified"
@@ -72,6 +78,20 @@ export interface V2Mt5ReadOnlyTimeContract {
   terminalBuild?: number;
   terminalVersion?: string;
   mt5PackageVersion?: string;
+  terminalProbeSchemaVersion?: string;
+  terminalProbeObservationId?: string;
+  terminalProbeCapturedAt?: string;
+  terminalBasisClassification?: V2Mt5TimestampBasisClassification;
+  pythonTransportBasis?: V2Mt5PythonTransportBasis;
+  terminalObservedOffsetMinutes?: number;
+  terminalEvidenceStatus?: V2Mt5TerminalEvidenceStatus;
+  terminalClockClassificationVersion?: string;
+  terminalProbeBlockers?: readonly string[];
+  terminalProbeWarnings?: readonly string[];
+  timeVerificationScope?: V2Mt5TimeVerificationScope;
+  currentLiveTimeBasisVerified?: boolean;
+  historicalDstPolicyVerified?: boolean;
+  strategySessionTimezone?: "America/New_York";
   readOnly: true;
   marketDataOnly: true;
   blockers: readonly string[];
@@ -100,4 +120,6 @@ export interface V2Mt5TimeContractIdentityFields {
   timeContractId: string;
   timeContractVersion: string;
   timeContractVerificationStatus: V2Mt5TimeContractVerificationStatus;
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: V2Mt5TimeVerificationScope;
 }

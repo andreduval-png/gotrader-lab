@@ -108,6 +108,8 @@ export interface V2SourceDescription {
   timeContractId?: string;
   timeContractVersion?: string;
   timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: "none" | "current_live" | "historical";
   shadowOnly: true;
 }
 
@@ -172,6 +174,8 @@ export interface V2LegacyCandleSourceSnapshot {
   timeContractId?: string;
   timeContractVersion?: string;
   timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: "none" | "current_live" | "historical";
 }
 
 export interface V2CandleCandidate {

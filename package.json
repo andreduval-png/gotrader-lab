@@ -41,6 +41,8 @@
     "diagnose:v2-candle-repository": "node scripts/diagnose-v2-candle-repository.mjs",
     "test:v2-mt5-time-normalization": "node scripts/test-v2-mt5-time-normalization.mjs",
     "test:v2-mt5-upstream-time-contract": "node scripts/test-v2-mt5-upstream-time-contract.mjs",
+    "test:v2-mt5-terminal-clock": "node scripts/test-v2-mt5-terminal-clock.mjs",
+    "diagnose:v2-mt5-terminal-clock": "node scripts/diagnose-v2-mt5-terminal-clock.mjs",
     "diagnose:v2-mt5-upstream-time-contract": "node scripts/diagnose-v2-mt5-upstream-time-contract.mjs",
     "diagnose:v2-mt5-time-normalization": "node scripts/diagnose-v2-mt5-time-normalization.mjs",
     "test:core": "node scripts/v2-baseline/run-baseline-suite.mjs core",

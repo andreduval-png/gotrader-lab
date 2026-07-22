@@ -1,6 +1,7 @@
 node_modules
 __pycache__/
 *.py[cod]
+*.ex5
 dist
 .env
 .env.local

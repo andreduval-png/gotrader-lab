@@ -191,7 +191,9 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     timeNormalizationPolicyVersion: policy.version,
     timeContractId: feed.timeContract?.contractId,
     timeContractVersion: feed.timeContract?.version,
-    timeContractVerificationStatus: feed.timeContract?.verificationStatus ?? "unknown"
+    timeContractVerificationStatus: feed.timeContract?.verificationStatus ?? "unknown",
+    terminalClockClassificationVersion: feed.timeContract?.terminalClockClassificationVersion,
+    timeVerificationScope: feed.timeContract?.timeVerificationScope
   });
 }
 

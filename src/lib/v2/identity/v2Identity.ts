@@ -69,6 +69,8 @@ export async function buildV2MarketDataIdentity({
   timeContractId,
   timeContractVersion,
   timeContractVerificationStatus,
+  terminalClockClassificationVersion,
+  timeVerificationScope,
   timeframeFingerprints,
   timezoneVersion = V2_TIMEZONE_VERSION
 }: {
@@ -83,6 +85,8 @@ export async function buildV2MarketDataIdentity({
   timeContractId?: string;
   timeContractVersion?: string;
   timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
+  terminalClockClassificationVersion?: string;
+  timeVerificationScope?: "none" | "current_live" | "historical";
   timeframeFingerprints: Readonly<Record<string, string>>;
   timezoneVersion?: string;
 }): Promise<Readonly<V2MarketDataIdentity>> {
@@ -100,6 +104,8 @@ export async function buildV2MarketDataIdentity({
     ...(timeContractId ? { timeContractId } : {}),
     ...(timeContractVersion ? { timeContractVersion } : {}),
     ...(timeContractVerificationStatus ? { timeContractVerificationStatus } : {}),
+    ...(terminalClockClassificationVersion ? { terminalClockClassificationVersion } : {}),
+    ...(timeVerificationScope ? { timeVerificationScope } : {}),
     identitySchemaVersion: V2_IDENTITY_SCHEMA_VERSION,
     canonicalHashVersion: V2_CANONICAL_HASH_VERSION
   };
