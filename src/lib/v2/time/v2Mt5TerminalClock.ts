@@ -115,6 +115,7 @@ export function classifyV2Mt5TerminalClock(
   const observation = input.observation;
   const clockToleranceMs = input.clockToleranceMs ?? 5_000;
   const maximumObservationAgeMs = input.maximumObservationAgeMs ?? 120_000;
+  const maximumQuoteAgeMs = input.maximumQuoteAgeMs ?? 120_000;
   const systemMidpointMs = Math.round((input.systemUtcBeforeMs + input.systemUtcAfterMs) / 2);
   const pythonTickMs = tickMs(input.pythonTickRaw, input.pythonTickMscRaw);
   const symbolTimeMs = tickMs(observation.symbolTimeRaw, observation.symbolTimeMscRaw);
@@ -125,6 +126,7 @@ export function classifyV2Mt5TerminalClock(
     pythonTickMinusSymbolTimeMs: pythonTickMs - symbolTimeMs,
     pythonCandleMinusLatestM5BarMs: toMs(input.pythonLatestM5BarRaw - observation.latestBarOpenRaw),
     timeCurrentMinusTimeGmtMs: toMs(observation.timeCurrentRaw - observation.timeGmtRaw),
+    timeTradeServerMinusTimeCurrentMs: toMs(observation.timeTradeServerRaw - observation.timeCurrentRaw),
     timeTradeServerMinusTimeGmtMs: toMs(observation.timeTradeServerRaw - observation.timeGmtRaw),
     symbolTimeMinusTimeGmtMs: symbolTimeMs - toMs(observation.timeGmtRaw),
     systemUtcMinusTimeGmtMs: systemMidpointMs - toMs(observation.timeGmtRaw),
@@ -140,13 +142,14 @@ export function classifyV2Mt5TerminalClock(
   if (!observation.symbolSynchronized) blockers.push("terminal_symbol_not_synchronized");
   if (!observation.tickReadSucceeded) blockers.push("terminal_tick_unavailable");
   if (!observation.barReadSucceeded) blockers.push("terminal_bar_unavailable");
+  if (Math.abs(deltas.timeTradeServerMinusTimeCurrentMs) > maximumQuoteAgeMs) blockers.push("terminal_quote_stale");
   if (Math.abs(deltas.systemUtcMinusTimeGmtMs) > maximumObservationAgeMs) blockers.push("terminal_gmt_not_correlated_with_system_utc");
   if (Math.abs(deltas.pythonCandleMinusLatestM5BarMs) > 300_000) blockers.push("python_terminal_bar_basis_mismatch");
 
   const pythonTransportBasis = classifyTransport({ clockToleranceMs, deltas, observationAgeMs });
   const currentMatchesQuote = Math.abs(toMs(observation.timeCurrentRaw) - symbolTimeMs) <= 30_000;
-  const terminalQuoteFresh = currentMatchesQuote;
-  const currentOffsetMs = deltas.symbolTimeMinusTimeGmtMs;
+  const terminalQuoteFresh = currentMatchesQuote && Math.abs(deltas.timeTradeServerMinusTimeCurrentMs) <= maximumQuoteAgeMs;
+  const currentOffsetMs = deltas.timeCurrentMinusTimeGmtMs;
   const pythonOffsetMs = pythonTickMs - systemMidpointMs;
   const offsetAgreement = Math.abs(currentOffsetMs - pythonOffsetMs) <= clockToleranceMs + observationAgeMs;
   const barParity = Math.abs(deltas.pythonCandleMinusLatestM5BarMs) <= 1_000;

@@ -68,6 +68,7 @@ export interface V2Mt5TerminalClockComparisonInput {
   wrapperTickRaw?: number;
   wrapperLatestM5BarRaw?: number;
   maximumObservationAgeMs?: number;
+  maximumQuoteAgeMs?: number;
   clockToleranceMs?: number;
   historicalDstPolicyVerified?: boolean;
 }
@@ -79,6 +80,7 @@ export interface V2Mt5TerminalClockDeltas {
   pythonTickMinusSymbolTimeMs: number;
   pythonCandleMinusLatestM5BarMs: number;
   timeCurrentMinusTimeGmtMs: number;
+  timeTradeServerMinusTimeCurrentMs: number;
   timeTradeServerMinusTimeGmtMs: number;
   symbolTimeMinusTimeGmtMs: number;
   systemUtcMinusTimeGmtMs: number;

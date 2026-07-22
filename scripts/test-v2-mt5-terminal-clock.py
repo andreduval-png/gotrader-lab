@@ -83,6 +83,10 @@ with tempfile.TemporaryDirectory() as directory:
     common = Path(directory) / "Common"
     data = str(Path(directory) / "Terminal" / "INSTANCE")
     path = observation_path(str(common), data)
+    expect_error(
+        lambda: read_observation(common_data_path=str(common), terminal_data_path=data),
+        "file_missing",
+    )
     path.parent.mkdir(parents=True)
     persisted = {**valid, "probeInstanceId": fnv1a32(data)}
     path.write_text(json.dumps(persisted), encoding="utf-8")
@@ -130,6 +134,15 @@ with tempfile.TemporaryDirectory() as directory:
         ),
         "schema_invalid",
     )
+    path.write_text(json.dumps({**persisted, "probeInstanceId": "00000000"}), encoding="utf-8")
+    expect_error(
+        lambda: read_observation(
+            common_data_path=str(common),
+            terminal_data_path=data,
+            now_epoch_seconds=valid["timeGmtRaw"] + 1,
+        ),
+        "instance_mismatch",
+    )
 
 utc_observation = fixture(offset_seconds=0)
 utc_result = compare(
@@ -161,6 +174,18 @@ conflict_result = compare(
 assert conflict_result["basisClassification"] in {"insufficient_evidence", "conflicting_terminal_evidence"}
 assert conflict_result["phase2Eligible"] is False
 
+stale_quote_observation = {
+    **wall_observation,
+    "timeTradeServerRaw": wall_observation["timeCurrentRaw"] + 1_800,
+}
+stale_quote_result = compare(
+    stale_quote_observation,
+    python_tick=stale_quote_observation["symbolTimeRaw"],
+    python_bar=stale_quote_observation["latestBarOpenRaw"],
+)
+assert stale_quote_result["currentLiveTimeBasisVerified"] is False
+assert "terminal_quote_stale" in stale_quote_result["blockers"]
+
 workspace = Path(__file__).resolve().parents[1]
 upstream = runpy.run_path(str(workspace / "scripts" / "mt5-readonly-upstream.py"))
 build_time_contract = upstream["build_time_contract"]
@@ -191,9 +216,33 @@ live_contract = build_time_contract(
     terminal_evidence=terminal_evidence,
 )
 assert live_contract["verificationStatus"] == "observed_candidate"
+assert live_contract["providerTimeBasis"] == "mt5_server_wall_clock"
+assert live_contract["configurationSource"] == "provider_metadata"
 assert live_contract["currentLiveTimeBasisVerified"] is True
 assert live_contract["historicalDstPolicyVerified"] is False
 assert live_contract["timeVerificationScope"] == "current_live"
+assert live_contract["phase2Eligible"] is False
+
+conflicting_contract = build_time_contract(
+    environment={},
+    raw_tick_time=wall_observation["symbolTimeRaw"],
+    raw_tick_time_msc=wall_observation["symbolTimeMscRaw"],
+    raw_candle_time=wall_observation["latestBarOpenRaw"],
+    system_time_utc=datetime.fromtimestamp(wall_observation["timeGmtRaw"], timezone.utc),
+    terminal_build=5836,
+    terminal_version="500.5836.28 Apr 2026",
+    mt5_package_version="5.0.5735",
+    terminal_evidence={
+        **terminal_evidence,
+        "terminalBasisClassification": "conflicting_terminal_evidence",
+        "terminalEvidenceStatus": "conflicting",
+        "currentLiveTimeBasisVerified": False,
+    },
+)
+assert conflicting_contract["verificationStatus"] == "unknown"
+assert conflicting_contract["currentLiveTimeBasisVerified"] is False
+assert conflicting_contract["historicalDstPolicyVerified"] is False
+assert conflicting_contract["phase2Eligible"] is False
 
 print(json.dumps({
     "status": "passed",
@@ -203,9 +252,13 @@ print(json.dumps({
     "historicalDstVerified": wall_result["historicalDstPolicyVerified"],
     "duplicateRejected": True,
     "staleRejected": True,
+    "staleQuoteRejected": True,
     "oversizedRejected": True,
     "malformedRejected": True,
     "invalidSchemaRejected": True,
+    "missingObservationRejected": True,
+    "terminalInstanceMismatchRejected": True,
+    "conflictingContractBlocked": conflicting_contract["verificationStatus"] == "unknown",
     "sensitiveFieldsRejected": True,
     "upstreamContractStatus": live_contract["verificationStatus"],
     "authority": AUTHORITY,

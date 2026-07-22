@@ -526,6 +526,7 @@ const timeContractLikePayload = (payload) =>
   typeof payload.version === "string" &&
   ["epoch_utc", "mt5_server_wall_clock", "iso_with_offset", "unknown"].includes(payload.providerTimeBasis) &&
   ["verified", "configured_unverified", "observed_candidate", "unknown"].includes(payload.verificationStatus) &&
+  (payload.version === "1.0.0" || typeof payload.phase2Eligible === "boolean") &&
   payload.readOnly === true &&
   payload.marketDataOnly === true &&
   payload.executionAuthority === "none" &&
@@ -540,6 +541,10 @@ const unavailableTimeContract = (reason) => ({
   verificationStatus: "unknown",
   verificationSources: [],
   systemTimeUtc: new Date().toISOString(),
+  currentLiveTimeBasisVerified: false,
+  historicalDstPolicyVerified: false,
+  timeVerificationScope: "none",
+  phase2Eligible: false,
   readOnly: true,
   marketDataOnly: true,
   blockers: [reason],

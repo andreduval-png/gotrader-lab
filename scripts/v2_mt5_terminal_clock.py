@@ -213,6 +213,7 @@ def classify_terminal_clock(
     wrapper_tick_raw: int | None = None,
     wrapper_latest_m5_bar_raw: int | None = None,
     maximum_observation_age_ms: int = 120_000,
+    maximum_quote_age_ms: int = 120_000,
     clock_tolerance_ms: int = 5_000,
     historical_dst_policy_verified: bool = False,
 ) -> dict[str, Any]:
@@ -229,6 +230,7 @@ def classify_terminal_clock(
         "pythonTickMinusSymbolTimeMs": python_tick_ms - symbol_time_ms,
         "pythonCandleMinusLatestM5BarMs": int((python_latest_m5_bar_raw - observation["latestBarOpenRaw"]) * 1000),
         "timeCurrentMinusTimeGmtMs": int((observation["timeCurrentRaw"] - observation["timeGmtRaw"]) * 1000),
+        "timeTradeServerMinusTimeCurrentMs": int((observation["timeTradeServerRaw"] - observation["timeCurrentRaw"]) * 1000),
         "timeTradeServerMinusTimeGmtMs": int((observation["timeTradeServerRaw"] - observation["timeGmtRaw"]) * 1000),
         "symbolTimeMinusTimeGmtMs": symbol_time_ms - int(observation["timeGmtRaw"] * 1000),
         "systemUtcMinusTimeGmtMs": system_midpoint_ms - int(observation["timeGmtRaw"] * 1000),
@@ -250,6 +252,8 @@ def classify_terminal_clock(
         blockers.append("terminal_tick_unavailable")
     if not observation["barReadSucceeded"]:
         blockers.append("terminal_bar_unavailable")
+    if abs(deltas["timeTradeServerMinusTimeCurrentMs"]) > maximum_quote_age_ms:
+        blockers.append("terminal_quote_stale")
     if abs(deltas["systemUtcMinusTimeGmtMs"]) > maximum_observation_age_ms:
         blockers.append("terminal_gmt_not_correlated_with_system_utc")
     if abs(deltas["pythonCandleMinusLatestM5BarMs"]) > 300_000:
@@ -266,8 +270,8 @@ def classify_terminal_clock(
         transport_basis = "unresolved"
 
     current_matches_quote = abs(observation["timeCurrentRaw"] * 1000 - symbol_time_ms) <= 30_000
-    terminal_quote_fresh = current_matches_quote
-    current_offset_ms = deltas["symbolTimeMinusTimeGmtMs"]
+    terminal_quote_fresh = current_matches_quote and abs(deltas["timeTradeServerMinusTimeCurrentMs"]) <= maximum_quote_age_ms
+    current_offset_ms = deltas["timeCurrentMinusTimeGmtMs"]
     python_offset_ms = python_tick_ms - system_midpoint_ms
     offset_agreement = abs(current_offset_ms - python_offset_ms) <= clock_tolerance_ms + observation_age_ms
     bar_parity = abs(deltas["pythonCandleMinusLatestM5BarMs"]) <= 1_000

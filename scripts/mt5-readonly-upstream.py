@@ -41,6 +41,7 @@ MAX_CANDLES = 5000
 MT5_LOCK = threading.Lock()
 TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract"
 TIME_CONTRACT_VERSION = "1.1.0"
+SERVICE_VERSION = "gotrader-mt5-readonly-upstream-v1.1"
 OFFICIAL_TIME_SOURCE = "metatrader5_official_documentation"
 ALLOWED_VERIFICATION_SOURCES = {
     OFFICIAL_TIME_SOURCE,
@@ -245,6 +246,10 @@ def build_time_contract(
     terminal_metadata_verification_id = environment.get("MT5_PROVIDER_TERMINAL_METADATA_VERIFICATION_ID", "").strip() or None
     blockers: list[str] = []
     warnings: list[str] = []
+    terminal_evidence = terminal_evidence or {}
+    terminal_basis = terminal_evidence.get("terminalBasisClassification")
+    terminal_current_live_verified = terminal_evidence.get("currentLiveTimeBasisVerified") is True
+    terminal_conflicting = terminal_basis == "conflicting_terminal_evidence"
 
     if configured_timezone and configured_offset_raw:
         blockers.append("timezone_and_fixed_offset_are_mutually_exclusive")
@@ -259,11 +264,23 @@ def build_time_contract(
     if configured_basis and configured_basis not in allowed_bases:
         blockers.append("invalid_provider_time_basis")
     provider_time_basis = configured_basis or (
-        "mt5_server_wall_clock" if configured_timezone or configured_offset is not None else "unknown"
+        "mt5_server_wall_clock"
+        if configured_timezone or configured_offset is not None or terminal_basis in {
+            "verified_trade_server_wall_clock",
+            "current_offset_verified_only",
+        }
+        else "epoch_utc"
+        if terminal_basis == "verified_utc_epoch"
+        else "unknown"
     )
     if provider_time_basis == "epoch_utc" and (configured_timezone or configured_offset is not None):
         blockers.append("epoch_utc_must_not_declare_wall_clock_timezone")
-    if provider_time_basis == "mt5_server_wall_clock" and not configured_timezone and configured_offset is None:
+    if (
+        provider_time_basis == "mt5_server_wall_clock"
+        and not configured_timezone
+        and configured_offset is None
+        and not terminal_current_live_verified
+    ):
         blockers.append("wall_clock_policy_requires_timezone_or_offset")
 
     dst_policy = (
@@ -312,12 +329,10 @@ def build_time_contract(
         and ((configured_timezone and (seasonal_verified or declared_verified)) or fixed_verified)
     )
 
-    terminal_evidence = terminal_evidence or {}
-    terminal_basis = terminal_evidence.get("terminalBasisClassification")
-    terminal_current_live_verified = terminal_evidence.get("currentLiveTimeBasisVerified") is True
-    terminal_conflicting = terminal_basis == "conflicting_terminal_evidence"
     if terminal_conflicting:
         warnings.append("The terminal-side clock probe conflicts with the Python MT5 timestamp basis.")
+    if terminal_current_live_verified and not configured_timezone and configured_offset is None:
+        warnings.append("Terminal clock evidence verifies the current-live basis only; historical DST policy remains unverified.")
 
     historical_dst_verified = bool(epoch_verified or wall_clock_verified)
     current_live_verified = bool(historical_dst_verified or terminal_current_live_verified)
@@ -365,7 +380,7 @@ def build_time_contract(
         "providerTimezone": configured_timezone,
         "providerUtcOffsetMinutes": configured_offset,
         "dstPolicy": dst_policy,
-        "configurationSource": "operator_config" if configured else "none",
+        "configurationSource": "operator_config" if configured else "provider_metadata" if terminal_current_live_verified else "none",
         "verificationStatus": verification_status,
         "verificationSources": effective_sources,
         "providerDeclarationId": provider_declaration_id,
@@ -390,6 +405,7 @@ def build_time_contract(
         "currentLiveTimeBasisVerified": current_live_verified,
         "historicalDstPolicyVerified": historical_dst_verified,
         "timeVerificationScope": "historical" if historical_dst_verified else "current_live" if current_live_verified else "none",
+        "phase2Eligible": bool(verification_status == "verified" and historical_dst_verified),
         "readOnly": True,
         "marketDataOnly": True,
         "blockers": sorted(set(blockers)),
@@ -433,6 +449,8 @@ class Mt5ReadOnlyState:
         connected = self.ensure_connected() if probe_terminal else self.connected
         return {
             "provider": "mt5_read_only_upstream",
+            "serviceVersion": SERVICE_VERSION,
+            "timeContractVersion": TIME_CONTRACT_VERSION,
             "connectionStatus": "connected" if connected else "degraded",
             "bridgeMode": "live" if connected else "degraded",
             "processHealth": "healthy",
@@ -507,7 +525,7 @@ class Mt5ReadOnlyState:
 
 
 class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
-    server_version = "GoTraderMt5ReadOnly/1.0"
+    server_version = "GoTraderMt5ReadOnly/1.1"
 
     @property
     def state(self) -> Mt5ReadOnlyState:

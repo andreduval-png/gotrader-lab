@@ -71,16 +71,22 @@ The source and binary were copied to the connected terminal's `MQL5/Scripts/GoTr
 
 ## Live Result
 
-Before the manual terminal run:
+The manually generated observation captured at `2026-07-22T20:59:50Z` produced:
 
 ```text
-status: blocked_terminal_probe_unavailable
-reason: terminal_observation_file_missing
+status: current_live_time_verified_historical_dst_unverified
+basisClassification: verified_trade_server_wall_clock
+pythonTransportBasis: matches_symbol_quote_time
+terminalEvidenceStatus: verified_current_live
+timeVerificationScope: current_live
+currentLiveTimeBasisVerified: true
+historicalDstPolicyVerified: false
+terminalObservedOffsetMinutes: 180
+pythonCandleMinusLatestM5BarMs: 0
+phase2Eligible: false
 ```
 
-No terminal observation, exact live deltas, current-live verification, or historical-DST verification was fabricated. Phase 2 remains ineligible.
-
-Accordingly, the implemented values and comparisons are ready, but no live numeric terminal/Python/wrapper/system result is claimed in this commit. The deterministic +180-minute fixture classifies as `verified_trade_server_wall_clock`, matches Python to `SYMBOL_TIME`, and produces exact Python-candle-to-M5-bar parity of `0 ms`. That fixture is test evidence, not a substitute for the missing terminal capture.
+The observation later expired under the strict 120-second runtime freshness policy. Its successful classification remains an audit result, but the stale file is not reused as fresh market-time evidence.
 
 ## Deterministic Results
 
@@ -142,7 +148,8 @@ The probe is a manually run MQL5 Script, not an Expert Advisor. It does not requ
 ## Known Limitations
 
 - The terminal script must be started manually from MT5 Navigator; Python MT5 exposes no safe read-only script-launch operation.
-- The latest-observation file has not yet been generated in the connected terminal.
+- A runtime observation is reusable only for 120 seconds and must be recaptured manually when current-live verification is required.
+- A fresh observation captured while the symbol quote clock is stale is rejected; terminal wall-clock freshness alone is not sufficient.
 - One current observation can verify only a current-live basis. It cannot prove the provider's historical seasonal/DST rule.
 - `TimeGMTOffset()` and `TimeDaylightSavings()` describe the local computer, not the broker timezone; they are retained only as supporting diagnostics.
 - `TimeTradeServer()` is terminal-calculated and supporting evidence, while `TimeCurrent()` reflects the last known server/Market Watch quote time.
@@ -153,8 +160,8 @@ Revert the Phase 1.7 commit and remove the machine-local probe source/binary fro
 
 ## Phase 2 Decision
 
-The source is compiled and installed, but the terminal-side observation has not been manually generated. Historical DST policy also remains unverified.
+The terminal/Python current-live basis has been verified. The provider's historical DST policy remains unverified, so Phase 2 remains blocked.
 
 ```text
-PHASE 1.7 BLOCKED - LIVE TERMINAL PROBE NOT COMPLETED
+PHASE 1.7 PASSED FOR CURRENT-LIVE TIME ONLY - HISTORICAL DST POLICY UNVERIFIED
 ```

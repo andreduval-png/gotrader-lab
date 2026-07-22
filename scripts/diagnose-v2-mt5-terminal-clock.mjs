@@ -2,6 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { evaluateV2Mt5TerminalContractAgreement } from "./v2-mt5-terminal-contract-agreement.mjs";
 
 const workspace = process.cwd();
 const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || "http://127.0.0.1:7341").replace(/\/$/, "");
@@ -78,13 +79,20 @@ const timeSource = timeService.status === 0
   ? timeService.stdout.split(/\r?\n/).find((line) => /^Source:/i.test(line.trim()))?.split(":").slice(1).join(":").trim()
   : undefined;
 const classification = direct.classification;
-const finalStatus = classification.currentLiveTimeBasisVerified
-  ? classification.historicalDstPolicyVerified
-    ? "terminal_time_basis_verified"
-    : "current_live_time_verified_historical_dst_unverified"
-  : classification.basisClassification === "conflicting_terminal_evidence"
-    ? "blocked_conflicting_terminal_evidence"
-    : "blocked_terminal_evidence_inconclusive";
+const agreement = evaluateV2Mt5TerminalContractAgreement({
+  responseStatus: timeContract.status,
+  contract: timeContract.body,
+  classification
+});
+const finalStatus = agreement.status === "blocked"
+  ? "blocked_time_contract_integration_mismatch"
+  : classification.currentLiveTimeBasisVerified
+    ? classification.historicalDstPolicyVerified
+      ? "terminal_time_basis_verified"
+      : "current_live_time_verified_historical_dst_unverified"
+    : classification.basisClassification === "conflicting_terminal_evidence"
+      ? "blocked_conflicting_terminal_evidence"
+      : "blocked_terminal_evidence_inconclusive";
 console.log(JSON.stringify({
   status: finalStatus,
   bridgeUrl,
@@ -128,14 +136,14 @@ console.log(JSON.stringify({
     ...classification,
     deltas: { ...classification.deltas, ...wrapperDeltas }
   },
+  contractAgreement: agreement,
   timeContract: {
     version: timeContract.body?.version,
     verificationStatus: timeContract.body?.verificationStatus,
     currentLiveTimeBasisVerified: timeContract.body?.currentLiveTimeBasisVerified,
     historicalDstPolicyVerified: timeContract.body?.historicalDstPolicyVerified,
     timeVerificationScope: timeContract.body?.timeVerificationScope,
-    phase2Eligible: timeContract.body?.verificationStatus === "verified" &&
-      timeContract.body?.historicalDstPolicyVerified === true
+    phase2Eligible: timeContract.body?.phase2Eligible === true
   },
   strategySessionTimezone: "America/New_York",
   rawCandlesPrinted: false,

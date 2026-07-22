@@ -189,6 +189,10 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
     contract.verificationStatus === "verified" &&
     contract.historicalDstPolicyVerified !== true
   ) blockers.push("verified_contract_requires_historical_time_scope");
+  const expectedPhase2Eligible = contract.verificationStatus === "verified" && contract.historicalDstPolicyVerified === true;
+  if (contract.version !== "1.0.0" && contract.phase2Eligible !== expectedPhase2Eligible) {
+    blockers.push("phase2_eligibility_projection_invalid");
+  }
   if (contract.readOnly !== true || contract.marketDataOnly !== true) blockers.push("read_only_market_data_contract_required");
   try {
     assertV2Authority(contract.authority);
@@ -210,8 +214,10 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   const policy = normalized?.verificationStatus === "verified"
     ? policyFromVerifiedV2Mt5TimeContract(normalized)
     : undefined;
-  const phase2Eligible = accepted && normalized?.verificationStatus === "verified" && (
-    normalized.version === "1.0.0" || normalized.historicalDstPolicyVerified === true
+  const phase2Eligible = accepted && (
+    normalized?.version === "1.0.0"
+      ? normalized.verificationStatus === "verified"
+      : normalized?.phase2Eligible === true && normalized.historicalDstPolicyVerified === true
   );
   return Object.freeze({
     status: accepted ? "accepted" as const : "blocked" as const,

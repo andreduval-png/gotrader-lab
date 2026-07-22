@@ -91,6 +91,7 @@ export interface V2Mt5ReadOnlyTimeContract {
   timeVerificationScope?: V2Mt5TimeVerificationScope;
   currentLiveTimeBasisVerified?: boolean;
   historicalDstPolicyVerified?: boolean;
+  phase2Eligible?: boolean;
   strategySessionTimezone?: "America/New_York";
   readOnly: true;
   marketDataOnly: true;

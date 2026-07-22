@@ -8,6 +8,7 @@ import net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { compileTypescriptModules } from "./v2-baseline/compile-typescript-modules.mjs";
+import { evaluateV2Mt5TerminalContractAgreement } from "./v2-mt5-terminal-contract-agreement.mjs";
 
 const workspace = process.cwd();
 const authority = Object.freeze({
@@ -132,6 +133,12 @@ const partial = clock.classifyV2Mt5TerminalClock({
 });
 assert.equal(partial.phase2Eligible, false);
 assert.ok(partial.blockers.includes("terminal_bar_unavailable"));
+const staleQuote = compare(observation({
+  offsetSeconds: 10_800,
+  overrides: { timeTradeServerRaw: 1_800_010_800 + 1_800 }
+}));
+assert.equal(staleQuote.currentLiveTimeBasisVerified, false);
+assert.ok(staleQuote.blockers.includes("terminal_quote_stale"));
 
 const liveOnlyContract = Object.freeze({
   contractId: "gotrader-mt5-readonly-time-contract",
@@ -164,6 +171,7 @@ const liveOnlyContract = Object.freeze({
   timeVerificationScope: "current_live",
   currentLiveTimeBasisVerified: true,
   historicalDstPolicyVerified: false,
+  phase2Eligible: false,
   strategySessionTimezone: "America/New_York",
   readOnly: true,
   marketDataOnly: true,
@@ -175,9 +183,35 @@ const liveOnlyContract = Object.freeze({
 const liveValidation = contracts.validateV2Mt5UpstreamTimeContract(liveOnlyContract);
 assert.equal(liveValidation.status, "accepted");
 assert.equal(liveValidation.phase2Eligible, false);
+const acceptedAgreement = evaluateV2Mt5TerminalContractAgreement({
+  responseStatus: 200,
+  contract: { ...liveOnlyContract, sourceMethod: "upstream_http:/time-contract" },
+  classification: wall
+});
+assert.equal(acceptedAgreement.status, "accepted");
+assert.equal(acceptedAgreement.phase2Eligible, false);
+const stubAgreement = evaluateV2Mt5TerminalContractAgreement({
+  responseStatus: 200,
+  contract: {
+    ...liveOnlyContract,
+    version: "0",
+    verificationStatus: "unknown",
+    currentLiveTimeBasisVerified: false,
+    timeVerificationScope: "none",
+    sourceMethod: "contract_stub:/time-contract"
+  },
+  classification: wall
+});
+assert.equal(stubAgreement.status, "blocked");
+assert.ok(stubAgreement.blockers.includes("time_contract_version_mismatch"));
+assert.ok(stubAgreement.blockers.includes("time_contract_stub_returned"));
 assert.equal(contracts.validateV2Mt5UpstreamTimeContract({
   ...liveOnlyContract,
   verificationStatus: "verified"
+}).status, "blocked");
+assert.equal(contracts.validateV2Mt5UpstreamTimeContract({
+  ...liveOnlyContract,
+  phase2Eligible: true
 }).status, "blocked");
 
 const getFreePort = () => new Promise((resolve, reject) => {
@@ -219,6 +253,7 @@ try {
   assert.equal(wrapped.terminalBasisClassification, liveOnlyContract.terminalBasisClassification);
   assert.equal(wrapped.currentLiveTimeBasisVerified, true);
   assert.equal(wrapped.historicalDstPolicyVerified, false);
+  assert.equal(wrapped.phase2Eligible, false);
   assert.equal(wrapped.timeVerificationScope, "current_live");
   assert.equal(wrapped.executionAuthority, "none");
 } finally {
@@ -250,7 +285,15 @@ const identityInput = {
 };
 const currentIdentity = await identity.buildV2MarketDataIdentity({ ...identityInput, timeVerificationScope: "current_live" });
 const historicalIdentity = await identity.buildV2MarketDataIdentity({ ...identityInput, timeVerificationScope: "historical" });
+const volatileObservationIdentity = await identity.buildV2MarketDataIdentity({
+  ...identityInput,
+  timeVerificationScope: "current_live",
+  terminalProbeObservationId: "DIFFERENT-OBSERVATION",
+  terminalProbeCapturedAt: "2030-01-01T00:00:00.000Z",
+  observationAgeMs: 99_999
+});
 assert.notEqual(currentIdentity.identityHash, historicalIdentity.identityHash);
+assert.equal(currentIdentity.identityHash, volatileObservationIdentity.identityHash);
 
 const output = {
   status: "passed",
@@ -263,8 +306,12 @@ const output = {
   exactBarParityMs: wall.deltas.pythonCandleMinusLatestM5BarMs,
   staleRejected: stale.blockers.includes("terminal_observation_stale"),
   partialRejected: partial.blockers.includes("terminal_bar_unavailable"),
+  staleQuoteRejected: staleQuote.blockers.includes("terminal_quote_stale"),
   identitySensitiveToVerificationScope: currentIdentity.identityHash !== historicalIdentity.identityHash,
   wrapperPassThrough: "passed",
+  endpointAgreement: acceptedAgreement.status,
+  stubMismatchBlocked: stubAgreement.status === "blocked",
+  identityExcludesVolatileObservationFields: currentIdentity.identityHash === volatileObservationIdentity.identityHash,
   rawCandleArraysSerialized: false,
   sensitiveFieldsAbsent: true,
   mql5MutationCapabilitiesAbsent: true,
