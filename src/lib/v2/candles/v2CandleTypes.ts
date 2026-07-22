@@ -1,5 +1,6 @@
 import type { V2MarketDataCapability } from "../authority/v2Authority";
 import type { V2MarketDataIdentity, V2SourceIdentity, V2SourceKind } from "../identity/v2IdentityTypes";
+import type { V2ProviderTimeBasis, V2TimeNormalizationAudit } from "../time/v2TimeNormalizationTypes";
 
 export type V2CandlePurpose =
   | "current_read"
@@ -36,6 +37,7 @@ export interface V2CanonicalCandle {
   closureSource: V2ClosureSource;
   providerTime?: string;
   receivedAt?: string;
+  timeAudit?: Readonly<V2TimeNormalizationAudit>;
 }
 
 export interface V2DataQualityDiagnostics {
@@ -99,6 +101,9 @@ export interface V2SourceDescription {
   stale: boolean;
   warnings: readonly string[];
   capability: Readonly<V2MarketDataCapability>;
+  providerTimeBasis?: V2ProviderTimeBasis;
+  timeNormalizationPolicyId?: string;
+  timeNormalizationPolicyVersion?: string;
   shadowOnly: true;
 }
 
@@ -145,6 +150,9 @@ export interface V2LegacyCandleLike {
   providerTime?: string;
   serverTimestamp?: string;
   receivedAt?: string;
+  rawProviderTime?: string | number;
+  rawProviderCloseTime?: string | number;
+  timeAudit?: Readonly<V2TimeNormalizationAudit>;
 }
 
 export interface V2LegacyCandleSourceSnapshot {
@@ -154,6 +162,9 @@ export interface V2LegacyCandleSourceSnapshot {
   closurePolicy: V2ClosurePolicy;
   stale?: boolean;
   warnings?: readonly string[];
+  providerTimeBasis?: V2ProviderTimeBasis;
+  timeNormalizationPolicyId?: string;
+  timeNormalizationPolicyVersion?: string;
 }
 
 export interface V2CandleCandidate {
@@ -168,4 +179,5 @@ export interface V2CandleCandidate {
   closureSource: V2ClosureSource;
   providerTime?: string;
   receivedAt?: string;
+  timeAudit?: Readonly<V2TimeNormalizationAudit>;
 }

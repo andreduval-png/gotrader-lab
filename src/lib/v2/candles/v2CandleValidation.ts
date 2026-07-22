@@ -135,7 +135,14 @@ export function validateAndNormalizeV2Candles({
       isClosed: true as const,
       closureSource: candidate.closureSource,
       providerTime: candidate.providerTime,
-      receivedAt: candidate.receivedAt
+      receivedAt: candidate.receivedAt,
+      timeAudit: candidate.timeAudit
+        ? Object.freeze({
+            ...candidate.timeAudit,
+            warnings: Object.freeze([...candidate.timeAudit.warnings]),
+            blockers: Object.freeze([...candidate.timeAudit.blockers])
+          })
+        : undefined
     }))
   );
 

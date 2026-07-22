@@ -4,6 +4,7 @@ export * from "./v2CandleValidation";
 export * from "./v2CandleWindowBuilder";
 export * from "./v2CanonicalSourceManagerAdapter";
 export * from "./v2Mt5ReadOnlyAdapter";
+export * from "./v2Mt5TimeNormalizedAdapter";
 export * from "./v2PushFeedAdapter";
 export * from "./v2ReplaySnapshotAdapter";
 export * from "./v2RepositoryRegistry";

@@ -53,7 +53,9 @@ export function createV2StaticCandleRepository({
         query,
         source: source.identity,
         sourceStale: source.stale,
-        sourceWarnings: source.warnings
+        sourceWarnings: source.warnings,
+        timeNormalizationPolicyId: source.timeNormalizationPolicyId,
+        timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion
       });
     },
     async getAvailableTimeframes(sourceIdentity: V2SourceIdentity) {
@@ -71,6 +73,9 @@ export function createV2StaticCandleRepository({
         stale: Boolean(source.stale),
         warnings: Object.freeze([...(source.warnings ?? [])]),
         capability: V2_MARKET_DATA_READ_ONLY,
+        providerTimeBasis: source.providerTimeBasis,
+        timeNormalizationPolicyId: source.timeNormalizationPolicyId,
+        timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion,
         shadowOnly: true as const
       });
     }

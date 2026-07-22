@@ -3,3 +3,4 @@ export * from "./authority";
 export * from "./candles";
 export * from "./identity";
 export * from "./serialization";
+export * from "./time";

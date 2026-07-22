@@ -109,7 +109,8 @@ const candidateFromLegacy = ({
     isClosed,
     closureSource: closureSourceFor(closurePolicy),
     providerTime: candle.providerTime ?? candle.serverTimestamp,
-    receivedAt: candle.receivedAt
+    receivedAt: candle.receivedAt,
+    timeAudit: candle.timeAudit
   };
 };
 
@@ -152,7 +153,9 @@ export async function buildV2CanonicalCandleWindow({
   query,
   source,
   sourceStale = false,
-  sourceWarnings = []
+  sourceWarnings = [],
+  timeNormalizationPolicyId,
+  timeNormalizationPolicyVersion
 }: {
   adapterId: string;
   adapterVersion: string;
@@ -163,6 +166,8 @@ export async function buildV2CanonicalCandleWindow({
   source: Readonly<V2SourceIdentity>;
   sourceStale?: boolean;
   sourceWarnings?: readonly string[];
+  timeNormalizationPolicyId?: string;
+  timeNormalizationPolicyVersion?: string;
 }): Promise<Readonly<V2CanonicalCandleWindow>> {
   if (!v2SourceIdentityMatches(query.source, source)) {
     throw new V2CandleRepositoryError("source_identity_mismatch", "The requested V2 source identity does not match the adapter source.");
@@ -208,6 +213,8 @@ export async function buildV2CanonicalCandleWindow({
   const fallbackBoundary = normalizedQuery.end ?? normalizedQuery.start ?? asOfIso;
   const identity = await buildV2MarketDataIdentity({
     source,
+    timeNormalizationPolicyId,
+    timeNormalizationPolicyVersion,
     timeframeFingerprints: { [normalizedQuery.timeframe]: source.sourceFingerprint },
     dataWindowStart: first?.openTime ?? fallbackBoundary,
     dataWindowEnd: last?.closeTime ?? fallbackBoundary,

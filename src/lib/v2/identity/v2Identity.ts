@@ -1,6 +1,8 @@
 import { canonicalHash, V2_CANONICAL_HASH_VERSION } from "../serialization/canonicalSerialization";
 import {
   V2_IDENTITY_SCHEMA_VERSION,
+  V2_DEFAULT_TIME_NORMALIZATION_POLICY_ID,
+  V2_DEFAULT_TIME_NORMALIZATION_POLICY_VERSION,
   V2_SESSION_CALENDAR_VERSION,
   V2_TIMEZONE_VERSION,
   type V2MarketDataIdentity,
@@ -62,6 +64,8 @@ export async function buildV2MarketDataIdentity({
   lastClosedCandle,
   sessionCalendarVersion = V2_SESSION_CALENDAR_VERSION,
   source,
+  timeNormalizationPolicyId = V2_DEFAULT_TIME_NORMALIZATION_POLICY_ID,
+  timeNormalizationPolicyVersion = V2_DEFAULT_TIME_NORMALIZATION_POLICY_VERSION,
   timeframeFingerprints,
   timezoneVersion = V2_TIMEZONE_VERSION
 }: {
@@ -71,6 +75,8 @@ export async function buildV2MarketDataIdentity({
   lastClosedCandle: string;
   sessionCalendarVersion?: string;
   source: Readonly<V2SourceIdentity>;
+  timeNormalizationPolicyId?: string;
+  timeNormalizationPolicyVersion?: string;
   timeframeFingerprints: Readonly<Record<string, string>>;
   timezoneVersion?: string;
 }): Promise<Readonly<V2MarketDataIdentity>> {
@@ -83,6 +89,8 @@ export async function buildV2MarketDataIdentity({
     candleCountByTimeframe: sortV2NumberRecord(candleCountByTimeframe),
     sessionCalendarVersion,
     timezoneVersion,
+    timeNormalizationPolicyId,
+    timeNormalizationPolicyVersion,
     identitySchemaVersion: V2_IDENTITY_SCHEMA_VERSION,
     canonicalHashVersion: V2_CANONICAL_HASH_VERSION
   };
