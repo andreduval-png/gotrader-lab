@@ -12,6 +12,12 @@ const mt5Root = path.join(projectRoot, "src", "lib", "integrations", "mt5");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-phase2-models-test");
 const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -23,12 +29,22 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIndexSmtTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRiskTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRisk.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictRealReplayRunnerTypes.ts" },
   { root: sourceRoot, file: "ictManualReplayReviewTypes.ts" },
   { root: sourceRoot, file: "ictMarketScorecardTypes.ts" },
   { root: sourceRoot, file: "ictMonteCarloTypes.ts" },
   { root: sourceRoot, file: "ictLatestResearchStateTypes.ts" },
   { root: sourceRoot, file: "ictLatestResearchState.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContextTypes.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContext.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognitionTypes.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognition.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetectionTypes.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetection.ts" },
+  { root: sourceRoot, file: "ictSelfImprovementTypes.ts" },
+  { root: sourceRoot, file: "ictSelfImprovement.ts" },
   { root: sourceRoot, file: "ictSignalContractTypes.ts" },
   { root: sourceRoot, file: "ictSignalContract.ts" },
   { root: sourceRoot, file: "ictPaperSignalSimulatorTypes.ts" },
@@ -87,9 +103,21 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    sourceFiles
+      .filter(({ file, root }) => root === sourceRoot && file !== "index.ts")
+      .map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`)
+      .join("\n"),
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -99,6 +127,20 @@ export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_PHASE2_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
 }
 `,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "forwardScenarioStub.mjs"),
+    "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
     "utf8"
   );
 }
@@ -255,8 +297,8 @@ async function main() {
   const missingHtf = suite.evaluateIctPhase2BreadAndButterBuy({ ...bullish, htfCandles: {} });
   assert.notEqual(missingHtf.approvedProfileDecision?.status, "approved_research_candidate", "missing HTF data should not approve a Phase 2 model");
   assert.ok(
-    missingHtf.approvedProfileDecision?.rejectionReasons.some((reason) => /higher-timeframe/i.test(reason)),
-    "missing HTF data should expose approved-profile blocker"
+    missingHtf.approvedProfileDecision?.rejectionReasons.some((reason) => /signal is not directional|HTF data missing|higher-timeframe/i.test(reason)),
+    `missing HTF fixture must expose its current fail-closed blocker: ${JSON.stringify(missingHtf.approvedProfileDecision?.rejectionReasons ?? [])}`
   );
 
   process.stdout.write("GoTrader ICT Phase 2 Models smoke test passed.\n");
