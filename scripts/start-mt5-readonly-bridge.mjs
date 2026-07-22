@@ -31,6 +31,7 @@ const defaultBrokerSymbol =
 const brokerSymbolSuggestions = ["USTECH", "US500", "US30", "XAUUSD", "EURUSD.pro", "EURUSD", "NAS100", "US100"];
 const configuredUpstreamPaths = {
   status: process.env.MT5_READONLY_UPSTREAM_STATUS_PATH,
+  timeContract: process.env.MT5_READONLY_UPSTREAM_TIME_CONTRACT_PATH,
   quote: process.env.MT5_READONLY_UPSTREAM_QUOTE_PATH,
   candles: process.env.MT5_READONLY_UPSTREAM_CANDLES_PATH,
   candleRange: process.env.MT5_READONLY_UPSTREAM_CANDLES_RANGE_PATH,
@@ -39,6 +40,7 @@ const configuredUpstreamPaths = {
 };
 const upstreamPathCandidates = {
   status: [configuredUpstreamPaths.status, "/health", "/status", "/api/v1/market/symbols", "/symbols"].filter(Boolean),
+  timeContract: [configuredUpstreamPaths.timeContract, "/time-contract", "/api/v1/market/time-contract"].filter(Boolean),
   quote: [configuredUpstreamPaths.quote, "/quote", "/price", "/tick", "/api/v1/market/price"].filter(Boolean),
   candles: [
     configuredUpstreamPaths.candles,
@@ -80,6 +82,8 @@ const authority = {
   brokerAuthority: "none",
   readinessOverrideAuthority: "none"
 };
+const TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract";
+const WRAPPER_TIME_CONTRACT_VERSION = "gotrader-mt5-readonly-wrapper-time-contract-v1";
 
 const json = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -146,6 +150,7 @@ const plannedStatus = () => ({
   lastUpstreamError,
   upstreamPaths: {
     status: discoveredUpstreamPaths.status ?? configuredUpstreamPaths.status,
+    timeContract: discoveredUpstreamPaths.timeContract ?? configuredUpstreamPaths.timeContract,
     quote: discoveredUpstreamPaths.quote ?? configuredUpstreamPaths.quote,
     candles: discoveredUpstreamPaths.candles ?? configuredUpstreamPaths.candles,
     candleRange: discoveredUpstreamPaths.candleRange ?? configuredUpstreamPaths.candleRange,
@@ -156,6 +161,7 @@ const plannedStatus = () => ({
   defaultBrokerSymbol,
   upstreamCandidatePaths: {
     status: upstreamPathCandidates.status,
+    timeContract: upstreamPathCandidates.timeContract,
     quote: upstreamPathCandidates.quote,
     candles: upstreamPathCandidates.candles,
     candleRange: upstreamPathCandidates.candleRange,
@@ -513,6 +519,47 @@ const candleLikePayload = (payload) =>
     toNumber(firstDefined(item.low, item.l)) !== undefined &&
     toNumber(firstDefined(item.close, item.c)) !== undefined
   );
+const timeContractLikePayload = (payload) =>
+  payload &&
+  typeof payload === "object" &&
+  payload.contractId === TIME_CONTRACT_ID &&
+  typeof payload.version === "string" &&
+  ["epoch_utc", "mt5_server_wall_clock", "iso_with_offset", "unknown"].includes(payload.providerTimeBasis) &&
+  ["verified", "configured_unverified", "observed_candidate", "unknown"].includes(payload.verificationStatus) &&
+  payload.readOnly === true &&
+  payload.marketDataOnly === true &&
+  payload.executionAuthority === "none" &&
+  payload.brokerAuthority === "none" &&
+  payload.readinessOverrideAuthority === "none";
+const unavailableTimeContract = (reason) => ({
+  contractId: TIME_CONTRACT_ID,
+  version: "0",
+  providerTimeBasis: "unknown",
+  dstPolicy: "unknown",
+  configurationSource: "none",
+  verificationStatus: "unknown",
+  verificationSources: [],
+  systemTimeUtc: new Date().toISOString(),
+  readOnly: true,
+  marketDataOnly: true,
+  blockers: [reason],
+  warnings: ["The upstream time contract is unavailable; V2 normalization must fail closed."],
+  authority,
+  ...authority,
+  receivedAtUtc: new Date().toISOString(),
+  wrapperContractVersion: WRAPPER_TIME_CONTRACT_VERSION,
+  sourceMethod: "contract_stub:/time-contract"
+});
+const upstreamTimeContract = async () => {
+  const { payload, path } = await fetchUpstreamJson("timeContract", {}, timeContractLikePayload);
+  return {
+    ...payload,
+    receivedAtUtc: new Date().toISOString(),
+    wrapperContractVersion: WRAPPER_TIME_CONTRACT_VERSION,
+    upstreamPath: path,
+    sourceMethod: `upstream_http:${path}`
+  };
+};
 const normalizeQuote = ({ payload, requestedSymbol, brokerSymbol, sourcePath }) => {
   const data = payload?.data && typeof payload.data === "object" && !Array.isArray(payload.data) ? payload.data : payload;
   const bid = toNumber(firstDefined(data?.bid, data?.bid_price, data?.price?.bid));
@@ -530,6 +577,8 @@ const normalizeQuote = ({ payload, requestedSymbol, brokerSymbol, sourcePath }) 
     mid,
     spread,
     timestamp: parseTimestamp(firstDefined(data?.timestamp, data?.time, data?.datetime)),
+    rawTime: toNumber(firstDefined(data?.rawTime, data?.raw_time)),
+    rawTimeMsc: toNumber(firstDefined(data?.rawTimeMsc, data?.raw_time_msc, data?.time_msc)),
     connectionStatus: bid !== undefined || ask !== undefined || mid !== undefined ? "connected" : "degraded",
     sourceMethod: sourcePath ? `upstream_http:${sourcePath}` : undefined,
     warnings: ["MT5 quote was retrieved through the GoTrader read-only wrapper; no execution authority."],
@@ -547,6 +596,8 @@ const normalizeCandles = ({ payload, brokerSymbol, timeframe, limit }) => {
         id: `mt5_read_only_${brokerSymbol}_${time}_${index}`,
         time,
         timestamp,
+        rawTime: toNumber(firstDefined(item.rawTime, item.raw_time, item.time)),
+        rawTimeMsc: toNumber(firstDefined(item.rawTimeMsc, item.raw_time_msc, item.time_msc)),
         open: toNumber(firstDefined(item.open, item.o)),
         high: toNumber(firstDefined(item.high, item.h)),
         low: toNumber(firstDefined(item.low, item.l)),
@@ -777,6 +828,23 @@ const server = createServer(async (req, res) => {
         },
         message: "GoTrader MT5 read-only wrapper is running, but upstream market-data probes failed."
       });
+    }
+    return;
+  }
+
+  if (url.pathname === "/time-contract" || url.pathname === "/api/v1/market/time-contract") {
+    if (!upstreamBaseUrl) {
+      json(res, 200, unavailableTimeContract("mt5_readonly_upstream_not_configured"));
+      return;
+    }
+    try {
+      const contract = await upstreamTimeContract();
+      lastUpstreamError = undefined;
+      json(res, 200, contract);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      lastUpstreamError = reason;
+      json(res, 200, unavailableTimeContract("upstream_time_contract_unavailable"));
     }
     return;
   }

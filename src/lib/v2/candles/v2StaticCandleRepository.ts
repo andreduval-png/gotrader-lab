@@ -55,7 +55,10 @@ export function createV2StaticCandleRepository({
         sourceStale: source.stale,
         sourceWarnings: source.warnings,
         timeNormalizationPolicyId: source.timeNormalizationPolicyId,
-        timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion
+        timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion,
+        timeContractId: source.timeContractId,
+        timeContractVersion: source.timeContractVersion,
+        timeContractVerificationStatus: source.timeContractVerificationStatus
       });
     },
     async getAvailableTimeframes(sourceIdentity: V2SourceIdentity) {
@@ -76,6 +79,9 @@ export function createV2StaticCandleRepository({
         providerTimeBasis: source.providerTimeBasis,
         timeNormalizationPolicyId: source.timeNormalizationPolicyId,
         timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion,
+        timeContractId: source.timeContractId,
+        timeContractVersion: source.timeContractVersion,
+        timeContractVerificationStatus: source.timeContractVerificationStatus,
         shadowOnly: true as const
       });
     }

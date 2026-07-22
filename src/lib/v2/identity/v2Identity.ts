@@ -66,6 +66,9 @@ export async function buildV2MarketDataIdentity({
   source,
   timeNormalizationPolicyId = V2_DEFAULT_TIME_NORMALIZATION_POLICY_ID,
   timeNormalizationPolicyVersion = V2_DEFAULT_TIME_NORMALIZATION_POLICY_VERSION,
+  timeContractId,
+  timeContractVersion,
+  timeContractVerificationStatus,
   timeframeFingerprints,
   timezoneVersion = V2_TIMEZONE_VERSION
 }: {
@@ -77,6 +80,9 @@ export async function buildV2MarketDataIdentity({
   source: Readonly<V2SourceIdentity>;
   timeNormalizationPolicyId?: string;
   timeNormalizationPolicyVersion?: string;
+  timeContractId?: string;
+  timeContractVersion?: string;
+  timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
   timeframeFingerprints: Readonly<Record<string, string>>;
   timezoneVersion?: string;
 }): Promise<Readonly<V2MarketDataIdentity>> {
@@ -91,6 +97,9 @@ export async function buildV2MarketDataIdentity({
     timezoneVersion,
     timeNormalizationPolicyId,
     timeNormalizationPolicyVersion,
+    ...(timeContractId ? { timeContractId } : {}),
+    ...(timeContractVersion ? { timeContractVersion } : {}),
+    ...(timeContractVerificationStatus ? { timeContractVerificationStatus } : {}),
     identitySchemaVersion: V2_IDENTITY_SCHEMA_VERSION,
     canonicalHashVersion: V2_CANONICAL_HASH_VERSION
   };

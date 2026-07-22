@@ -6,6 +6,8 @@ import {
   proveV2CandleClosure,
   validateV2TrustedReferenceClock
 } from "../time/v2TimeNormalization";
+import { validateV2Mt5UpstreamTimeContract } from "../time/v2Mt5UpstreamTimeContract";
+import type { V2Mt5ReadOnlyTimeContract } from "../time/v2Mt5UpstreamTimeContractTypes";
 import type {
   V2TimeDiagnosticCode,
   V2TimeNormalizationAudit,
@@ -35,7 +37,8 @@ export interface V2Mt5TimeNormalizedFeedSnapshot {
   receivedAt?: string;
   providerClockUtc?: string;
   warnings?: readonly string[];
-  timePolicy: V2TimeNormalizationPolicy;
+  timeContract?: Readonly<V2Mt5ReadOnlyTimeContract>;
+  timePolicy?: V2TimeNormalizationPolicy;
 }
 
 const freezeCodes = (values: readonly V2TimeDiagnosticCode[]) =>
@@ -69,7 +72,18 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
   feed: V2Mt5TimeNormalizedFeedSnapshot;
   systemUtc: string;
 }): V2LegacyCandleSourceSnapshot {
-  const policy = createV2TimeNormalizationPolicy(feed.timePolicy);
+  const contractValidation = validateV2Mt5UpstreamTimeContract(feed.timeContract);
+  const policy = contractValidation.policy ?? createV2TimeNormalizationPolicy({
+    policyId: feed.timeContract?.contractId ?? "gotrader-v2-mt5-upstream-time-contract-unverified",
+    version: feed.timeContract?.version ?? "0",
+    provider: "mt5_read_only",
+    basis: "unknown",
+    outputTimezone: "UTC",
+    discoveryMethod: "unknown",
+    dstPolicy: "unknown",
+    maximumClockSkewMs: 60_000,
+    closureToleranceMs: 1_000
+  });
   const receivedAt = feed.receivedAt ?? systemUtc;
   const trustedClock = validateV2TrustedReferenceClock({
     maximumClockSkewMs: policy.maximumClockSkewMs,
@@ -154,6 +168,8 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
   });
   const timeWarnings = [
     ...(feed.warnings ?? []),
+    ...contractValidation.warnings,
+    ...contractValidation.blockers.map((blocker) => `MT5 upstream time contract blocker: ${blocker}.`),
     ...(blockedNormalizationCount
       ? [`${blockedNormalizationCount} MT5 candle timestamp(s) could not be normalized under ${policy.policyId}@${policy.version}.`]
       : []),
@@ -165,11 +181,17 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     timeframe: feed.timeframe,
     candles: Object.freeze(candles),
     closurePolicy: "explicit_closed" as const,
-    stale: feed.connectionStatus !== "connected" || trustedClock.status === "blocked" || blockedNormalizationCount > 0,
+    stale: feed.connectionStatus !== "connected" ||
+      trustedClock.status === "blocked" ||
+      blockedNormalizationCount > 0 ||
+      !contractValidation.phase2Eligible,
     warnings: freezeText(timeWarnings),
     providerTimeBasis: policy.basis,
     timeNormalizationPolicyId: policy.policyId,
-    timeNormalizationPolicyVersion: policy.version
+    timeNormalizationPolicyVersion: policy.version,
+    timeContractId: feed.timeContract?.contractId,
+    timeContractVersion: feed.timeContract?.version,
+    timeContractVerificationStatus: feed.timeContract?.verificationStatus ?? "unknown"
   });
 }
 

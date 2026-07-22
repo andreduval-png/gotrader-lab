@@ -1,6 +1,7 @@
 import type { V2MarketDataCapability } from "../authority/v2Authority";
 import type { V2MarketDataIdentity, V2SourceIdentity, V2SourceKind } from "../identity/v2IdentityTypes";
 import type { V2ProviderTimeBasis, V2TimeNormalizationAudit } from "../time/v2TimeNormalizationTypes";
+import type { V2Mt5TimeContractVerificationStatus } from "../time/v2Mt5UpstreamTimeContractTypes";
 
 export type V2CandlePurpose =
   | "current_read"
@@ -104,6 +105,9 @@ export interface V2SourceDescription {
   providerTimeBasis?: V2ProviderTimeBasis;
   timeNormalizationPolicyId?: string;
   timeNormalizationPolicyVersion?: string;
+  timeContractId?: string;
+  timeContractVersion?: string;
+  timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
   shadowOnly: true;
 }
 
@@ -165,6 +169,9 @@ export interface V2LegacyCandleSourceSnapshot {
   providerTimeBasis?: V2ProviderTimeBasis;
   timeNormalizationPolicyId?: string;
   timeNormalizationPolicyVersion?: string;
+  timeContractId?: string;
+  timeContractVersion?: string;
+  timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
 }
 
 export interface V2CandleCandidate {

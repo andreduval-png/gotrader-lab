@@ -1,6 +1,8 @@
 export const mt5ReadOnlyAllowedTools = new Set([
   "status",
   "health",
+  "time_contract",
+  "time-contract",
   "get_symbols",
   "get_symbol_price",
   "get_candles_latest",

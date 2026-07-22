@@ -10,6 +10,7 @@ export type V2TimeDiscoveryMethod =
   | "configured_iana_timezone"
   | "server_clock_comparison"
   | "explicit_utc_contract"
+  | "verified_upstream_contract"
   | "unknown";
 
 export type V2DstPolicy =

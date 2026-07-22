@@ -15,6 +15,8 @@ const sourceFiles = [
   "src/lib/v2/identity/v2Identity.ts",
   "src/lib/v2/time/v2TimeNormalizationTypes.ts",
   "src/lib/v2/time/v2TimeNormalization.ts",
+  "src/lib/v2/time/v2Mt5UpstreamTimeContractTypes.ts",
+  "src/lib/v2/time/v2Mt5UpstreamTimeContract.ts",
   "src/lib/v2/candles/v2CandleTypes.ts",
   "src/lib/v2/candles/v2Timeframe.ts",
   "src/lib/v2/candles/v2CandleValidation.ts",
@@ -27,6 +29,7 @@ const sourceFiles = [
 compileTypescriptModules({ files: sourceFiles, outRoot });
 const load = (name) => import(pathToFileURL(path.join(outRoot, `${name}.mjs`)).href);
 const time = await load("v2TimeNormalization");
+const timeContract = await load("v2Mt5UpstreamTimeContract");
 const identity = await load("v2Identity");
 const identityTypes = await load("v2IdentityTypes");
 const mt5 = await load("v2Mt5TimeNormalizedAdapter");
@@ -53,6 +56,40 @@ const policy = (overrides = {}) => time.createV2TimeNormalizationPolicy({
   closureToleranceMs: 1_000,
   ...overrides
 });
+const verifiedTimeContract = Object.freeze({
+  contractId: "gotrader-mt5-readonly-time-contract",
+  version: "1.0.0",
+  providerTimeBasis: "mt5_server_wall_clock",
+  providerTimezone: "Europe/Helsinki",
+  dstPolicy: "iana_timezone_rules",
+  configurationSource: "provider_metadata",
+  verificationStatus: "verified",
+  verificationSources: ["provider_documentation", "tick_candle_basis_comparison"],
+  providerDeclarationId: "provider-time-contract-v1",
+  rawServerTime: Date.UTC(2026, 6, 22, 20, 49) / 1_000,
+  rawServerTimeMsc: Date.UTC(2026, 6, 22, 20, 49),
+  interpretedServerTimeUtc: "2026-07-22T20:49:00.000Z",
+  normalizedProviderTimeUtc: "2026-07-22T17:49:00.000Z",
+  serverTimeUtc: "2026-07-22T17:49:00.000Z",
+  systemTimeUtc: "2026-07-22T17:50:00.000Z",
+  observedOffsetMinutes: 180,
+  rawLatestCandleTime: Date.UTC(2026, 6, 22, 20, 40) / 1_000,
+  tickCandleBasisAgreement: true,
+  observationSummary: {
+    observationCount: 0,
+    acceptedObservationCount: 0,
+    winterObservationCount: 0,
+    summerObservationCount: 0,
+    fixedOffsetObservationCount: 0
+  },
+  readOnly: true,
+  marketDataOnly: true,
+  blockers: [],
+  warnings: [],
+  authority,
+  ...authority
+});
+assert.equal(timeContract.validateV2Mt5UpstreamTimeContract(verifiedTimeContract).phase2Eligible, true);
 
 const normalized = (input, selectedPolicy = policy()) => {
   const result = time.normalizeMt5ProviderTime(input, selectedPolicy);
@@ -217,7 +254,8 @@ const feed = {
   candles: rawCandles,
   connectionStatus: "connected",
   receivedAt: "2026-07-22T17:49:59.900Z",
-  timePolicy: policy()
+  timePolicy: policy(),
+  timeContract: verifiedTimeContract
 };
 const repository = mt5.createV2Mt5TimeNormalizedRepository({
   asOf: () => "2026-07-22T17:50:00.000Z",
@@ -230,14 +268,15 @@ assert.equal(pollingWindow.candles.length, 2);
 assert.equal(pollingWindow.candles[0].openTime, "2026-07-22T17:35:00.000Z");
 assert.equal(pollingWindow.candles[0].timeAudit.rawProviderOpenTime, rawCandles[0].rawProviderTime);
 assert.equal(pollingWindow.candles[0].timeAudit.offsetAppliedMinutes, 180);
-assert.equal(pollingWindow.identity.timeNormalizationPolicyVersion, "1");
+assert.equal(pollingWindow.identity.timeNormalizationPolicyVersion, "1.0.0");
+assert.equal(pollingWindow.identity.timeContractVerificationStatus, "verified");
 assert.equal(pollingWindow.identity.source.sourceFingerprint, "legacy-fingerprint-unchanged");
 assert.ok(Object.isFrozen(pollingWindow.candles[0].timeAudit));
 assert.ok(Object.isFrozen(pollingWindow.candles[0].timeAudit.blockers));
 assert.deepEqual(pollingWindow.capability.authority, authority);
 const description = await repository.describeSource(source);
 assert.equal(description.providerTimeBasis, "mt5_server_wall_clock");
-assert.equal(description.timeNormalizationPolicyVersion, "1");
+assert.equal(description.timeNormalizationPolicyVersion, "1.0.0");
 assert.equal(description.capability.marketDataAccess, "read_only");
 
 const pushRepository = mt5.createV2Mt5TimeNormalizedRepository({
@@ -253,7 +292,15 @@ assert.equal(parity.status, "exact_match");
 
 const blockedRepository = mt5.createV2Mt5TimeNormalizedRepository({
   asOf: () => "2026-07-22T17:50:00.000Z",
-  loadFeed: async () => ({ ...feed, timePolicy: unknownPolicy })
+  loadFeed: async () => ({
+    ...feed,
+    timeContract: {
+      ...verifiedTimeContract,
+      verificationStatus: "configured_unverified",
+      verificationSources: []
+    },
+    timePolicy: unknownPolicy
+  })
 });
 const blockedWindow = await blockedRepository.getWindow(query);
 assert.equal(blockedWindow.diagnostics.status, "blocked");

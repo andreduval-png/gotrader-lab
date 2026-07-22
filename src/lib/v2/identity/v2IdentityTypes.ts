@@ -31,6 +31,9 @@ export interface V2MarketDataIdentity {
   timezoneVersion: string;
   timeNormalizationPolicyId: string;
   timeNormalizationPolicyVersion: string;
+  timeContractId?: string;
+  timeContractVersion?: string;
+  timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
   identitySchemaVersion: string;
   canonicalHashVersion: string;
   identityHash: string;
