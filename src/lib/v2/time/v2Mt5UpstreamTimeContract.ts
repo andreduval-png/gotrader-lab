@@ -183,6 +183,10 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   if (!validIso(contract.systemTimeUtc)) blockers.push("system_time_utc_invalid");
   if (contract.serverTimeUtc && !validIso(contract.serverTimeUtc)) blockers.push("server_time_utc_invalid");
   if (contract.terminalProbeCapturedAt && !validIso(contract.terminalProbeCapturedAt)) blockers.push("terminal_probe_captured_at_invalid");
+  if (
+    contract.terminalProbeInstanceId !== undefined &&
+    (typeof contract.terminalProbeInstanceId !== "string" || !/^[a-f0-9]{8}$/i.test(contract.terminalProbeInstanceId))
+  ) blockers.push("terminal_probe_instance_invalid");
   if (contract.providerTimezone && !validIanaTimezone(contract.providerTimezone)) blockers.push("provider_timezone_invalid");
   if (
     contract.providerUtcOffsetMinutes !== undefined &&

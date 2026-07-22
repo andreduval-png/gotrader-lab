@@ -17,6 +17,8 @@ const sourceFiles = [
   "src/lib/v2/time/v2TimeNormalization.ts",
   "src/lib/v2/time/v2Mt5UpstreamTimeContractTypes.ts",
   "src/lib/v2/time/v2Mt5UpstreamTimeContract.ts",
+  "src/lib/v2/time/v2Mt5OffsetRegimeTypes.ts",
+  "src/lib/v2/time/v2Mt5OffsetRegimeLedger.ts",
   "src/lib/v2/candles/v2CandleTypes.ts",
   "src/lib/v2/candles/v2Timeframe.ts",
   "src/lib/v2/candles/v2CandleValidation.ts",

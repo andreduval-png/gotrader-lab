@@ -79,6 +79,7 @@ export interface V2SourceTimeEligibility {
   verifiedAtUtc?: string;
   currentLiveValidUntilUtc?: string;
   offsetRegimeStartUtc?: string;
+  offsetRegimeId?: string;
   blockers: readonly string[];
   warnings: readonly string[];
 }

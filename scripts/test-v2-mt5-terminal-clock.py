@@ -192,6 +192,7 @@ build_time_contract = upstream["build_time_contract"]
 terminal_evidence = {
     "terminalProbeSchemaVersion": wall_observation["version"],
     "terminalProbeObservationId": wall_observation["observationId"],
+    "terminalProbeInstanceId": wall_observation["probeInstanceId"],
     "terminalProbeCapturedAt": "2027-01-15T08:00:00Z",
     "terminalBasisClassification": wall_result["basisClassification"],
     "pythonTransportBasis": wall_result["pythonTransportBasis"],

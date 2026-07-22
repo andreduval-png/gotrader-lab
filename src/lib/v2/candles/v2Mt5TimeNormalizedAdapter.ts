@@ -10,6 +10,8 @@ import {
   policyFromCurrentLiveV2Mt5TimeContract,
   validateV2Mt5UpstreamTimeContract
 } from "../time/v2Mt5UpstreamTimeContract";
+import { resolveV2Mt5OffsetRegimeCoverage } from "../time/v2Mt5OffsetRegimeLedger";
+import type { V2Mt5OffsetRegimeLedger } from "../time/v2Mt5OffsetRegimeTypes";
 import type { V2Mt5ReadOnlyTimeContract } from "../time/v2Mt5UpstreamTimeContractTypes";
 import type {
   V2TimeDiagnosticCode,
@@ -44,6 +46,7 @@ export interface V2Mt5TimeNormalizedFeedSnapshot {
   warnings?: readonly string[];
   timeContract?: Readonly<V2Mt5ReadOnlyTimeContract>;
   timePolicy?: V2TimeNormalizationPolicy;
+  offsetRegimeLedger?: Readonly<V2Mt5OffsetRegimeLedger>;
 }
 
 const freezeCodes = (values: readonly V2TimeDiagnosticCode[]) =>
@@ -85,10 +88,20 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     Number.isFinite(systemUtcMs) &&
     systemUtcMs >= capturedAtMs - 5_000 &&
     systemUtcMs - capturedAtMs <= CURRENT_LIVE_OBSERVATION_MAX_AGE_MS;
-  const currentLiveEligible = contractValidation.status === "accepted" &&
+  const currentLiveContractEligible = contractValidation.status === "accepted" &&
     contract?.currentLiveTimeBasisVerified === true &&
     currentLiveObservationFresh;
-  const currentLivePolicy = currentLiveEligible && contract
+  const offsetRegimeCoverage = feed.offsetRegimeLedger
+    ? resolveV2Mt5OffsetRegimeCoverage({
+        ledger: feed.offsetRegimeLedger,
+        brokerSymbol: feed.brokerSymbol ?? feed.symbol,
+        contract,
+        systemUtc
+      })
+    : undefined;
+  const currentLiveEligible = currentLiveContractEligible &&
+    (!feed.offsetRegimeLedger || offsetRegimeCoverage?.eligible === true);
+  const currentLivePolicy = currentLiveContractEligible && contract
     ? policyFromCurrentLiveV2Mt5TimeContract(contract)
     : undefined;
   const policy = contractValidation.policy ?? currentLivePolicy ?? createV2TimeNormalizationPolicy({
@@ -188,6 +201,8 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     ...(feed.warnings ?? []),
     ...contractValidation.warnings,
     ...contractValidation.blockers.map((blocker) => `MT5 upstream time contract blocker: ${blocker}.`),
+    ...(offsetRegimeCoverage?.warnings ?? []),
+    ...(offsetRegimeCoverage?.blockers ?? []).map((blocker) => `MT5 offset-regime blocker: ${blocker}.`),
     ...(blockedNormalizationCount
       ? [`${blockedNormalizationCount} MT5 candle timestamp(s) could not be normalized under ${policy.policyId}@${policy.version}.`]
       : []),
@@ -200,16 +215,24 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     verificationScope: contract?.timeVerificationScope ?? "none",
     ...(Number.isFinite(capturedAtMs) ? {
       verifiedAtUtc: new Date(capturedAtMs).toISOString(),
-      currentLiveValidUntilUtc: new Date(capturedAtMs + CURRENT_LIVE_OBSERVATION_MAX_AGE_MS).toISOString(),
-      offsetRegimeStartUtc: new Date(capturedAtMs).toISOString()
+      currentLiveValidUntilUtc: offsetRegimeCoverage?.eligible && offsetRegimeCoverage.validUntilUtc
+        ? offsetRegimeCoverage.validUntilUtc
+        : new Date(capturedAtMs + CURRENT_LIVE_OBSERVATION_MAX_AGE_MS).toISOString(),
+      offsetRegimeStartUtc: offsetRegimeCoverage?.eligible && offsetRegimeCoverage.regimeStartUtc
+        ? offsetRegimeCoverage.regimeStartUtc
+        : new Date(capturedAtMs).toISOString(),
+      ...(offsetRegimeCoverage?.eligible && offsetRegimeCoverage.regimeId
+        ? { offsetRegimeId: offsetRegimeCoverage.regimeId }
+        : {})
     } : {}),
     blockers: freezeText([
       ...contractValidation.blockers,
+      ...(feed.offsetRegimeLedger ? offsetRegimeCoverage?.blockers ?? [] : []),
       ...(!contractValidation.phase2Eligible && !currentLiveEligible
         ? [currentLiveObservationFresh ? "current_live_time_contract_ineligible" : "current_live_terminal_observation_stale"]
         : [])
     ]),
-    warnings: freezeText(contractValidation.warnings)
+    warnings: freezeText([...contractValidation.warnings, ...(offsetRegimeCoverage?.warnings ?? [])])
   });
   return Object.freeze({
     identity: createV2SourceIdentityFromTimeNormalizedMt5Feed(feed),

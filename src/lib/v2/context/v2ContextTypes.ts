@@ -167,6 +167,7 @@ export interface V2ContextWindowIdentityRef {
   dataWindowEnd: string;
   lastClosedCandle: string;
   candleCount: number;
+  offsetRegimeId?: string;
 }
 
 export interface V2ContextInputIdentity {

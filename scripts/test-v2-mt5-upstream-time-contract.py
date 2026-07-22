@@ -51,6 +51,38 @@ def build(environment: dict[str, str], observations: list[dict] | None = None, c
     )
 
 
+terminal_evidence = {
+    "terminalProbeSchemaVersion": "1.0.0",
+    "terminalProbeObservationId": "ABCDEF12-100-1800010800",
+    "terminalProbeInstanceId": "ABCDEF12",
+    "terminalProbeCapturedAt": "2026-07-22T18:30:00Z",
+    "terminalBasisClassification": "verified_trade_server_wall_clock",
+    "pythonTransportBasis": "matches_symbol_quote_time",
+    "terminalObservedOffsetMinutes": 180,
+    "terminalEvidenceStatus": "verified_current_live",
+    "timeVerificationScope": "current_live",
+    "currentLiveTimeBasisVerified": True,
+    "historicalDstPolicyVerified": False,
+    "terminalClockClassificationVersion": "1.0.0",
+    "terminalProbeBlockers": [],
+    "terminalProbeWarnings": [],
+}
+terminal_contract = build_time_contract(
+    environment={},
+    raw_tick_time=raw_tick,
+    raw_tick_time_msc=raw_tick * 1000 + 250,
+    raw_candle_time=raw_candle,
+    system_time_utc=system_time,
+    terminal_build=5836,
+    terminal_version="500.5836.28 Apr 2026",
+    mt5_package_version="5.0.5735",
+    observations=[],
+    terminal_evidence=terminal_evidence,
+)
+assert terminal_contract["terminalProbeInstanceId"] == "ABCDEF12"
+assert terminal_contract["currentLiveTimeBasisVerified"] is True
+
+
 unknown = build({})
 assert unknown["verificationStatus"] == "observed_candidate"
 assert unknown["providerTimeBasis"] == "unknown"

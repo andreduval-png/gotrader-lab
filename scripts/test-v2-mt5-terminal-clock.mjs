@@ -162,6 +162,7 @@ const liveOnlyContract = Object.freeze({
   },
   terminalProbeSchemaVersion: "1.0.0",
   terminalProbeObservationId: "ABCDEF12-100-1800010800",
+  terminalProbeInstanceId: "ABCDEF12",
   terminalProbeCapturedAt: "2027-01-15T08:00:00.000Z",
   terminalBasisClassification: "verified_trade_server_wall_clock",
   pythonTransportBasis: "matches_symbol_quote_time",
@@ -250,6 +251,7 @@ try {
   }
   assert.ok(wrapped, "MT5 wrapper did not expose the terminal-clock contract fixture.");
   assert.equal(wrapped.terminalProbeObservationId, liveOnlyContract.terminalProbeObservationId);
+  assert.equal(wrapped.terminalProbeInstanceId, liveOnlyContract.terminalProbeInstanceId);
   assert.equal(wrapped.terminalBasisClassification, liveOnlyContract.terminalBasisClassification);
   assert.equal(wrapped.currentLiveTimeBasisVerified, true);
   assert.equal(wrapped.historicalDstPolicyVerified, false);

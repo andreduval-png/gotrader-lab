@@ -27,7 +27,8 @@ const refFor = (window: V2ContextBuildRequest["windows"][number]): Readonly<V2Co
     dataWindowStart: window.identity.dataWindowStart,
     dataWindowEnd: window.identity.dataWindowEnd,
     lastClosedCandle: window.identity.lastClosedCandle,
-    candleCount: window.identity.candleCountByTimeframe[timeframe] ?? window.candles.length
+    candleCount: window.identity.candleCountByTimeframe[timeframe] ?? window.candles.length,
+    ...(window.timeEligibility?.offsetRegimeId ? { offsetRegimeId: window.timeEligibility.offsetRegimeId } : {})
   });
 };
 

@@ -326,6 +326,7 @@ def compact_terminal_evidence(classification: dict[str, Any], observation: dict[
     return {
         "terminalProbeSchemaVersion": observation["version"],
         "terminalProbeObservationId": observation["observationId"],
+        "terminalProbeInstanceId": observation["probeInstanceId"],
         "terminalProbeCapturedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(observation["timeGmtRaw"])),
         "terminalBasisClassification": classification["basisClassification"],
         "pythonTransportBasis": classification["pythonTransportBasis"],

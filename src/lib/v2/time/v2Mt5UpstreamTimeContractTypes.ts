@@ -80,6 +80,7 @@ export interface V2Mt5ReadOnlyTimeContract {
   mt5PackageVersion?: string;
   terminalProbeSchemaVersion?: string;
   terminalProbeObservationId?: string;
+  terminalProbeInstanceId?: string;
   terminalProbeCapturedAt?: string;
   terminalBasisClassification?: V2Mt5TimestampBasisClassification;
   pythonTransportBasis?: V2Mt5PythonTransportBasis;

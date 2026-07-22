@@ -4,3 +4,5 @@ export * from "./v2Mt5UpstreamTimeContract";
 export * from "./v2Mt5UpstreamTimeContractTypes";
 export * from "./v2Mt5TerminalClock";
 export * from "./v2Mt5TerminalClockTypes";
+export * from "./v2Mt5OffsetRegimeLedger";
+export * from "./v2Mt5OffsetRegimeTypes";
