@@ -3,7 +3,7 @@
   "purpose": "Phase 0 baseline suites for compatibility-preserving GoTrader V2 migration.",
   "categories": {
     "build_and_typecheck": ["typecheck", "build"],
-    "source_integrity": ["test:v2-source-timing", "test:source-status", "test:mt5-push-feed"],
+    "source_integrity": ["test:v2-source-timing", "test:v2-candle-repository", "test:source-status", "test:mt5-push-feed"],
     "strategy_detection": ["test:v2-strategy-manifest", "test:ict-ifvg", "test:ict-universal-recognition", "test:gotrader-system-coordination"],
     "trade_geometry": ["test:ict-trade-construction", "test:ict-ifvg"],
     "replay": ["test:ict-replay-validation"],
@@ -21,6 +21,7 @@
       "test:v2-strategy-manifest",
       "test:v2-baseline-snapshots",
       "test:v2-source-timing",
+      "test:v2-candle-repository",
       "test:regime-classifier",
       "test:source-status",
       "test:validation-chain",
@@ -44,6 +45,7 @@
     ],
     "source-integrity": [
       "test:v2-source-timing",
+      "test:v2-candle-repository",
       "test:source-status",
       "test:mt5-push-feed",
       "test:ict-multi-timeframe-context"
