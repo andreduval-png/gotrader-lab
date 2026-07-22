@@ -6,7 +6,10 @@ import {
   proveV2CandleClosure,
   validateV2TrustedReferenceClock
 } from "../time/v2TimeNormalization";
-import { validateV2Mt5UpstreamTimeContract } from "../time/v2Mt5UpstreamTimeContract";
+import {
+  policyFromCurrentLiveV2Mt5TimeContract,
+  validateV2Mt5UpstreamTimeContract
+} from "../time/v2Mt5UpstreamTimeContract";
 import type { V2Mt5ReadOnlyTimeContract } from "../time/v2Mt5UpstreamTimeContractTypes";
 import type {
   V2TimeDiagnosticCode,
@@ -17,13 +20,15 @@ import {
   V2CandleRepositoryError,
   type V2CandleRepository,
   type V2LegacyCandleLike,
-  type V2LegacyCandleSourceSnapshot
+  type V2LegacyCandleSourceSnapshot,
+  type V2SourceTimeEligibility
 } from "./v2CandleTypes";
 import { createV2StaticCandleRepository } from "./v2StaticCandleRepository";
 import { v2TimeframeMilliseconds } from "./v2Timeframe";
 
 export const V2_MT5_TIME_NORMALIZED_ADAPTER_ID = "mt5-read-only-time-normalized-snapshot";
 export const V2_MT5_TIME_NORMALIZED_ADAPTER_VERSION = "gotrader-v2-mt5-time-normalized-adapter-v1";
+const CURRENT_LIVE_OBSERVATION_MAX_AGE_MS = 120_000;
 
 export interface V2Mt5TimeNormalizedFeedSnapshot {
   feedId: string;
@@ -73,7 +78,20 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
   systemUtc: string;
 }): V2LegacyCandleSourceSnapshot {
   const contractValidation = validateV2Mt5UpstreamTimeContract(feed.timeContract);
-  const policy = contractValidation.policy ?? createV2TimeNormalizationPolicy({
+  const contract = contractValidation.contract;
+  const capturedAtMs = Date.parse(contract?.terminalProbeCapturedAt ?? "invalid");
+  const systemUtcMs = Date.parse(systemUtc);
+  const currentLiveObservationFresh = Number.isFinite(capturedAtMs) &&
+    Number.isFinite(systemUtcMs) &&
+    systemUtcMs >= capturedAtMs - 5_000 &&
+    systemUtcMs - capturedAtMs <= CURRENT_LIVE_OBSERVATION_MAX_AGE_MS;
+  const currentLiveEligible = contractValidation.status === "accepted" &&
+    contract?.currentLiveTimeBasisVerified === true &&
+    currentLiveObservationFresh;
+  const currentLivePolicy = currentLiveEligible && contract
+    ? policyFromCurrentLiveV2Mt5TimeContract(contract)
+    : undefined;
+  const policy = contractValidation.policy ?? currentLivePolicy ?? createV2TimeNormalizationPolicy({
     policyId: feed.timeContract?.contractId ?? "gotrader-v2-mt5-upstream-time-contract-unverified",
     version: feed.timeContract?.version ?? "0",
     provider: "mt5_read_only",
@@ -176,6 +194,23 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     ...(unclosedCount ? [`${unclosedCount} candle(s) did not pass normalized close-time proof.`] : []),
     ...(trustedClock.status === "blocked" ? ["The trusted UTC reference-clock check failed closed."] : [])
   ];
+  const timeEligibility: Readonly<V2SourceTimeEligibility> = Object.freeze({
+    currentLiveEligible,
+    historicalEligible: contractValidation.phase2Eligible,
+    verificationScope: contract?.timeVerificationScope ?? "none",
+    ...(Number.isFinite(capturedAtMs) ? {
+      verifiedAtUtc: new Date(capturedAtMs).toISOString(),
+      currentLiveValidUntilUtc: new Date(capturedAtMs + CURRENT_LIVE_OBSERVATION_MAX_AGE_MS).toISOString(),
+      offsetRegimeStartUtc: new Date(capturedAtMs).toISOString()
+    } : {}),
+    blockers: freezeText([
+      ...contractValidation.blockers,
+      ...(!contractValidation.phase2Eligible && !currentLiveEligible
+        ? [currentLiveObservationFresh ? "current_live_time_contract_ineligible" : "current_live_terminal_observation_stale"]
+        : [])
+    ]),
+    warnings: freezeText(contractValidation.warnings)
+  });
   return Object.freeze({
     identity: createV2SourceIdentityFromTimeNormalizedMt5Feed(feed),
     timeframe: feed.timeframe,
@@ -184,7 +219,7 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     stale: feed.connectionStatus !== "connected" ||
       trustedClock.status === "blocked" ||
       blockedNormalizationCount > 0 ||
-      !contractValidation.phase2Eligible,
+      (!contractValidation.phase2Eligible && !currentLiveEligible),
     warnings: freezeText(timeWarnings),
     providerTimeBasis: policy.basis,
     timeNormalizationPolicyId: policy.policyId,
@@ -193,7 +228,8 @@ export function mt5TimeNormalizedFeedToV2Snapshot({
     timeContractVersion: feed.timeContract?.version,
     timeContractVerificationStatus: feed.timeContract?.verificationStatus ?? "unknown",
     terminalClockClassificationVersion: feed.timeContract?.terminalClockClassificationVersion,
-    timeVerificationScope: feed.timeContract?.timeVerificationScope
+    timeVerificationScope: feed.timeContract?.timeVerificationScope,
+    timeEligibility
   });
 }
 

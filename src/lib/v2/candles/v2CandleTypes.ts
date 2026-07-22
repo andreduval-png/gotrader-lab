@@ -72,6 +72,17 @@ export interface V2EvidencePolicy {
   reason: string;
 }
 
+export interface V2SourceTimeEligibility {
+  currentLiveEligible: boolean;
+  historicalEligible: boolean;
+  verificationScope: "none" | "current_live" | "historical";
+  verifiedAtUtc?: string;
+  currentLiveValidUntilUtc?: string;
+  offsetRegimeStartUtc?: string;
+  blockers: readonly string[];
+  warnings: readonly string[];
+}
+
 export interface V2CanonicalCandleQuery {
   source: Readonly<V2SourceIdentity>;
   timeframe: string;
@@ -88,6 +99,7 @@ export interface V2CanonicalCandleWindow {
   diagnostics: Readonly<V2DataQualityDiagnostics>;
   capability: Readonly<V2MarketDataCapability>;
   evidencePolicy: Readonly<V2EvidencePolicy>;
+  timeEligibility?: Readonly<V2SourceTimeEligibility>;
   adapterId: string;
   adapterVersion: string;
   shadowOnly: true;
@@ -110,6 +122,7 @@ export interface V2SourceDescription {
   timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
   terminalClockClassificationVersion?: string;
   timeVerificationScope?: "none" | "current_live" | "historical";
+  timeEligibility?: Readonly<V2SourceTimeEligibility>;
   shadowOnly: true;
 }
 
@@ -176,6 +189,7 @@ export interface V2LegacyCandleSourceSnapshot {
   timeContractVerificationStatus?: V2Mt5TimeContractVerificationStatus;
   terminalClockClassificationVersion?: string;
   timeVerificationScope?: "none" | "current_live" | "historical";
+  timeEligibility?: Readonly<V2SourceTimeEligibility>;
 }
 
 export interface V2CandleCandidate {

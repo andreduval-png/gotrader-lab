@@ -132,6 +132,36 @@ export function policyFromVerifiedV2Mt5TimeContract(
   });
 }
 
+export function policyFromCurrentLiveV2Mt5TimeContract(
+  contract: Readonly<V2Mt5ReadOnlyTimeContract>
+): Readonly<V2TimeNormalizationPolicy> {
+  if (
+    contract.currentLiveTimeBasisVerified !== true ||
+    !["current_live", "historical"].includes(contract.timeVerificationScope ?? "none")
+  ) {
+    throw new Error("A current-live MT5 time verification is required before creating a current-live policy.");
+  }
+  const wallClockOffset = contract.terminalObservedOffsetMinutes ?? contract.providerUtcOffsetMinutes;
+  if (contract.providerTimeBasis === "mt5_server_wall_clock" && !Number.isInteger(wallClockOffset)) {
+    throw new Error("Current-live MT5 wall-clock normalization requires the observed terminal offset.");
+  }
+  if (!["mt5_server_wall_clock", "epoch_utc"].includes(contract.providerTimeBasis)) {
+    throw new Error(`Unsupported current-live MT5 provider basis: ${contract.providerTimeBasis}.`);
+  }
+  return createV2TimeNormalizationPolicy({
+    policyId: `${contract.contractId}:current-live`,
+    version: contract.version,
+    provider: "mt5_read_only",
+    basis: contract.providerTimeBasis,
+    sourceUtcOffsetMinutes: contract.providerTimeBasis === "mt5_server_wall_clock" ? wallClockOffset : undefined,
+    outputTimezone: "UTC",
+    discoveryMethod: contract.providerTimeBasis === "epoch_utc" ? "explicit_utc_contract" : "server_clock_comparison",
+    dstPolicy: contract.providerTimeBasis === "epoch_utc" ? "not_applicable" : "explicit_offset",
+    maximumClockSkewMs: 60_000,
+    closureToleranceMs: 1_000
+  });
+}
+
 export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt5TimeContractValidationResult> {
   const blockers: string[] = [];
   const warnings: string[] = [];
@@ -207,7 +237,11 @@ export function validateV2Mt5UpstreamTimeContract(input: unknown): Readonly<V2Mt
   const sensitivePaths = collectSensitivePaths(contract);
   if (sensitivePaths.length) blockers.push(...sensitivePaths.map((path) => `sensitive_field_forbidden:${path}`));
   if (contract.verificationStatus === "verified") validateVerifiedEvidence(contract, blockers);
-  if (contract.verificationStatus !== "verified") warnings.push("The MT5 upstream time contract is not verified; V2 must fail closed.");
+  if (contract.verificationStatus !== "verified") {
+    warnings.push(contract.currentLiveTimeBasisVerified === true
+      ? "The MT5 contract is verified for current-live normalization only; historical V2 use must fail closed."
+      : "The MT5 upstream time contract is not verified; V2 must fail closed.");
+  }
 
   const accepted = blockers.length === 0;
   const normalized = accepted ? Object.freeze(contract as V2Mt5ReadOnlyTimeContract) : undefined;

@@ -11,7 +11,8 @@ import {
   type V2ClosurePolicy,
   type V2ClosureSource,
   type V2EvidencePolicy,
-  type V2LegacyCandleLike
+  type V2LegacyCandleLike,
+  type V2SourceTimeEligibility
 } from "./v2CandleTypes";
 import { normalizeV2Timeframe, v2TimeframeMilliseconds } from "./v2Timeframe";
 
@@ -160,7 +161,8 @@ export async function buildV2CanonicalCandleWindow({
   timeContractVersion,
   timeContractVerificationStatus,
   terminalClockClassificationVersion,
-  timeVerificationScope
+  timeVerificationScope,
+  sourceTimeEligibility
 }: {
   adapterId: string;
   adapterVersion: string;
@@ -178,6 +180,7 @@ export async function buildV2CanonicalCandleWindow({
   timeContractVerificationStatus?: "verified" | "configured_unverified" | "observed_candidate" | "unknown";
   terminalClockClassificationVersion?: string;
   timeVerificationScope?: "none" | "current_live" | "historical";
+  sourceTimeEligibility?: Readonly<V2SourceTimeEligibility>;
 }): Promise<Readonly<V2CanonicalCandleWindow>> {
   if (!v2SourceIdentityMatches(query.source, source)) {
     throw new V2CandleRepositoryError("source_identity_mismatch", "The requested V2 source identity does not match the adapter source.");
@@ -246,6 +249,7 @@ export async function buildV2CanonicalCandleWindow({
       purpose: query.purpose,
       source
     }),
+    ...(sourceTimeEligibility ? { timeEligibility: sourceTimeEligibility } : {}),
     adapterId,
     adapterVersion,
     shadowOnly: true as const

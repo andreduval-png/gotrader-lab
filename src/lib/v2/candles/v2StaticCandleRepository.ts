@@ -13,6 +13,24 @@ import { normalizeV2Timeframe } from "./v2Timeframe";
 
 export const V2_STATIC_REPOSITORY_ADAPTER_VERSION = "gotrader-v2-static-repository-v1";
 
+const historicalTimePurposes = new Set(["replay", "walk_forward", "deep_research"]);
+
+const timeEligibilityForPurpose = (
+  source: V2LegacyCandleSourceSnapshot,
+  purpose: V2CanonicalCandleQuery["purpose"]
+) => {
+  if (!source.timeEligibility) return { eligible: true, warning: undefined };
+  const eligible = historicalTimePurposes.has(purpose)
+    ? source.timeEligibility.historicalEligible
+    : source.timeEligibility.historicalEligible || source.timeEligibility.currentLiveEligible;
+  return {
+    eligible,
+    warning: eligible ? undefined : historicalTimePurposes.has(purpose)
+      ? `V2 ${purpose} requires historically verified time normalization.`
+      : `V2 ${purpose} requires fresh current-live or historically verified time normalization.`
+  };
+};
+
 export function createV2StaticCandleRepository({
   adapterId,
   adapterVersion = V2_STATIC_REPOSITORY_ADAPTER_VERSION,
@@ -44,6 +62,7 @@ export function createV2StaticCandleRepository({
           `${query.timeframe} is unavailable for V2 source ${query.source.sourceId}.`
         );
       }
+      const purposeTime = timeEligibilityForPurpose(source, query.purpose);
       return buildV2CanonicalCandleWindow({
         adapterId,
         adapterVersion,
@@ -52,15 +71,19 @@ export function createV2StaticCandleRepository({
         legacyCandles: source.candles,
         query,
         source: source.identity,
-        sourceStale: source.stale,
-        sourceWarnings: source.warnings,
+        sourceStale: Boolean(source.stale) || !purposeTime.eligible,
+        sourceWarnings: Object.freeze([
+          ...(source.warnings ?? []),
+          ...(purposeTime.warning ? [purposeTime.warning] : [])
+        ]),
         timeNormalizationPolicyId: source.timeNormalizationPolicyId,
         timeNormalizationPolicyVersion: source.timeNormalizationPolicyVersion,
         timeContractId: source.timeContractId,
         timeContractVersion: source.timeContractVersion,
         timeContractVerificationStatus: source.timeContractVerificationStatus,
         terminalClockClassificationVersion: source.terminalClockClassificationVersion,
-        timeVerificationScope: source.timeVerificationScope
+        timeVerificationScope: source.timeVerificationScope,
+        sourceTimeEligibility: source.timeEligibility
       });
     },
     async getAvailableTimeframes(sourceIdentity: V2SourceIdentity) {
@@ -86,6 +109,7 @@ export function createV2StaticCandleRepository({
         timeContractVerificationStatus: source.timeContractVerificationStatus,
         terminalClockClassificationVersion: source.terminalClockClassificationVersion,
         timeVerificationScope: source.timeVerificationScope,
+        timeEligibility: source.timeEligibility,
         shadowOnly: true as const
       });
     }
