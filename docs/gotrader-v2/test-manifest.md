@@ -6,9 +6,9 @@ The machine-readable manifest is `scripts/v2-baseline/test-manifest.json`; `scri
 
 | Command | Purpose |
 |---|---|
-| `npm.cmd run test:core` | Fast deterministic type, catalog, snapshot, source, time-contract, context, session/opening/range/liquidity/displacement/FVG/HTF-bias fact, regime, provenance, push-feed, and authority checks. |
+| `npm.cmd run test:core` | Fast deterministic type, catalog, snapshot, source, time-contract, context, session/opening/range/liquidity/displacement/FVG/HTF-bias fact, Phase 2A compatibility, regime, provenance, push-feed, and authority checks. |
 | `npm.cmd run test:strategy-baselines` | Representative detector and legacy-engine parity checks. |
-| `npm.cmd run test:source-integrity` | Source identity, timing, offset-regime continuity, shadow context, session/opening/range/liquidity/displacement/FVG/HTF-bias fact, push-feed, and multi-timeframe checks. |
+| `npm.cmd run test:source-integrity` | Source identity, timing, offset-regime continuity, shadow context, session/opening/range/liquidity/displacement/FVG/HTF-bias fact, Phase 2A compatibility, push-feed, and multi-timeframe checks. |
 | `npm.cmd run test:provenance` | Committed source and validation-chain lineage checks. |
 | `npm.cmd run test:safety` | Authority, MT5 read-only, OpenClaw draft, and auto-apply safety checks. |
 | `npm.cmd run test:browser-smoke` | Existing Playwright route and console smoke. |
