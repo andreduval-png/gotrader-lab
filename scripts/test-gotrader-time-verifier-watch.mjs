@@ -10,6 +10,7 @@ import {
   emptyTimeVerifierWatchState
 } from "./gotrader-time-verifier-watch-core.mjs";
 import {
+  collectCurrentLiveTimeEvidence,
   compactTerminalProbeResult
 } from "./gotrader-current-live-time-collector.mjs";
 import {
@@ -149,6 +150,44 @@ const compactProbeB = compactTerminalProbeResult({
 });
 assert.equal(compactProbeA.contentFingerprint, immutableObservationFingerprint);
 assert.equal(compactProbeB.contentFingerprint, immutableObservationFingerprint);
+
+const correlatedProbe = directProbe(5);
+const correlatedContract = contractFor(correlatedProbe);
+const correlationResponses = [
+  correlatedContract,
+  {
+    ...correlatedContract,
+    timeVerificationArtifactId: "sha256:race-window"
+  },
+  correlatedContract,
+  correlatedContract
+];
+let correlationFetchCount = 0;
+const correlationDelays = [];
+const correlatedEvidence = await collectCurrentLiveTimeEvidence({
+  repoRoot: ".",
+  upstreamUrl: "http://upstream.test",
+  bridgeUrl: "http://bridge.test",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  nowUtc: at(151),
+  requireDirectProbe: true,
+  readProbe: async () => correlatedProbe,
+  fetchJson: async () => {
+    const response = correlationResponses[correlationFetchCount];
+    correlationFetchCount += 1;
+    return response;
+  },
+  maximumCorrelationAttempts: 2,
+  correlationRetryDelayMs: 25,
+  delay: async (milliseconds) => {
+    correlationDelays.push(milliseconds);
+  }
+});
+assert.equal(correlatedEvidence.artifact.validationStatus, "accepted");
+assert.equal(correlatedEvidence.correlationAttemptCount, 2);
+assert.equal(correlationFetchCount, 4);
+assert.deepEqual(correlationDelays, [25]);
 
 const engine = createTimeVerifierWatchEngine();
 const first = evidenceFor(1);

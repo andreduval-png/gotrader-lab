@@ -32,6 +32,20 @@ const defaultFetchJson = async (url, timeoutMs = 5_000) => {
   }
 };
 
+const correlationRaceBlockerPattern =
+  /^(?:upstream_bridge_.+_mismatch|direct_upstream_(?:probe_observation|probe_instance|probe_generated_time|classifier|observed_offset|provider_basis)_mismatch|verification_artifact_id_missing|verification_scope_not_current_live|current_live_time_basis_not_verified|time_contract_proof_state_mismatch)$/;
+
+const isCorrelationRace = (artifact) =>
+  artifact?.validationStatus === "blocked" &&
+  Array.isArray(artifact.blockers) &&
+  artifact.blockers.length > 0 &&
+  artifact.blockers.every((blocker) =>
+    correlationRaceBlockerPattern.test(String(blocker))
+  );
+
+const wait = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 export function compactTerminalProbeResult(result = {}) {
   const observation = result?.observation ?? {};
   const classification = result?.classification ?? {};
@@ -153,41 +167,62 @@ export async function collectCurrentLiveTimeEvidence({
   environment = process.env,
   fetchJson = defaultFetchJson,
   readProbe = readTerminalProbe,
-  requireDirectProbe = false
+  requireDirectProbe = false,
+  maximumCorrelationAttempts = 3,
+  correlationRetryDelayMs = 100,
+  delay = wait
 }) {
-  const directProbe = await readProbe({
-    repoRoot,
-    brokerSymbol,
-    environment
-  });
-  const [upstream, bridge] = await Promise.all([
-    fetchJson(
-      `${String(upstreamUrl).replace(/\/+$/, "")}/time-contract?symbol_name=${encodeURIComponent(
-        brokerSymbol
-      )}`
-    ),
-    fetchJson(
-      `${String(bridgeUrl).replace(/\/+$/, "")}/time-contract?symbol=${encodeURIComponent(
-        brokerSymbol
-      )}`
-    )
-  ]);
-  const artifact = buildCurrentLiveVerificationArtifact({
-    upstream,
-    bridge,
-    directProbe,
-    requestedSymbol,
-    brokerSymbol,
-    nowUtc,
-    requireDirectProbe
-  });
-  return Object.freeze({
-    artifact,
-    directProbe,
-    surfaces: Object.freeze({
-      upstreamAvailable: upstream?.sourceMethod !== "unavailable",
-      bridgeAvailable: bridge?.sourceMethod !== "unavailable"
-    }),
-    authority: currentLiveVerificationAuthority
-  });
+  const attempts = Math.min(
+    5,
+    Math.max(1, Number(maximumCorrelationAttempts) || 1)
+  );
+  let latestEvidence;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const directProbe = await readProbe({
+      repoRoot,
+      brokerSymbol,
+      environment
+    });
+    const [upstream, bridge] = await Promise.all([
+      fetchJson(
+        `${String(upstreamUrl).replace(/\/+$/, "")}/time-contract?symbol_name=${encodeURIComponent(
+          brokerSymbol
+        )}`
+      ),
+      fetchJson(
+        `${String(bridgeUrl).replace(/\/+$/, "")}/time-contract?symbol=${encodeURIComponent(
+          brokerSymbol
+        )}`
+      )
+    ]);
+    const artifact = buildCurrentLiveVerificationArtifact({
+      upstream,
+      bridge,
+      directProbe,
+      requestedSymbol,
+      brokerSymbol,
+      nowUtc,
+      requireDirectProbe
+    });
+    latestEvidence = Object.freeze({
+      artifact,
+      directProbe,
+      correlationAttemptCount: attempt,
+      surfaces: Object.freeze({
+        upstreamAvailable: upstream?.sourceMethod !== "unavailable",
+        bridgeAvailable: bridge?.sourceMethod !== "unavailable"
+      }),
+      authority: currentLiveVerificationAuthority
+    });
+    if (!isCorrelationRace(artifact) || attempt === attempts) {
+      return latestEvidence;
+    }
+    await delay(
+      Math.min(
+        Math.max(0, Number(correlationRetryDelayMs) || 0) * attempt,
+        1_000
+      )
+    );
+  }
+  return latestEvidence;
 }
