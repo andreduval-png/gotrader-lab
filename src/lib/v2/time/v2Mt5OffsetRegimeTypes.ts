@@ -10,6 +10,8 @@ export const V2_MT5_OFFSET_REGIME_LEDGER_VERSION = "1.0.0";
 export const V2_MT5_OFFSET_REGIME_POLICY_VERSION = "gotrader-v2-mt5-offset-regime-continuity-v1";
 export const V2_MT5_OFFSET_REGIME_DEFAULT_MAX_GAP_MS = 120_000;
 export const V2_MT5_OFFSET_REGIME_MAX_SUMMARIES = 24;
+export const V2_MT5_OFFSET_REGIME_FILE_SCHEMA = "gotrader-v2-mt5-offset-regime-ledger-file";
+export const V2_MT5_OFFSET_REGIME_FILE_VERSION = "1.0.0";
 
 export type V2Mt5OffsetRegimeTerminationReason =
   | "observation_gap"
@@ -87,4 +89,22 @@ export interface V2Mt5OffsetRegimeCoverage {
   validUntilUtc?: string;
   blockers: readonly string[];
   warnings: readonly string[];
+}
+
+export interface V2Mt5OffsetRegimeLedgerFile {
+  schemaId: typeof V2_MT5_OFFSET_REGIME_FILE_SCHEMA;
+  version: typeof V2_MT5_OFFSET_REGIME_FILE_VERSION;
+  savedAtUtc: string;
+  ledgerHash: string;
+  ledger: Readonly<V2Mt5OffsetRegimeLedger>;
+}
+
+export interface V2Mt5OffsetRegimeValidationResult {
+  status: "accepted" | "blocked";
+  ledger?: Readonly<V2Mt5OffsetRegimeLedger>;
+  blockers: readonly string[];
+}
+
+export interface V2Mt5OffsetRegimeFileValidationResult extends V2Mt5OffsetRegimeValidationResult {
+  file?: Readonly<V2Mt5OffsetRegimeLedgerFile>;
 }

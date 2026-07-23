@@ -6,3 +6,4 @@ export * from "./v2Mt5TerminalClock";
 export * from "./v2Mt5TerminalClockTypes";
 export * from "./v2Mt5OffsetRegimeLedger";
 export * from "./v2Mt5OffsetRegimeTypes";
+export * from "./v2Mt5OffsetRegimeValidation";

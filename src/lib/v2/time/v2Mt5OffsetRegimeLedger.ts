@@ -181,10 +181,11 @@ const compactLedger = ({
 }): Readonly<V2Mt5OffsetRegimeLedger> => {
   const overflow = Math.max(0, regimes.length - V2_MT5_OFFSET_REGIME_MAX_SUMMARIES);
   const compacted = overflow ? regimes.slice(overflow) : regimes;
+  const { activeRegimeId: _previousActiveRegimeId, ...baseWithoutActiveRegime } = base;
   return Object.freeze({
-    ...base,
+    ...baseWithoutActiveRegime,
     regimes: freezeRegimes(compacted),
-    ...(activeRegimeId ? { activeRegimeId } : { activeRegimeId: undefined }),
+    ...(activeRegimeId ? { activeRegimeId } : {}),
     processedObservationCount: base.processedObservationCount + processedIncrement,
     compactedRegimeCount: base.compactedRegimeCount + overflow,
     warnings: unique([...warnings, ...(overflow ? ["offset_regime_history_compacted"] : [])]),
