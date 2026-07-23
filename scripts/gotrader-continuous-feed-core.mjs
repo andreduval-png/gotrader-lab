@@ -228,11 +228,59 @@ export function evaluateRuntimeTimeContract(
       if (verificationArtifact?.terminalConnected !== true) {
         blockers.push("current_live_watcher_terminal_not_connected");
       }
-      if (
-        verificationArtifact?.upstreamContractArtifactId !== artifactId ||
-        verificationArtifact?.bridgeContractArtifactId !== artifactId
+      const contractProbeObservationId =
+        contract?.terminalProbeObservationId;
+      const contractProbeInstanceId = contract?.terminalProbeInstanceId;
+      const contractProbeGeneratedMs = Date.parse(
+        contract?.timeVerificationGeneratedAtUtc ??
+          contract?.generatedAtUtc ??
+          ""
+      );
+      if (!contractProbeObservationId) {
+        blockers.push("current_live_contract_probe_observation_missing");
+      } else if (
+        Number.isFinite(watcherGeneratedMs) &&
+        Number.isFinite(contractProbeGeneratedMs)
       ) {
-        blockers.push("current_live_watcher_contract_artifact_mismatch");
+        if (contractProbeGeneratedMs < watcherGeneratedMs) {
+          blockers.push("current_live_contract_probe_out_of_order");
+        } else if (
+          contractProbeGeneratedMs === watcherGeneratedMs &&
+          verificationArtifact?.probeObservationId !==
+            contractProbeObservationId
+        ) {
+          blockers.push("current_live_watcher_probe_observation_conflict");
+        }
+      } else {
+        blockers.push("current_live_probe_time_missing");
+      }
+      if (
+        !contractProbeInstanceId ||
+        verificationArtifact?.probeInstanceFingerprint !==
+          contractProbeInstanceId
+      ) {
+        blockers.push("current_live_watcher_probe_instance_mismatch");
+      }
+      if (
+        verificationArtifact?.providerTimeBasis !==
+        contract?.providerTimeBasis
+      ) {
+        blockers.push("current_live_watcher_provider_basis_mismatch");
+      }
+      if (
+        verificationArtifact?.observedOffsetMinutes !==
+        finiteNumber(
+          contract?.terminalObservedOffsetMinutes ??
+            contract?.observedOffsetMinutes
+        )
+      ) {
+        blockers.push("current_live_watcher_observed_offset_mismatch");
+      }
+      if (
+        verificationArtifact?.terminalClockClassificationVersion !==
+        contract?.terminalClockClassificationVersion
+      ) {
+        blockers.push("current_live_watcher_classifier_version_mismatch");
       }
       if (
         verificationArtifact?.requestedSymbol !== "MNQ" ||

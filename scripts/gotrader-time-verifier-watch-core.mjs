@@ -35,8 +35,8 @@ const continuityKeyFor = (artifact) =>
       artifact?.terminalClockClassificationVersion
   });
 
-const hardBlocker = (blocker) =>
-  /disconnected|stopped|malformed|conflict|mismatch|future|invalid|symbol|instance|authority/i.test(
+const requiresImmediateProofRevocation = (blocker) =>
+  /terminal_observation_conflicting_duplicate|direct_terminal_probe_(?:not_persistent|version_invalid|disconnected|stopped|malformed|future|invalid|symbol_mismatch)|authority_not_none|raw_payload_persistence_not_false/i.test(
     String(blocker)
   );
 
@@ -166,7 +166,12 @@ export function createTimeVerifierWatchEngine({
       artifact?.validationStatus === "accepted" && blockers.length === 0;
     if (!accepted) {
       state.failureCount += 1;
-      const hardFailure = blockers.some(hardBlocker);
+      const activeProofAccepted =
+        state.activeArtifact?.validationStatus === "accepted" &&
+        state.activeArtifact?.currentLiveTimeBasisVerified === true;
+      const hardFailure =
+        !activeProofAccepted ||
+        blockers.some(requiresImmediateProofRevocation);
       const blockedArtifact = hardFailure
         ? {
             ...artifact,

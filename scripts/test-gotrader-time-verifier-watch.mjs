@@ -150,6 +150,50 @@ assert.equal(
   afterRestart.artifact.artifactId
 );
 
+const renewalRaceEngine = createTimeVerifierWatchEngine();
+const renewalRaceAccepted = renewalRaceEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  nowUtc: at(31)
+});
+const renewalRace = evidenceFor(2, {
+  bridge: { timeVerificationGeneratedAtUtc: at(61) }
+});
+assert.equal(renewalRace.artifact.validationStatus, "blocked");
+assert.ok(
+  renewalRace.artifact.blockers.includes(
+    "upstream_bridge_generatedAtUtc_mismatch"
+  )
+);
+const preservedRenewalRace = renewalRaceEngine.processEvidence({
+  artifact: renewalRace.artifact,
+  directProbe: renewalRace.probe,
+  nowUtc: at(61)
+});
+assert.equal(preservedRenewalRace.action, "preserved");
+assert.equal(preservedRenewalRace.persistArtifact, false);
+assert.equal(preservedRenewalRace.status.currentLiveEligible, true);
+assert.equal(
+  preservedRenewalRace.status.verificationArtifactId,
+  renewalRaceAccepted.artifact.artifactId
+);
+
+const activeDisconnect = evidenceFor(2, {
+  probe: {
+    probeState: "disconnected",
+    terminalConnected: false,
+    contentFingerprint: "sha256:active-disconnected"
+  }
+});
+const activeDisconnectResult = renewalRaceEngine.processEvidence({
+  artifact: activeDisconnect.artifact,
+  directProbe: activeDisconnect.probe,
+  nowUtc: at(61)
+});
+assert.equal(activeDisconnectResult.action, "blocked");
+assert.equal(activeDisconnectResult.persistArtifact, true);
+assert.equal(activeDisconnectResult.status.currentLiveEligible, false);
+
 const conflictingProbe = {
   ...third.probe,
   contentFingerprint: "sha256:changed-content"
@@ -215,6 +259,62 @@ assert.equal(
   afterRestart.artifact.artifactId
 );
 assert.equal(strictEvaluation.continuityStartedAtUtc, at(30));
+const dynamicRequestArtifact = evaluateRuntimeTimeContract(
+  {
+    ...third.contract,
+    timeVerificationArtifactId: "sha256:request-level-artifact"
+  },
+  {
+    requireVerificationArtifact: true,
+    requireWatcherArtifact: true,
+    verificationArtifact: afterRestart.artifact,
+    nowUtc: at(91)
+  }
+);
+assert.equal(dynamicRequestArtifact.eligible, true);
+const newerPendingRenewal = evaluateRuntimeTimeContract(
+  evidenceFor(4).contract,
+  {
+    requireVerificationArtifact: true,
+    requireWatcherArtifact: true,
+    verificationArtifact: afterRestart.artifact,
+    nowUtc: at(121)
+  }
+);
+assert.equal(newerPendingRenewal.eligible, true);
+const mismatchedProbeObservation = evaluateRuntimeTimeContract(
+  {
+    ...third.contract,
+    terminalProbeObservationId: "ABCDEF12-unverified-new-observation"
+  },
+  {
+    requireVerificationArtifact: true,
+    requireWatcherArtifact: true,
+    verificationArtifact: afterRestart.artifact,
+    nowUtc: at(91)
+  }
+);
+assert.equal(mismatchedProbeObservation.eligible, false);
+assert.ok(
+  mismatchedProbeObservation.blockers.includes(
+    "current_live_watcher_probe_observation_conflict"
+  )
+);
+const outOfOrderProbeObservation = evaluateRuntimeTimeContract(
+  second.contract,
+  {
+    requireVerificationArtifact: true,
+    requireWatcherArtifact: true,
+    verificationArtifact: afterRestart.artifact,
+    nowUtc: at(91)
+  }
+);
+assert.equal(outOfOrderProbeObservation.eligible, false);
+assert.ok(
+  outOfOrderProbeObservation.blockers.includes(
+    "current_live_contract_probe_out_of_order"
+  )
+);
 const missingWatcher = evaluateRuntimeTimeContract(third.contract, {
   requireVerificationArtifact: true,
   requireWatcherArtifact: true,
