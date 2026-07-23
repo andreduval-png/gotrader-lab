@@ -1,9 +1,10 @@
 import type { V2Authority } from "../../authority/v2Authority";
+import type { V2IfvgPhase3EvidenceSummary } from "./v2IfvgPhase3EvidenceTypes";
 
 export const V2_IFVG_PHASE3_LIFECYCLE_SCHEMA = "gotrader-v2-ifvg-phase3-research-lifecycle-artifact";
 export const V2_IFVG_PHASE3_LIFECYCLE_VERSION = "phase-3e-lifecycle-v1";
 export const V2_IFVG_PHASE3_GATE_SCHEMA = "gotrader-v2-ifvg-phase3-canary-gate";
-export const V2_IFVG_PHASE3_GATE_VERSION = "phase-3e-canary-gate-v1";
+export const V2_IFVG_PHASE3_GATE_VERSION = "phase-3f-canary-gate-v2";
 export const V2_IFVG_V3_POSITIVE_BASELINE_SHA256 =
   "1661113c11dccbb53516a5b42ba1dc70a9dbb4f5e7d33f4f03fb01e79116951a";
 export const V2_IFVG_V2_NEGATIVE_BASELINE_SHA256 =
@@ -123,6 +124,7 @@ export interface V2IfvgPhase3CanaryGateInput {
   deterministicParity: Readonly<V2IfvgPhase3DeterministicParity>;
   positiveCanary: Readonly<V2IfvgV3ResearchLifecycleArtifact>;
   negativeControl: Readonly<V2IfvgV2ResearchLifecycleArtifact>;
+  historicalEvidence?: Readonly<V2IfvgPhase3EvidenceSummary>;
   liveShadow?: Readonly<V2IfvgPhase3LiveShadowSummary>;
 }
 
@@ -140,6 +142,7 @@ export interface V2IfvgPhase3CanaryGateResult {
   liveShadowParity: V2IfvgPhase3ParityOutcome;
   positiveCanaryPreserved: boolean;
   negativeControlPreserved: boolean;
+  historicalEvidenceValidated: boolean;
   identityMatchedResearchEvidence: boolean;
   liveShadowReviewThresholdMet: boolean;
   phase3CompletionReviewReady: boolean;

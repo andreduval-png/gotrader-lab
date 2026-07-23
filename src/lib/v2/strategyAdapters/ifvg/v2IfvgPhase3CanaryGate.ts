@@ -96,6 +96,7 @@ export async function evaluateV2IfvgPhase3CanaryGate(
 ): Promise<Readonly<V2IfvgPhase3CanaryGateResult>> {
   assertV2Authority(input.positiveCanary.authority);
   assertV2Authority(input.negativeControl.authority);
+  if (input.historicalEvidence) assertV2Authority(input.historicalEvidence.authority);
   if (input.liveShadow) assertV2Authority(input.liveShadow.authority);
   const evaluatedAt = new Date(input.evaluatedAtUtc);
   if (!Number.isFinite(evaluatedAt.valueOf())) throw new Error("IFVG Phase 3 gate time is invalid.");
@@ -123,10 +124,24 @@ export async function evaluateV2IfvgPhase3CanaryGate(
   const historicalSourceIdentityMatches =
     validHistoricalSourceFingerprints &&
     positiveHistoricalSourceFingerprint === negativeHistoricalSourceFingerprint;
-  const identityMatchedResearchEvidence =
+  const legacyIdentityMatchedResearchEvidence =
     input.positiveCanary.provenanceStatus === "identity_matched" &&
     input.negativeControl.provenanceStatus === "identity_matched" &&
     historicalSourceIdentityMatches;
+  const historicalEvidenceValidated = Boolean(
+    input.historicalEvidence &&
+    input.historicalEvidence.validationStatus === "accepted" &&
+    input.historicalEvidence.sourceIdentityMatches &&
+    input.historicalEvidence.parameterIdentityMatches &&
+    input.historicalEvidence.costModelIdentityMatches &&
+    input.historicalEvidence.boundaryIdentityComplete &&
+    input.historicalEvidence.metricsExact &&
+    input.historicalEvidence.blockers.length === 0
+  );
+  const historicalEvidenceRegression =
+    input.historicalEvidence?.validationStatus === "regression";
+  const identityMatchedResearchEvidence =
+    historicalEvidenceValidated || legacyIdentityMatchedResearchEvidence;
   const liveShadowReviewThresholdMet = Boolean(
     input.liveShadow &&
     input.liveShadow.validationStatus === "accepted" &&
@@ -138,7 +153,7 @@ export async function evaluateV2IfvgPhase3CanaryGate(
     input.liveShadow.statisticallyIndependentWindowClaimed === false
   );
   const researchLifecycleParity: V2IfvgPhase3ParityOutcome =
-    !positiveCanaryPreserved || !negativeControlPreserved
+    !positiveCanaryPreserved || !negativeControlPreserved || historicalEvidenceRegression
       ? "regression"
       : identityMatchedResearchEvidence
         ? "exact_parity"
@@ -180,19 +195,26 @@ export async function evaluateV2IfvgPhase3CanaryGate(
     input.deterministicParity.selection === "exact_parity" ? "" : "ifvg_v3_selection_parity_not_exact",
     positiveCanaryPreserved ? "" : "ifvg_v3_positive_canary_baseline_regression",
     negativeControlPreserved ? "" : "ifvg_v2_negative_control_regression",
-    input.positiveCanary.provenanceStatus === "identity_matched"
+    input.historicalEvidence ? "" : input.positiveCanary.provenanceStatus === "identity_matched"
       ? ""
       : "ifvg_v3_replay_oos_source_identity_missing",
-    input.negativeControl.provenanceStatus === "identity_matched"
+    input.historicalEvidence ? "" : input.negativeControl.provenanceStatus === "identity_matched"
       ? ""
       : "ifvg_v2_replay_oos_source_identity_missing",
+    !input.historicalEvidence &&
     input.positiveCanary.provenanceStatus === "identity_matched" &&
     input.negativeControl.provenanceStatus === "identity_matched" &&
     !validHistoricalSourceFingerprints
       ? "ifvg_phase3_replay_oos_source_identity_invalid"
       : "",
+    !input.historicalEvidence &&
     validHistoricalSourceFingerprints && !historicalSourceIdentityMatches
       ? "ifvg_phase3_replay_oos_source_identity_mismatch"
+      : "",
+    ...(input.historicalEvidence?.blockers ?? []),
+    input.historicalEvidence && !historicalEvidenceValidated &&
+    input.historicalEvidence.blockers.length === 0
+      ? "ifvg_phase3_historical_evidence_not_accepted"
       : "",
     input.liveShadow ? "" : "ifvg_v3_live_shadow_ledger_missing",
     input.liveShadow && input.liveShadow.regressionCount > 0
@@ -212,6 +234,7 @@ export async function evaluateV2IfvgPhase3CanaryGate(
   ]);
   const warnings = uniqueSorted([
     "Live closed-window parity observations are operational canaries, not statistically independent research evidence.",
+    ...(input.historicalEvidence?.warnings ?? []),
     input.positiveCanary.replay.maximumDrawdownR > 4
       ? "The preserved IFVG v3 replay drawdown exceeds the current conservative research benchmark."
       : "",
@@ -232,6 +255,7 @@ export async function evaluateV2IfvgPhase3CanaryGate(
     liveShadowParity,
     positiveCanaryPreserved,
     negativeControlPreserved,
+    historicalEvidenceValidated,
     identityMatchedResearchEvidence,
     liveShadowReviewThresholdMet,
     phase3CompletionReviewReady,
