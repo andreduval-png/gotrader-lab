@@ -3,6 +3,7 @@ import { buildV2ContextInputIdentity } from "./v2ContextIdentity";
 import { evaluateV2ContextEligibility } from "./v2ContextEligibility";
 import { buildV2DealingRangeLiquidityFacts } from "./v2DealingRangeLiquidityFactEngine";
 import { buildV2DisplacementFvgFacts } from "./v2DisplacementFvgFactEngine";
+import { buildV2HigherTimeframeBiasFacts } from "./v2HigherTimeframeBiasFactEngine";
 import { buildV2SessionOpeningFacts } from "./v2SessionOpeningFactEngine";
 import {
   V2_CONTEXT_POLICY_VERSION,
@@ -49,22 +50,34 @@ export async function buildV2CanonicalMarketContext(
         identity,
         sourceFacts: Object.freeze([...sessionOpeningResult.facts, ...rangeLiquidityResult.facts])
       });
+  const higherTimeframeBiasResult = eligibility.status === "blocked" ||
+    sessionOpeningResult.blockers.length ||
+    rangeLiquidityResult.blockers.length ||
+    displacementFvgResult.blockers.length
+    ? { facts: Object.freeze([]), warnings: Object.freeze([]), blockers: Object.freeze([]) }
+    : await buildV2HigherTimeframeBiasFacts({
+        request: normalizedRequest,
+        identity
+      });
   const facts = Object.freeze([
     ...sessionOpeningResult.facts,
     ...rangeLiquidityResult.facts,
-    ...displacementFvgResult.facts
+    ...displacementFvgResult.facts,
+    ...higherTimeframeBiasResult.facts
   ]);
   const blockers = Object.freeze([...new Set([
     ...eligibility.blockers,
     ...sessionOpeningResult.blockers,
     ...rangeLiquidityResult.blockers,
-    ...displacementFvgResult.blockers
+    ...displacementFvgResult.blockers,
+    ...higherTimeframeBiasResult.blockers
   ])]);
   const warnings = Object.freeze([...new Set([
     ...eligibility.warnings,
     ...sessionOpeningResult.warnings,
     ...rangeLiquidityResult.warnings,
-    ...displacementFvgResult.warnings
+    ...displacementFvgResult.warnings,
+    ...higherTimeframeBiasResult.warnings
   ])]);
   const status = blockers.length ? "blocked" : warnings.length ? "degraded" : eligibility.status;
   const requestedFactFamilies = normalizedRequest.requestedFactFamilies ?? [];
@@ -83,6 +96,8 @@ export async function buildV2CanonicalMarketContext(
       ? "not_implemented_phase_2a0"
       : eligibility.status === "blocked"
         ? "blocked_by_context_eligibility"
+        : requestedFactFamilies.includes("higher_timeframe_bias")
+          ? "higher_timeframe_bias_phase_2a6"
         : requestedFactFamilies.some((family) => family === "displacement" || family === "fair_value_gap")
           ? "displacement_fvg_phase_2a5"
         : requestedFactFamilies.some((family) => family === "dealing_range" || family === "liquidity")

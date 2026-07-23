@@ -39,7 +39,8 @@ export function evaluateV2ContextEligibility(
       family !== "dealing_range" &&
       family !== "liquidity" &&
       family !== "displacement" &&
-      family !== "fair_value_gap"
+      family !== "fair_value_gap" &&
+      family !== "higher_timeframe_bias"
     ) {
       unsupportedPolicyRequests.push(`unsupported_fact_family:${String(family)}`);
     }

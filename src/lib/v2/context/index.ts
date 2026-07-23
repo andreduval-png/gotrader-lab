@@ -4,4 +4,5 @@ export * from "./v2ContextIdentity";
 export * from "./v2ContextTypes";
 export * from "./v2DealingRangeLiquidityFactEngine";
 export * from "./v2DisplacementFvgFactEngine";
+export * from "./v2HigherTimeframeBiasFactEngine";
 export * from "./v2SessionOpeningFactEngine";

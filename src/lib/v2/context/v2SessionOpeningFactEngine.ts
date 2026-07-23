@@ -279,7 +279,7 @@ export async function buildV2SessionOpeningFacts({
   identity: Readonly<V2ContextInputIdentity>;
 }): Promise<Readonly<V2SessionOpeningFactEngineResult>> {
   const requested = new Set<V2ContextFactFamily>(request.requestedFactFamilies ?? []);
-  if (!requested.size) {
+  if (!requested.has("session") && !requested.has("opening_price")) {
     return Object.freeze({ facts: Object.freeze([]), warnings: Object.freeze([]), blockers: Object.freeze([]) });
   }
   const window = request.windows.find((candidate) => v2ContextWindowTimeframe(candidate) === "5m");
