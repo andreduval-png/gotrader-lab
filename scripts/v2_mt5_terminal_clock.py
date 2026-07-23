@@ -191,7 +191,7 @@ def validate_observation(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def _observation_digest(observation: dict[str, Any]) -> str:
+def observation_digest(observation: dict[str, Any]) -> str:
     serialized = json.dumps(
         observation,
         ensure_ascii=True,
@@ -211,7 +211,7 @@ class TerminalClockObservationRegistry:
 
     def accept(self, observation: dict[str, Any]) -> None:
         observation_id = str(observation["observationId"])
-        digest = _observation_digest(observation)
+        digest = observation_digest(observation)
         previous_digest = self.observation_digests.get(observation_id)
         if previous_digest is not None:
             if previous_digest != digest:

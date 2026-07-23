@@ -10,6 +10,9 @@ import {
   emptyTimeVerifierWatchState
 } from "./gotrader-time-verifier-watch-core.mjs";
 import {
+  compactTerminalProbeResult
+} from "./gotrader-current-live-time-collector.mjs";
+import {
   createContinuousFeedEngine,
   evaluateRuntimeTimeContract
 } from "./gotrader-continuous-feed-core.mjs";
@@ -86,6 +89,66 @@ const evidenceFor = (sequence, options = {}) => {
   });
   return { probe, contract, artifact };
 };
+
+const immutableObservationFingerprint = `sha256:${"a".repeat(64)}`;
+const compactProbeA = compactTerminalProbeResult({
+  status: "complete",
+  observationFingerprint: immutableObservationFingerprint,
+  observation: {
+    observationId: "ABCDEF12-immutable",
+    probeInstanceId: "ABCDEF12",
+    version: "1.1.0",
+    probeVersion: "1.1.0",
+    probeMode: "persistent_ea",
+    probeState: "fresh",
+    terminalConnected: true,
+    timeGmtRaw: baseEpoch / 1_000,
+    symbolTimeRaw: baseEpoch / 1_000,
+    latestBarOpenRaw: baseEpoch / 1_000,
+    terminalBuild: 5836,
+    symbol: "USTECH",
+    timeframe: "M5",
+    chartSymbol: "USTECH",
+    chartTimeframe: "M5"
+  },
+  classification: {
+    basisClassification: "verified_trade_server_wall_clock",
+    terminalObservedOffsetMinutes: -240,
+    classificationVersion: "1.0.0",
+    currentLiveTimeBasisVerified: true,
+    warnings: []
+  }
+});
+const compactProbeB = compactTerminalProbeResult({
+  status: "complete",
+  observationFingerprint: immutableObservationFingerprint,
+  observation: {
+    observationId: "ABCDEF12-immutable",
+    probeInstanceId: "ABCDEF12",
+    version: "1.1.0",
+    probeVersion: "1.1.0",
+    probeMode: "persistent_ea",
+    probeState: "fresh",
+    terminalConnected: true,
+    timeGmtRaw: baseEpoch / 1_000,
+    symbolTimeRaw: baseEpoch / 1_000,
+    latestBarOpenRaw: baseEpoch / 1_000,
+    terminalBuild: 5836,
+    symbol: "USTECH",
+    timeframe: "M5",
+    chartSymbol: "USTECH",
+    chartTimeframe: "M5"
+  },
+  classification: {
+    basisClassification: "current_offset_verified_only",
+    terminalObservedOffsetMinutes: -240,
+    classificationVersion: "1.0.0",
+    currentLiveTimeBasisVerified: true,
+    warnings: ["Dynamic correlation details changed."]
+  }
+});
+assert.equal(compactProbeA.contentFingerprint, immutableObservationFingerprint);
+assert.equal(compactProbeB.contentFingerprint, immutableObservationFingerprint);
 
 const engine = createTimeVerifierWatchEngine();
 const first = evidenceFor(1);

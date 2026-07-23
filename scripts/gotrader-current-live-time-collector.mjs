@@ -81,9 +81,29 @@ export function compactTerminalProbeResult(result = {}) {
       : [],
     authority: currentLiveVerificationAuthority
   };
+  const observationFingerprint =
+    /^sha256:[a-f0-9]{64}$/i.test(String(result?.observationFingerprint ?? ""))
+      ? String(result.observationFingerprint).toLowerCase()
+      : canonicalHash({
+          observationId: compact.observationId,
+          probeInstanceId: compact.probeInstanceId,
+          probeVersion: compact.probeVersion,
+          probeMode: compact.probeMode,
+          probeState: compact.probeState,
+          terminalConnected: compact.terminalConnected,
+          terminalProbeCapturedAt: compact.terminalProbeCapturedAt,
+          quoteObservedAt: compact.quoteObservedAt,
+          latestM5BarAt: compact.latestM5BarAt,
+          terminalBuild: compact.terminalBuild,
+          symbol: compact.symbol,
+          timeframe: compact.timeframe,
+          chartSymbol: compact.chartSymbol,
+          chartTimeframe: compact.chartTimeframe,
+          authority: compact.authority
+        });
   return Object.freeze({
     ...compact,
-    contentFingerprint: canonicalHash(compact)
+    contentFingerprint: observationFingerprint
   });
 }
 

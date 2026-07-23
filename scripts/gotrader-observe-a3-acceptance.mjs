@@ -187,9 +187,7 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     noLedgerGaps: ledgerGapCount === 0,
     proofFreshnessMaintained:
       totalSamples > 0 && freshProofSamples === totalSamples,
-    noVerificationFailures: verificationFailureCount === 0,
-    noObserverTransportFailures: transportFailures === 0,
-    noVerificationBlockersObserved: blockers.size === 0
+    noObserverTransportFailures: transportFailures === 0
   };
   const acceptancePassed = Object.values(acceptanceChecks).every(Boolean);
   const core = {

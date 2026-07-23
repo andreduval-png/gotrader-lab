@@ -698,10 +698,14 @@ export function createContinuousFeedEngine({
     lastEligibility = latestTimeContract.eligible;
     timeContractStateObserved = true;
 
+    let candleDataUnavailable = false;
     for (const payload of candlePayloads) {
       const normalized = normalizeRuntimeCandleResponse(payload, receivedAt);
       if (!normalized.timeframe || normalized.blockers.length) {
-        for (const blocker of normalized.blockers) blockers.add(blocker);
+        candleDataUnavailable = true;
+        for (const blocker of normalized.blockers) {
+          if (blocker !== "candle_data_unavailable") blockers.add(blocker);
+        }
         continue;
       }
       const key = seriesKeyFor(normalized);
@@ -903,6 +907,10 @@ export function createContinuousFeedEngine({
         });
         lastClosedBySeries.set(key, candle.candleOpenTime);
       }
+    }
+    if (candlePayloads.length) {
+      if (candleDataUnavailable) blockers.add("candle_data_unavailable");
+      else blockers.delete("candle_data_unavailable");
     }
 
     if (stale && latestTimeContract.eligible) {

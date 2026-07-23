@@ -187,6 +187,43 @@ bounded.processPoll({
 });
 assert.equal(bounded.status().rollingStoreCounts["MNQ:USTECH:1m"], 2_000);
 
+const candleRecoveryEngine = createContinuousFeedEngine();
+const candleUnavailable = candleRecoveryEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:02:30.000Z"),
+  candlePayloads: [
+    {
+      requestedSymbol: "MNQ",
+      brokerSymbol: "USTECH",
+      timeframe: "5m",
+      candles: []
+    }
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:02:31.000Z"
+});
+assert.equal(
+  candleUnavailable.status.blockers.includes("candle_data_unavailable"),
+  true
+);
+const candleRecovered = candleRecoveryEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:05:30.000Z"),
+  candlePayloads: [
+    candles(
+      [
+        candle("2026-07-23T10:00:00.000Z"),
+        candle("2026-07-23T10:05:00.000Z", 105)
+      ],
+      "5m"
+    )
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:05:31.000Z"
+});
+assert.equal(
+  candleRecovered.status.blockers.includes("candle_data_unavailable"),
+  false
+);
+
 const stale = restarted.markFeedStale({ reason: "fixture_transport_stale" });
 assert.equal(stale.events[0].type, "feed_stale");
 assert.equal(JSON.stringify(stale).includes("placeOrder"), false);
@@ -214,6 +251,7 @@ console.log(
       sourceIdentityStable: true,
       closeEventsEffectivelyOnce: true,
       closedCandleConflictsBlocked: true,
+      recoveredCandleDataClearsBlocker: true,
       rollingStoresBounded: true,
       rawCandlesPersisted: false,
       ...continuousFeedAuthority

@@ -11,7 +11,13 @@ from pathlib import Path
 
 import MetaTrader5 as mt5
 
-from v2_mt5_terminal_clock import AUTHORITY, TerminalClockObservationError, classify_terminal_clock, read_observation
+from v2_mt5_terminal_clock import (
+    AUTHORITY,
+    TerminalClockObservationError,
+    classify_terminal_clock,
+    observation_digest,
+    read_observation,
+)
 
 
 def main() -> int:
@@ -58,6 +64,7 @@ def main() -> int:
                 "systemUtcAfterMs": system_after_ms,
             },
             "classification": classification,
+            "observationFingerprint": f"sha256:{observation_digest(observation)}",
             "rawCandleArraysPrinted": False,
             "authority": AUTHORITY,
         }, separators=(",", ":")))
