@@ -4,7 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildAlwaysOnReadOnlyProfile,
+  ALWAYS_ON_READ_ONLY_PROFILE_ID,
+  buildRuntimeProfile,
   classifyRuntimeState,
   compactRuntimeStatus,
   runtimeAuthority,
@@ -25,6 +26,11 @@ import { loadLocalEnvironment } from "./local-env.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2] || "status";
+const profileArgumentIndex = process.argv.indexOf("--profile");
+const selectedProfileId =
+  (profileArgumentIndex >= 0 ? process.argv[profileArgumentIndex + 1] : undefined) ??
+  process.env.GOTRADER_RUNTIME_PROFILE ??
+  ALWAYS_ON_READ_ONLY_PROFILE_ID;
 const allowedCommands = new Set(["status", "health", "stop"]);
 if (!allowedCommands.has(command)) {
   console.error(`Unsupported runtime command: ${command}.`);
@@ -33,7 +39,11 @@ if (!allowedCommands.has(command)) {
 
 await loadLocalEnvironment();
 const repositoryIdentity = await getRepositoryIdentity(repoRoot);
-const profile = buildAlwaysOnReadOnlyProfile({ repoRoot, env: process.env });
+const profile = buildRuntimeProfile({
+  profileId: selectedProfileId,
+  repoRoot,
+  env: process.env
+});
 const paths = buildRuntimePaths(repoRoot, profile.profileId);
 await ensureRuntimePaths(paths);
 
@@ -129,6 +139,8 @@ await writeJsonAtomic(paths.stateFile, {
   blockers: [],
   warnings: [],
   browserRequired: false,
+  continuousFeedEnabled: profile.continuousFeedEnabled === true,
+  closedCandleSchedulerEnabled: profile.closedCandleSchedulerEnabled === true,
   strategySchedulerEnabled: false,
   paperDemoEnabled: false,
   executionEnabled: false,

@@ -72,7 +72,7 @@ export interface RuntimeServiceStatus {
 
 export interface GoTraderRuntimeStatus {
   runtimeId: string;
-  profileId: "always_on_read_only";
+  profileId: "always_on_read_only" | "always_on_read_only_scheduler";
   profileVersion: string;
   supervisorVersion: string;
   state: RuntimeServiceState;
@@ -86,6 +86,8 @@ export interface GoTraderRuntimeStatus {
   warnings: readonly string[];
   browserRequired: false;
   strategySchedulerEnabled: false;
+  continuousFeedEnabled: boolean;
+  closedCandleSchedulerEnabled: boolean;
   paperDemoEnabled: false;
   executionEnabled: false;
   aiSupervisorEnabled: false;

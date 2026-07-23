@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildAlwaysOnReadOnlyProfile,
+  buildAlwaysOnReadOnlySchedulerProfile,
   buildProcessFingerprint,
   classifyProbe,
   classifyProcessOwnership,
@@ -130,6 +131,28 @@ await test("registry is read-only, strategy-neutral, and profile-validated", asy
     ["mt5_terminal", "mt5_readonly_upstream", "mt5_readonly_bridge"]
   );
   assert.equal(profile.browserRequired, false);
+  assert.equal(profile.strategySchedulerEnabled, false);
+  assert.equal(profile.paperDemoEnabled, false);
+  assert.equal(profile.executionEnabled, false);
+  assert.equal(profile.productionAdoptionAllowed, false);
+  assert.deepEqual(profile.authority, runtimeAuthority);
+});
+
+await test("scheduler profile extends A1 without granting strategy or execution authority", async () => {
+  const profile = buildAlwaysOnReadOnlySchedulerProfile({ repoRoot });
+  assert.deepEqual(validateRuntimeProfile(profile), { valid: true, errors: [] });
+  assert.deepEqual(
+    profile.services.map((service) => service.serviceId),
+    [
+      "mt5_terminal",
+      "mt5_readonly_upstream",
+      "mt5_readonly_bridge",
+      "market_data_feed",
+      "autonomous_cycle_scheduler"
+    ]
+  );
+  assert.equal(profile.continuousFeedEnabled, true);
+  assert.equal(profile.closedCandleSchedulerEnabled, true);
   assert.equal(profile.strategySchedulerEnabled, false);
   assert.equal(profile.paperDemoEnabled, false);
   assert.equal(profile.executionEnabled, false);
@@ -427,6 +450,11 @@ await test("runtime implementation imports no strategy or research modules", asy
     "scripts/gotrader-runtime-io.mjs",
     "scripts/gotrader-runtime-supervisor.mjs",
     "scripts/gotrader-runtime-control.mjs",
+    "scripts/gotrader-continuous-feed-core.mjs",
+    "scripts/gotrader-continuous-feed.mjs",
+    "scripts/gotrader-autonomous-scheduler-core.mjs",
+    "scripts/gotrader-autonomous-scheduler.mjs",
+    "scripts/gotrader-scheduler-control.mjs",
     "src/lib/alwaysOnRuntime/alwaysOnRuntimeTypes.ts",
     "src/lib/alwaysOnRuntime/alwaysOnRuntimeProfile.ts"
   ];

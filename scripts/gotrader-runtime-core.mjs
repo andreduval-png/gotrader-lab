@@ -9,7 +9,10 @@ export const runtimeAuthority = Object.freeze({
 
 export const ALWAYS_ON_READ_ONLY_PROFILE_ID = "always_on_read_only";
 export const ALWAYS_ON_READ_ONLY_PROFILE_VERSION = "track-a1-always-on-read-only-v1";
-export const GOTRADER_RUNTIME_SUPERVISOR_VERSION = "gotrader-runtime-supervisor-v1";
+export const ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID = "always_on_read_only_scheduler";
+export const ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_VERSION =
+  "track-a2-always-on-read-only-scheduler-v1";
+export const GOTRADER_RUNTIME_SUPERVISOR_VERSION = "gotrader-runtime-supervisor-v1.1";
 
 export const runtimeServiceStates = Object.freeze([
   "stopped",
@@ -201,9 +204,133 @@ export function buildAlwaysOnReadOnlyProfile({
   });
 }
 
+export function buildAlwaysOnReadOnlySchedulerProfile({
+  repoRoot,
+  env = process.env,
+  nodeExecutable = process.execPath
+}) {
+  const base = buildAlwaysOnReadOnlyProfile({ repoRoot, env, nodeExecutable });
+  const root = path.resolve(repoRoot);
+  const host = env.GOTRADER_RUNTIME_HOST || "127.0.0.1";
+  const bridgePort = boundedInteger(env.GOTRADER_RUNTIME_BRIDGE_PORT, 7341, 1, 65_535);
+  const feedPort = boundedInteger(env.GOTRADER_RUNTIME_FEED_PORT, 7343, 1, 65_535);
+  const schedulerPort = boundedInteger(env.GOTRADER_RUNTIME_SCHEDULER_PORT, 7344, 1, 65_535);
+  const bridgeUrl = `http://${host}:${bridgePort}`;
+  const feedUrl = `http://${host}:${feedPort}`;
+  const feedScript = path.join(root, "scripts", "gotrader-continuous-feed.mjs");
+  const schedulerScript = path.join(root, "scripts", "gotrader-autonomous-scheduler.mjs");
+  const common = {
+    workingDirectory: root,
+    required: true,
+    authority: runtimeAuthority
+  };
+  const managedRestartPolicy = immutableRestartPolicy;
+
+  return Object.freeze({
+    ...base,
+    profileId: ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+    profileVersion: ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_VERSION,
+    continuousFeedEnabled: true,
+    closedCandleSchedulerEnabled: true,
+    strategySchedulerEnabled: false,
+    enabledTaskTypes: Object.freeze([
+      "runtime_health_snapshot",
+      "current_market_snapshot"
+    ]),
+    services: Object.freeze([
+      ...base.services,
+      Object.freeze({
+        ...common,
+        serviceId: "market_data_feed",
+        displayName: "GoTrader continuous read-only market-data feed",
+        command: nodeExecutable,
+        args: Object.freeze(["--max-old-space-size=256", feedScript]),
+        scriptPath: feedScript,
+        runtime: "node",
+        dependencies: Object.freeze(["mt5_readonly_bridge"]),
+        expectedPorts: Object.freeze([feedPort]),
+        identityTokens: Object.freeze([feedScript]),
+        environment: Object.freeze({
+          GOTRADER_RUNTIME_PROFILE_ID: ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+          GOTRADER_FEED_HOST: host,
+          GOTRADER_FEED_PORT: String(feedPort),
+          GOTRADER_FEED_BRIDGE_URL: bridgeUrl
+        }),
+        healthProbes: Object.freeze([
+          Object.freeze({
+            probeId: "feed_health",
+            kind: "health",
+            url: `${feedUrl}/health`,
+            expectedServiceVersion: "gotrader-continuous-feed-v1",
+            restartRelevant: true
+          }),
+          Object.freeze({
+            probeId: "feed_transport",
+            kind: "transport",
+            url: `${feedUrl}/status`,
+            restartRelevant: false
+          })
+        ]),
+        restartPolicy: managedRestartPolicy
+      }),
+      Object.freeze({
+        ...common,
+        serviceId: "autonomous_cycle_scheduler",
+        displayName: "GoTrader read-only closed-candle scheduler",
+        command: nodeExecutable,
+        args: Object.freeze(["--max-old-space-size=256", schedulerScript]),
+        scriptPath: schedulerScript,
+        runtime: "node",
+        dependencies: Object.freeze(["market_data_feed"]),
+        expectedPorts: Object.freeze([schedulerPort]),
+        identityTokens: Object.freeze([schedulerScript]),
+        environment: Object.freeze({
+          GOTRADER_RUNTIME_PROFILE_ID: ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+          GOTRADER_SCHEDULER_HOST: host,
+          GOTRADER_SCHEDULER_PORT: String(schedulerPort),
+          GOTRADER_SCHEDULER_FEED_URL: feedUrl
+        }),
+        healthProbes: Object.freeze([
+          Object.freeze({
+            probeId: "scheduler_health",
+            kind: "health",
+            url: `http://${host}:${schedulerPort}/health`,
+            expectedServiceVersion: "gotrader-autonomous-scheduler-v1",
+            restartRelevant: true
+          }),
+          Object.freeze({
+            probeId: "scheduler_transport",
+            kind: "transport",
+            url: `http://${host}:${schedulerPort}/status`,
+            restartRelevant: false
+          })
+        ]),
+        restartPolicy: managedRestartPolicy
+      })
+    ])
+  });
+}
+
+export function buildRuntimeProfile({
+  profileId = ALWAYS_ON_READ_ONLY_PROFILE_ID,
+  ...options
+}) {
+  if (profileId === ALWAYS_ON_READ_ONLY_PROFILE_ID) {
+    return buildAlwaysOnReadOnlyProfile(options);
+  }
+  if (profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID) {
+    return buildAlwaysOnReadOnlySchedulerProfile(options);
+  }
+  throw new Error(`Runtime profile is not allowlisted: ${profileId}.`);
+}
+
 export function validateRuntimeProfile(profile) {
   const errors = [];
-  if (profile?.profileId !== ALWAYS_ON_READ_ONLY_PROFILE_ID) {
+  const allowedProfileIds = new Set([
+    ALWAYS_ON_READ_ONLY_PROFILE_ID,
+    ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID
+  ]);
+  if (!allowedProfileIds.has(profile?.profileId)) {
     errors.push("runtime_profile_not_allowlisted");
   }
   if (profile?.productionAdoptionAllowed !== false) errors.push("production_adoption_must_be_false");
@@ -242,7 +369,20 @@ export function validateRuntimeProfile(profile) {
     }
   }
 
-  const expected = ["mt5_terminal", "mt5_readonly_upstream", "mt5_readonly_bridge"];
+  if (
+    profile?.profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID &&
+    (profile?.continuousFeedEnabled !== true || profile?.closedCandleSchedulerEnabled !== true)
+  ) {
+    errors.push("scheduler_profile_services_must_be_enabled");
+  }
+  const expected = [
+    "mt5_terminal",
+    "mt5_readonly_upstream",
+    "mt5_readonly_bridge",
+    ...(profile?.profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID
+      ? ["market_data_feed", "autonomous_cycle_scheduler"]
+      : [])
+  ];
   for (const id of expected) {
     if (!ids.has(id)) errors.push(`${id}_missing`);
   }
@@ -341,7 +481,11 @@ export function classifyProcessOwnership({ processInfo, service, repositoryRoot 
 export function classifyProbe({ descriptor, result, now = new Date().toISOString() }) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const connectionStatus = String(
-    payload.connectionStatus ?? payload.status ?? payload.bridgeStatus ?? ""
+    payload.connectionStatus ??
+      payload.status ??
+      payload.bridgeStatus ??
+      payload.state ??
+      ""
   ).toLowerCase();
   const versionMatches =
     !descriptor.expectedServiceVersion ||
@@ -377,7 +521,14 @@ export function classifyProbe({ descriptor, result, now = new Date().toISOString
     classification = count > 0 ? "available" : "candle_data_unavailable";
     if (count <= 0) warnings.push("candle_data_unavailable");
   } else if (effectiveOk && descriptor.kind === "transport") {
-    classification = ["degraded", "planned", "unavailable", "disconnected"].includes(connectionStatus)
+    classification = [
+      "degraded",
+      "planned",
+      "unavailable",
+      "disconnected",
+      "blocked",
+      "stale"
+    ].includes(connectionStatus)
       ? "degraded"
       : "healthy";
     if (classification === "degraded") warnings.push("market_data_transport_degraded");
@@ -481,6 +632,8 @@ export function compactRuntimeStatus({
     blockers: [...new Set(blockers)],
     warnings: [...new Set(warnings)],
     browserRequired: false,
+    continuousFeedEnabled: profile.continuousFeedEnabled === true,
+    closedCandleSchedulerEnabled: profile.closedCandleSchedulerEnabled === true,
     strategySchedulerEnabled: false,
     paperDemoEnabled: false,
     executionEnabled: false,

@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
-  buildAlwaysOnReadOnlyProfile,
+  ALWAYS_ON_READ_ONLY_PROFILE_ID,
+  buildRuntimeProfile,
   classifyRuntimeState,
   compactRuntimeStatus,
   registerRestartAttempt,
@@ -41,6 +42,11 @@ import { loadLocalEnvironment } from "./local-env.mjs";
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const launchUi = process.argv.includes("--launch-ui");
+const profileArgumentIndex = process.argv.indexOf("--profile");
+const selectedProfileId =
+  (profileArgumentIndex >= 0 ? process.argv[profileArgumentIndex + 1] : undefined) ??
+  process.env.GOTRADER_RUNTIME_PROFILE ??
+  ALWAYS_ON_READ_ONLY_PROFILE_ID;
 const heartbeatIntervalMs = Math.min(
   60_000,
   Math.max(2_000, Number(process.env.GOTRADER_RUNTIME_HEARTBEAT_MS || 5_000))
@@ -53,7 +59,11 @@ const endpointIntervalMs = Math.min(
 await loadLocalEnvironment();
 
 const repositoryIdentity = await getRepositoryIdentity(repoRoot);
-const profile = buildAlwaysOnReadOnlyProfile({ repoRoot, env: process.env });
+const profile = buildRuntimeProfile({
+  profileId: selectedProfileId,
+  repoRoot,
+  env: process.env
+});
 const paths = buildRuntimePaths(repoRoot, profile.profileId);
 const runtimeId = crypto.randomUUID();
 const startedAt = new Date().toISOString();
