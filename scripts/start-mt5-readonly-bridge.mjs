@@ -84,6 +84,7 @@ const authority = {
 };
 const TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract";
 const WRAPPER_TIME_CONTRACT_VERSION = "gotrader-mt5-readonly-wrapper-time-contract-v1";
+const WRAPPER_SERVICE_VERSION = "gotrader-mt5-readonly-wrapper-v1.1";
 
 const json = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -110,6 +111,7 @@ const redactUrl = (value) => {
 
 const plannedStatus = () => ({
   provider: "mt5_read_only",
+  serviceVersion: WRAPPER_SERVICE_VERSION,
   connectionStatus: upstreamBaseUrl
     ? latestEndpointAvailable === true
       ? "connected"
