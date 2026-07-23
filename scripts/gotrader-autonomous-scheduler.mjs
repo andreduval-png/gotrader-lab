@@ -6,15 +6,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AUTONOMOUS_SCHEDULER_SERVICE_VERSION,
+  buildSchedulerTaskRegistry,
   createAutonomousSchedulerEngine,
   disabledSchedulerCapabilities,
-  schedulerTaskRegistry
 } from "./gotrader-autonomous-scheduler-core.mjs";
 import {
   continuousFeedAuthority,
   continuousFeedCapability
 } from "./gotrader-continuous-feed-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
+import {
+  createShadowContextController,
+  loadShadowContextDependencies
+} from "./gotrader-shadow-context-core.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const profileId =
@@ -27,6 +31,7 @@ const checkpointFile = path.join(schedulerRoot, "checkpoint.json");
 const artifactFile = path.join(schedulerRoot, "artifacts.json");
 const statusFile = path.join(schedulerRoot, "status.json");
 const controlFile = path.join(schedulerRoot, "control.json");
+const contextRoot = path.join(stateRoot, profileId, "context");
 
 const host = process.env.GOTRADER_SCHEDULER_HOST || "127.0.0.1";
 const port = Math.min(
@@ -50,14 +55,56 @@ const maximumArtifacts = Math.min(
 );
 
 await fs.mkdir(schedulerRoot, { recursive: true });
+const shadowContextEnabled = profileId === "always_on_shadow_context";
+const activeTaskRegistry = buildSchedulerTaskRegistry({
+  enableShadowContext: shadowContextEnabled
+});
 const checkpointExists = await fs
   .access(checkpointFile)
   .then(() => true)
   .catch(() => false);
 const savedCheckpoint = await readJsonFile(checkpointFile);
+const fetchJson = async (url) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+let contextController;
+if (shadowContextEnabled) {
+  const dependencies = await loadShadowContextDependencies({
+    repoRoot,
+    outRoot: path.join(contextRoot, "compiled")
+  });
+  contextController = await createShadowContextController({
+    contextRoot,
+    dependencies,
+    fetchWindows: ({ requestedSymbol, brokerSymbol, timeframes, asOf }) =>
+      fetchJson(
+        `${feedUrl}/windows?requestedSymbol=${encodeURIComponent(
+          requestedSymbol
+        )}&brokerSymbol=${encodeURIComponent(
+          brokerSymbol
+        )}&timeframes=${encodeURIComponent(
+          timeframes.join(",")
+        )}&asOf=${encodeURIComponent(asOf)}&limit=300`
+      )
+  });
+}
 const engine = createAutonomousSchedulerEngine({
   checkpoint: savedCheckpoint,
-  registry: schedulerTaskRegistry,
+  registry: activeTaskRegistry,
+  handlers: contextController
+    ? { shadow_context_refresh: contextController.handler }
+    : {},
   maximumArtifacts
 });
 let durableArtifacts = (await readJsonFile(artifactFile))?.artifacts;
@@ -74,21 +121,6 @@ let checkpointStatus = checkpointExists
   : "missing";
 const startedAt = new Date().toISOString();
 let lastStatusWriteAt = 0;
-
-const fetchJson = async (url) => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
-  try {
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-};
 
 const buildStatus = () => {
   const engineStatus = engine.status();
@@ -133,6 +165,13 @@ const buildStatus = () => {
     warnings: [...new Set(warnings)],
     disabledCapabilities: disabledSchedulerCapabilities,
     eventDeliverySemantics: "at_least_once_effectively_once_artifacts",
+    memoryRssBytes: process.memoryUsage().rss,
+    cpuUserMicroseconds: process.cpuUsage().user,
+    cpuSystemMicroseconds: process.cpuUsage().system,
+    shadowContext: contextController?.status() ?? {
+      enabled: false,
+      state: "disabled"
+    },
     rawCandlesPersisted: false,
     ...continuousFeedCapability,
     ...continuousFeedAuthority
@@ -271,6 +310,18 @@ const server = http.createServer((request, response) => {
     json(response, 200, lastStatus);
     return;
   }
+  if (url.pathname === "/context/status") {
+    json(
+      response,
+      200,
+      contextController?.status() ?? {
+        enabled: false,
+        state: "disabled",
+        ...continuousFeedAuthority
+      }
+    );
+    return;
+  }
   json(response, 404, {
     message: "Scheduler endpoint not found.",
     ...continuousFeedAuthority
@@ -293,7 +344,7 @@ server.listen(port, host, async () => {
       host,
       port,
       feedUrl,
-      enabledTaskTypes: schedulerTaskRegistry
+      enabledTaskTypes: activeTaskRegistry
         .filter((task) => task.enabled)
         .map((task) => task.taskType),
       ...continuousFeedAuthority

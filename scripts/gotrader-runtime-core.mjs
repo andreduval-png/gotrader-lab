@@ -12,6 +12,9 @@ export const ALWAYS_ON_READ_ONLY_PROFILE_VERSION = "track-a1-always-on-read-only
 export const ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID = "always_on_read_only_scheduler";
 export const ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_VERSION =
   "track-a2-always-on-read-only-scheduler-v1";
+export const ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID = "always_on_shadow_context";
+export const ALWAYS_ON_SHADOW_CONTEXT_PROFILE_VERSION =
+  "track-a3-verified-time-shadow-context-v1";
 export const GOTRADER_RUNTIME_SUPERVISOR_VERSION = "gotrader-runtime-supervisor-v1.1";
 
 export const runtimeServiceStates = Object.freeze([
@@ -321,6 +324,37 @@ export function buildRuntimeProfile({
   if (profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID) {
     return buildAlwaysOnReadOnlySchedulerProfile(options);
   }
+  if (profileId === ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID) {
+    const base = buildAlwaysOnReadOnlySchedulerProfile(options);
+    return Object.freeze({
+      ...base,
+      profileId: ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID,
+      profileVersion: ALWAYS_ON_SHADOW_CONTEXT_PROFILE_VERSION,
+      timeVerificationEnabled: true,
+      shadowContextEnabled: true,
+      enabledTaskTypes: Object.freeze([
+        "runtime_health_snapshot",
+        "current_market_snapshot",
+        "shadow_context_refresh"
+      ]),
+      services: Object.freeze(
+        base.services.map((service) =>
+          ["market_data_feed", "autonomous_cycle_scheduler"].includes(
+            service.serviceId
+          )
+            ? Object.freeze({
+                ...service,
+                environment: Object.freeze({
+                  ...service.environment,
+                  GOTRADER_RUNTIME_PROFILE_ID:
+                    ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+                })
+              })
+            : service
+        )
+      )
+    });
+  }
   throw new Error(`Runtime profile is not allowlisted: ${profileId}.`);
 }
 
@@ -328,7 +362,8 @@ export function validateRuntimeProfile(profile) {
   const errors = [];
   const allowedProfileIds = new Set([
     ALWAYS_ON_READ_ONLY_PROFILE_ID,
-    ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID
+    ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+    ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
   ]);
   if (!allowedProfileIds.has(profile?.profileId)) {
     errors.push("runtime_profile_not_allowlisted");
@@ -370,7 +405,10 @@ export function validateRuntimeProfile(profile) {
   }
 
   if (
-    profile?.profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID &&
+    [
+      ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+    ].includes(profile?.profileId) &&
     (profile?.continuousFeedEnabled !== true || profile?.closedCandleSchedulerEnabled !== true)
   ) {
     errors.push("scheduler_profile_services_must_be_enabled");
@@ -379,7 +417,10 @@ export function validateRuntimeProfile(profile) {
     "mt5_terminal",
     "mt5_readonly_upstream",
     "mt5_readonly_bridge",
-    ...(profile?.profileId === ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID
+    ...([
+      ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
+      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+    ].includes(profile?.profileId)
       ? ["market_data_feed", "autonomous_cycle_scheduler"]
       : [])
   ];

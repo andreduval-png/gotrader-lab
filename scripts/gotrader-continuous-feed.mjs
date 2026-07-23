@@ -18,6 +18,7 @@ import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const profileId =
   process.env.GOTRADER_RUNTIME_PROFILE_ID || "always_on_read_only_scheduler";
+const requireVerificationArtifact = profileId === "always_on_shadow_context";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
   ? path.resolve(process.env.GOTRADER_RUNTIME_STATE_ROOT)
   : path.join(repoRoot, ".gotrader", "runtime");
@@ -91,7 +92,8 @@ const engine = createContinuousFeedEngine({
   capacities: defaultRollingStoreCapacities,
   checkpoint: savedCheckpoint,
   knownEvents: durableEvents,
-  maximumCloseEventIds: maximumDurableEvents
+  maximumCloseEventIds: maximumDurableEvents,
+  requireVerificationArtifact
 });
 
 let stopping = false;
@@ -119,6 +121,11 @@ let latestCandlePayloads = [];
 let consecutiveFailures = 0;
 let lastCandlePollAt = 0;
 let lastTimeContractPollAt = 0;
+const processResources = () => ({
+  memoryRssBytes: process.memoryUsage().rss,
+  cpuUserMicroseconds: process.cpuUsage().user,
+  cpuSystemMicroseconds: process.cpuUsage().system
+});
 
 const fetchJson = async (url) => {
   const controller = new AbortController();
@@ -180,6 +187,7 @@ const persistResult = async (result) => {
     durableEventCount: durableEvents.length,
     lastSequence: nextSequence,
     pollIntervalsMs: lastStatus.pollIntervalsMs,
+    ...processResources(),
     ...continuousFeedCapability,
     ...continuousFeedAuthority
   };
@@ -248,6 +256,7 @@ const poll = async () => {
             error instanceof Error ? error.message : String(error)
           ])
         ],
+        ...processResources(),
         ...continuousFeedCapability,
         ...continuousFeedAuthority
       };
@@ -304,6 +313,67 @@ const server = http.createServer((request, response) => {
     });
     return;
   }
+  if (url.pathname === "/windows") {
+    const requested = url.searchParams.get("requestedSymbol") || requestedSymbol;
+    const broker = url.searchParams.get("brokerSymbol") || brokerSymbol;
+    const requestedTimeframes = [
+      ...new Set(
+        String(url.searchParams.get("timeframes") || "5m,15m,1h,4h,1d")
+          .split(",")
+          .map(normalizeRuntimeTimeframe)
+          .filter(Boolean)
+      )
+    ];
+    const asOf =
+      new Date(url.searchParams.get("asOf") || Date.now()).toISOString();
+    const asOfMs = Date.parse(asOf);
+    const limit = Math.min(
+      500,
+      Math.max(3, Number(url.searchParams.get("limit") ?? 300))
+    );
+    const snapshot = engine.rollingStoreSnapshot();
+    const windows = Object.fromEntries(
+      requestedTimeframes.map((timeframe) => {
+        const key = `${requested}:${broker}:${timeframe}`;
+        const candles = (snapshot[key] ?? [])
+          .filter((candle) => Date.parse(candle.candleCloseTime) <= asOfMs)
+          .slice(-limit)
+          .map((candle) => ({
+            candleOpenTime: candle.candleOpenTime,
+            candleCloseTime: candle.candleCloseTime,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+            tickVolume: candle.tickVolume,
+            spread: candle.spread
+          }));
+        return [timeframe, candles];
+      })
+    );
+    json(response, 200, {
+      requestedSymbol: requested,
+      brokerSymbol: broker,
+      asOf,
+      windows,
+      timeContract: {
+        version: lastStatus.timeContractVersion,
+        eligible: lastStatus.timeContractEligible,
+        verificationArtifactId: lastStatus.verificationArtifactId,
+        verificationScope: lastStatus.verificationScope,
+        verificationGeneratedAtUtc: lastStatus.verificationGeneratedAtUtc,
+        verificationExpiresAtUtc: lastStatus.verificationExpiresAtUtc,
+        verificationProofState: lastStatus.verificationProofState,
+        providerTimeBasis: lastStatus.providerTimeBasis,
+        observedOffsetMinutes: lastStatus.observedOffsetMinutes
+      },
+      sourceProvider: "mt5_read_only",
+      rawCandlesPersisted: false,
+      ...continuousFeedAuthority
+    });
+    return;
+  }
   json(response, 404, {
     message: "Continuous feed endpoint not found.",
     ...continuousFeedAuthority
@@ -325,6 +395,7 @@ server.listen(port, host, async () => {
       port,
       bridgeUrl,
       timeframes,
+      requireVerificationArtifact,
       ...continuousFeedAuthority
     })
   );

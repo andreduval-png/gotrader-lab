@@ -8,7 +8,10 @@ import {
 export const AUTONOMOUS_SCHEDULER_SERVICE_VERSION =
   "gotrader-autonomous-scheduler-v1";
 
-export const schedulerTaskRegistry = Object.freeze([
+export function buildSchedulerTaskRegistry({
+  enableShadowContext = false
+} = {}) {
+  return Object.freeze([
   Object.freeze({
     taskType: "runtime_health_snapshot",
     taskVersion: "1.0.0",
@@ -33,14 +36,19 @@ export const schedulerTaskRegistry = Object.freeze([
   }),
   Object.freeze({
     taskType: "shadow_context_refresh",
-    taskVersion: "1.0.0",
-    enabled: false,
+    taskVersion: "2.0.0",
+    enabled: enableShadowContext,
     triggerEvent: "candle_closed",
-    requiredTimeframes: Object.freeze(["5m", "15m", "1h", "4h", "1d"]),
+    requiredTimeframes: Object.freeze(["5m"]),
+    inputTimeframes: Object.freeze(["5m", "15m", "1h", "4h", "1d"]),
+    requiredRequestedSymbol: "MNQ",
+    requiredBrokerSymbol: "USTECH",
     timeoutMs: 5_000,
     concurrencyPolicy: "one_per_task_type",
-    retryLimit: 0,
-    disabledReason: "feed_observation_gate_not_passed",
+    retryLimit: 1,
+    ...(enableShadowContext
+      ? {}
+      : { disabledReason: "verified_time_operational_gate_not_passed" }),
     ...continuousFeedAuthority
   }),
   Object.freeze({
@@ -55,7 +63,10 @@ export const schedulerTaskRegistry = Object.freeze([
     disabledReason: "phase3_completion_gate_not_passed",
     ...continuousFeedAuthority
   })
-]);
+  ]);
+}
+
+export const schedulerTaskRegistry = buildSchedulerTaskRegistry();
 
 export const disabledSchedulerCapabilities = Object.freeze([
   "trade_intent_generation",
@@ -91,6 +102,21 @@ export function validateSchedulerTaskRegistry(registry = schedulerTaskRegistry) 
     }
     if (disabledSchedulerCapabilities.includes(task?.taskType) && task?.enabled) {
       errors.push(`${task.taskType}_must_be_disabled`);
+    }
+    if (task?.taskType === "shadow_ifvg_comparison" && task?.enabled) {
+      errors.push("shadow_ifvg_comparison_must_remain_disabled");
+    }
+    if (
+      task?.taskType === "shadow_context_refresh" &&
+      task?.enabled &&
+      (
+        task.requiredRequestedSymbol !== "MNQ" ||
+        task.requiredBrokerSymbol !== "USTECH" ||
+        task.requiredTimeframes.length !== 1 ||
+        task.requiredTimeframes[0] !== "5m"
+      )
+    ) {
+      errors.push("shadow_context_refresh_trigger_scope_invalid");
     }
   }
   return { valid: errors.length === 0, errors: [...new Set(errors)] };
@@ -240,6 +266,18 @@ export function createAutonomousSchedulerEngine({
         ) {
           continue;
         }
+        if (
+          task.requiredRequestedSymbol &&
+          task.requiredRequestedSymbol !== event.requestedSymbol
+        ) {
+          continue;
+        }
+        if (
+          task.requiredBrokerSymbol &&
+          task.requiredBrokerSymbol !== event.brokerSymbol
+        ) {
+          continue;
+        }
         const cycleId = taskCycleId(task, event);
         if (completedTaskRunIds.has(cycleId)) continue;
         if (activeTaskTypes.has(task.taskType)) {
@@ -258,24 +296,32 @@ export function createAutonomousSchedulerEngine({
               Promise.resolve(handler({ task, event, feedStatus, attempt })),
               task.timeoutMs
             );
+            const resultStatus = ["completed", "blocked", "cancelled"].includes(
+              result?.status
+            )
+              ? result.status
+              : "completed";
             artifact = {
               cycleId,
               triggerEventId: event.eventId,
               taskType: task.taskType,
               startedAt,
               completedAt: new Date().toISOString(),
-              status: "completed",
+              status: resultStatus,
               sourceIdentity: event.sourceIdentity,
               sourceFingerprint: event.sourceFingerprint,
               requestedSymbol: event.requestedSymbol,
               brokerSymbol: event.brokerSymbol,
               timeframe: event.timeframe,
               observedMarketTime: event.observedMarketTime,
-              blockers: [],
+              blockers: Array.isArray(result?.blockers) ? result.blockers : [],
               warnings: Array.isArray(result?.warnings) ? result.warnings : [],
               outputArtifactIds: Array.isArray(result?.outputArtifactIds)
                 ? result.outputArtifactIds
                 : [],
+              ...(result?.resultArtifact
+                ? { resultArtifact: result.resultArtifact }
+                : {}),
               productionAdoptionAllowed: false,
               ...continuousFeedAuthority
             };

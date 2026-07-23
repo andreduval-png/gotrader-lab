@@ -9,6 +9,7 @@ deal, trade, and mutation routes do not exist.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -373,6 +374,50 @@ def build_time_contract(
         | ({"repeated_fixed_offset_observations"} if fixed_verified else set())
         | ({"terminal_clock_probe_current_live"} if terminal_current_live_verified else set())
     )
+    generated_at_utc = terminal_evidence.get("terminalProbeCapturedAt")
+    proof_state = "missing"
+    proof_age_seconds = None
+    expires_at_utc = None
+    if generated_at_utc:
+        try:
+            generated_at = datetime.fromisoformat(str(generated_at_utc).replace("Z", "+00:00"))
+            proof_age_seconds = max(0, round((system_time_utc - generated_at).total_seconds()))
+            expires_at_utc = (generated_at + timedelta(seconds=180)).isoformat().replace("+00:00", "Z")
+            proof_state = "fresh" if proof_age_seconds <= 120 else "expiring" if proof_age_seconds <= 180 else "stale"
+        except ValueError:
+            proof_state = "conflicting"
+    terminal_probe_fingerprint = hashlib.sha256(json.dumps({
+        "observationId": terminal_evidence.get("terminalProbeObservationId"),
+        "probeInstanceId": terminal_evidence.get("terminalProbeInstanceId"),
+        "capturedAtUtc": generated_at_utc,
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    quote_observation_fingerprint = hashlib.sha256(json.dumps({
+        "rawTickTime": raw_tick_time,
+        "rawTickTimeMsc": raw_tick_time_msc,
+        "basis": terminal_evidence.get("pythonTransportBasis"),
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    candle_observation_fingerprint = hashlib.sha256(json.dumps({
+        "rawLatestCandleTime": raw_candle_time,
+        "timeframe": "M5",
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    proof_core = {
+        "contractId": TIME_CONTRACT_ID,
+        "contractVersion": TIME_CONTRACT_VERSION,
+        "verificationScope": "current_live",
+        "providerTimeBasis": provider_time_basis,
+        "observedOffsetMinutes": terminal_evidence.get("terminalObservedOffsetMinutes", observed_offset),
+        "terminalClockClassificationVersion": terminal_evidence.get("terminalClockClassificationVersion"),
+        "terminalProbeFingerprint": f"sha256:{terminal_probe_fingerprint}",
+        "quoteObservationFingerprint": f"sha256:{quote_observation_fingerprint}",
+        "candleObservationFingerprint": f"sha256:{candle_observation_fingerprint}",
+        "generatedAtUtc": generated_at_utc,
+        "expiresAtUtc": expires_at_utc,
+        "currentLiveTimeBasisVerified": current_live_verified and proof_state == "fresh",
+        "historicalDstPolicyVerified": False,
+    }
+    verification_artifact_id = "sha256:" + hashlib.sha256(
+        json.dumps(proof_core, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     contract = {
         "contractId": TIME_CONTRACT_ID,
         "version": TIME_CONTRACT_VERSION,
@@ -406,6 +451,14 @@ def build_time_contract(
         "historicalDstPolicyVerified": historical_dst_verified,
         "timeVerificationScope": "historical" if historical_dst_verified else "current_live" if current_live_verified else "none",
         "phase2Eligible": bool(verification_status == "verified" and historical_dst_verified),
+        "timeVerificationArtifactId": verification_artifact_id if generated_at_utc else None,
+        "timeVerificationGeneratedAtUtc": generated_at_utc,
+        "timeVerificationExpiresAtUtc": expires_at_utc,
+        "timeVerificationProofState": proof_state,
+        "timeVerificationProofAgeSeconds": proof_age_seconds,
+        "terminalProbeFingerprint": f"sha256:{terminal_probe_fingerprint}" if generated_at_utc else None,
+        "quoteObservationFingerprint": f"sha256:{quote_observation_fingerprint}" if generated_at_utc else None,
+        "candleObservationFingerprint": f"sha256:{candle_observation_fingerprint}" if generated_at_utc else None,
         "readOnly": True,
         "marketDataOnly": True,
         "blockers": sorted(set(blockers)),

@@ -129,8 +129,33 @@ export function buildRuntimeCandlePayloadHash(candle) {
   })}`;
 }
 
-export function evaluateRuntimeTimeContract(contract) {
+export function evaluateRuntimeTimeContract(
+  contract,
+  {
+    requireVerificationArtifact = false,
+    nowUtc = new Date().toISOString()
+  } = {}
+) {
   const version = String(contract?.version ?? contract?.wrapperContractVersion ?? "unknown");
+  const artifactId = String(contract?.timeVerificationArtifactId ?? "");
+  const generatedAtUtc =
+    contract?.timeVerificationGeneratedAtUtc ?? contract?.terminalProbeCapturedAt;
+  const expiresAtUtc = contract?.timeVerificationExpiresAtUtc;
+  const generatedMs = Date.parse(generatedAtUtc ?? "");
+  const nowMs = Date.parse(nowUtc);
+  const proofAgeSeconds =
+    Number.isFinite(generatedMs) && Number.isFinite(nowMs)
+      ? Math.max(0, Math.round((nowMs - generatedMs) / 1_000))
+      : undefined;
+  const derivedProofState =
+    proofAgeSeconds === undefined || nowMs < generatedMs - 5_000
+      ? "conflicting"
+      : proofAgeSeconds <= 120
+        ? "fresh"
+        : proofAgeSeconds <= 180
+          ? "expiring"
+          : "stale";
+  const proofState = contract?.timeVerificationProofState ?? derivedProofState;
   const currentLiveVerified =
     contract?.currentLiveTimeBasisVerified === true ||
     (contract?.verificationStatus === "verified" &&
@@ -143,11 +168,35 @@ export function evaluateRuntimeTimeContract(contract) {
   const blockers = [];
   if (!currentLiveVerified) blockers.push("current_live_time_basis_not_verified");
   if (stale) blockers.push("terminal_time_evidence_stale");
+  if (requireVerificationArtifact) {
+    if (!artifactId) blockers.push("current_live_verification_artifact_missing");
+    if (contract?.timeVerificationScope !== "current_live") {
+      blockers.push("current_live_verification_scope_invalid");
+    }
+    if (proofState !== "fresh") blockers.push(`current_live_proof_${proofState}`);
+    if (
+      !generatedAtUtc ||
+      !expiresAtUtc ||
+      !Number.isFinite(Date.parse(expiresAtUtc))
+    ) {
+      blockers.push("current_live_verification_expiry_missing");
+    }
+  }
   return {
-    eligible: currentLiveVerified && !stale,
+    eligible: currentLiveVerified && !stale && blockers.length === 0,
     version,
+    artifactId: artifactId || undefined,
+    verificationScope: contract?.timeVerificationScope ?? "none",
+    generatedAtUtc,
+    expiresAtUtc,
+    proofState,
+    proofAgeSeconds,
+    terminalClockClassificationVersion:
+      contract?.terminalClockClassificationVersion,
     providerTimeBasis: contract?.providerTimeBasis ?? "unknown",
-    observedOffsetMinutes: finiteNumber(contract?.observedOffsetMinutes),
+    observedOffsetMinutes: finiteNumber(
+      contract?.terminalObservedOffsetMinutes ?? contract?.observedOffsetMinutes
+    ),
     blockers
   };
 }
@@ -245,7 +294,8 @@ const eventBase = ({
   timeframe,
   observedMarketTime,
   receivedAt,
-  timeContractVersion
+  timeContractVersion,
+  timeVerificationArtifactId
 }) => ({
   eventId,
   eventVersion: RUNTIME_MARKET_EVENT_VERSION,
@@ -259,6 +309,7 @@ const eventBase = ({
   receivedAt,
   sourceFingerprint: sourceIdentity,
   timeContractVersion,
+  ...(timeVerificationArtifactId ? { timeVerificationArtifactId } : {}),
   ...continuousFeedCapability,
   ...continuousFeedAuthority
 });
@@ -268,7 +319,8 @@ export function createContinuousFeedEngine({
   checkpoint,
   knownEvents = [],
   maximumCloseEventIds = 5_000,
-  maximumCatchUpCandles = 24
+  maximumCatchUpCandles = 24,
+  requireVerificationArtifact = false
 } = {}) {
   const stores = new Map();
   const formingHashes = new Map();
@@ -282,6 +334,9 @@ export function createContinuousFeedEngine({
     Object.entries(checkpoint?.closedPayloadHashesByIdentity ?? {})
   );
   const conflictingIdentities = new Set(checkpoint?.conflictingCandleIdentities ?? []);
+  const rejectedCloseIdentities = new Set(
+    checkpoint?.rejectedCloseIdentities ?? []
+  );
   const establishedSeries = new Set(checkpoint?.establishedSeries ?? []);
   const lastClosedBySeries = new Map(
     Object.entries(checkpoint?.lastClosedBySeries ?? {})
@@ -294,9 +349,19 @@ export function createContinuousFeedEngine({
   let duplicateCloseEventCount = Number(checkpoint?.duplicateCloseEventCount ?? 0);
   let conflictingCandleCount = Number(checkpoint?.conflictingCandleCount ?? 0);
   let recoveredEventCount = Number(checkpoint?.recoveredEventCount ?? 0);
+  let quoteUpdateCount = Number(checkpoint?.quoteUpdateCount ?? 0);
+  let formingCandleUpdateCount = Number(
+    checkpoint?.formingCandleUpdateCount ?? 0
+  );
+  let rejectedCloseEventCount = Number(
+    checkpoint?.rejectedCloseEventCount ?? 0
+  );
+  let lastRejectedClose;
   let lastFormingCandleUpdate;
   let lastClosedCandleEvent;
-  let latestTimeContract = evaluateRuntimeTimeContract(undefined);
+  let latestTimeContract = evaluateRuntimeTimeContract(undefined, {
+    requireVerificationArtifact
+  });
   const blockers = new Set();
   const warnings = new Set();
 
@@ -327,7 +392,23 @@ export function createContinuousFeedEngine({
     duplicateCloseEventCount,
     conflictingCandleCount,
     recoveredEventCount,
+    quoteUpdateCount,
+    formingCandleUpdateCount,
+    rejectedCloseEventCount,
+    lastRejectedClose,
     timeContractEligible: latestTimeContract.eligible,
+    timeContractVersion: latestTimeContract.version,
+    verificationArtifactRequired: requireVerificationArtifact,
+    verificationArtifactId: latestTimeContract.artifactId,
+    verificationScope: latestTimeContract.verificationScope,
+    verificationGeneratedAtUtc: latestTimeContract.generatedAtUtc,
+    verificationExpiresAtUtc: latestTimeContract.expiresAtUtc,
+    verificationProofState: latestTimeContract.proofState,
+    verificationProofAgeSeconds: latestTimeContract.proofAgeSeconds,
+    providerTimeBasis: latestTimeContract.providerTimeBasis,
+    observedOffsetMinutes: latestTimeContract.observedOffsetMinutes,
+    terminalClockClassificationVersion:
+      latestTimeContract.terminalClockClassificationVersion,
     blockers: [...blockers],
     warnings: [...warnings],
     ...continuousFeedCapability,
@@ -346,13 +427,21 @@ export function createContinuousFeedEngine({
       [...conflictingIdentities],
       maximumCloseEventIds
     ),
+    rejectedCloseIdentities: boundedUnique(
+      [...rejectedCloseIdentities],
+      maximumCloseEventIds
+    ),
     lastTimeContractEligible: latestTimeContract.eligible,
+    lastTimeVerificationArtifactId: latestTimeContract.artifactId,
     timeContractStateObserved,
     feedStale: stale,
     emittedCloseEventCount,
     duplicateCloseEventCount,
     conflictingCandleCount,
     recoveredEventCount,
+    quoteUpdateCount,
+    formingCandleUpdateCount,
+    rejectedCloseEventCount,
     checkpointedAt: new Date().toISOString(),
     ...continuousFeedAuthority
   });
@@ -386,7 +475,8 @@ export function createContinuousFeedEngine({
         timeframe,
         observedMarketTime,
         receivedAt,
-        timeContractVersion: latestTimeContract.version
+        timeContractVersion: latestTimeContract.version,
+        timeVerificationArtifactId: latestTimeContract.artifactId
       }),
       reason
     };
@@ -398,7 +488,15 @@ export function createContinuousFeedEngine({
     timeContract,
     receivedAt = new Date().toISOString()
   }) => {
-    latestTimeContract = evaluateRuntimeTimeContract(timeContract);
+    const eligibilityBeforePoll = latestTimeContract.eligible;
+    latestTimeContract = evaluateRuntimeTimeContract(timeContract, {
+      requireVerificationArtifact,
+      nowUtc: receivedAt
+    });
+    const eligibilityRecoveredThisPoll =
+      latestTimeContract.eligible &&
+      timeContractStateObserved &&
+      !eligibilityBeforePoll;
     const events = [];
     const nextQuote = normalizeRuntimeQuote(quotePayload, receivedAt);
     const quoteChanged =
@@ -413,6 +511,7 @@ export function createContinuousFeedEngine({
       timeContractVersion: latestTimeContract.version
     });
     if (quoteChanged) {
+      quoteUpdateCount += 1;
       events.push({
         ...eventBase({
           eventId: `runtime_quote_${stableHash({
@@ -427,7 +526,8 @@ export function createContinuousFeedEngine({
           brokerSymbol: quote.brokerSymbol,
           observedMarketTime: quote.observedMarketTime,
           receivedAt,
-          timeContractVersion: latestTimeContract.version
+          timeContractVersion: latestTimeContract.version,
+          timeVerificationArtifactId: latestTimeContract.artifactId
         }),
         bid: quote.bid,
         ask: quote.ask,
@@ -495,13 +595,28 @@ export function createContinuousFeedEngine({
         timeContractVersion: latestTimeContract.version
       });
       const marketReferenceMs = Date.parse(quote.observedMarketTime);
+      const eligibleByMarketTime = merged.filter(
+        (candle) =>
+          Date.parse(candle.candleCloseTime) <= marketReferenceMs &&
+          Date.parse(candle.candleOpenTime) <= marketReferenceMs
+      );
       const closed = latestTimeContract.eligible
-        ? merged.filter(
-            (candle) =>
-              Date.parse(candle.candleCloseTime) <= marketReferenceMs &&
-              Date.parse(candle.candleOpenTime) <= marketReferenceMs
-          )
+        ? eligibleByMarketTime
         : [];
+      if (!latestTimeContract.eligible) {
+        for (const candle of eligibleByMarketTime.slice(-maximumCatchUpCandles)) {
+          const rejectedIdentity = `${key}:${candle.candleOpenTime}`;
+          if (rejectedCloseIdentities.has(rejectedIdentity)) continue;
+          rejectedCloseIdentities.add(rejectedIdentity);
+          rejectedCloseEventCount += 1;
+          lastRejectedClose = {
+            candleOpenTime: candle.candleOpenTime,
+            candleCloseTime: candle.candleCloseTime,
+            timeframe: normalized.timeframe,
+            reason: latestTimeContract.blockers.join(",")
+          };
+        }
+      }
       const conflictEvents = [];
       for (const candle of closed) {
         const candleIdentity = buildRuntimeCandleIdentity({
@@ -543,6 +658,7 @@ export function createContinuousFeedEngine({
       if (forming) {
         const payloadHash = buildRuntimeCandlePayloadHash(forming);
         if (formingHashes.get(key) !== payloadHash) {
+          formingCandleUpdateCount += 1;
           formingHashes.set(key, payloadHash);
           lastFormingCandleUpdate = receivedAt;
           events.push({
@@ -559,7 +675,8 @@ export function createContinuousFeedEngine({
               timeframe: normalized.timeframe,
               observedMarketTime: quote.observedMarketTime,
               receivedAt,
-              timeContractVersion: latestTimeContract.version
+              timeContractVersion: latestTimeContract.version,
+              timeVerificationArtifactId: latestTimeContract.artifactId
             }),
             candleOpenTime: forming.candleOpenTime,
             candleCloseTime: forming.candleCloseTime,
@@ -570,7 +687,7 @@ export function createContinuousFeedEngine({
 
       if (!latestTimeContract.eligible || !closed.length) continue;
 
-      if (!establishedSeries.has(key)) {
+      if (!establishedSeries.has(key) || eligibilityRecoveredThisPoll) {
         const baseline = closed.at(-1);
         establishedSeries.add(key);
         lastClosedBySeries.set(key, baseline.candleOpenTime);
@@ -646,7 +763,8 @@ export function createContinuousFeedEngine({
             timeframe: normalized.timeframe,
             observedMarketTime: candle.candleCloseTime,
             receivedAt,
-            timeContractVersion: latestTimeContract.version
+            timeContractVersion: latestTimeContract.version,
+            timeVerificationArtifactId: latestTimeContract.artifactId
           }),
           candleOpenTime: candle.candleOpenTime,
           candleCloseTime: candle.candleCloseTime,

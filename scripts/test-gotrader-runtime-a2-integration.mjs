@@ -226,6 +226,11 @@ try {
   assert.equal((await readArtifacts()).length, 4);
 
   await writeState(4, { timeVerified: true });
+  await waitFor("verified time recovery", async () => {
+    const { payload } = await fetchJson(`http://127.0.0.1:${feedPort}/status`);
+    return payload.timeContractEligible === true;
+  });
+  await writeState(5, { timeVerified: true });
   await waitFor("verified time recovery artifacts", async () => {
     const artifacts = await readArtifacts();
     return artifacts.length === 6 ? artifacts : undefined;
@@ -259,6 +264,7 @@ try {
       {
         status: "passed",
         closeEventsObserved: 3,
+        retroactiveRecoveryCloseSuppressed: true,
         schedulerArtifacts: artifacts.length,
         schedulerRestartDeduplicated: true,
         pauseResumeDurable: true,
