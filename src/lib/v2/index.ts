@@ -4,4 +4,5 @@ export * from "./candles";
 export * from "./context";
 export * from "./identity";
 export * from "./serialization";
+export * from "./strategyAdapters";
 export * from "./time";

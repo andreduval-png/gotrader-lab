@@ -4,7 +4,7 @@
   "categories": {
     "build_and_typecheck": ["typecheck", "build"],
     "source_integrity": ["test:v2-source-timing", "test:v2-candle-repository", "test:v2-mt5-time-normalization", "test:v2-mt5-upstream-time-contract", "test:v2-mt5-terminal-clock", "test:v2-context-foundation", "test:v2-mt5-offset-regime", "test:v2-mt5-offset-regime-collector", "test:v2-session-opening-facts", "test:v2-dealing-range-liquidity-facts", "test:v2-displacement-fvg-facts", "test:v2-higher-timeframe-bias-facts", "test:v2-context-compatibility", "test:source-status", "test:mt5-push-feed"],
-    "strategy_detection": ["test:v2-strategy-manifest", "test:ict-ifvg", "test:ict-universal-recognition", "test:gotrader-system-coordination"],
+    "strategy_detection": ["test:v2-strategy-manifest", "test:v2-ifvg-shadow", "test:ict-ifvg", "test:ict-universal-recognition", "test:gotrader-system-coordination"],
     "trade_geometry": ["test:ict-trade-construction", "test:ict-ifvg"],
     "replay": ["test:ict-replay-validation"],
     "walk_forward_oos": ["test:detector-profile-walk-forward", "test:ict-out-of-sample-validation"],
@@ -33,6 +33,7 @@
       "test:v2-displacement-fvg-facts",
       "test:v2-higher-timeframe-bias-facts",
       "test:v2-context-compatibility",
+      "test:v2-ifvg-shadow",
       "test:regime-classifier",
       "test:source-status",
       "test:validation-chain",
@@ -42,6 +43,7 @@
     "strategy-baselines": [
       "test:v2-strategy-manifest",
       "test:v2-baseline-snapshots",
+      "test:v2-ifvg-shadow",
       "test:ict-ifvg",
       "test:ict-silver-bullet",
       "test:ict-turtle-soup",

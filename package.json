@@ -48,6 +48,8 @@
     "test:v2-displacement-fvg-facts": "node scripts/test-v2-displacement-fvg-facts.mjs",
     "test:v2-higher-timeframe-bias-facts": "node scripts/test-v2-higher-timeframe-bias-facts.mjs",
     "test:v2-context-compatibility": "node scripts/test-v2-context-compatibility.mjs",
+    "test:v2-ifvg-shadow": "node scripts/test-v2-ifvg-shadow.mjs",
+    "diagnose:v2-ifvg-shadow": "node scripts/test-v2-ifvg-shadow.mjs --diagnostic",
     "test:v2-mt5-offset-regime": "node scripts/test-v2-mt5-offset-regime.mjs",
     "test:v2-mt5-offset-regime-collector": "node scripts/test-v2-mt5-offset-regime-collector.mjs",
     "collect:v2-mt5-offset-regime": "node scripts/collect-v2-mt5-offset-regime.mjs",
