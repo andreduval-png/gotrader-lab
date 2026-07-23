@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -17,6 +18,7 @@ import {
 const execFileAsync = promisify(execFile);
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const transientAtomicRenameCodes = new Set(["EACCES", "EBUSY", "EPERM"]);
 
 export function buildRuntimePaths(repoRoot, profileId) {
   const runtimeRoot = path.join(path.resolve(repoRoot), ".gotrader", "runtime", profileId);
@@ -63,11 +65,42 @@ export async function readJsonFile(filePath) {
   }
 }
 
+export async function renameAtomicFileWithRetry(
+  sourcePath,
+  destinationPath,
+  {
+    rename = fs.rename,
+    delay = sleep,
+    maximumAttempts = 6,
+    initialDelayMs = 25
+  } = {}
+) {
+  let latestError;
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    try {
+      await rename(sourcePath, destinationPath);
+      return { attempts: attempt };
+    } catch (error) {
+      latestError = error;
+      const retryable =
+        transientAtomicRenameCodes.has(error?.code) && attempt < maximumAttempts;
+      if (!retryable) throw error;
+      await delay(Math.min(initialDelayMs * (2 ** (attempt - 1)), 400));
+    }
+  }
+  throw latestError;
+}
+
 export async function writeJsonAtomic(filePath, value) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await fs.rename(temporary, filePath);
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await renameAtomicFileWithRetry(temporary, filePath);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export function isPidAlive(pid) {

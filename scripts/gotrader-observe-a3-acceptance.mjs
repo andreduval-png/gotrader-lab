@@ -6,6 +6,10 @@ import {
   canonicalHash,
   currentLiveVerificationAuthority
 } from "./gotrader-current-live-time-verification-core.mjs";
+import {
+  eventsAfterAcceptanceBaseline,
+  resolveAcceptanceBaselineSequence
+} from "./gotrader-a3-acceptance-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 
 const args = process.argv.slice(2);
@@ -71,6 +75,7 @@ const startedAt = new Date().toISOString();
 const startMs = Date.now();
 let stopping = false;
 let afterSequence = 0;
+let baselineSequence;
 let totalSamples = 0;
 let freshProofSamples = 0;
 let transportFailures = 0;
@@ -137,6 +142,11 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     Number(lastVerifier?.verificationRenewalCount ?? 0) -
       Number(firstVerifier?.verificationRenewalCount ?? 0)
   );
+  const verificationFailureCount = Math.max(
+    0,
+    Number(lastVerifier?.verificationFailureCount ?? 0) -
+      Number(firstVerifier?.verificationFailureCount ?? 0)
+  );
   const feedRestartCount = Number(
     (await readJsonFile(supervisorFile))?.services?.find?.(
       (service) => service.serviceId === "market_data_feed"
@@ -174,7 +184,12 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     noDuplicateCloses: duplicateCloseCount === 0,
     noDuplicateContextArtifacts: duplicateContextCount === 0,
     noPayloadConflicts: payloadConflictCount === 0,
-    noLedgerGaps: ledgerGapCount === 0
+    noLedgerGaps: ledgerGapCount === 0,
+    proofFreshnessMaintained:
+      totalSamples > 0 && freshProofSamples === totalSamples,
+    noVerificationFailures: verificationFailureCount === 0,
+    noObserverTransportFailures: transportFailures === 0,
+    noVerificationBlockersObserved: blockers.size === 0
   };
   const acceptancePassed = Object.values(acceptanceChecks).every(Boolean);
   const core = {
@@ -206,9 +221,7 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     verifierRestartCount,
     proofRenewalCount,
     proofUptimePercentage,
-    verificationFailureCount: Number(
-      lastVerifier?.verificationFailureCount ?? 0
-    ),
+    verificationFailureCount,
     transportFailures,
     maximumQueueDepth,
     maximumFeedMemoryBytes,
@@ -276,7 +289,18 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
       maximumQueueDepth,
       Number(schedulerStatus.queueDepth ?? 0)
     );
-    for (const event of events.events ?? []) {
+    const receivedEvents = events.events ?? [];
+    if (baselineSequence === undefined) {
+      baselineSequence = resolveAcceptanceBaselineSequence({
+        feedLastSequence: feedStatus.lastSequence,
+        events: receivedEvents
+      });
+      afterSequence = baselineSequence;
+    }
+    for (const event of eventsAfterAcceptanceBaseline({
+      events: receivedEvents,
+      baselineSequence
+    })) {
       afterSequence = Math.max(afterSequence, Number(event.sequence ?? 0));
       if (
         event.type === "candle_closed" &&

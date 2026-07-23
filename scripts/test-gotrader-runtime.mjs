@@ -31,6 +31,7 @@ import {
   inspectServicePortOwnership,
   readJsonFile,
   releaseRuntimeLock,
+  renameAtomicFileWithRetry,
   rotateRuntimeLog,
   sleep,
   startManagedService,
@@ -308,6 +309,43 @@ await test("runtime logs redact secrets and retain no raw market arrays", async 
   await rotateRuntimeLog(rotationFile, { maximumBytes: 8, retainedFiles: 2 });
   assert.equal(await fs.readFile(`${rotationFile}.1`, "utf8"), "0123456789abcdef");
   await fs.rm(temporary, { recursive: true, force: true });
+});
+
+await test("atomic status replacement retries transient Windows file locks only", async () => {
+  const delays = [];
+  let attempts = 0;
+  const recovered = await renameAtomicFileWithRetry("source", "destination", {
+    rename: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const error = new Error("OneDrive temporarily locked the destination.");
+        error.code = "EPERM";
+        throw error;
+      }
+    },
+    delay: async (milliseconds) => {
+      delays.push(milliseconds);
+    }
+  });
+  assert.deepEqual(recovered, { attempts: 3 });
+  assert.deepEqual(delays, [25, 50]);
+
+  let permanentAttempts = 0;
+  await assert.rejects(
+    renameAtomicFileWithRetry("source", "destination", {
+      rename: async () => {
+        permanentAttempts += 1;
+        const error = new Error("Invalid destination.");
+        error.code = "EINVAL";
+        throw error;
+      },
+      delay: async () => {
+        throw new Error("Permanent failures must not be delayed or retried.");
+      }
+    }),
+    { code: "EINVAL" }
+  );
+  assert.equal(permanentAttempts, 1);
 });
 
 await test("worktree-scoped lock is atomic and stale locks recover safely", async () => {

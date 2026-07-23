@@ -15,9 +15,37 @@ import {
   buildSchedulerTaskRegistry,
   createAutonomousSchedulerEngine
 } from "./gotrader-autonomous-scheduler-core.mjs";
+import {
+  eventsAfterAcceptanceBaseline,
+  resolveAcceptanceBaselineSequence
+} from "./gotrader-a3-acceptance-core.mjs";
 
 const baseEpoch = Date.parse("2026-07-23T14:00:00.000Z");
 const at = (seconds) => new Date(baseEpoch + seconds * 1_000).toISOString();
+
+const observerFixtureEvents = [
+  { eventId: "before", sequence: 9 },
+  { eventId: "at-baseline", sequence: 10 },
+  { eventId: "after-status-snapshot", sequence: 11 }
+];
+const observerBaseline = resolveAcceptanceBaselineSequence({
+  feedLastSequence: 10,
+  events: observerFixtureEvents
+});
+assert.equal(observerBaseline, 10);
+assert.deepEqual(
+  eventsAfterAcceptanceBaseline({
+    events: observerFixtureEvents,
+    baselineSequence: observerBaseline
+  }).map((event) => event.eventId),
+  ["after-status-snapshot"]
+);
+assert.equal(
+  resolveAcceptanceBaselineSequence({
+    events: observerFixtureEvents.slice(0, 2)
+  }),
+  10
+);
 
 const directProbe = (sequence, generatedAtSeconds) => ({
   status: "complete",
@@ -305,6 +333,7 @@ console.log(
       proofExpiryBlockedClose: true,
       retroactiveCloseSuppressed: true,
       recoveryRebaselined: true,
+      acceptanceObserverBaselinesExistingLedger: true,
       verifiedCloseCount: 2,
       contextCycleCount: contextCycles.length,
       duplicateCloseCount: 0,
