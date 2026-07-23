@@ -175,6 +175,16 @@ assert.ok(bullishDisplacement.derivation.inputFactIds.length >= 1);
 assert.equal(bullishDisplacement.observedMarketTime, "2026-07-13T04:35:00.000Z");
 assert.equal(bullishGap.payload.state, "inverted");
 assert.equal(bullishGap.payload.inversionTime, "2026-07-13T04:55:00.000Z");
+assert.equal(bullishGap.payload.inversionBarsAfterConfirmation, 4);
+assert.equal(bullishGap.payload.preInversionUsage, "used");
+assert.deepEqual(
+  bullishGap.payload.lifecycleTransitions.map((transition) => transition.state),
+  ["fresh", "touched", "partially_filled", "filled", "inverted"]
+);
+assert.deepEqual(
+  bullishGap.payload.lifecycleTransitions.map((transition) => transition.barsAfterConfirmation),
+  [0, 1, 2, 3, 4]
+);
 assert.deepEqual(bullishGap.derivation.inputFactIds, [bullishDisplacement.factId]);
 assert.equal(bearishGap.payload.state, "fresh");
 assert.equal(gaps.some((fact) => fact.payload.gapType === "ifvg"), false);

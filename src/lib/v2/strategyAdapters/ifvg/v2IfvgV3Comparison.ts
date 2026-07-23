@@ -2,6 +2,7 @@ import { assertV2Authority, V2_AUTHORITY_NONE } from "../../authority/v2Authorit
 import { canonicalHash } from "../../serialization/canonicalSerialization";
 import {
   V2_IFVG_V3_COMPARISON_SCHEMA_VERSION,
+  V2_IFVG_V3_MAX_INVERSION_BARS,
   V2_IFVG_V3_PROFILE_ID,
   type LegacyIfvgV3DetectionObservation,
   type V2IfvgV3AdapterResult,
@@ -12,7 +13,10 @@ import {
 } from "./v2IfvgV3Types";
 
 const detected = (artifacts: readonly Readonly<V2IfvgV3DetectionArtifact>[]) =>
-  artifacts.filter((artifact) => artifact.detectionFlowState === "inversion_confirmed");
+  artifacts.filter((artifact) =>
+    artifact.artifactState === "detected" &&
+    artifact.detectionFlowState === "inversion_confirmed"
+  );
 
 const uniqueSorted = (values: readonly string[]) =>
   Object.freeze([...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right)));
@@ -46,19 +50,18 @@ const compareCandidate = (
     legacy.ifvgReference?.inversionTime === v2.ifvgReference?.inversionTime
       ? undefined
       : "inversion_time_mismatch",
+    legacy.ifvgReference?.inversionBarsAfterConfirmation === v2.ifvgReference?.inversionBarsAfterConfirmation
+      ? undefined
+      : "inversion_horizon_mismatch",
+    legacy.fvgReference.preInversionUsage === v2.fvgReference.preInversionUsage
+      ? undefined
+      : "pre_inversion_usage_mismatch",
     legacy.detectionFlowState === v2.detectionFlowState ? undefined : "detection_flow_state_mismatch",
     JSON.stringify(legacy.blockerIds) === JSON.stringify(v2.blockerIds)
       ? undefined
       : "detection_blocker_mismatch"
   ].filter((item): item is string => Boolean(item));
-  const hasMissingFreshness = v2.limitationIds.includes("pre_inversion_usage_history_unavailable");
-  const outcome: V2IfvgV3ParityOutcome = differences.length > 0
-    ? hasMissingFreshness && differences.every((difference) => difference === "detection_blocker_mismatch")
-      ? "insufficient_comparison_data"
-      : "regression"
-    : hasMissingFreshness
-      ? "insufficient_comparison_data"
-      : "exact_parity";
+  const outcome: V2IfvgV3ParityOutcome = differences.length > 0 ? "regression" : "exact_parity";
   return Object.freeze({
     normalizedCandidateId: candidateId,
     outcome,
@@ -70,7 +73,7 @@ const compareCandidate = (
 
 const overallOutcome = (
   comparisons: readonly Readonly<V2IfvgV3CandidateComparison>[],
-  limitations: readonly string[],
+  detectionBlockingLimitations: readonly string[],
   metadataDifferences: readonly string[]
 ): V2IfvgV3ParityOutcome => {
   if (metadataDifferences.length > 0) return "regression";
@@ -78,7 +81,7 @@ const overallOutcome = (
   if (comparisons.some((comparison) => comparison.outcome === "legacy_only")) return "legacy_only";
   if (comparisons.some((comparison) => comparison.outcome === "v2_only")) return "v2_only";
   if (
-    limitations.length > 0 ||
+    detectionBlockingLimitations.length > 0 ||
     comparisons.some((comparison) => comparison.outcome === "insufficient_comparison_data")
   ) return "insufficient_comparison_data";
   if (comparisons.some((comparison) => comparison.outcome === "acceptable_normalized_variance")) {
@@ -107,23 +110,58 @@ export const compareLegacyAndV2IfvgV3Detection = async ({
     ...legacyDetected.map((artifact) => artifact.normalizedCandidateId),
     ...v2Detected.map((artifact) => artifact.normalizedCandidateId)
   ]);
-  const candidateComparisons = Object.freeze(candidateIds.map((candidateId) =>
+  const rawCandidateComparisons = candidateIds.map((candidateId) =>
     compareCandidate(
       candidateId,
       legacyDetected.find((artifact) => artifact.normalizedCandidateId === candidateId),
       v2Detected.find((artifact) => artifact.normalizedCandidateId === candidateId)
     )
+  );
+  const legacyCandidatesMatched = legacyDetected.every((legacyArtifact) =>
+    rawCandidateComparisons.some((comparison) =>
+      comparison.normalizedCandidateId === legacyArtifact.normalizedCandidateId &&
+      comparison.outcome === "exact_parity"
+    )
+  );
+  const v2OnlyCandidatesAreDetectionValid = rawCandidateComparisons
+    .filter((comparison) => comparison.outcome === "v2_only")
+    .every((comparison) => {
+      const artifact = v2Detected.find((candidate) =>
+        candidate.normalizedCandidateId === comparison.normalizedCandidateId
+      );
+      return artifact?.fvgReference.preInversionUsage === "unused" &&
+        artifact.ifvgReference?.inversionBarsAfterConfirmation !== undefined &&
+        artifact.ifvgReference.inversionBarsAfterConfirmation <= V2_IFVG_V3_MAX_INVERSION_BARS;
+    });
+  const normalizeSingleLegacyOutput = legacyDetected.length === 1 &&
+    v2Detected.length > legacyDetected.length &&
+    legacyCandidatesMatched &&
+    v2OnlyCandidatesAreDetectionValid;
+  const candidateComparisons = Object.freeze(rawCandidateComparisons.map((comparison) =>
+    normalizeSingleLegacyOutput && comparison.outcome === "v2_only"
+      ? Object.freeze({
+          ...comparison,
+          outcome: "acceptable_normalized_variance" as const,
+          differences: Object.freeze(["legacy_single_ranked_candidate_vs_v2_detection_set"])
+        })
+      : comparison
   ));
   const limitations = uniqueSorted([
     ...legacy.diagnostics.limitations,
     ...v2.diagnostics.limitations,
     ...v2Detected.flatMap((artifact) => artifact.limitationIds)
   ]);
+  const detectionBlockingLimitations = limitations.filter((limitation) =>
+    limitation !== "fresh_retest_history_deferred_to_phase_3b"
+  );
+  const documentedVariances = uniqueSorted([
+    ...(normalizeSingleLegacyOutput ? ["legacy_single_ranked_candidate_vs_v2_detection_set"] : [])
+  ]);
   const differences = uniqueSorted([
     ...metadataDifferences,
     ...candidateComparisons.flatMap((comparison) => comparison.differences)
   ]);
-  const outcome = overallOutcome(candidateComparisons, limitations, metadataDifferences);
+  const outcome = overallOutcome(candidateComparisons, detectionBlockingLimitations, metadataDifferences);
   const reportCore: Omit<V2IfvgV3ComparisonReport, "reportId"> = {
     schemaVersion: V2_IFVG_V3_COMPARISON_SCHEMA_VERSION,
     profileId: V2_IFVG_V3_PROFILE_ID,
@@ -134,6 +172,7 @@ export const compareLegacyAndV2IfvgV3Detection = async ({
     v2DetectedCount: v2Detected.length,
     candidateComparisons,
     differences,
+    documentedVariances,
     limitations,
     detectionParityAchieved: outcome === "exact_parity" || outcome === "acceptable_normalized_variance",
     fullStrategyParityClaimed: false as const,

@@ -67,6 +67,13 @@ export const buildLegacyIfvgV3DetectionObservation = async ({
   }
 
   const inversionTime = addTimeframeDuration(candidate.inversionCandle.timestamp, timeframe);
+  const inversionBarsAfterConfirmation = Math.max(
+    0,
+    candidate.inversionCandle.candleIndex - candidate.originalFvgCandle.candleIndex
+  );
+  const preInversionUsage = candidate.missingConditions.includes("unused_ifvg_zone")
+    ? "used" as const
+    : "unused" as const;
   const direction = candidate.side === "short" ? "short" as const : "long" as const;
   const semanticIdentityHash = await buildV2IfvgV3FvgSemanticIdentity({
     confirmationCandleTime,
@@ -116,10 +123,24 @@ export const buildLegacyIfvgV3DetectionObservation = async ({
       semanticIdentityHash,
       originalDirection: candidate.originalFvgDirection,
       confirmationCandleTime,
-      lifecycleState: "inverted"
+      lifecycleState: "inverted",
+      lifecycleTransitions: Object.freeze([
+        Object.freeze({
+          state: "fresh",
+          candleTime: confirmationCandleTime,
+          barsAfterConfirmation: 0
+        }),
+        Object.freeze({
+          state: "inverted",
+          candleTime: inversionTime,
+          barsAfterConfirmation: inversionBarsAfterConfirmation
+        })
+      ]),
+      preInversionUsage
     }),
     ifvgReference: Object.freeze({
       inversionTime,
+      inversionBarsAfterConfirmation,
       derivedFromLifecycleState: "inverted"
     }),
     liquidityFactIds: Object.freeze([]),

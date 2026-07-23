@@ -12,7 +12,7 @@ export const V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION = "gotrader-v2-opening
 export const V2_CONTEXT_DEALING_RANGE_FACT_POLICY_VERSION = "gotrader-v2-session-dealing-range-facts-v1";
 export const V2_CONTEXT_LIQUIDITY_FACT_POLICY_VERSION = "gotrader-v2-session-liquidity-facts-v1";
 export const V2_CONTEXT_DISPLACEMENT_FACT_POLICY_VERSION = "gotrader-v2-displacement-facts-v1";
-export const V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION = "gotrader-v2-fair-value-gap-facts-v1";
+export const V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION = "gotrader-v2-fair-value-gap-facts-v2";
 export const V2_CONTEXT_HIGHER_TIMEFRAME_BIAS_FACT_POLICY_VERSION = "gotrader-v2-higher-timeframe-bias-facts-v1";
 
 export type V2ContextPurpose = "current_live_shadow" | "deterministic_fixture";
@@ -139,6 +139,20 @@ export interface V2DisplacementFactPayload {
   policyVersion: string;
 }
 
+export type V2FairValueGapLifecycleState =
+  | "fresh"
+  | "touched"
+  | "partially_filled"
+  | "filled"
+  | "inverted"
+  | "invalidated";
+
+export interface V2FairValueGapLifecycleTransition {
+  state: V2FairValueGapLifecycleState;
+  candleTime: string;
+  barsAfterConfirmation: number;
+}
+
 export interface V2FairValueGapFactPayload {
   direction: "bullish" | "bearish";
   gapType: "fvg" | "ifvg";
@@ -147,9 +161,12 @@ export interface V2FairValueGapFactPayload {
   midpoint: number;
   formedAt: string;
   confirmationCandleTime: string;
-  state: "fresh" | "touched" | "partially_filled" | "filled" | "inverted" | "invalidated";
+  state: V2FairValueGapLifecycleState;
+  lifecycleTransitions?: readonly Readonly<V2FairValueGapLifecycleTransition>[];
+  preInversionUsage?: "unused" | "used" | "unknown" | "not_applicable";
   originalFvgFactId?: string;
   inversionTime?: string;
+  inversionBarsAfterConfirmation?: number;
   policyId: string;
   policyVersion: string;
 }

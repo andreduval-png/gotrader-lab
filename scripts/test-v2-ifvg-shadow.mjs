@@ -172,7 +172,10 @@ const runLegacy = async ({ candles, contextCandles, contextArtifactId, fingerpri
 };
 
 const detectedArtifacts = (result) =>
-  result.artifacts.filter((artifact) => artifact.detectionFlowState === "inversion_confirmed");
+  result.artifacts.filter((artifact) =>
+    artifact.artifactState === "detected" &&
+    artifact.detectionFlowState === "inversion_confirmed"
+  );
 
 const compactSafety = (value, label) => {
   const serialized = JSON.stringify(value);
@@ -199,8 +202,12 @@ const longV2 = await adapter.detectV2IfvgV3Shadow(longContext);
 const longDetected = detectedArtifacts(longV2);
 assert.ok(longDetected.some((artifact) => artifact.direction === "long"), "V2 must detect the bullish IFVG direction");
 assert.ok(longDetected.every((artifact) => artifact.causalClosedCandleTime === artifact.ifvgReference.inversionTime));
-assert.equal(longV2.diagnostics.status, "insufficient_data");
-assert.ok(longV2.diagnostics.limitations.includes("pre_inversion_usage_history_unavailable"));
+assert.equal(longV2.diagnostics.status, "eligible");
+assert.ok(longDetected.every((artifact) => artifact.fvgReference.preInversionUsage === "unused"));
+assert.ok(longDetected.every((artifact) =>
+  artifact.ifvgReference.inversionBarsAfterConfirmation <= 36
+));
+assert.ok(longDetected.every((artifact) => artifact.fvgReference.lifecycleTransitions.length >= 2));
 const longComparison = await comparator.compareLegacyAndV2IfvgV3Detection({
   legacy: longLegacy.observation,
   v2: longV2
@@ -226,10 +233,11 @@ if (process.argv.includes("--diagnostic")) {
 }
 assert.equal(
   longComparison.outcome,
-  "v2_only",
-  "full context must expose the selected-candidate ambiguity instead of hiding the extra inversion"
+  "acceptable_normalized_variance",
+  "the full V2 detection set may document the legacy public API's single post-ranked output"
 );
-assert.equal(longComparison.detectionParityAchieved, false);
+assert.ok(longComparison.documentedVariances.includes("legacy_single_ranked_candidate_vs_v2_detection_set"));
+assert.equal(longComparison.detectionParityAchieved, true);
 assert.equal(longComparison.fullStrategyParityClaimed, false);
 
 const shortCandles = mirrorCandles(longCandles);
@@ -283,9 +291,10 @@ const focusedComparison = await comparator.compareLegacyAndV2IfvgV3Detection({
 });
 assert.equal(
   focusedComparison.outcome,
-  "insufficient_comparison_data",
-  "matching inversion identity must remain blocked until pre-inversion use history is available"
+  "exact_parity",
+  "matching inversion identity must prove the legacy horizon and unused-zone rule"
 );
+assert.equal(focusedComparison.detectionParityAchieved, true);
 
 const lifecycleContext = (state, extras = {}) => Object.freeze({
   ...focusedContext,
@@ -317,6 +326,70 @@ const stale = await adapter.detectV2IfvgV3Shadow(lifecycleContext("inverted", {
 }));
 assert.ok(stale.artifacts.some((artifact) => artifact.artifactState === "expired"));
 
+const reusedContext = Object.freeze({
+  ...focusedContext,
+  facts: Object.freeze(focusedContext.facts.map((fact) =>
+    fact.kind === "fair_value_gap"
+      ? Object.freeze({
+          ...fact,
+          payload: Object.freeze({
+            ...fact.payload,
+            preInversionUsage: "used",
+            lifecycleTransitions: Object.freeze([
+              Object.freeze({
+                state: "fresh",
+                candleTime: fact.payload.confirmationCandleTime,
+                barsAfterConfirmation: 0
+              }),
+              Object.freeze({
+                state: "touched",
+                candleTime: iso(68),
+                barsAfterConfirmation: 1
+              }),
+              Object.freeze({
+                state: "inverted",
+                candleTime: fact.payload.inversionTime,
+                barsAfterConfirmation: fact.payload.inversionBarsAfterConfirmation
+              })
+            ])
+          })
+        })
+      : fact
+  ))
+});
+const reused = await adapter.detectV2IfvgV3Shadow(reusedContext);
+assert.equal(detectedArtifacts(reused).length, 0);
+assert.ok(reused.artifacts.some((artifact) =>
+  artifact.detectionFlowState === "inversion_rejected_reused" &&
+  artifact.blockerIds.includes("ifvg_zone_used_before_inversion")
+));
+
+const outsideHorizonContext = Object.freeze({
+  ...focusedContext,
+  facts: Object.freeze(focusedContext.facts.map((fact) =>
+    fact.kind === "fair_value_gap"
+      ? Object.freeze({
+          ...fact,
+          payload: Object.freeze({
+            ...fact.payload,
+            inversionBarsAfterConfirmation: 37,
+            lifecycleTransitions: Object.freeze((fact.payload.lifecycleTransitions ?? []).map((transition) =>
+              transition.state === "inverted"
+                ? Object.freeze({ ...transition, barsAfterConfirmation: 37 })
+                : transition
+            ))
+          })
+        })
+      : fact
+  ))
+});
+const outsideHorizon = await adapter.detectV2IfvgV3Shadow(outsideHorizonContext);
+assert.equal(detectedArtifacts(outsideHorizon).length, 0);
+assert.ok(outsideHorizon.artifacts.some((artifact) =>
+  artifact.detectionFlowState === "inversion_outside_horizon" &&
+  artifact.blockerIds.includes("inversion_outside_legacy_36_bar_horizon")
+));
+
 const blockedContext = Object.freeze({
   ...focusedContext,
   diagnostics: Object.freeze({ ...focusedContext.diagnostics, status: "blocked", blockers: ["fixture_context_blocked"] })
@@ -336,6 +409,28 @@ const mock = await adapter.detectV2IfvgV3Shadow(mockContext);
 assert.equal(mock.diagnostics.status, "blocked");
 assert.ok(mock.diagnostics.blockers.includes("mock_sample_source_not_eligible"));
 
+const missingLineageContext = Object.freeze({
+  ...focusedContext,
+  facts: Object.freeze(focusedContext.facts.map((fact) => {
+    if (fact.kind !== "fair_value_gap") return fact;
+    const {
+      lifecycleTransitions: _lifecycleTransitions,
+      preInversionUsage: _preInversionUsage,
+      ...payloadWithoutLineage
+    } = fact.payload;
+    return Object.freeze({
+      ...fact,
+      payload: Object.freeze(payloadWithoutLineage)
+    });
+  }))
+});
+const missingLineage = await adapter.detectV2IfvgV3Shadow(missingLineageContext);
+assert.equal(missingLineage.diagnostics.status, "insufficient_data");
+assert.equal(detectedArtifacts(missingLineage).length, 0);
+assert.ok(missingLineage.artifacts.some((artifact) =>
+  artifact.blockerIds.includes("pre_inversion_usage_history_unavailable")
+));
+
 const reordered = await adapter.detectV2IfvgV3Shadow(Object.freeze({
   ...longContext,
   facts: Object.freeze([...longContext.facts].reverse())
@@ -353,7 +448,7 @@ const ambiguousContext = Object.freeze({
 });
 const ambiguous = await adapter.detectV2IfvgV3Shadow(ambiguousContext);
 assert.equal(ambiguous.diagnostics.status, "insufficient_data");
-assert.ok(ambiguous.diagnostics.limitations.includes("multiple_inverted_fvg_selection_requires_legacy_geometry"));
+assert.ok(ambiguous.diagnostics.limitations.includes("duplicate_inverted_fvg_identity"));
 
 const mismatchedLegacy = Object.freeze({
   ...longLegacy.observation,
@@ -365,6 +460,54 @@ const mismatch = await comparator.compareLegacyAndV2IfvgV3Detection({
 });
 assert.equal(mismatch.outcome, "regression");
 assert.ok(mismatch.differences.includes("source_fingerprint_mismatch"));
+
+const unexplainedExtra = Object.freeze({
+  ...longV2,
+  artifacts: Object.freeze(longV2.artifacts.map((artifact, index) =>
+    index === 1
+      ? Object.freeze({
+          ...artifact,
+          fvgReference: Object.freeze({
+            ...artifact.fvgReference,
+            preInversionUsage: "unknown"
+          })
+        })
+      : artifact
+  ))
+});
+const unexplainedExtraComparison = await comparator.compareLegacyAndV2IfvgV3Detection({
+  legacy: longLegacy.observation,
+  v2: unexplainedExtra
+});
+assert.equal(
+  unexplainedExtraComparison.outcome,
+  "v2_only",
+  "an extra candidate without proved detection lineage must remain a blocking variance"
+);
+
+const lateExtra = Object.freeze({
+  ...longV2,
+  artifacts: Object.freeze(longV2.artifacts.map((artifact, index) =>
+    index === 1
+      ? Object.freeze({
+          ...artifact,
+          ifvgReference: Object.freeze({
+            ...artifact.ifvgReference,
+            inversionBarsAfterConfirmation: 37
+          })
+        })
+      : artifact
+  ))
+});
+const lateExtraComparison = await comparator.compareLegacyAndV2IfvgV3Detection({
+  legacy: longLegacy.observation,
+  v2: lateExtra
+});
+assert.equal(
+  lateExtraComparison.outcome,
+  "v2_only",
+  "the comparator must not normalize an extra candidate outside the legacy inversion horizon"
+);
 
 compactSafety(longV2, "V2 IFVG shadow result");
 compactSafety(longComparison, "V2 IFVG comparison report");
@@ -411,10 +554,19 @@ const output = {
   noIfvgParity: emptyComparison.outcome,
   positiveCanaryOutcome: longComparison.outcome,
   focusedCandidateOutcome: focusedComparison.outcome,
-  positiveCanaryLimitations: [
-    "multiple_inverted_fvg_selection_requires_legacy_geometry",
-    "pre_inversion_usage_history_unavailable"
-  ],
+  documentedVariances: longComparison.documentedVariances,
+  lifecycleLineageAvailable: longDetected.every((artifact) =>
+    artifact.fvgReference.lifecycleTransitions.length >= 2
+  ),
+  reusedZoneRejected: reused.artifacts.some((artifact) =>
+    artifact.detectionFlowState === "inversion_rejected_reused"
+  ),
+  outsideHorizonRejected: outsideHorizon.artifacts.some((artifact) =>
+    artifact.detectionFlowState === "inversion_outside_horizon"
+  ),
+  missingLineageBlocked: missingLineage.diagnostics.status === "insufficient_data",
+  unexplainedExtraBlocked: unexplainedExtraComparison.outcome === "v2_only",
+  lateExtraBlocked: lateExtraComparison.outcome === "v2_only",
   detectionParityAchieved: longComparison.detectionParityAchieved,
   fullStrategyParityClaimed: false,
   negativeControlPreserved: true,

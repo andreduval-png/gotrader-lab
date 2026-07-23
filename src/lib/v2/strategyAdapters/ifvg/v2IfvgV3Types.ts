@@ -4,14 +4,17 @@ import type { V2StrategyAdapterResult } from "../v2StrategyAdapter";
 export const V2_IFVG_V3_PROFILE_ID = "ifvg_fresh_retest_v3_research";
 export const V2_IFVG_V3_STRATEGY_ID = "ifvg_v1";
 export const V2_IFVG_V3_ADAPTER_ID = "gotrader-v2-ifvg-v3-shadow-adapter";
-export const V2_IFVG_V3_ADAPTER_VERSION = "phase-3a-detection-v1";
-export const V2_IFVG_V3_INPUT_CONTRACT_VERSION = "canonical-market-state-v1";
-export const V2_IFVG_V3_ARTIFACT_SCHEMA_VERSION = "gotrader-v2-ifvg-shadow-artifact-v1";
-export const V2_IFVG_V3_COMPARISON_SCHEMA_VERSION = "gotrader-v2-ifvg-shadow-comparison-v1";
+export const V2_IFVG_V3_ADAPTER_VERSION = "phase-3a1-detection-v2";
+export const V2_IFVG_V3_INPUT_CONTRACT_VERSION = "canonical-market-state-v2";
+export const V2_IFVG_V3_ARTIFACT_SCHEMA_VERSION = "gotrader-v2-ifvg-shadow-artifact-v2";
+export const V2_IFVG_V3_COMPARISON_SCHEMA_VERSION = "gotrader-v2-ifvg-shadow-comparison-v2";
+export const V2_IFVG_V3_MAX_INVERSION_BARS = 36;
 
 export type V2IfvgV3ArtifactState = "detected" | "rejected" | "blocked" | "expired";
 export type V2IfvgV3DetectionFlowState =
   | "inversion_confirmed"
+  | "inversion_rejected_reused"
+  | "inversion_outside_horizon"
   | "awaiting_inversion"
   | "invalidated"
   | "expired"
@@ -31,11 +34,18 @@ export interface V2IfvgV3FvgReference {
   originalDirection: "bullish" | "bearish";
   confirmationCandleTime: string;
   lifecycleState: string;
+  lifecycleTransitions: readonly Readonly<{
+    state: string;
+    candleTime: string;
+    barsAfterConfirmation: number;
+  }>[];
+  preInversionUsage: "unused" | "used" | "unknown" | "not_applicable";
 }
 
 export interface V2IfvgV3InversionReference {
   originalFvgFactId?: string;
   inversionTime: string;
+  inversionBarsAfterConfirmation?: number;
   derivedFromLifecycleState: "inverted";
 }
 
@@ -111,6 +121,7 @@ export interface V2IfvgV3ComparisonReport {
   v2DetectedCount: number;
   candidateComparisons: readonly Readonly<V2IfvgV3CandidateComparison>[];
   differences: readonly string[];
+  documentedVariances: readonly string[];
   limitations: readonly string[];
   detectionParityAchieved: boolean;
   fullStrategyParityClaimed: false;

@@ -9,6 +9,8 @@ import {
   type V2DisplacementFactPayload,
   type V2FactEnvelope,
   type V2FairValueGapFactPayload,
+  type V2FairValueGapLifecycleState,
+  type V2FairValueGapLifecycleTransition,
   type V2LiquidityPoolFactPayload,
   type V2LiquiditySweepFactPayload,
   type V2MarketFact
@@ -193,34 +195,71 @@ const lifecycleFor = (
   let rank = 0;
   let transitionCandle = candles[gap.confirmationIndex];
   let inversionTime: string | undefined;
-  const advance = (nextState: V2FairValueGapFactPayload["state"], nextRank: number, candle: Readonly<V2CanonicalCandle>) => {
+  let inversionBarsAfterConfirmation: number | undefined;
+  const lifecycleTransitions: Readonly<V2FairValueGapLifecycleTransition>[] = [
+    Object.freeze({
+      state: "fresh",
+      candleTime: transitionCandle.closeTime,
+      barsAfterConfirmation: 0
+    })
+  ];
+  const advance = (
+    nextState: V2FairValueGapLifecycleState,
+    nextRank: number,
+    candle: Readonly<V2CanonicalCandle>,
+    candleIndex: number
+  ) => {
     if (nextRank <= rank) return;
     state = nextState;
     rank = nextRank;
     transitionCandle = candle;
+    lifecycleTransitions.push(Object.freeze({
+      state: nextState,
+      candleTime: candle.closeTime,
+      barsAfterConfirmation: candleIndex - gap.confirmationIndex
+    }));
   };
-  for (const candle of candles.slice(gap.confirmationIndex + 1)) {
+  for (let candleIndex = gap.confirmationIndex + 1; candleIndex < candles.length; candleIndex += 1) {
+    const candle = candles[candleIndex];
     if (gap.direction === "bullish") {
       if (candle.close < gap.lowerBound) {
-        advance("inverted", 4, candle);
+        advance("inverted", 4, candle, candleIndex);
         inversionTime = candle.closeTime;
+        inversionBarsAfterConfirmation = candleIndex - gap.confirmationIndex;
         break;
       }
-      if (candle.low <= gap.lowerBound) advance("filled", 3, candle);
-      else if (candle.low < gap.upperBound) advance("partially_filled", 2, candle);
-      else if (candle.low === gap.upperBound) advance("touched", 1, candle);
+      if (candle.low <= gap.lowerBound) advance("filled", 3, candle, candleIndex);
+      else if (candle.low < gap.upperBound) advance("partially_filled", 2, candle, candleIndex);
+      else if (candle.low === gap.upperBound) advance("touched", 1, candle, candleIndex);
     } else {
       if (candle.close > gap.upperBound) {
-        advance("inverted", 4, candle);
+        advance("inverted", 4, candle, candleIndex);
         inversionTime = candle.closeTime;
+        inversionBarsAfterConfirmation = candleIndex - gap.confirmationIndex;
         break;
       }
-      if (candle.high >= gap.upperBound) advance("filled", 3, candle);
-      else if (candle.high > gap.lowerBound) advance("partially_filled", 2, candle);
-      else if (candle.high === gap.lowerBound) advance("touched", 1, candle);
+      if (candle.high >= gap.upperBound) advance("filled", 3, candle, candleIndex);
+      else if (candle.high > gap.lowerBound) advance("partially_filled", 2, candle, candleIndex);
+      else if (candle.high === gap.lowerBound) advance("touched", 1, candle, candleIndex);
     }
   }
-  return { state, transitionCandle, inversionTime };
+  const preInversionUsage = inversionTime
+    ? lifecycleTransitions.some((transition) =>
+        transition.state === "touched" ||
+        transition.state === "partially_filled" ||
+        transition.state === "filled"
+      )
+      ? "used" as const
+      : "unused" as const
+    : "not_applicable" as const;
+  return {
+    state,
+    transitionCandle,
+    lifecycleTransitions: Object.freeze(lifecycleTransitions),
+    preInversionUsage,
+    inversionTime,
+    inversionBarsAfterConfirmation
+  };
 };
 
 const buildFairValueGapFacts = async ({
@@ -251,7 +290,12 @@ const buildFairValueGapFacts = async ({
       formedAt: middle.closeTime,
       confirmationCandleTime: confirmation.closeTime,
       state: lifecycle.state,
+      lifecycleTransitions: lifecycle.lifecycleTransitions,
+      preInversionUsage: lifecycle.preInversionUsage,
       ...(lifecycle.inversionTime ? { inversionTime: lifecycle.inversionTime } : {}),
+      ...(lifecycle.inversionBarsAfterConfirmation !== undefined
+        ? { inversionBarsAfterConfirmation: lifecycle.inversionBarsAfterConfirmation }
+        : {}),
       policyId: V2_FAIR_VALUE_GAP_FACT_ENGINE_ID,
       policyVersion: V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION
     });

@@ -11,6 +11,7 @@ import {
   V2_IFVG_V3_ADAPTER_VERSION,
   V2_IFVG_V3_ARTIFACT_SCHEMA_VERSION,
   V2_IFVG_V3_INPUT_CONTRACT_VERSION,
+  V2_IFVG_V3_MAX_INVERSION_BARS,
   V2_IFVG_V3_PROFILE_ID,
   V2_IFVG_V3_STRATEGY_ID,
   type V2IfvgV3AdapterResult,
@@ -52,6 +53,16 @@ const artifactFor = async (
 ): Promise<Readonly<V2IfvgV3DetectionArtifact>> => {
   const lifecycle = fact.payload.state;
   const inverted = lifecycle === "inverted" && Boolean(fact.payload.inversionTime);
+  const inversionBars = fact.payload.inversionBarsAfterConfirmation;
+  const lifecycleKnown = Array.isArray(fact.payload.lifecycleTransitions) &&
+    fact.payload.preInversionUsage !== undefined;
+  const inversionWithinHorizon = inverted &&
+    inversionBars !== undefined &&
+    inversionBars <= V2_IFVG_V3_MAX_INVERSION_BARS;
+  const reusedBeforeInversion = inversionWithinHorizon && fact.payload.preInversionUsage === "used";
+  const acceptedInversion = inversionWithinHorizon &&
+    fact.payload.preInversionUsage === "unused" &&
+    lifecycleKnown;
   const expired = lifecycle === "invalidated" || (
     Boolean(fact.expiresAt) && Date.parse(fact.expiresAt as string) <= Date.parse(context.identity.asOfMarketTime)
   );
@@ -80,12 +91,23 @@ const artifactFor = async (
   const lineage = supportingLineage(context, fact);
   const factBlockers = [...fact.quality.blockers];
   const limitationIds = inverted
-    ? ["pre_inversion_usage_history_unavailable", "fresh_retest_history_deferred_to_phase_3b"]
+    ? [
+        lifecycleKnown ? undefined : "pre_inversion_usage_history_unavailable",
+        "fresh_retest_history_deferred_to_phase_3b"
+      ].filter((item): item is string => Boolean(item))
     : [];
   const blockerIds = expired
     ? uniqueSorted([...factBlockers, "ifvg_lifecycle_expired"])
-    : inverted
-      ? uniqueSorted(factBlockers)
+    : inverted && inversionBars === undefined
+      ? uniqueSorted([...factBlockers, "inversion_horizon_unavailable"])
+      : inverted && !inversionWithinHorizon
+        ? uniqueSorted([...factBlockers, "inversion_outside_legacy_36_bar_horizon"])
+        : reusedBeforeInversion
+          ? uniqueSorted([...factBlockers, "ifvg_zone_used_before_inversion"])
+          : inverted && !lifecycleKnown
+            ? uniqueSorted([...factBlockers, "pre_inversion_usage_history_unavailable"])
+            : acceptedInversion
+              ? uniqueSorted(factBlockers)
       : uniqueSorted([...factBlockers, "full_inversion_not_confirmed"]);
 
   return Object.freeze({
@@ -95,11 +117,23 @@ const artifactFor = async (
     strategyId: V2_IFVG_V3_STRATEGY_ID,
     profileId: V2_IFVG_V3_PROFILE_ID,
     adapterVersion: V2_IFVG_V3_ADAPTER_VERSION,
-    artifactState: expired ? "expired" : inverted ? "detected" : blockerIds.length > 1 ? "blocked" : "rejected",
+    artifactState: expired
+      ? "expired"
+      : acceptedInversion
+        ? "detected"
+        : inverted && !lifecycleKnown
+          ? "blocked"
+          : "rejected",
     detectionFlowState: expired
       ? lifecycle === "invalidated" ? "invalidated" : "expired"
-      : inverted
+      : acceptedInversion
         ? "inversion_confirmed"
+        : reusedBeforeInversion
+          ? "inversion_rejected_reused"
+          : inverted && inversionBars !== undefined && !inversionWithinHorizon
+            ? "inversion_outside_horizon"
+            : inverted && !lifecycleKnown
+              ? "insufficient_data"
         : "awaiting_inversion",
     direction,
     source: Object.freeze({
@@ -116,12 +150,21 @@ const artifactFor = async (
       semanticIdentityHash,
       originalDirection: fact.payload.direction,
       confirmationCandleTime: fact.payload.confirmationCandleTime,
-      lifecycleState: lifecycle
+      lifecycleState: lifecycle,
+      lifecycleTransitions: Object.freeze((fact.payload.lifecycleTransitions ?? []).map((transition) =>
+        Object.freeze({
+          state: transition.state,
+          candleTime: transition.candleTime,
+          barsAfterConfirmation: transition.barsAfterConfirmation
+        })
+      )),
+      preInversionUsage: fact.payload.preInversionUsage ?? "unknown"
     }),
     ...(inverted ? {
       ifvgReference: Object.freeze({
         originalFvgFactId: fact.factId,
         inversionTime,
+        ...(inversionBars !== undefined ? { inversionBarsAfterConfirmation: inversionBars } : {}),
         derivedFromLifecycleState: "inverted" as const
       })
     } : {}),
@@ -190,12 +233,23 @@ export const V2IfvgV3Adapter: V2StrategyAdapter<V2CanonicalMarketState, V2IfvgV3
     const artifacts = Object.freeze(await Promise.all(
       fvgFacts.map((fact: FvgFact) => artifactFor(context, fact))
     ));
-    const invertedArtifacts = artifacts.filter((artifact) => artifact.detectionFlowState === "inversion_confirmed");
-    const limitations = uniqueSorted(invertedArtifacts.flatMap((artifact) => artifact.limitationIds));
-    const multipleSelectionLimitation = invertedArtifacts.length > 1
-      ? ["multiple_inverted_fvg_selection_requires_legacy_geometry"]
-      : [];
-    const allLimitations = uniqueSorted([...limitations, ...multipleSelectionLimitation]);
+    const detectedArtifacts = artifacts.filter((artifact) =>
+      artifact.artifactState === "detected" &&
+      artifact.detectionFlowState === "inversion_confirmed"
+    );
+    const limitations = uniqueSorted(artifacts.flatMap((artifact) =>
+      artifact.limitationIds.filter((limitation) => limitation !== "fresh_retest_history_deferred_to_phase_3b")
+    ));
+    const duplicateCandidateIds = detectedArtifacts
+      .map((artifact) => artifact.normalizedCandidateId)
+      .filter((candidateId, index, values) => values.indexOf(candidateId) !== index);
+    const allLimitations = uniqueSorted([
+      ...limitations,
+      ...(duplicateCandidateIds.length ? ["duplicate_inverted_fvg_identity"] : [])
+    ]);
+    const warnings = detectedArtifacts.length > 1
+      ? Object.freeze(["legacy_public_detector_selects_single_post_ranked_candidate"])
+      : Object.freeze([] as string[]);
 
     return Object.freeze({
       strategyId: V2_IFVG_V3_STRATEGY_ID,
@@ -213,7 +267,7 @@ export const V2IfvgV3Adapter: V2StrategyAdapter<V2CanonicalMarketState, V2IfvgV3
             ? "insufficient_data"
             : "eligible",
         blockers: uniqueSorted(contextBlockers),
-        warnings: Object.freeze([]),
+        warnings,
         limitations: allLimitations
       }),
       shadowOnly: true,
