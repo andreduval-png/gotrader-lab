@@ -44,6 +44,7 @@
     "test:v2-mt5-terminal-clock": "node scripts/test-v2-mt5-terminal-clock.mjs",
     "test:v2-context-foundation": "node scripts/test-v2-context-foundation.mjs",
     "test:v2-session-opening-facts": "node scripts/test-v2-session-opening-facts.mjs",
+    "test:v2-dealing-range-liquidity-facts": "node scripts/test-v2-dealing-range-liquidity-facts.mjs",
     "test:v2-mt5-offset-regime": "node scripts/test-v2-mt5-offset-regime.mjs",
     "test:v2-mt5-offset-regime-collector": "node scripts/test-v2-mt5-offset-regime-collector.mjs",
     "collect:v2-mt5-offset-regime": "node scripts/collect-v2-mt5-offset-regime.mjs",

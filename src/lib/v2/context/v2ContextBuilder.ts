@@ -1,6 +1,7 @@
 import { V2_AUTHORITY_NONE } from "../authority/v2Authority";
 import { buildV2ContextInputIdentity } from "./v2ContextIdentity";
 import { evaluateV2ContextEligibility } from "./v2ContextEligibility";
+import { buildV2DealingRangeLiquidityFacts } from "./v2DealingRangeLiquidityFactEngine";
 import { buildV2SessionOpeningFacts } from "./v2SessionOpeningFactEngine";
 import {
   V2_CONTEXT_POLICY_VERSION,
@@ -28,11 +29,27 @@ export async function buildV2CanonicalMarketContext(
   };
   const identity = await buildV2ContextInputIdentity(normalizedRequest);
   const eligibility = evaluateV2ContextEligibility(normalizedRequest);
-  const factsResult = eligibility.status === "blocked"
+  const sessionOpeningResult = eligibility.status === "blocked"
     ? { facts: Object.freeze([]), warnings: Object.freeze([]), blockers: Object.freeze([]) }
     : await buildV2SessionOpeningFacts({ request: normalizedRequest, identity });
-  const blockers = Object.freeze([...new Set([...eligibility.blockers, ...factsResult.blockers])]);
-  const warnings = Object.freeze([...new Set([...eligibility.warnings, ...factsResult.warnings])]);
+  const rangeLiquidityResult = eligibility.status === "blocked" || sessionOpeningResult.blockers.length
+    ? { facts: Object.freeze([]), warnings: Object.freeze([]), blockers: Object.freeze([]) }
+    : await buildV2DealingRangeLiquidityFacts({
+        request: normalizedRequest,
+        identity,
+        sourceFacts: sessionOpeningResult.facts
+      });
+  const facts = Object.freeze([...sessionOpeningResult.facts, ...rangeLiquidityResult.facts]);
+  const blockers = Object.freeze([...new Set([
+    ...eligibility.blockers,
+    ...sessionOpeningResult.blockers,
+    ...rangeLiquidityResult.blockers
+  ])]);
+  const warnings = Object.freeze([...new Set([
+    ...eligibility.warnings,
+    ...sessionOpeningResult.warnings,
+    ...rangeLiquidityResult.warnings
+  ])]);
   const status = blockers.length ? "blocked" : warnings.length ? "degraded" : eligibility.status;
   const requestedFactFamilies = normalizedRequest.requestedFactFamilies ?? [];
   const diagnostics: Readonly<V2ContextDiagnostics> = Object.freeze({
@@ -50,12 +67,14 @@ export async function buildV2CanonicalMarketContext(
       ? "not_implemented_phase_2a0"
       : eligibility.status === "blocked"
         ? "blocked_by_context_eligibility"
-        : "session_opening_price_phase_2a3"
+        : requestedFactFamilies.some((family) => family === "dealing_range" || family === "liquidity")
+          ? "range_liquidity_phase_2a4"
+          : "session_opening_price_phase_2a3"
   });
   return Object.freeze({
     contextArtifactId: `v2-context:${identity.identityHash.replace(/^sha256:/, "")}`,
     identity,
-    facts: factsResult.facts,
+    facts,
     diagnostics,
     contextSchemaVersion: V2_CONTEXT_SCHEMA_VERSION,
     contextPolicyVersion: normalizedRequest.contextPolicyVersion ?? V2_CONTEXT_POLICY_VERSION,

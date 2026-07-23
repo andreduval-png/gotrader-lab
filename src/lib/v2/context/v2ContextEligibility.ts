@@ -31,11 +31,18 @@ export function evaluateV2ContextEligibility(
   if (request.brokerSymbol !== request.source.brokerSymbol) blockers.push("broker_symbol_identity_mismatch");
   if (request.source.marketDataAccess !== "read_only") blockers.push("read_only_source_required");
   if (!request.windows.length) blockers.push("context_windows_missing");
-  (request.requestedFactFamilies ?? []).forEach((family) => {
-    if (family !== "session" && family !== "opening_price") {
+  const requestedFactFamilies = new Set(request.requestedFactFamilies ?? []);
+  requestedFactFamilies.forEach((family) => {
+    if (family !== "session" && family !== "opening_price" && family !== "dealing_range" && family !== "liquidity") {
       unsupportedPolicyRequests.push(`unsupported_fact_family:${String(family)}`);
     }
   });
+  if (requestedFactFamilies.has("dealing_range") && !requestedFactFamilies.has("session")) {
+    unsupportedPolicyRequests.push("fact_family_dependency_missing:dealing_range:session");
+  }
+  if (requestedFactFamilies.has("liquidity") && !requestedFactFamilies.has("session")) {
+    unsupportedPolicyRequests.push("fact_family_dependency_missing:liquidity:session");
+  }
 
   const required = [...new Set(request.requiredTimeframes.map(normalizeV2Timeframe))];
   const seen = new Set<string>();

@@ -9,10 +9,12 @@ export const V2_CONTEXT_SESSION_CALENDAR_VERSION = "gotrader-v2-shadow-session-c
 export const V2_CONTEXT_STRATEGY_TIMEZONE = "America/New_York" as const;
 export const V2_CONTEXT_SESSION_FACT_POLICY_VERSION = "gotrader-v2-session-facts-v1";
 export const V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION = "gotrader-v2-opening-price-facts-v1";
+export const V2_CONTEXT_DEALING_RANGE_FACT_POLICY_VERSION = "gotrader-v2-session-dealing-range-facts-v1";
+export const V2_CONTEXT_LIQUIDITY_FACT_POLICY_VERSION = "gotrader-v2-session-liquidity-facts-v1";
 
 export type V2ContextPurpose = "current_live_shadow" | "deterministic_fixture";
 export type V2ContextStatus = "eligible" | "degraded" | "blocked";
-export type V2ContextFactFamily = "session" | "opening_price";
+export type V2ContextFactFamily = "session" | "opening_price" | "dealing_range" | "liquidity";
 export type V2MarketFactKind =
   | "session"
   | "opening_price"
@@ -108,7 +110,7 @@ export interface V2LiquiditySweepFactPayload {
   extremePrice: number;
   sweepCandleTime: string;
   closedBackInside: boolean;
-  displacementFollowThrough: boolean;
+  displacementFollowThrough?: boolean;
   confirmationState: "wick_through" | "confirmed" | "rejected";
 }
 
@@ -201,7 +203,8 @@ export interface V2ContextDiagnostics {
   factEngineStatus:
     | "not_implemented_phase_2a0"
     | "blocked_by_context_eligibility"
-    | "session_opening_price_phase_2a3";
+    | "session_opening_price_phase_2a3"
+    | "range_liquidity_phase_2a4";
 }
 
 export interface V2ContextEligibilityResult extends V2ContextDiagnostics {
