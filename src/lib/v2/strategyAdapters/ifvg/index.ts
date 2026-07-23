@@ -6,4 +6,8 @@ export * from "./v2IfvgV3GeometryTypes";
 export * from "./v2IfvgV3Identity";
 export * from "./v2IfvgV3LegacyGeometryObservation";
 export * from "./v2IfvgV3LegacyObservation";
+export * from "./v2IfvgV3LegacySelectionObservation";
+export * from "./v2IfvgV3SelectionAdapter";
+export * from "./v2IfvgV3SelectionComparison";
+export * from "./v2IfvgV3SelectionTypes";
 export * from "./v2IfvgV3Types";
