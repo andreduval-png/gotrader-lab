@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from typing import Any
 
 SCHEMA_ID = "gotrader-mt5-terminal-clock-observation"
 SCHEMA_VERSION = "1.0.0"
+PERSISTENT_SCHEMA_VERSION = "1.1.0"
+SUPPORTED_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION, PERSISTENT_SCHEMA_VERSION})
 CLASSIFICATION_VERSION = "1.0.0"
 MAX_OBSERVATION_BYTES = 64 * 1024
 DEFAULT_MAXIMUM_AGE_SECONDS = 120
@@ -46,6 +49,14 @@ ALLOWED_FIELDS = {
     "executionAuthority",
     "brokerAuthority",
     "readinessOverrideAuthority",
+    "probeVersion",
+    "probeMode",
+    "probeState",
+    "heartbeatIntervalSeconds",
+    "terminalConnected",
+    "terminalDataPathFingerprint",
+    "chartSymbol",
+    "chartTimeframe",
 }
 REQUIRED_NUMERIC_FIELDS = {
     "sequence",
@@ -75,6 +86,7 @@ SENSITIVE_TOKENS = {
     "apikey",
     "login",
 }
+PERSISTENT_PROBE_STATES = frozenset({"fresh", "disconnected", "stopped"})
 
 
 class TerminalClockObservationError(ValueError):
@@ -127,7 +139,8 @@ def validate_observation(payload: Any) -> dict[str, Any]:
     blockers.extend(f"terminal_observation_sensitive_field_forbidden:{path}" for path in _sensitive_paths(payload))
     if payload.get("schemaId") != SCHEMA_ID:
         blockers.append("terminal_observation_schema_invalid")
-    if payload.get("version") != SCHEMA_VERSION:
+    version = payload.get("version")
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
         blockers.append("terminal_observation_version_invalid")
     if not str(payload.get("observationId", "")).strip():
         blockers.append("terminal_observation_id_missing")
@@ -150,24 +163,61 @@ def validate_observation(payload: Any) -> dict[str, Any]:
         blockers.append("terminal_observation_authority_invalid")
     if any(payload.get(key) != "none" for key in AUTHORITY):
         blockers.append("terminal_observation_top_level_authority_invalid")
+    if version == PERSISTENT_SCHEMA_VERSION:
+        if payload.get("probeVersion") != PERSISTENT_SCHEMA_VERSION:
+            blockers.append("terminal_probe_version_invalid")
+        if payload.get("probeMode") != "persistent_ea":
+            blockers.append("terminal_probe_mode_invalid")
+        probe_state = payload.get("probeState")
+        if probe_state not in PERSISTENT_PROBE_STATES:
+            blockers.append("terminal_probe_state_invalid")
+        interval = payload.get("heartbeatIntervalSeconds")
+        if isinstance(interval, bool) or not isinstance(interval, int) or interval < 10 or interval > 60:
+            blockers.append("terminal_probe_interval_invalid")
+        if not isinstance(payload.get("terminalConnected"), bool):
+            blockers.append("terminal_connection_state_invalid")
+        elif not payload["terminalConnected"] or probe_state == "disconnected":
+            blockers.append("terminal_observation_disconnected")
+        if probe_state == "stopped":
+            blockers.append("terminal_observation_stopped")
+        if payload.get("terminalDataPathFingerprint") != probe_instance:
+            blockers.append("terminal_data_path_fingerprint_mismatch")
+        if not str(payload.get("chartSymbol", "")).strip():
+            blockers.append("terminal_chart_symbol_missing")
+        if not str(payload.get("chartTimeframe", "")).strip():
+            blockers.append("terminal_chart_timeframe_missing")
     if blockers:
         raise TerminalClockObservationError(",".join(sorted(set(blockers))))
     return payload
 
 
+def _observation_digest(observation: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        observation,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
 @dataclass
 class TerminalClockObservationRegistry:
-    seen_ids: set[str]
+    observation_digests: dict[str, str]
 
     @classmethod
     def empty(cls) -> "TerminalClockObservationRegistry":
-        return cls(seen_ids=set())
+        return cls(observation_digests={})
 
     def accept(self, observation: dict[str, Any]) -> None:
         observation_id = str(observation["observationId"])
-        if observation_id in self.seen_ids:
+        digest = _observation_digest(observation)
+        previous_digest = self.observation_digests.get(observation_id)
+        if previous_digest is not None:
+            if previous_digest != digest:
+                raise TerminalClockObservationError("terminal_observation_conflicting_duplicate")
             raise TerminalClockObservationError("terminal_observation_duplicate")
-        self.seen_ids.add(observation_id)
+        self.observation_digests[observation_id] = digest
 
 
 def read_observation(
@@ -176,6 +226,7 @@ def read_observation(
     terminal_data_path: str,
     now_epoch_seconds: float | None = None,
     maximum_age_seconds: int = DEFAULT_MAXIMUM_AGE_SECONDS,
+    expected_symbol: str | None = None,
     registry: TerminalClockObservationRegistry | None = None,
 ) -> dict[str, Any]:
     path = observation_path(common_data_path, terminal_data_path)
@@ -193,9 +244,13 @@ def read_observation(
     expected_instance = fnv1a32(terminal_data_path)
     if observation["probeInstanceId"].upper() != expected_instance:
         raise TerminalClockObservationError("terminal_probe_instance_mismatch")
+    if expected_symbol is not None and observation["symbol"].upper() != expected_symbol.upper():
+        raise TerminalClockObservationError("terminal_observation_symbol_mismatch")
     current_epoch = time.time() if now_epoch_seconds is None else now_epoch_seconds
     age_seconds = current_epoch - float(observation["timeGmtRaw"])
-    if age_seconds < -5 or age_seconds > maximum_age_seconds:
+    if age_seconds < -5:
+        raise TerminalClockObservationError("terminal_observation_future_timestamp")
+    if age_seconds > maximum_age_seconds:
         raise TerminalClockObservationError("terminal_observation_stale")
     if registry is not None:
         registry.accept(observation)

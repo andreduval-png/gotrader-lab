@@ -61,6 +61,27 @@ def fixture(*, utc_raw: int = 1_800_000_000, offset_seconds: int = 0) -> dict:
     }
 
 
+def persistent_fixture(
+    *,
+    utc_raw: int = 1_800_000_000,
+    offset_seconds: int = 0,
+    state: str = "fresh",
+    connected: bool = True,
+) -> dict:
+    return {
+        **fixture(utc_raw=utc_raw, offset_seconds=offset_seconds),
+        "version": "1.1.0",
+        "probeVersion": "1.1.0",
+        "probeMode": "persistent_ea",
+        "probeState": state,
+        "heartbeatIntervalSeconds": 30,
+        "terminalConnected": connected,
+        "terminalDataPathFingerprint": "ABCDEF12",
+        "chartSymbol": "USTECH",
+        "chartTimeframe": "PERIOD_M5",
+    }
+
+
 def compare(observation: dict, *, python_tick: int, python_bar: int, historical: bool = False) -> dict:
     system_ms = int(observation["timeGmtRaw"] * 1000)
     return classify_terminal_clock(
@@ -76,8 +97,26 @@ def compare(observation: dict, *, python_tick: int, python_bar: int, historical:
 
 valid = fixture()
 validate_observation(valid)
+persistent_valid = persistent_fixture()
+validate_observation(persistent_valid)
 expect_error(lambda: validate_observation({**valid, "accountData": {"login": 1}}), "sensitive_field_forbidden")
 expect_error(lambda: validate_observation({**valid, "executionAuthority": "trade"}), "top_level_authority_invalid")
+expect_error(
+    lambda: validate_observation({**persistent_valid, "probeState": "disconnected", "terminalConnected": False}),
+    "terminal_observation_disconnected",
+)
+expect_error(
+    lambda: validate_observation({**persistent_valid, "probeState": "stopped"}),
+    "terminal_observation_stopped",
+)
+expect_error(
+    lambda: validate_observation({**persistent_valid, "heartbeatIntervalSeconds": 9}),
+    "terminal_probe_interval_invalid",
+)
+expect_error(
+    lambda: validate_observation({**persistent_valid, "terminalDataPathFingerprint": "00000000"}),
+    "terminal_data_path_fingerprint_mismatch",
+)
 
 with tempfile.TemporaryDirectory() as directory:
     common = Path(directory) / "Common"
@@ -106,6 +145,34 @@ with tempfile.TemporaryDirectory() as directory:
             registry=registry,
         ),
         "duplicate",
+    )
+    path.write_text(json.dumps({**persisted, "captureDurationMs": 3}), encoding="utf-8")
+    expect_error(
+        lambda: read_observation(
+            common_data_path=str(common),
+            terminal_data_path=data,
+            now_epoch_seconds=valid["timeGmtRaw"] + 1,
+            registry=registry,
+        ),
+        "conflicting_duplicate",
+    )
+    path.write_text(json.dumps(persisted), encoding="utf-8")
+    expect_error(
+        lambda: read_observation(
+            common_data_path=str(common),
+            terminal_data_path=data,
+            now_epoch_seconds=valid["timeGmtRaw"] + 1,
+            expected_symbol="US30",
+        ),
+        "symbol_mismatch",
+    )
+    expect_error(
+        lambda: read_observation(
+            common_data_path=str(common),
+            terminal_data_path=data,
+            now_epoch_seconds=valid["timeGmtRaw"] - 10,
+        ),
+        "future_timestamp",
     )
     expect_error(
         lambda: read_observation(
@@ -252,13 +319,19 @@ print(json.dumps({
     "currentLiveVerified": wall_result["currentLiveTimeBasisVerified"],
     "historicalDstVerified": wall_result["historicalDstPolicyVerified"],
     "duplicateRejected": True,
+    "conflictingDuplicateRejected": True,
     "staleRejected": True,
+    "futureTimestampRejected": True,
+    "wrongSymbolRejected": True,
+    "disconnectedRejected": True,
+    "stoppedRejected": True,
     "staleQuoteRejected": True,
     "oversizedRejected": True,
     "malformedRejected": True,
     "invalidSchemaRejected": True,
     "missingObservationRejected": True,
     "terminalInstanceMismatchRejected": True,
+    "persistentSchemaAccepted": True,
     "conflictingContractBlocked": conflicting_contract["verificationStatus"] == "unknown",
     "sensitiveFieldsRejected": True,
     "upstreamContractStatus": live_contract["verificationStatus"],
