@@ -33,7 +33,14 @@ export function evaluateV2ContextEligibility(
   if (!request.windows.length) blockers.push("context_windows_missing");
   const requestedFactFamilies = new Set(request.requestedFactFamilies ?? []);
   requestedFactFamilies.forEach((family) => {
-    if (family !== "session" && family !== "opening_price" && family !== "dealing_range" && family !== "liquidity") {
+    if (
+      family !== "session" &&
+      family !== "opening_price" &&
+      family !== "dealing_range" &&
+      family !== "liquidity" &&
+      family !== "displacement" &&
+      family !== "fair_value_gap"
+    ) {
       unsupportedPolicyRequests.push(`unsupported_fact_family:${String(family)}`);
     }
   });

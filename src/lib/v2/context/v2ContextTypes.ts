@@ -11,10 +11,18 @@ export const V2_CONTEXT_SESSION_FACT_POLICY_VERSION = "gotrader-v2-session-facts
 export const V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION = "gotrader-v2-opening-price-facts-v1";
 export const V2_CONTEXT_DEALING_RANGE_FACT_POLICY_VERSION = "gotrader-v2-session-dealing-range-facts-v1";
 export const V2_CONTEXT_LIQUIDITY_FACT_POLICY_VERSION = "gotrader-v2-session-liquidity-facts-v1";
+export const V2_CONTEXT_DISPLACEMENT_FACT_POLICY_VERSION = "gotrader-v2-displacement-facts-v1";
+export const V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION = "gotrader-v2-fair-value-gap-facts-v1";
 
 export type V2ContextPurpose = "current_live_shadow" | "deterministic_fixture";
 export type V2ContextStatus = "eligible" | "degraded" | "blocked";
-export type V2ContextFactFamily = "session" | "opening_price" | "dealing_range" | "liquidity";
+export type V2ContextFactFamily =
+  | "session"
+  | "opening_price"
+  | "dealing_range"
+  | "liquidity"
+  | "displacement"
+  | "fair_value_gap";
 export type V2MarketFactKind =
   | "session"
   | "opening_price"
@@ -204,7 +212,8 @@ export interface V2ContextDiagnostics {
     | "not_implemented_phase_2a0"
     | "blocked_by_context_eligibility"
     | "session_opening_price_phase_2a3"
-    | "range_liquidity_phase_2a4";
+    | "range_liquidity_phase_2a4"
+    | "displacement_fvg_phase_2a5";
 }
 
 export interface V2ContextEligibilityResult extends V2ContextDiagnostics {

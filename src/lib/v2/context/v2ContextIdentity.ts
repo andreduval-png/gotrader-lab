@@ -3,6 +3,8 @@ import { normalizeV2Timeframe } from "../candles/v2Timeframe";
 import type { V2MarketFact } from "./v2ContextTypes";
 import {
   V2_CONTEXT_DEALING_RANGE_FACT_POLICY_VERSION,
+  V2_CONTEXT_DISPLACEMENT_FACT_POLICY_VERSION,
+  V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION,
   V2_CONTEXT_IDENTITY_VERSION,
   V2_CONTEXT_LIQUIDITY_FACT_POLICY_VERSION,
   V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION,
@@ -21,6 +23,8 @@ const factPolicyVersionFor = (family: V2ContextFactFamily) => {
     case "opening_price": return V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION;
     case "dealing_range": return V2_CONTEXT_DEALING_RANGE_FACT_POLICY_VERSION;
     case "liquidity": return V2_CONTEXT_LIQUIDITY_FACT_POLICY_VERSION;
+    case "displacement": return V2_CONTEXT_DISPLACEMENT_FACT_POLICY_VERSION;
+    case "fair_value_gap": return V2_CONTEXT_FAIR_VALUE_GAP_FACT_POLICY_VERSION;
   }
 };
 

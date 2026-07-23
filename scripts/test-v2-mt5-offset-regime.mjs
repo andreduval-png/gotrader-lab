@@ -31,6 +31,7 @@ const sourceFiles = [
   "src/lib/v2/context/v2ContextEligibility.ts",
   "src/lib/v2/context/v2SessionOpeningFactEngine.ts",
   "src/lib/v2/context/v2DealingRangeLiquidityFactEngine.ts",
+  "src/lib/v2/context/v2DisplacementFvgFactEngine.ts",
   "src/lib/v2/context/v2ContextBuilder.ts"
 ].map((file) => path.join(workspace, file));
 
