@@ -3,7 +3,9 @@ import { normalizeV2Timeframe } from "../candles/v2Timeframe";
 import type { V2MarketFact } from "./v2ContextTypes";
 import {
   V2_CONTEXT_IDENTITY_VERSION,
+  V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION,
   V2_CONTEXT_POLICY_VERSION,
+  V2_CONTEXT_SESSION_FACT_POLICY_VERSION,
   V2_CONTEXT_SESSION_CALENDAR_VERSION,
   type V2ContextBuildRequest,
   type V2ContextInputIdentity,
@@ -39,6 +41,11 @@ export async function buildV2ContextInputIdentity(
   const inputWindows = Object.freeze(request.windows.map(refFor).sort((left, right) =>
     left.timeframe.localeCompare(right.timeframe) || left.identityHash.localeCompare(right.identityHash)
   ));
+  const requestedFactFamilies = Object.freeze([...new Set(request.requestedFactFamilies ?? [])].sort());
+  const factPolicyVersions = Object.freeze(requestedFactFamilies.map((family) => family === "session"
+    ? V2_CONTEXT_SESSION_FACT_POLICY_VERSION
+    : V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION
+  ));
   const core = {
     identityVersion: V2_CONTEXT_IDENTITY_VERSION,
     source: request.source,
@@ -47,7 +54,8 @@ export async function buildV2ContextInputIdentity(
     requiredTimeframes,
     inputWindows,
     contextPolicyVersion: request.contextPolicyVersion ?? V2_CONTEXT_POLICY_VERSION,
-    sessionCalendarVersion: request.sessionCalendarVersion ?? V2_CONTEXT_SESSION_CALENDAR_VERSION
+    sessionCalendarVersion: request.sessionCalendarVersion ?? V2_CONTEXT_SESSION_CALENDAR_VERSION,
+    ...(requestedFactFamilies.length ? { requestedFactFamilies, factPolicyVersions } : {})
   } as const;
   return Object.freeze({ ...core, identityHash: await canonicalHash(core) });
 }

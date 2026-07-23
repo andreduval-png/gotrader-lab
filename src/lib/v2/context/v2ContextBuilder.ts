@@ -1,6 +1,7 @@
 import { V2_AUTHORITY_NONE } from "../authority/v2Authority";
 import { buildV2ContextInputIdentity } from "./v2ContextIdentity";
 import { evaluateV2ContextEligibility } from "./v2ContextEligibility";
+import { buildV2SessionOpeningFacts } from "./v2SessionOpeningFactEngine";
 import {
   V2_CONTEXT_POLICY_VERSION,
   V2_CONTEXT_SCHEMA_VERSION,
@@ -27,23 +28,34 @@ export async function buildV2CanonicalMarketContext(
   };
   const identity = await buildV2ContextInputIdentity(normalizedRequest);
   const eligibility = evaluateV2ContextEligibility(normalizedRequest);
+  const factsResult = eligibility.status === "blocked"
+    ? { facts: Object.freeze([]), warnings: Object.freeze([]), blockers: Object.freeze([]) }
+    : await buildV2SessionOpeningFacts({ request: normalizedRequest, identity });
+  const blockers = Object.freeze([...new Set([...eligibility.blockers, ...factsResult.blockers])]);
+  const warnings = Object.freeze([...new Set([...eligibility.warnings, ...factsResult.warnings])]);
+  const status = blockers.length ? "blocked" : warnings.length ? "degraded" : eligibility.status;
+  const requestedFactFamilies = normalizedRequest.requestedFactFamilies ?? [];
   const diagnostics: Readonly<V2ContextDiagnostics> = Object.freeze({
-    status: eligibility.status,
+    status,
     missingTimeframes: eligibility.missingTimeframes,
     staleWindows: eligibility.staleWindows,
     preVerificationWindows: eligibility.preVerificationWindows,
     futureCandleAttempts: eligibility.futureCandleAttempts,
     unsupportedPolicyRequests: eligibility.unsupportedPolicyRequests,
     timeContractBlockers: eligibility.timeContractBlockers,
-    warnings: eligibility.warnings,
-    blockers: eligibility.blockers,
-    comparisonEligible: eligibility.comparisonEligible,
-    factEngineStatus: "not_implemented_phase_2a0"
+    warnings,
+    blockers,
+    comparisonEligible: eligibility.comparisonEligible && status !== "blocked",
+    factEngineStatus: !requestedFactFamilies.length
+      ? "not_implemented_phase_2a0"
+      : eligibility.status === "blocked"
+        ? "blocked_by_context_eligibility"
+        : "session_opening_price_phase_2a3"
   });
   return Object.freeze({
     contextArtifactId: `v2-context:${identity.identityHash.replace(/^sha256:/, "")}`,
     identity,
-    facts: Object.freeze([]),
+    facts: factsResult.facts,
     diagnostics,
     contextSchemaVersion: V2_CONTEXT_SCHEMA_VERSION,
     contextPolicyVersion: normalizedRequest.contextPolicyVersion ?? V2_CONTEXT_POLICY_VERSION,

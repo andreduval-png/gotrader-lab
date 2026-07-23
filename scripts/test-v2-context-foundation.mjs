@@ -29,6 +29,7 @@ const sourceFiles = [
   "src/lib/v2/context/v2ContextTypes.ts",
   "src/lib/v2/context/v2ContextIdentity.ts",
   "src/lib/v2/context/v2ContextEligibility.ts",
+  "src/lib/v2/context/v2SessionOpeningFactEngine.ts",
   "src/lib/v2/context/v2ContextBuilder.ts"
 ].map((file) => path.join(workspace, file));
 
@@ -354,8 +355,8 @@ console.log(JSON.stringify({
   expiredObservationBlocked: expired.diagnostics.status === "blocked",
   preVerificationWindowBlocked: preVerification.diagnostics.status === "blocked",
   multiWindowIdentityStable: fixtureA.contextArtifactId === fixtureB.contextArtifactId,
-  factEnginesImplemented: false,
-  factCount: liveContext.facts.length,
+  defaultFactFamiliesRequested: false,
+  defaultFactCount: liveContext.facts.length,
   productionAdoptions: productionAdoptions.length,
   rawCandleArraysSerialized: false,
   authority

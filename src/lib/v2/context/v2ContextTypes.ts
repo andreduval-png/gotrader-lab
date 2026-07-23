@@ -7,9 +7,12 @@ export const V2_CONTEXT_POLICY_VERSION = "gotrader-v2-context-policy-v1";
 export const V2_CONTEXT_IDENTITY_VERSION = "gotrader-v2-context-input-identity-v1";
 export const V2_CONTEXT_SESSION_CALENDAR_VERSION = "gotrader-v2-shadow-session-calendar-v1";
 export const V2_CONTEXT_STRATEGY_TIMEZONE = "America/New_York" as const;
+export const V2_CONTEXT_SESSION_FACT_POLICY_VERSION = "gotrader-v2-session-facts-v1";
+export const V2_CONTEXT_OPENING_PRICE_FACT_POLICY_VERSION = "gotrader-v2-opening-price-facts-v1";
 
 export type V2ContextPurpose = "current_live_shadow" | "deterministic_fixture";
 export type V2ContextStatus = "eligible" | "degraded" | "blocked";
+export type V2ContextFactFamily = "session" | "opening_price";
 export type V2MarketFactKind =
   | "session"
   | "opening_price"
@@ -180,6 +183,8 @@ export interface V2ContextInputIdentity {
   inputWindows: readonly Readonly<V2ContextWindowIdentityRef>[];
   contextPolicyVersion: string;
   sessionCalendarVersion: string;
+  requestedFactFamilies?: readonly V2ContextFactFamily[];
+  factPolicyVersions?: readonly string[];
 }
 
 export interface V2ContextDiagnostics {
@@ -193,7 +198,10 @@ export interface V2ContextDiagnostics {
   warnings: readonly string[];
   blockers: readonly string[];
   comparisonEligible: boolean;
-  factEngineStatus: "not_implemented_phase_2a0";
+  factEngineStatus:
+    | "not_implemented_phase_2a0"
+    | "blocked_by_context_eligibility"
+    | "session_opening_price_phase_2a3";
 }
 
 export interface V2ContextEligibilityResult extends V2ContextDiagnostics {
@@ -210,6 +218,7 @@ export interface V2ContextBuildRequest {
   contextPolicyVersion?: string;
   sessionCalendarVersion?: string;
   purpose: V2ContextPurpose;
+  requestedFactFamilies?: readonly V2ContextFactFamily[];
   builtAt?: string;
 }
 

@@ -31,6 +31,11 @@ export function evaluateV2ContextEligibility(
   if (request.brokerSymbol !== request.source.brokerSymbol) blockers.push("broker_symbol_identity_mismatch");
   if (request.source.marketDataAccess !== "read_only") blockers.push("read_only_source_required");
   if (!request.windows.length) blockers.push("context_windows_missing");
+  (request.requestedFactFamilies ?? []).forEach((family) => {
+    if (family !== "session" && family !== "opening_price") {
+      unsupportedPolicyRequests.push(`unsupported_fact_family:${String(family)}`);
+    }
+  });
 
   const required = [...new Set(request.requiredTimeframes.map(normalizeV2Timeframe))];
   const seen = new Set<string>();
@@ -83,6 +88,7 @@ export function evaluateV2ContextEligibility(
 
   const missingTimeframes = required.filter((timeframe) => !seen.has(timeframe));
   blockers.push(...missingTimeframes.map((timeframe) => `required_timeframe_missing:${timeframe}`));
+  blockers.push(...unsupportedPolicyRequests);
   if (futureCandleAttempts) blockers.push("future_candle_attempted");
   if (staleWindows.length) blockers.push("stale_context_window");
 
