@@ -54,6 +54,8 @@
     "test:v2-ifvg-selection-shadow": "node scripts/test-v2-ifvg-selection-shadow.mjs",
     "test:v2-ifvg-live-shadow": "node scripts/test-v2-ifvg-live-shadow.mjs",
     "collect:v2-ifvg-live-shadow": "node scripts/collect-v2-ifvg-live-shadow.mjs",
+    "test:v2-ifvg-phase3-canary-gate": "node scripts/test-v2-ifvg-phase3-canary-gate.mjs",
+    "review:v2-ifvg-phase3-canary": "node scripts/review-v2-ifvg-phase3-canary.mjs",
     "test:v2-mt5-offset-regime": "node scripts/test-v2-mt5-offset-regime.mjs",
     "test:v2-mt5-offset-regime-collector": "node scripts/test-v2-mt5-offset-regime-collector.mjs",
     "collect:v2-mt5-offset-regime": "node scripts/collect-v2-mt5-offset-regime.mjs",

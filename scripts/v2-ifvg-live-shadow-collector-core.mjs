@@ -4,6 +4,13 @@ import path from "node:path";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
 
+export function resolveV2IfvgLiveShadowMode(input) {
+  const normalized = String(input ?? "shadow").trim().toLowerCase();
+  if (["shadow", "enabled", "on", "true", "1"].includes(normalized)) return "shadow";
+  if (["disabled", "off", "false", "0"].includes(normalized)) return "disabled";
+  throw new Error("V2_IFVG_LIVE_SHADOW_MODE must be shadow or disabled.");
+}
+
 export function normalizeV2IfvgLiveShadowBridgeUrl(input) {
   const parsed = new URL(String(input || "http://127.0.0.1:7341"));
   if (parsed.protocol !== "http:") throw new Error("The IFVG live shadow collector requires loopback HTTP.");

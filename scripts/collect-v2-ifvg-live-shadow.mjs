@@ -9,6 +9,7 @@ import {
   fetchV2IfvgLiveShadowInputs,
   loadV2IfvgLiveShadowLedger,
   loadV2IfvgOffsetRegimeLedger,
+  resolveV2IfvgLiveShadowMode,
   saveV2IfvgLiveShadowLedger
 } from "./v2-ifvg-live-shadow-collector-core.mjs";
 
@@ -38,6 +39,20 @@ const authority = Object.freeze({
   brokerAuthority: "none",
   readinessOverrideAuthority: "none"
 });
+const canaryMode = resolveV2IfvgLiveShadowMode(process.env.V2_IFVG_LIVE_SHADOW_MODE);
+
+if (canaryMode === "disabled") {
+  console.log(JSON.stringify({
+    status: "disabled",
+    migrationMode: "legacy_authoritative",
+    reason: "IFVG v3 live shadow collection is disabled by the canary rollback switch.",
+    networkRequestsMade: 0,
+    observationPersisted: false,
+    productionAdoptionAllowed: false,
+    authority
+  }, null, 2));
+  process.exit(0);
+}
 
 const outRoot = path.join(workspace, ".gotrader", "v2-ifvg-live-shadow-runtime");
 const sourceFiles = [

@@ -1,4 +1,7 @@
 export * from "./v2IfvgV3Adapter";
+export * from "./v2IfvgPhase3BaselineAdapter";
+export * from "./v2IfvgPhase3CanaryGate";
+export * from "./v2IfvgPhase3CanaryTypes";
 export * from "./v2IfvgV3Comparison";
 export * from "./v2IfvgV3GeometryAdapter";
 export * from "./v2IfvgV3GeometryComparison";
