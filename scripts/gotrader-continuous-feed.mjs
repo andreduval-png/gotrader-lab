@@ -18,11 +18,24 @@ import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const profileId =
   process.env.GOTRADER_RUNTIME_PROFILE_ID || "always_on_read_only_scheduler";
-const requireVerificationArtifact = profileId === "always_on_shadow_context";
+const requireVerificationArtifact = [
+  "always_on_shadow_context",
+  "always_on_shadow_context_verified"
+].includes(profileId);
+const requireWatcherArtifact =
+  profileId === "always_on_shadow_context_verified";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
   ? path.resolve(process.env.GOTRADER_RUNTIME_STATE_ROOT)
   : path.join(repoRoot, ".gotrader", "runtime");
 const runtimeRoot = path.join(stateRoot, profileId);
+const verificationArtifactFile =
+  process.env.GOTRADER_TIME_VERIFICATION_ARTIFACT_FILE
+    ? path.resolve(process.env.GOTRADER_TIME_VERIFICATION_ARTIFACT_FILE)
+    : path.join(
+        runtimeRoot,
+        "time",
+        "current-live-verification.json"
+      );
 const feedRoot = path.join(runtimeRoot, "feed");
 const checkpointFile = path.join(feedRoot, "checkpoint.json");
 const eventLedgerFile = path.join(feedRoot, "events.json");
@@ -93,7 +106,8 @@ const engine = createContinuousFeedEngine({
   checkpoint: savedCheckpoint,
   knownEvents: durableEvents,
   maximumCloseEventIds: maximumDurableEvents,
-  requireVerificationArtifact
+  requireVerificationArtifact,
+  requireWatcherArtifact
 });
 
 let stopping = false;
@@ -117,6 +131,7 @@ let lastStatus = {
   ...continuousFeedAuthority
 };
 let latestTimeContract;
+let latestVerificationArtifact;
 let latestCandlePayloads = [];
 let consecutiveFailures = 0;
 let lastCandlePollAt = 0;
@@ -209,6 +224,9 @@ const poll = async () => {
         `${bridgeUrl}/time-contract?symbol=${encodeURIComponent(brokerSymbol)}`
       );
       lastTimeContractPollAt = now;
+      latestVerificationArtifact = requireWatcherArtifact
+        ? await readJsonFile(verificationArtifactFile)
+        : undefined;
     }
     const quotePayload = await fetchJson(
       `${bridgeUrl}/quote?requestedSymbol=${encodeURIComponent(
@@ -234,6 +252,7 @@ const poll = async () => {
       quotePayload,
       candlePayloads: candlePayloadsForPoll,
       timeContract: latestTimeContract,
+      verificationArtifact: latestVerificationArtifact,
       receivedAt: new Date().toISOString()
     });
     consecutiveFailures = 0;
@@ -327,6 +346,9 @@ const server = http.createServer((request, response) => {
     const asOf =
       new Date(url.searchParams.get("asOf") || Date.now()).toISOString();
     const asOfMs = Date.parse(asOf);
+    const continuityStartMs = Date.parse(
+      lastStatus.offsetRegimeStartUtc ?? ""
+    );
     const limit = Math.min(
       500,
       Math.max(3, Number(url.searchParams.get("limit") ?? 300))
@@ -337,6 +359,11 @@ const server = http.createServer((request, response) => {
         const key = `${requested}:${broker}:${timeframe}`;
         const candles = (snapshot[key] ?? [])
           .filter((candle) => Date.parse(candle.candleCloseTime) <= asOfMs)
+          .filter(
+            (candle) =>
+              !Number.isFinite(continuityStartMs) ||
+              Date.parse(candle.candleOpenTime) >= continuityStartMs
+          )
           .slice(-limit)
           .map((candle) => ({
             candleOpenTime: candle.candleOpenTime,
@@ -365,6 +392,7 @@ const server = http.createServer((request, response) => {
         verificationGeneratedAtUtc: lastStatus.verificationGeneratedAtUtc,
         verificationExpiresAtUtc: lastStatus.verificationExpiresAtUtc,
         verificationProofState: lastStatus.verificationProofState,
+        offsetRegimeStartUtc: lastStatus.offsetRegimeStartUtc,
         providerTimeBasis: lastStatus.providerTimeBasis,
         observedOffsetMinutes: lastStatus.observedOffsetMinutes
       },
@@ -396,6 +424,7 @@ server.listen(port, host, async () => {
       bridgeUrl,
       timeframes,
       requireVerificationArtifact,
+      requireWatcherArtifact,
       ...continuousFeedAuthority
     })
   );

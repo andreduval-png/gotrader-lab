@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import {
   ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID,
+  ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID,
   buildRuntimeProfile,
   runtimeAuthority,
+  serviceStartupOrder,
   validateRuntimeProfile
 } from "./gotrader-runtime-core.mjs";
 import {
@@ -31,6 +33,43 @@ assert.deepEqual(validateRuntimeProfile(profile), { valid: true, errors: [] });
 assert.equal(profile.shadowContextEnabled, true);
 assert.equal(profile.strategySchedulerEnabled, false);
 assert.equal(profile.executionEnabled, false);
+
+const verifiedProfile = buildRuntimeProfile({
+  profileId: ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID,
+  repoRoot,
+  env: {
+    ...process.env,
+    GOTRADER_RUNTIME_UPSTREAM_PORT: "18010",
+    GOTRADER_RUNTIME_BRIDGE_PORT: "17351",
+    GOTRADER_RUNTIME_FEED_PORT: "17353",
+    GOTRADER_RUNTIME_SCHEDULER_PORT: "17354",
+    GOTRADER_RUNTIME_TIME_VERIFIER_PORT: "17355"
+  }
+});
+assert.deepEqual(validateRuntimeProfile(verifiedProfile), {
+  valid: true,
+  errors: []
+});
+assert.equal(verifiedProfile.persistentTimeVerifierEnabled, true);
+assert.deepEqual(
+  serviceStartupOrder(verifiedProfile).map((service) => service.serviceId),
+  [
+    "mt5_terminal",
+    "mt5_readonly_upstream",
+    "mt5_readonly_bridge",
+    "current_live_time_verifier",
+    "market_data_feed",
+    "autonomous_cycle_scheduler"
+  ]
+);
+assert.deepEqual(
+  verifiedProfile.services.find(
+    (service) => service.serviceId === "market_data_feed"
+  ).dependencies,
+  ["current_live_time_verifier"]
+);
+assert.equal(verifiedProfile.executionEnabled, false);
+assert.equal(verifiedProfile.strategySchedulerEnabled, false);
 
 const registry = buildSchedulerTaskRegistry({ enableShadowContext: true });
 assert.deepEqual(validateSchedulerTaskRegistry(registry), {

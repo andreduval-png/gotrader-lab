@@ -12,12 +12,17 @@ import { shadowContextAuthority } from "./gotrader-shadow-context-core.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2] || "status";
+const profileArgumentIndex = process.argv.indexOf("--profile");
 if (!new Set(["status", "pause", "resume"]).has(command)) {
   console.error(`Unsupported shadow-context command: ${command}.`);
   process.exit(2);
 }
 const profileId =
-  process.env.GOTRADER_RUNTIME_PROFILE_ID || "always_on_shadow_context";
+  (profileArgumentIndex >= 0
+    ? process.argv[profileArgumentIndex + 1]
+    : undefined) ||
+  process.env.GOTRADER_RUNTIME_PROFILE_ID ||
+  "always_on_shadow_context";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
   ? path.resolve(process.env.GOTRADER_RUNTIME_STATE_ROOT)
   : path.join(repoRoot, ".gotrader", "runtime");

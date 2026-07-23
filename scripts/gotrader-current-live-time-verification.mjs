@@ -2,13 +2,12 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   assertCompactTimeVerificationArtifact,
-  buildCurrentLiveVerificationArtifact,
   currentLiveVerificationAuthority
 } from "./gotrader-current-live-time-verification-core.mjs";
+import { collectCurrentLiveTimeEvidence } from "./gotrader-current-live-time-collector.mjs";
 import { writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,68 +33,13 @@ const bridgeUrl = String(
 const requestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
 const brokerSymbol = process.env.MT5_READONLY_BROKER_SYMBOL || "USTECH";
 
-const fetchJson = async (url) => {
-  try {
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000)
-    });
-    return response.ok
-      ? await response.json()
-      : { sourceMethod: "unavailable", blockers: [`http_${response.status}`] };
-  } catch (error) {
-    return {
-      sourceMethod: "unavailable",
-      blockers: [error instanceof Error ? error.message : String(error)]
-    };
-  }
-};
-
-const python = spawnSync(
-  process.env.PYTHON || "python",
-  [
-    path.join("scripts", "read-v2-mt5-terminal-clock.py"),
-    "--symbol",
-    brokerSymbol
-  ],
-  { cwd: repoRoot, encoding: "utf8" }
-);
-let directProbe = {};
-if (python.status === 0) {
-  try {
-    const result = JSON.parse(python.stdout);
-    if (result?.status === "complete") {
-      directProbe = {
-        observationId: result.observation?.observationId,
-        probeInstanceId: result.observation?.probeInstanceId,
-        terminalProbeCapturedAt: result.observation?.timeGmtRaw
-          ? new Date(Number(result.observation.timeGmtRaw) * 1_000).toISOString()
-          : undefined,
-        quoteObservedAt: result.observation?.symbolTimeRaw
-          ? new Date(Number(result.observation.symbolTimeRaw) * 1_000).toISOString()
-          : undefined,
-        pythonTransportBasis: result.classification?.pythonTransportBasis
-      };
-    }
-  } catch {
-    directProbe = {};
-  }
-}
-
-const [upstream, bridge] = await Promise.all([
-  fetchJson(
-    `${upstreamUrl}/time-contract?symbol_name=${encodeURIComponent(brokerSymbol)}`
-  ),
-  fetchJson(
-    `${bridgeUrl}/time-contract?symbol=${encodeURIComponent(brokerSymbol)}`
-  )
-]);
-const artifact = buildCurrentLiveVerificationArtifact({
-  upstream,
-  bridge,
-  directProbe,
+const { artifact } = await collectCurrentLiveTimeEvidence({
+  repoRoot,
+  upstreamUrl,
+  bridgeUrl,
   requestedSymbol,
-  brokerSymbol
+  brokerSymbol,
+  requireDirectProbe: false
 });
 const compactValidation = assertCompactTimeVerificationArtifact(artifact);
 if (!compactValidation.valid) {

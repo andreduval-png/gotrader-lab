@@ -278,6 +278,7 @@ export async function createShadowContextController({
         currentLiveValidUntilUtc:
           payload.timeContract.verificationExpiresAtUtc,
         offsetRegimeStartUtc:
+          payload.timeContract.offsetRegimeStartUtc ??
           payload.timeContract.verificationGeneratedAtUtc,
         blockers: Object.freeze([]),
         warnings: Object.freeze([
@@ -287,6 +288,10 @@ export async function createShadowContextController({
       const windows = [];
       for (const timeframe of requiredTimeframes) {
         const candles = payload.windows?.[timeframe] ?? [];
+        if (!candles.length) {
+          eventBlockers.push(`insufficient_context_window:${timeframe}`);
+          continue;
+        }
         windows.push(
           await dependencies.buildCanonicalWindow({
             adapterId: "gotrader-runtime-a3-rolling-store",
@@ -323,7 +328,34 @@ export async function createShadowContextController({
           })
         );
       }
-      const context = await dependencies.buildCanonicalContext({
+      if (eventBlockers.length) {
+        artifact = Object.freeze({
+          artifactId: `shadow_context_${stableHash({
+            cycleId,
+            eventBlockers
+          })}`,
+          artifactVersion: SHADOW_CONTEXT_RUNTIME_VERSION,
+          cycleId,
+          triggerEventId: event.eventId,
+          triggerCloseId: event.candleIdentity,
+          requestedSymbol: event.requestedSymbol,
+          brokerSymbol: event.brokerSymbol,
+          triggerTimeframe: event.timeframe,
+          timeVerificationArtifactId: event.timeVerificationArtifactId,
+          status: "blocked",
+          blockers: [...new Set(eventBlockers)],
+          warnings: [],
+          shadowOnly: true,
+          rawCandlesPersisted: false,
+          rawFactsPersisted: false,
+          canCreateEvidence: false,
+          evidenceCreated: false,
+          readinessChanged: false,
+          productionAdoptionAllowed: false,
+          ...shadowContextAuthority
+        });
+      } else {
+        const context = await dependencies.buildCanonicalContext({
         source,
         requestedSymbol: event.requestedSymbol,
         brokerSymbol: event.brokerSymbol,
@@ -341,13 +373,14 @@ export async function createShadowContextController({
           "higher_timeframe_bias"
         ],
         builtAt: event.receivedAt
-      });
-      artifact = compactContextArtifact({
-        cycleId,
-        event,
-        context,
-        windows
-      });
+        });
+        artifact = compactContextArtifact({
+          cycleId,
+          event,
+          context,
+          windows
+        });
+      }
     } else {
       artifact = Object.freeze({
         artifactId: `shadow_context_${stableHash({ cycleId, eventBlockers })}`,

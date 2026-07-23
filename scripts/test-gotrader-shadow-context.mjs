@@ -41,6 +41,7 @@ const candle = {
   low: 99,
   close: 101
 };
+const capturedTimeEligibility = [];
 const controller = await createShadowContextController({
   contextRoot: root,
   fetchWindows: async () => ({
@@ -50,7 +51,8 @@ const controller = await createShadowContextController({
       verificationArtifactId: "sha256:proof",
       verificationProofState: "fresh",
       verificationGeneratedAtUtc: "2026-07-23T14:04:00.000Z",
-      verificationExpiresAtUtc: "2026-07-23T14:07:00.000Z"
+      verificationExpiresAtUtc: "2026-07-23T14:07:00.000Z",
+      offsetRegimeStartUtc: "2026-07-23T12:00:00.000Z"
     },
     windows: Object.fromEntries(
       ["5m", "15m", "1h", "4h", "1d"].map((timeframe) => [
@@ -61,13 +63,16 @@ const controller = await createShadowContextController({
   }),
   dependencies: {
     createSourceIdentity: (source) => ({ ...source, marketDataAccess: "read_only" }),
-    buildCanonicalWindow: async ({ query }) => ({
-      identity: {
-        identityHash: `sha256:${query.timeframe}`,
-        candleCountByTimeframe: { [query.timeframe]: 1 }
-      },
-      candles: [candle]
-    }),
+    buildCanonicalWindow: async ({ query, sourceTimeEligibility }) => {
+      capturedTimeEligibility.push(sourceTimeEligibility);
+      return {
+        identity: {
+          identityHash: `sha256:${query.timeframe}`,
+          candleCountByTimeframe: { [query.timeframe]: 1 }
+        },
+        candles: [candle]
+      };
+    },
     buildCanonicalContext: async () => ({
       contextArtifactId: "v2-context:fixture",
       contextSchemaVersion: "fixture-schema",
@@ -89,6 +94,13 @@ assert.equal(first.status, "completed");
 assert.equal(first.resultArtifact.factCount, 2);
 assert.equal(first.resultArtifact.rawCandlesPersisted, false);
 assert.equal(first.resultArtifact.evidenceCreated, false);
+assert.equal(
+  capturedTimeEligibility.every(
+    (item) =>
+      item.offsetRegimeStartUtc === "2026-07-23T12:00:00.000Z"
+  ),
+  true
+);
 assert.deepEqual(
   {
     executionAuthority: first.resultArtifact.executionAuthority,
@@ -133,6 +145,51 @@ assert.equal(
   missingProof.blockers.includes("time_verification_artifact_missing"),
   true
 );
+
+const insufficientRoot = await fs.mkdtemp(
+  path.join(os.tmpdir(), "gotrader-a3-context-insufficient-")
+);
+const insufficientController = await createShadowContextController({
+  contextRoot: insufficientRoot,
+  fetchWindows: async () => ({
+    timeContract: {
+      version: "v2",
+      eligible: true,
+      verificationArtifactId: "sha256:proof",
+      verificationProofState: "fresh",
+      verificationGeneratedAtUtc: "2026-07-23T14:04:00.000Z",
+      verificationExpiresAtUtc: "2026-07-23T14:07:00.000Z",
+      offsetRegimeStartUtc: "2026-07-23T14:00:00.000Z"
+    },
+    windows: {
+      "5m": [candle],
+      "15m": [candle],
+      "1h": [candle],
+      "4h": [],
+      "1d": []
+    }
+  }),
+  dependencies: {
+    createSourceIdentity: (source) => source,
+    buildCanonicalWindow: async ({ query }) => ({
+      identity: {
+        identityHash: `sha256:${query.timeframe}`,
+        candleCountByTimeframe: { [query.timeframe]: 1 }
+      },
+      candles: [candle]
+    }),
+    buildCanonicalContext: async () => {
+      throw new Error("Context builder must not run with incomplete windows.");
+    }
+  }
+});
+const insufficient = await insufficientController.handler({
+  event: { ...event, eventId: "close-a3-insufficient" },
+  task
+});
+assert.equal(insufficient.status, "blocked");
+assert.ok(insufficient.blockers.includes("insufficient_context_window:4h"));
+assert.ok(insufficient.blockers.includes("insufficient_context_window:1d"));
 
 const registry = buildSchedulerTaskRegistry({ enableShadowContext: true });
 assert.equal(

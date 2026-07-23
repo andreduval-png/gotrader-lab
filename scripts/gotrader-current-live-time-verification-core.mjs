@@ -56,9 +56,12 @@ const compactContract = (contract) => ({
   verificationScope: contract?.timeVerificationScope,
   verificationStatus: contract?.verificationStatus,
   providerTimeBasis: contract?.providerTimeBasis,
+  terminalBasisClassification: contract?.terminalBasisClassification,
   observedOffsetMinutes:
     contract?.terminalObservedOffsetMinutes ?? contract?.observedOffsetMinutes,
   terminalClockClassificationVersion: contract?.terminalClockClassificationVersion,
+  terminalProbeObservationId: contract?.terminalProbeObservationId,
+  terminalProbeInstanceId: contract?.terminalProbeInstanceId,
   terminalProbeFingerprint: contract?.terminalProbeFingerprint,
   quoteObservationFingerprint: contract?.quoteObservationFingerprint,
   candleObservationFingerprint: contract?.candleObservationFingerprint,
@@ -87,8 +90,11 @@ export function compareCurrentLiveContractSurfaces({
     "verificationArtifactId",
     "verificationScope",
     "providerTimeBasis",
+    "terminalBasisClassification",
     "observedOffsetMinutes",
     "terminalClockClassificationVersion",
+    "terminalProbeObservationId",
+    "terminalProbeInstanceId",
     "generatedAtUtc",
     "expiresAtUtc",
     "currentLiveTimeBasisVerified",
@@ -140,13 +146,88 @@ export function compareCurrentLiveContractSurfaces({
   });
 }
 
+const validateDirectProbeAgreement = ({
+  directProbe,
+  agreement,
+  requestedSymbol,
+  brokerSymbol,
+  requireDirectProbe
+}) => {
+  if (!requireDirectProbe) return [];
+  const blockers = [];
+  if (directProbe?.status !== "complete") {
+    blockers.push(
+      `direct_terminal_probe_${String(
+        directProbe?.reason ?? directProbe?.status ?? "missing"
+      )}`
+    );
+    return blockers;
+  }
+  if (directProbe?.probeMode !== "persistent_ea") {
+    blockers.push("direct_terminal_probe_not_persistent");
+  }
+  if (directProbe?.probeVersion !== "1.1.0") {
+    blockers.push("direct_terminal_probe_version_invalid");
+  }
+  if (directProbe?.probeState !== "fresh") {
+    blockers.push(`direct_terminal_probe_${directProbe?.probeState ?? "invalid"}`);
+  }
+  if (directProbe?.terminalConnected !== true) {
+    blockers.push("direct_terminal_probe_disconnected");
+  }
+  if (directProbe?.observationId !== agreement.upstream.terminalProbeObservationId) {
+    blockers.push("direct_upstream_probe_observation_mismatch");
+  }
+  if (directProbe?.probeInstanceId !== agreement.upstream.terminalProbeInstanceId) {
+    blockers.push("direct_upstream_probe_instance_mismatch");
+  }
+  if (
+    Date.parse(directProbe?.terminalProbeCapturedAt ?? "") !==
+    Date.parse(agreement.upstream.generatedAtUtc ?? "")
+  ) {
+    blockers.push("direct_upstream_probe_generated_time_mismatch");
+  }
+  if (
+    directProbe?.terminalClockClassificationVersion !==
+    agreement.upstream.terminalClockClassificationVersion
+  ) {
+    blockers.push("direct_upstream_classifier_version_mismatch");
+  }
+  if (
+    directProbe?.observedOffsetMinutes !==
+    agreement.upstream.observedOffsetMinutes
+  ) {
+    blockers.push("direct_upstream_observed_offset_mismatch");
+  }
+  if (
+    directProbe?.providerTimeBasis &&
+    directProbe.providerTimeBasis !==
+      agreement.upstream.terminalBasisClassification
+  ) {
+    blockers.push("direct_upstream_provider_basis_mismatch");
+  }
+  if (
+    String(directProbe?.symbol ?? brokerSymbol).toUpperCase() !==
+    String(brokerSymbol).toUpperCase()
+  ) {
+    blockers.push("direct_terminal_probe_symbol_mismatch");
+  }
+  if (!requestedSymbol || !brokerSymbol) {
+    blockers.push("verification_symbol_identity_missing");
+  }
+  return unique(blockers);
+};
+
 export function buildCurrentLiveVerificationArtifact({
   upstream,
   bridge,
   directProbe,
   requestedSymbol = "MNQ",
   brokerSymbol = "USTECH",
-  nowUtc = new Date().toISOString()
+  nowUtc = new Date().toISOString(),
+  requireDirectProbe = false,
+  continuityStartedAtUtc,
+  renewalSequence
 }) {
   const agreement = compareCurrentLiveContractSurfaces({
     upstream,
@@ -159,6 +240,18 @@ export function buildCurrentLiveVerificationArtifact({
   const expiresAtUtc = Number.isFinite(generatedMs)
     ? new Date(generatedMs + CURRENT_LIVE_EXPIRES_MS).toISOString()
     : nowUtc;
+  const directBlockers = validateDirectProbeAgreement({
+    directProbe,
+    agreement,
+    requestedSymbol,
+    brokerSymbol,
+    requireDirectProbe
+  });
+  const validationBlockers = unique([
+    ...agreement.blockers,
+    ...directBlockers
+  ]);
+  const validationStatus = validationBlockers.length ? "blocked" : "accepted";
   const core = {
     schemaVersion: CURRENT_LIVE_TIME_VERIFICATION_SCHEMA,
     version: CURRENT_LIVE_TIME_VERIFICATION_VERSION,
@@ -178,6 +271,14 @@ export function buildCurrentLiveVerificationArtifact({
         probeInstanceId: directProbe?.probeInstanceId,
         capturedAt: directProbe?.terminalProbeCapturedAt
       }),
+    probeObservationId:
+      directProbe?.observationId ?? agreement.upstream.terminalProbeObservationId,
+    probeInstanceFingerprint:
+      directProbe?.probeInstanceId ?? agreement.upstream.terminalProbeInstanceId,
+    probeVersion: directProbe?.probeVersion,
+    probeMode: directProbe?.probeMode,
+    probeState: directProbe?.probeState,
+    terminalConnected: directProbe?.terminalConnected,
     quoteObservationFingerprint:
       agreement.upstream.quoteObservationFingerprint ??
       canonicalHash({
@@ -188,16 +289,18 @@ export function buildCurrentLiveVerificationArtifact({
       agreement.upstream.candleObservationFingerprint,
     upstreamContractArtifactId: agreement.upstream.verificationArtifactId,
     bridgeContractArtifactId: agreement.bridge.verificationArtifactId,
-    currentLiveTimeBasisVerified: agreement.status === "accepted",
+    currentLiveTimeBasisVerified: validationStatus === "accepted",
     historicalDstPolicyVerified: false,
     proofState: agreement.proofState,
-    validationStatus: agreement.status,
-    blockers: agreement.blockers,
+    validationStatus,
+    blockers: Object.freeze(validationBlockers),
     warnings: Object.freeze(
-      agreement.status === "accepted"
+      validationStatus === "accepted"
         ? ["Historical DST policy remains independently unverified."]
         : []
     ),
+    ...(continuityStartedAtUtc ? { continuityStartedAtUtc } : {}),
+    ...(Number.isInteger(renewalSequence) ? { renewalSequence } : {}),
     rawProbePersisted: false,
     rawCandlesPersisted: false,
     productionAdoptionAllowed: false,
@@ -238,6 +341,12 @@ export function assertCompactTimeVerificationArtifact(artifact) {
   }
   if (artifact?.rawProbePersisted !== false || artifact?.rawCandlesPersisted !== false) {
     errors.push("raw_payload_persistence_not_false");
+  }
+  if (
+    artifact?.validationStatus === "accepted" &&
+    artifact?.terminalConnected === false
+  ) {
+    errors.push("accepted_artifact_terminal_disconnected");
   }
   return Object.freeze({
     valid: errors.length === 0,

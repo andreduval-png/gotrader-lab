@@ -55,7 +55,10 @@ const maximumArtifacts = Math.min(
 );
 
 await fs.mkdir(schedulerRoot, { recursive: true });
-const shadowContextEnabled = profileId === "always_on_shadow_context";
+const shadowContextEnabled = [
+  "always_on_shadow_context",
+  "always_on_shadow_context_verified"
+].includes(profileId);
 const activeTaskRegistry = buildSchedulerTaskRegistry({
   enableShadowContext: shadowContextEnabled
 });

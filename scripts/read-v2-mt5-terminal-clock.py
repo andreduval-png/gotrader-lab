@@ -31,6 +31,7 @@ def main() -> int:
         observation = read_observation(
             common_data_path=str(getattr(terminal, "commondata_path", "")),
             terminal_data_path=str(getattr(terminal, "data_path", "")),
+            expected_symbol=args.symbol,
         )
         tick = mt5.symbol_info_tick(args.symbol)
         rates = mt5.copy_rates_from_pos(args.symbol, mt5.TIMEFRAME_M5, 0, 1)

@@ -543,6 +543,7 @@ class Mt5ReadOnlyState:
                 observation = read_observation(
                     common_data_path=str(getattr(terminal, "commondata_path", "")),
                     terminal_data_path=str(getattr(terminal, "data_path", "")),
+                    expected_symbol=symbol,
                 )
                 classification = classify_terminal_clock(
                     observation=observation,
@@ -561,7 +562,9 @@ class Mt5ReadOnlyState:
                     "historicalDstPolicyVerified": False,
                     "terminalClockClassificationVersion": "1.0.0",
                     "terminalProbeBlockers": [str(probe_error)],
-                    "terminalProbeWarnings": ["Run the manual GoTraderClockProbe script to collect terminal-side time evidence."],
+                    "terminalProbeWarnings": [
+                        "Attach the persistent GoTraderClockProbeEA to the connected symbol chart."
+                    ],
                 }
         return build_time_contract(
             environment=dict(os.environ),

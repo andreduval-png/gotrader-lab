@@ -15,6 +15,7 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2] || "status";
+const profileArgumentIndex = process.argv.indexOf("--profile");
 const allowed = new Set(["status", "pause", "resume"]);
 if (!allowed.has(command)) {
   console.error(`Unsupported scheduler command: ${command}.`);
@@ -22,7 +23,11 @@ if (!allowed.has(command)) {
 }
 
 const profileId =
-  process.env.GOTRADER_RUNTIME_PROFILE_ID || "always_on_read_only_scheduler";
+  (profileArgumentIndex >= 0
+    ? process.argv[profileArgumentIndex + 1]
+    : undefined) ||
+  process.env.GOTRADER_RUNTIME_PROFILE_ID ||
+  "always_on_read_only_scheduler";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
   ? path.resolve(process.env.GOTRADER_RUNTIME_STATE_ROOT)
   : path.join(repoRoot, ".gotrader", "runtime");

@@ -1,0 +1,318 @@
+#!/usr/bin/env node
+
+import assert from "node:assert/strict";
+import {
+  buildCurrentLiveVerificationArtifact,
+  currentLiveVerificationAuthority
+} from "./gotrader-current-live-time-verification-core.mjs";
+import {
+  createTimeVerifierWatchEngine,
+  emptyTimeVerifierWatchState
+} from "./gotrader-time-verifier-watch-core.mjs";
+import {
+  createContinuousFeedEngine,
+  evaluateRuntimeTimeContract
+} from "./gotrader-continuous-feed-core.mjs";
+
+const baseEpoch = Date.parse("2026-07-23T14:00:00.000Z");
+const at = (seconds) => new Date(baseEpoch + seconds * 1_000).toISOString();
+const directProbe = (sequence, overrides = {}) => ({
+  status: "complete",
+  observationId: `ABCDEF12-${sequence}`,
+  probeInstanceId: "ABCDEF12",
+  probeVersion: "1.1.0",
+  probeMode: "persistent_ea",
+  probeState: "fresh",
+  terminalConnected: true,
+  terminalProbeCapturedAt: at(sequence * 30),
+  quoteObservedAt: at(sequence * 30),
+  latestM5BarAt: at(0),
+  terminalBuild: 5836,
+  symbol: "USTECH",
+  timeframe: "M5",
+  chartSymbol: "USTECH",
+  chartTimeframe: "M5",
+  providerTimeBasis: "verified_trade_server_wall_clock",
+  pythonTransportBasis: "matches_symbol_quote_time",
+  observedOffsetMinutes: -240,
+  terminalClockClassificationVersion: "1.0.0",
+  currentLiveTimeBasisVerified: true,
+  blockers: [],
+  warnings: [],
+  contentFingerprint: `sha256:probe-${sequence}`,
+  authority: currentLiveVerificationAuthority,
+  ...overrides
+});
+const contractFor = (probe, overrides = {}) => ({
+  contractId: "mt5-terminal-clock",
+  version: "mt5-time-contract-v2",
+  timeVerificationArtifactId: `sha256:contract-${probe.observationId}`,
+  timeVerificationScope: "current_live",
+  verificationStatus: "verified",
+  providerTimeBasis: "broker_server_wall_clock",
+  terminalBasisClassification: probe.providerTimeBasis,
+  terminalObservedOffsetMinutes: probe.observedOffsetMinutes,
+  terminalClockClassificationVersion:
+    probe.terminalClockClassificationVersion,
+  terminalProbeObservationId: probe.observationId,
+  terminalProbeInstanceId: probe.probeInstanceId,
+  terminalProbeFingerprint: probe.contentFingerprint,
+  quoteObservationFingerprint: "sha256:quote",
+  candleObservationFingerprint: "sha256:candle",
+  timeVerificationGeneratedAtUtc: probe.terminalProbeCapturedAt,
+  timeVerificationExpiresAtUtc: at(
+    Number(probe.observationId.split("-").at(-1)) * 30 + 180
+  ),
+  timeVerificationProofState: "fresh",
+  currentLiveTimeBasisVerified: true,
+  historicalDstPolicyVerified: false,
+  readOnly: true,
+  marketDataOnly: true,
+  sourceMethod: "mt5_terminal_probe",
+  ...overrides
+});
+const evidenceFor = (sequence, options = {}) => {
+  const probe = directProbe(sequence, options.probe);
+  const contract = contractFor(probe, options.contract);
+  const bridge = { ...contract, ...(options.bridge ?? {}) };
+  const artifact = buildCurrentLiveVerificationArtifact({
+    upstream: contract,
+    bridge,
+    directProbe: probe,
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    nowUtc: at(sequence * 30 + 1),
+    requireDirectProbe: true
+  });
+  return { probe, contract, artifact };
+};
+
+const engine = createTimeVerifierWatchEngine();
+const first = evidenceFor(1);
+const firstResult = engine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  nowUtc: at(31)
+});
+assert.equal(firstResult.action, "renewed");
+assert.equal(firstResult.artifact.renewalSequence, 1);
+assert.equal(firstResult.artifact.continuityStartedAtUtc, at(30));
+assert.equal(firstResult.status.currentLiveEligible, true);
+
+const duplicate = engine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  nowUtc: at(40)
+});
+assert.equal(duplicate.action, "no_change");
+assert.equal(duplicate.persistArtifact, false);
+assert.equal(duplicate.status.verificationRenewalCount, 1);
+
+const second = evidenceFor(2);
+const renewed = engine.processEvidence({
+  artifact: second.artifact,
+  directProbe: second.probe,
+  nowUtc: at(61)
+});
+assert.equal(renewed.action, "renewed");
+assert.equal(renewed.artifact.renewalSequence, 2);
+assert.equal(renewed.artifact.continuityStartedAtUtc, at(30));
+
+const restartedEngine = createTimeVerifierWatchEngine({
+  state: engine.snapshot()
+});
+const third = evidenceFor(3);
+const afterRestart = restartedEngine.processEvidence({
+  artifact: third.artifact,
+  directProbe: third.probe,
+  nowUtc: at(91)
+});
+assert.equal(afterRestart.action, "renewed");
+assert.equal(afterRestart.artifact.continuityStartedAtUtc, at(30));
+assert.equal(afterRestart.artifact.renewalSequence, 3);
+
+const transientProbe = directProbe(4);
+const transientArtifact = {
+  ...evidenceFor(4).artifact,
+  validationStatus: "blocked",
+  currentLiveTimeBasisVerified: false,
+  blockers: ["upstream_transport_unavailable"]
+};
+const transient = restartedEngine.processEvidence({
+  artifact: transientArtifact,
+  directProbe: transientProbe,
+  nowUtc: at(121)
+});
+assert.equal(transient.action, "preserved");
+assert.equal(transient.persistArtifact, false);
+assert.equal(
+  transient.status.verificationArtifactId,
+  afterRestart.artifact.artifactId
+);
+
+const conflictingProbe = {
+  ...third.probe,
+  contentFingerprint: "sha256:changed-content"
+};
+const conflict = restartedEngine.processEvidence({
+  artifact: third.artifact,
+  directProbe: conflictingProbe,
+  nowUtc: at(125)
+});
+assert.equal(conflict.action, "blocked");
+assert.ok(
+  conflict.artifact.blockers.includes(
+    "terminal_observation_conflicting_duplicate"
+  )
+);
+assert.equal(conflict.status.currentLiveEligible, false);
+
+const mismatchEngine = createTimeVerifierWatchEngine();
+const mismatch = evidenceFor(1, {
+  bridge: { terminalObservedOffsetMinutes: -300 }
+});
+const mismatchResult = mismatchEngine.processEvidence({
+  artifact: mismatch.artifact,
+  directProbe: mismatch.probe,
+  nowUtc: at(31)
+});
+assert.equal(mismatchResult.action, "blocked");
+assert.ok(
+  mismatchResult.artifact.blockers.some((blocker) =>
+    blocker.includes("observedOffsetMinutes_mismatch")
+  )
+);
+
+const disconnectedEngine = createTimeVerifierWatchEngine();
+const disconnected = evidenceFor(1, {
+  probe: {
+    probeState: "disconnected",
+    terminalConnected: false,
+    contentFingerprint: "sha256:disconnected"
+  }
+});
+const disconnectedResult = disconnectedEngine.processEvidence({
+  artifact: disconnected.artifact,
+  directProbe: disconnected.probe,
+  nowUtc: at(31)
+});
+assert.equal(disconnectedResult.action, "blocked");
+assert.equal(disconnectedResult.status.currentLiveEligible, false);
+
+const expired = restartedEngine.status({ nowUtc: at(400) });
+assert.equal(expired.verificationProofState, "stale");
+assert.equal(expired.currentLiveEligible, false);
+
+const strictEvaluation = evaluateRuntimeTimeContract(third.contract, {
+  requireVerificationArtifact: true,
+  requireWatcherArtifact: true,
+  verificationArtifact: afterRestart.artifact,
+  nowUtc: at(91)
+});
+assert.equal(strictEvaluation.eligible, true);
+assert.equal(
+  strictEvaluation.artifactId,
+  afterRestart.artifact.artifactId
+);
+assert.equal(strictEvaluation.continuityStartedAtUtc, at(30));
+const missingWatcher = evaluateRuntimeTimeContract(third.contract, {
+  requireVerificationArtifact: true,
+  requireWatcherArtifact: true,
+  nowUtc: at(91)
+});
+assert.equal(missingWatcher.eligible, false);
+assert.ok(
+  missingWatcher.blockers.includes("current_live_watcher_artifact_missing")
+);
+
+const feed = createContinuousFeedEngine({
+  requireVerificationArtifact: true,
+  requireWatcherArtifact: true
+});
+const quote = {
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timestamp: at(605),
+  bid: 20_000,
+  ask: 20_001
+};
+const candlePayload = (count) => ({
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timeframe: "5m",
+  candles: Array.from({ length: count }, (_, index) => ({
+    time: at(index * 300),
+    open: 20_000 + index,
+    high: 20_010 + index,
+    low: 19_990 + index,
+    close: 20_005 + index,
+    tick_volume: 100
+  }))
+});
+const baseline = feed.processPoll({
+  quotePayload: quote,
+  candlePayloads: [candlePayload(2)],
+  timeContract: third.contract,
+  verificationArtifact: afterRestart.artifact,
+  receivedAt: at(91)
+});
+assert.equal(
+  baseline.events.some((event) => event.type === "candle_closed"),
+  false
+);
+const nextClose = feed.processPoll({
+  quotePayload: { ...quote, timestamp: at(905) },
+  candlePayloads: [candlePayload(3)],
+  timeContract: third.contract,
+  verificationArtifact: afterRestart.artifact,
+  receivedAt: at(92)
+});
+assert.equal(
+  nextClose.events.filter((event) => event.type === "candle_closed").length,
+  1
+);
+
+const serialized = JSON.stringify({
+  state: restartedEngine.snapshot(),
+  artifact: afterRestart.artifact
+}).toLowerCase();
+for (const forbidden of [
+  "\"candles\"",
+  "\"account\"",
+  "\"order\"",
+  "\"position\"",
+  "\"deal\"",
+  "\"password\"",
+  "\"token\""
+]) {
+  assert.equal(serialized.includes(forbidden), false, forbidden);
+}
+assert.deepEqual(afterRestart.artifact.authority, currentLiveVerificationAuthority);
+const emptyState = emptyTimeVerifierWatchState();
+assert.equal(emptyState.executionAuthority, "none");
+assert.equal(emptyState.brokerAuthority, "none");
+assert.equal(emptyState.readinessOverrideAuthority, "none");
+
+console.log(
+  JSON.stringify(
+    {
+      status: "passed",
+      initialProof: true,
+      renewalBindsNewProbe: true,
+      duplicateDoesNotRenew: true,
+      conflictingDuplicateBlocked: true,
+      transientFailurePreservesOnlyExistingProof: true,
+      restartContinuityPreserved: true,
+      expiryFailsClosed: true,
+      mismatchBlocked: true,
+      disconnectedBlocked: true,
+      strictFeedEligibility: true,
+      strictFeedClosedCandleTrigger: true,
+      compactPersistence: true,
+      historicalEligible: false,
+      ...currentLiveVerificationAuthority
+    },
+    null,
+    2
+  )
+);

@@ -15,6 +15,10 @@ export const ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_VERSION =
 export const ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID = "always_on_shadow_context";
 export const ALWAYS_ON_SHADOW_CONTEXT_PROFILE_VERSION =
   "track-a3-verified-time-shadow-context-v1";
+export const ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID =
+  "always_on_shadow_context_verified";
+export const ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_VERSION =
+  "track-a3-1-persistent-verified-time-shadow-context-v1";
 export const GOTRADER_RUNTIME_SUPERVISOR_VERSION = "gotrader-runtime-supervisor-v1.1";
 
 export const runtimeServiceStates = Object.freeze([
@@ -355,6 +359,118 @@ export function buildRuntimeProfile({
       )
     });
   }
+  if (profileId === ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID) {
+    const base = buildAlwaysOnReadOnlySchedulerProfile(options);
+    const root = path.resolve(options.repoRoot);
+    const env = options.env ?? process.env;
+    const host = env.GOTRADER_RUNTIME_HOST || "127.0.0.1";
+    const upstreamPort = boundedInteger(
+      env.GOTRADER_RUNTIME_UPSTREAM_PORT,
+      8000,
+      1,
+      65_535
+    );
+    const bridgePort = boundedInteger(
+      env.GOTRADER_RUNTIME_BRIDGE_PORT,
+      7341,
+      1,
+      65_535
+    );
+    const verifierPort = boundedInteger(
+      env.GOTRADER_RUNTIME_TIME_VERIFIER_PORT,
+      7345,
+      1,
+      65_535
+    );
+    const verifierScript = path.join(
+      root,
+      "scripts",
+      "gotrader-current-live-time-verifier.mjs"
+    );
+    const verifierUrl = `http://${host}:${verifierPort}`;
+    const verifierService = Object.freeze({
+      workingDirectory: root,
+      required: true,
+      authority: runtimeAuthority,
+      serviceId: "current_live_time_verifier",
+      displayName: "GoTrader current-live MT5 time verifier",
+      command: options.nodeExecutable ?? process.execPath,
+      args: Object.freeze(["--max-old-space-size=128", verifierScript]),
+      scriptPath: verifierScript,
+      runtime: "node",
+      dependencies: Object.freeze(["mt5_readonly_bridge"]),
+      expectedPorts: Object.freeze([verifierPort]),
+      identityTokens: Object.freeze([verifierScript]),
+      environment: Object.freeze({
+        GOTRADER_RUNTIME_PROFILE_ID:
+          ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID,
+        GOTRADER_TIME_VERIFIER_HOST: host,
+        GOTRADER_TIME_VERIFIER_PORT: String(verifierPort),
+        MT5_READONLY_UPSTREAM_BASE_URL: `http://${host}:${upstreamPort}`,
+        MT5_READONLY_BRIDGE_URL: `http://${host}:${bridgePort}`
+      }),
+      healthProbes: Object.freeze([
+        Object.freeze({
+          probeId: "time_verifier_health",
+          kind: "health",
+          url: `${verifierUrl}/health`,
+          expectedServiceVersion: "gotrader-current-live-time-verifier-v1",
+          restartRelevant: true
+        }),
+        Object.freeze({
+          probeId: "time_verifier_status",
+          kind: "transport",
+          url: `${verifierUrl}/status`,
+          restartRelevant: false
+        })
+      ]),
+      restartPolicy: immutableRestartPolicy
+    });
+    const services = [];
+    for (const service of base.services) {
+      if (service.serviceId === "market_data_feed") {
+        services.push(verifierService);
+        services.push(
+          Object.freeze({
+            ...service,
+            dependencies: Object.freeze(["current_live_time_verifier"]),
+            environment: Object.freeze({
+              ...service.environment,
+              GOTRADER_RUNTIME_PROFILE_ID:
+                ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID
+            })
+          })
+        );
+      } else if (service.serviceId === "autonomous_cycle_scheduler") {
+        services.push(
+          Object.freeze({
+            ...service,
+            environment: Object.freeze({
+              ...service.environment,
+              GOTRADER_RUNTIME_PROFILE_ID:
+                ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID
+            })
+          })
+        );
+      } else {
+        services.push(service);
+      }
+    }
+    return Object.freeze({
+      ...base,
+      profileId: ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID,
+      profileVersion: ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_VERSION,
+      timeVerificationEnabled: true,
+      persistentTimeVerifierEnabled: true,
+      shadowContextEnabled: true,
+      enabledTaskTypes: Object.freeze([
+        "runtime_health_snapshot",
+        "current_market_snapshot",
+        "shadow_context_refresh"
+      ]),
+      services: Object.freeze(services)
+    });
+  }
   throw new Error(`Runtime profile is not allowlisted: ${profileId}.`);
 }
 
@@ -363,7 +479,8 @@ export function validateRuntimeProfile(profile) {
   const allowedProfileIds = new Set([
     ALWAYS_ON_READ_ONLY_PROFILE_ID,
     ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
-    ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+    ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID,
+    ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID
   ]);
   if (!allowedProfileIds.has(profile?.profileId)) {
     errors.push("runtime_profile_not_allowlisted");
@@ -407,7 +524,8 @@ export function validateRuntimeProfile(profile) {
   if (
     [
       ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
-      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID,
+      ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID
     ].includes(profile?.profileId) &&
     (profile?.continuousFeedEnabled !== true || profile?.closedCandleSchedulerEnabled !== true)
   ) {
@@ -419,11 +537,19 @@ export function validateRuntimeProfile(profile) {
     "mt5_readonly_bridge",
     ...([
       ALWAYS_ON_READ_ONLY_SCHEDULER_PROFILE_ID,
-      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID
+      ALWAYS_ON_SHADOW_CONTEXT_PROFILE_ID,
+      ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID
     ].includes(profile?.profileId)
       ? ["market_data_feed", "autonomous_cycle_scheduler"]
       : [])
   ];
+  if (profile?.profileId === ALWAYS_ON_SHADOW_CONTEXT_VERIFIED_PROFILE_ID) {
+    expected.splice(
+      expected.indexOf("market_data_feed"),
+      0,
+      "current_live_time_verifier"
+    );
+  }
   for (const id of expected) {
     if (!ids.has(id)) errors.push(`${id}_missing`);
   }

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertCompactTimeVerificationArtifact } from "./gotrader-current-live-time-verification-core.mjs";
 
 export const continuousFeedAuthority = Object.freeze({
   executionAuthority: "none",
@@ -133,6 +134,8 @@ export function evaluateRuntimeTimeContract(
   contract,
   {
     requireVerificationArtifact = false,
+    requireWatcherArtifact = false,
+    verificationArtifact,
     nowUtc = new Date().toISOString()
   } = {}
 ) {
@@ -182,14 +185,80 @@ export function evaluateRuntimeTimeContract(
       blockers.push("current_live_verification_expiry_missing");
     }
   }
+  let effectiveArtifactId = artifactId || undefined;
+  let continuityStartedAtUtc;
+  let watcherArtifactProofState;
+  if (requireWatcherArtifact) {
+    const compactValidation = assertCompactTimeVerificationArtifact(
+      verificationArtifact
+    );
+    if (!verificationArtifact) {
+      blockers.push("current_live_watcher_artifact_missing");
+    } else {
+      if (!compactValidation.valid) {
+        blockers.push(...compactValidation.errors);
+      }
+      const watcherGeneratedMs = Date.parse(
+        verificationArtifact?.generatedAtUtc ?? ""
+      );
+      const watcherAgeSeconds =
+        Number.isFinite(watcherGeneratedMs) && Number.isFinite(nowMs)
+          ? Math.max(0, Math.round((nowMs - watcherGeneratedMs) / 1_000))
+          : undefined;
+      watcherArtifactProofState =
+        watcherAgeSeconds === undefined || nowMs < watcherGeneratedMs - 5_000
+          ? "conflicting"
+          : watcherAgeSeconds <= 120
+            ? "fresh"
+            : watcherAgeSeconds <= 180
+              ? "expiring"
+              : "stale";
+      if (verificationArtifact?.validationStatus !== "accepted") {
+        blockers.push("current_live_watcher_artifact_not_accepted");
+      }
+      if (watcherArtifactProofState !== "fresh") {
+        blockers.push(`current_live_watcher_proof_${watcherArtifactProofState}`);
+      }
+      if (verificationArtifact?.currentLiveTimeBasisVerified !== true) {
+        blockers.push("current_live_watcher_basis_not_verified");
+      }
+      if (verificationArtifact?.historicalDstPolicyVerified !== false) {
+        blockers.push("historical_verification_must_remain_false");
+      }
+      if (verificationArtifact?.terminalConnected !== true) {
+        blockers.push("current_live_watcher_terminal_not_connected");
+      }
+      if (
+        verificationArtifact?.upstreamContractArtifactId !== artifactId ||
+        verificationArtifact?.bridgeContractArtifactId !== artifactId
+      ) {
+        blockers.push("current_live_watcher_contract_artifact_mismatch");
+      }
+      if (
+        verificationArtifact?.requestedSymbol !== "MNQ" ||
+        verificationArtifact?.brokerSymbol !== "USTECH"
+      ) {
+        blockers.push("current_live_watcher_symbol_scope_invalid");
+      }
+      if (!verificationArtifact?.continuityStartedAtUtc) {
+        blockers.push("current_live_continuity_start_missing");
+      }
+      effectiveArtifactId = verificationArtifact?.artifactId;
+      continuityStartedAtUtc =
+        verificationArtifact?.continuityStartedAtUtc;
+    }
+  }
   return {
     eligible: currentLiveVerified && !stale && blockers.length === 0,
     version,
-    artifactId: artifactId || undefined,
+    artifactId: effectiveArtifactId,
+    contractArtifactId: artifactId || undefined,
     verificationScope: contract?.timeVerificationScope ?? "none",
     generatedAtUtc,
     expiresAtUtc,
-    proofState,
+    proofState: requireWatcherArtifact
+      ? watcherArtifactProofState ?? "missing"
+      : proofState,
     proofAgeSeconds,
     terminalClockClassificationVersion:
       contract?.terminalClockClassificationVersion,
@@ -197,6 +266,8 @@ export function evaluateRuntimeTimeContract(
     observedOffsetMinutes: finiteNumber(
       contract?.terminalObservedOffsetMinutes ?? contract?.observedOffsetMinutes
     ),
+    continuityStartedAtUtc,
+    watcherArtifactRequired: requireWatcherArtifact,
     blockers
   };
 }
@@ -320,7 +391,8 @@ export function createContinuousFeedEngine({
   knownEvents = [],
   maximumCloseEventIds = 5_000,
   maximumCatchUpCandles = 24,
-  requireVerificationArtifact = false
+  requireVerificationArtifact = false,
+  requireWatcherArtifact = false
 } = {}) {
   const stores = new Map();
   const formingHashes = new Map();
@@ -360,10 +432,12 @@ export function createContinuousFeedEngine({
   let lastFormingCandleUpdate;
   let lastClosedCandleEvent;
   let latestTimeContract = evaluateRuntimeTimeContract(undefined, {
-    requireVerificationArtifact
+    requireVerificationArtifact,
+    requireWatcherArtifact
   });
   const blockers = new Set();
   const warnings = new Set();
+  let priorTimeContractBlockers = new Set();
 
   const status = () => ({
     serviceVersion: CONTINUOUS_FEED_SERVICE_VERSION,
@@ -399,7 +473,9 @@ export function createContinuousFeedEngine({
     timeContractEligible: latestTimeContract.eligible,
     timeContractVersion: latestTimeContract.version,
     verificationArtifactRequired: requireVerificationArtifact,
+    watcherArtifactRequired: requireWatcherArtifact,
     verificationArtifactId: latestTimeContract.artifactId,
+    contractVerificationArtifactId: latestTimeContract.contractArtifactId,
     verificationScope: latestTimeContract.verificationScope,
     verificationGeneratedAtUtc: latestTimeContract.generatedAtUtc,
     verificationExpiresAtUtc: latestTimeContract.expiresAtUtc,
@@ -409,6 +485,7 @@ export function createContinuousFeedEngine({
     observedOffsetMinutes: latestTimeContract.observedOffsetMinutes,
     terminalClockClassificationVersion:
       latestTimeContract.terminalClockClassificationVersion,
+    offsetRegimeStartUtc: latestTimeContract.continuityStartedAtUtc,
     blockers: [...blockers],
     warnings: [...warnings],
     ...continuousFeedCapability,
@@ -486,13 +563,18 @@ export function createContinuousFeedEngine({
     quotePayload,
     candlePayloads = [],
     timeContract,
+    verificationArtifact,
     receivedAt = new Date().toISOString()
   }) => {
     const eligibilityBeforePoll = latestTimeContract.eligible;
     latestTimeContract = evaluateRuntimeTimeContract(timeContract, {
       requireVerificationArtifact,
+      requireWatcherArtifact,
+      verificationArtifact,
       nowUtc: receivedAt
     });
+    for (const blocker of priorTimeContractBlockers) blockers.delete(blocker);
+    priorTimeContractBlockers = new Set(latestTimeContract.blockers);
     const eligibilityRecoveredThisPoll =
       latestTimeContract.eligible &&
       timeContractStateObserved &&
