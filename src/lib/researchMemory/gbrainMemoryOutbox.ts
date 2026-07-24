@@ -1,4 +1,5 @@
 import type { GoTraderResearchMemoryPacket } from "./researchMemoryTypes";
+import type { GbrainResearchMemoryMetadata } from "./gbrainResearchMemoryTypes";
 
 export const GBRAIN_MEMORY_OUTBOX_STORAGE_KEY = "gotrader.gbrain-memory-outbox.v1";
 export const GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT = "gotrader-gbrain-memory-outbox-updated";
@@ -15,6 +16,7 @@ export interface GbrainMemoryDocument {
   sourceFingerprint?: string;
   cycleId?: string;
   generatedAt: string;
+  metadata: GbrainResearchMemoryMetadata;
   authority: {
     executionAuthority: "none";
     brokerAuthority: "none";
@@ -162,6 +164,30 @@ export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket):
     sourceFingerprint: packet.source.sourceFingerprint,
     cycleId: "cycleId" in packet ? packet.cycleId : undefined,
     generatedAt: packet.timestamp,
+    metadata: {
+      evidenceRecordId: packet.memoryIdentity?.evidenceRecordId,
+      researchCycleId: packet.memoryIdentity?.researchCycleId ?? ("cycleId" in packet ? packet.cycleId : undefined),
+      profileId: packet.memoryIdentity?.profileId ?? packet.grinch.profile,
+      profileVersion: packet.memoryIdentity?.profileVersion,
+      parameterFingerprint: packet.memoryIdentity?.parameterFingerprint,
+      requestedSymbol: packet.source.requestedSymbol,
+      brokerSymbol: packet.source.brokerSymbol,
+      timeframe: packet.source.timeframe,
+      marketDate: packet.source.lastTimestamp?.slice(0, 10) ?? packet.timestamp.slice(0, 10),
+      sourceProvider: packet.source.provider,
+      outcome: packet.memoryIdentity?.outcome,
+      outcomeSummary: "resultSummary" in packet ? packet.resultSummary : packet.nextAction,
+      blockerSummary: uniqueText(packet.blockers, 12),
+      aggregateSummary: {
+        completedTrades: packet.metrics.sampleSize,
+        averageR: packet.metrics.averageR,
+        maximumDrawdownR: packet.metrics.maxDrawdownR,
+        profitFactor: packet.metrics.profitFactor,
+        positiveCycle: (packet.metrics.averageR ?? 0) > 0,
+        oosVerdict: packet.walkForwardVerdict?.verdict
+      },
+      hypothesisSummary: packet.ictThesis?.summary
+    },
     authority: {
       executionAuthority: "none",
       brokerAuthority: "none",

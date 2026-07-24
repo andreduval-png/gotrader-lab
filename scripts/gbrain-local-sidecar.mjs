@@ -46,6 +46,7 @@ const requestBodyLimit = 512 * 1024;
 const maximumBatchSize = 100;
 const maximumMarkdownSize = 32_000;
 const maximumSearchResults = 25;
+const maximumSummaryText = 1_200;
 const allowedOrigins = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:5173",
@@ -106,6 +107,75 @@ const forbiddenKeyPattern =
   /^(?:account|accountData|accountId|accountNumber|orders?|orderData|positions?|positionData|password|secret|apiKey|api_key|token|mt5Credentials|screenshots?|base64|rawRuntimeSnapshot|rawSnapshot|rawCandles|candles|importedOhlcv)$/i;
 const secretContentPattern =
   /data:[^;]+;base64,|(?:api[_-]?key|password|secret|bearer|token)\s*[:=]\s*\S+/i;
+const allowedMetadataKeys = new Set([
+  "evidenceRecordId",
+  "researchCycleId",
+  "profileId",
+  "profileVersion",
+  "parameterFingerprint",
+  "requestedSymbol",
+  "brokerSymbol",
+  "timeframe",
+  "marketDate",
+  "sourceProvider",
+  "outcome",
+  "outcomeSummary",
+  "blockerSummary",
+  "aggregateSummary",
+  "hypothesisSummary"
+]);
+const allowedAggregateKeys = new Set([
+  "completedTrades",
+  "averageR",
+  "maximumDrawdownR",
+  "profitFactor",
+  "positiveCycle",
+  "oosVerdict"
+]);
+
+const compactText = (value, limit = maximumSummaryText) =>
+  String(value ?? "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)\s+instructions?/gi, "[untrusted instruction removed]")
+    .replace(/(?:execution|broker|readinessOverride)Authority\s*[:=]\s*(?!none\b)\S+/gi, "[unsafe authority claim removed]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+
+function sanitizeMetadata(metadata) {
+  if (!isPlainObject(metadata)) return {};
+  const sanitized = {};
+  for (const key of allowedMetadataKeys) {
+    if (!(key in metadata)) continue;
+    if (key === "blockerSummary") {
+      sanitized.blockerSummary = uniqueText(
+        Array.isArray(metadata.blockerSummary) ? metadata.blockerSummary.map((value) => compactText(value, 300)) : [],
+        16
+      );
+      continue;
+    }
+    if (key === "aggregateSummary") {
+      if (!isPlainObject(metadata.aggregateSummary)) continue;
+      sanitized.aggregateSummary = Object.fromEntries(
+        Object.entries(metadata.aggregateSummary)
+          .filter(([aggregateKey]) => allowedAggregateKeys.has(aggregateKey))
+          .map(([aggregateKey, value]) => [
+            aggregateKey,
+            typeof value === "number" || typeof value === "boolean"
+              ? value
+              : compactText(value, 120)
+          ])
+      );
+      continue;
+    }
+    sanitized[key] = compactText(metadata[key], key.endsWith("Summary") ? maximumSummaryText : 300);
+  }
+  sanitized.blockerSummary = sanitized.blockerSummary ?? [];
+  return sanitized;
+}
 
 function validateDocument(document) {
   const blockedFields = [];
@@ -124,17 +194,46 @@ function validateDocument(document) {
   if (!String(document.markdown ?? "").trim() || String(document.markdown).length > maximumMarkdownSize) {
     blockedFields.push("document.markdown");
   }
-  if (secretContentPattern.test(String(document.markdown ?? ""))) {
+  const markdown = String(document.markdown ?? "");
+  if (secretContentPattern.test(markdown)) {
     blockedFields.push("document.markdown.secret_or_base64_content");
+  }
+  if (
+    ["open", "high", "low", "close"].every((key) =>
+      new RegExp(`["']?${key}["']?\\s*:\\s*-?\\d`, "i").test(markdown)
+    )
+  ) {
+    blockedFields.push("document.markdown.raw_ohlcv_content");
   }
   if (!Array.isArray(document.tags) || document.tags.length > 30) {
     blockedFields.push("document.tags");
+  }
+  if (document.metadata !== undefined && !isPlainObject(document.metadata)) {
+    blockedFields.push("document.metadata");
+  }
+  if (isPlainObject(document.metadata)) {
+    Object.keys(document.metadata).forEach((key) => {
+      if (!allowedMetadataKeys.has(key)) blockedFields.push(`document.metadata.${key}`);
+    });
+    if (isPlainObject(document.metadata.aggregateSummary)) {
+      Object.keys(document.metadata.aggregateSummary).forEach((key) => {
+        if (!allowedAggregateKeys.has(key)) {
+          blockedFields.push(`document.metadata.aggregateSummary.${key}`);
+        }
+      });
+    }
   }
   if (!isAuthorityNone(document.authority)) {
     blockedFields.push("document.authority");
   }
 
   const visit = (value, currentPath) => {
+    if (typeof value === "string") {
+      if (secretContentPattern.test(value)) {
+        blockedFields.push(`${currentPath}.secret_or_base64_content`);
+      }
+      return;
+    }
     if (!value || typeof value !== "object") return;
     if (Array.isArray(value)) {
       value.forEach((item, index) => visit(item, `${currentPath}[${index}]`));
@@ -397,6 +496,7 @@ async function persistDocument(document) {
   }
 
   const storedAt = nowIso();
+  const receiptId = `gbrain_receipt_${document.documentId}_${contentHash.slice(0, 16)}`;
   const storedPath = safeDocumentPath(document.path);
   await atomicWrite(storedPath, `${document.markdown.trim()}\n`);
   state.documents[document.documentId] = {
@@ -408,6 +508,8 @@ async function persistDocument(document) {
     cycleId: document.cycleId,
     generatedAt: document.generatedAt,
     storedAt,
+    metadata: sanitizeMetadata(document.metadata),
+    receiptId,
     contentHash,
     indexStatus: "pending",
     indexAttemptCount: existing?.indexAttemptCount ?? 0,
@@ -433,6 +535,7 @@ async function persistDocument(document) {
   }
   await saveState();
   await appendReceipt({
+    receiptId,
     timestamp: nowIso(),
     eventType: "gotrader_gbrain_memory_stored",
     documentId: document.documentId,
@@ -446,6 +549,7 @@ async function persistDocument(document) {
     accepted: true,
     status: existing ? "updated" : "stored",
     documentId: document.documentId,
+    receiptId,
     indexStatus: record.indexStatus,
     indexError: record.lastIndexError
   };
@@ -521,6 +625,9 @@ function compactStatus() {
     failedDocumentCount,
     lastStoredAt: documents.map((record) => record.storedAt).sort().at(-1) ?? null,
     lastIndexedAt: state.lastIndexedAt,
+    lastReceiptId: documents
+      .filter((record) => record.receiptId)
+      .sort((left, right) => String(right.storedAt).localeCompare(String(left.storedAt)))[0]?.receiptId ?? null,
     lastError: state.lastError ?? gbrainCapability.error,
     dataDirectory: sidecarRoot,
     authority,
@@ -528,12 +635,87 @@ function compactStatus() {
   };
 }
 
-async function searchSpool(query, limit) {
+function compactMemorySummary(record, retrievalMode = "bounded_fallback") {
+  const metadata = sanitizeMetadata(record.metadata);
+  return {
+    memoryId: record.documentId,
+    documentId: record.documentId,
+    title: compactText(record.title, 300),
+    evidenceRecordId: metadata.evidenceRecordId,
+    researchCycleId: metadata.researchCycleId ?? record.cycleId,
+    cycleId: metadata.researchCycleId ?? record.cycleId,
+    profileId: metadata.profileId,
+    profileVersion: metadata.profileVersion,
+    parameterFingerprint: metadata.parameterFingerprint,
+    requestedSymbol: metadata.requestedSymbol,
+    brokerSymbol: metadata.brokerSymbol,
+    timeframe: metadata.timeframe,
+    marketDate: metadata.marketDate,
+    sourceProvider: metadata.sourceProvider,
+    sourceFingerprint: record.sourceFingerprint,
+    createdAtUtc: record.generatedAt,
+    generatedAt: record.generatedAt,
+    storedAtUtc: record.storedAt,
+    receiptId: record.receiptId,
+    outcome: metadata.outcome,
+    outcomeSummary: metadata.outcomeSummary,
+    summary: metadata.outcomeSummary,
+    blockerSummary: metadata.blockerSummary,
+    aggregateSummary: metadata.aggregateSummary,
+    hypothesisSummary: metadata.hypothesisSummary,
+    similarityTags: uniqueText(record.tags ?? [], 20),
+    tags: uniqueText(record.tags ?? [], 20),
+    indexStatus: record.indexStatus,
+    provenance: {
+      source: "local_gbrain_sidecar",
+      retrievalMode,
+      advisoryOnly: true,
+      nativeEvidenceAuthoritative: true,
+      untrustedRetrievedContent: true
+    },
+    ...memorySafetyPolicy,
+    authority
+  };
+}
+
+const sameText = (left, right) =>
+  String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
+
+function recordMatchesFilters(record, filters = {}) {
+  const metadata = sanitizeMetadata(record.metadata);
+  const exact = [
+    ["profileId", metadata.profileId],
+    ["profileVersion", metadata.profileVersion],
+    ["parameterFingerprint", metadata.parameterFingerprint],
+    ["sourceFingerprint", record.sourceFingerprint],
+    ["requestedSymbol", metadata.requestedSymbol],
+    ["brokerSymbol", metadata.brokerSymbol],
+    ["timeframe", metadata.timeframe],
+    ["outcome", metadata.outcome]
+  ];
+  if (exact.some(([key, value]) => filters[key] && !sameText(filters[key], value))) return false;
+  if (filters.blocker) {
+    const blocker = String(filters.blocker).toLowerCase();
+    if (!(metadata.blockerSummary ?? []).some((value) => String(value).toLowerCase().includes(blocker))) {
+      return false;
+    }
+  }
+  if (Array.isArray(filters.tags) && filters.tags.length) {
+    const tags = new Set((record.tags ?? []).map((tag) => String(tag).toLowerCase()));
+    if (!filters.tags.every((tag) => tags.has(String(tag).toLowerCase()))) return false;
+  }
+  const date = Date.parse(metadata.marketDate || record.generatedAt || "");
+  if (filters.dateFromUtc && (!Number.isFinite(date) || date < Date.parse(filters.dateFromUtc))) return false;
+  if (filters.dateToUtc && (!Number.isFinite(date) || date > Date.parse(filters.dateToUtc))) return false;
+  return true;
+}
+
+async function searchSpool(query, limit, filters = {}) {
   const terms = uniqueText(
     String(query).toLowerCase().split(/[^a-z0-9._-]+/).filter((term) => term.length > 1),
     20
   );
-  const records = Object.values(state.documents);
+  const records = Object.values(state.documents).filter((record) => recordMatchesFilters(record, filters));
   const results = [];
   for (const record of records) {
     try {
@@ -542,18 +724,8 @@ async function searchSpool(query, limit) {
       const score = terms.reduce((total, term) => total + (haystack.split(term).length - 1), 0);
       if (!score && terms.length) continue;
       results.push({
-        documentId: record.documentId,
-        path: record.path,
-        title: record.title,
+        ...compactMemorySummary(record, "bounded_fallback"),
         score,
-        sourceFingerprint: record.sourceFingerprint,
-        cycleId: record.cycleId,
-        generatedAt: record.generatedAt,
-        summary: markdown
-          .replace(/^#.+$/gm, "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 500)
       });
     } catch {
       // A missing spool file is reported through status/reconciliation, not leaked into search.
@@ -579,6 +751,48 @@ async function searchGbrain(query, limit) {
   } catch {
     return null;
   }
+}
+
+function mapGbrainResultsToKnownRecords(results, filters, limit) {
+  if (!Array.isArray(results)) return [];
+  const candidates = Object.values(state.documents).filter((record) => recordMatchesFilters(record, filters));
+  const ranked = [];
+  const seen = new Set();
+  for (const result of results.slice(0, maximumSearchResults)) {
+    const hint = compactText(JSON.stringify(result), 5_000).toLowerCase();
+    const record = candidates.find((candidate) => {
+      const aliases = [
+        candidate.documentId,
+        candidate.path,
+        String(candidate.path).replace(/\.md$/i, ""),
+        candidate.title,
+        candidate.cycleId
+      ].filter(Boolean);
+      return aliases.some((alias) => hint.includes(String(alias).toLowerCase()));
+    });
+    if (!record || seen.has(record.documentId)) continue;
+    seen.add(record.documentId);
+    ranked.push(compactMemorySummary(record, "keyword"));
+    if (ranked.length >= limit) break;
+  }
+  return ranked;
+}
+
+function normalizeSearchFilters(payload) {
+  return {
+    profileId: compactText(payload.profileId, 200),
+    profileVersion: compactText(payload.profileVersion, 120),
+    parameterFingerprint: compactText(payload.parameterFingerprint, 300),
+    sourceFingerprint: compactText(payload.sourceFingerprint, 300),
+    requestedSymbol: compactText(payload.requestedSymbol, 80),
+    brokerSymbol: compactText(payload.brokerSymbol, 80),
+    timeframe: compactText(payload.timeframe, 40),
+    outcome: compactText(payload.outcome, 120),
+    blocker: compactText(payload.blocker, 300),
+    dateFromUtc: compactText(payload.dateFromUtc, 80),
+    dateToUtc: compactText(payload.dateToUtc, 80),
+    tags: uniqueText(Array.isArray(payload.tags) ? payload.tags.map((tag) => compactText(tag, 80)) : [], 10)
+  };
 }
 
 function applyCors(request, response) {
@@ -629,22 +843,30 @@ async function handleRequest(request, response) {
     sendJson(response, 200, compactStatus());
     return;
   }
+  const summaryMatch = request.method === "GET"
+    ? url.pathname.match(/^\/v1\/memory\/(gbrain_document_[a-z0-9._-]+)$/i)
+    : null;
+  if (summaryMatch) {
+    const record = state.documents[summaryMatch[1]];
+    if (!record) {
+      sendJson(response, 404, {
+        status: "not_found",
+        memoryId: summaryMatch[1]
+      });
+      return;
+    }
+    sendJson(response, 200, {
+      status: "complete",
+      memory: compactMemorySummary(record, "direct_lookup")
+    });
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/v1/memory/recent") {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 20), 1), 100);
     const documents = Object.values(state.documents)
       .sort((left, right) => String(right.storedAt).localeCompare(String(left.storedAt)))
       .slice(0, limit)
-      .map((record) => ({
-        documentId: record.documentId,
-        path: record.path,
-        title: record.title,
-        tags: record.tags,
-        sourceFingerprint: record.sourceFingerprint,
-        cycleId: record.cycleId,
-        generatedAt: record.generatedAt,
-        storedAt: record.storedAt,
-        indexStatus: record.indexStatus
-      }));
+      .map((record) => compactMemorySummary(record, "bounded_fallback"));
     sendJson(response, 200, { status: "complete", documents, authority, safetyNotice });
     return;
   }
@@ -687,11 +909,16 @@ async function handleRequest(request, response) {
       sendJson(response, 400, { status: "invalid_query", authority, safetyNotice });
       return;
     }
+    const filters = normalizeSearchFilters(payload);
     const gbrainResults = await searchGbrain(query, limit);
-    const results = Array.isArray(gbrainResults) ? gbrainResults.slice(0, limit) : await searchSpool(query, limit);
+    const mappedResults = mapGbrainResultsToKnownRecords(gbrainResults, filters, limit);
+    const results = mappedResults.length
+      ? mappedResults
+      : await searchSpool(query, limit, filters);
     sendJson(response, 200, {
       status: "complete",
-      backend: Array.isArray(gbrainResults) ? "gbrain_pglite_keyword" : "spool_keyword",
+      backend: mappedResults.length ? "gbrain_pglite_keyword" : "spool_keyword",
+      retrievalMode: mappedResults.length ? "keyword" : "bounded_fallback",
       query,
       results,
       authority,

@@ -135,6 +135,14 @@ export interface GoTraderResearchMemoryBase {
   nextAction: string;
   authority: GoTraderResearchMemoryAuthority;
   exclusions: GoTraderResearchMemoryExclusion[];
+  memoryIdentity?: {
+    evidenceRecordId?: string;
+    researchCycleId?: string;
+    profileId?: string;
+    profileVersion?: string;
+    parameterFingerprint?: string;
+    outcome?: string;
+  };
 }
 
 export interface GoTraderResearchCycleMemory extends GoTraderResearchMemoryBase {

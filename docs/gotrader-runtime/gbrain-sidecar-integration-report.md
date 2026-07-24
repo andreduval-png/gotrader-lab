@@ -1,10 +1,10 @@
-# GoTrader GBrain G1 Sidecar Integration Report
+# GoTrader GBrain G1-G2 Integration Report
 
 Date: 2026-07-24
 
 ## Final Status
 
-`GBRAIN G1 PASSED - DURABLE SIDECAR INTEGRATED`
+`GBRAIN G1-G2 PASSED - READ-ONLY MCP RESEARCH MEMORY ESTABLISHED`
 
 ## Integration Base
 
@@ -82,6 +82,10 @@ research remain independent.
 - Search results remain advisory and cannot create validation-chain evidence.
 - The browser caches compact status only; raw database content is never exposed.
 
+G2 adds a GoTrader-owned read-only MCP facade with status, bounded search, and
+single-summary tools. It does not expose gbrain directly. See
+`docs/gotrader-runtime/gbrain-mcp-research-memory-facade.md`.
+
 ## Safety Contract
 
 Every sidecar response enforces:
@@ -114,6 +118,7 @@ Passed:
 - `npm.cmd run test:research-evidence-memory`
 - `npm.cmd run test:gbrain-sidecar`
 - `npm.cmd run test:gbrain-sidecar:real`
+- `npm.cmd run test:gotrader-mcp-research-memory`
 - `npm.cmd run test:core`
 - `npm.cmd run test:strategy-baselines`
 - `npm.cmd run test:source-integrity`
@@ -140,7 +145,9 @@ IFVG v2 negative control:
 - Retrieval is keyword-oriented and does not use embeddings.
 - gbrain retrieval is advisory and is not automatically injected into
   deterministic candidate scoring.
-- MCP-facing agents cannot query memory until G2 is completed.
+- MCP-facing agents receive keyword-oriented, sanitized summaries only.
+- Legacy memories without G2 identity metadata require native-evidence backfill
+  before exact profile/version/parameter filtering can match them.
 - The local HTTP writer relies on loopback binding, origin restrictions, strict
   packet validation, and stable memory identity. No remote writer is supported.
 

@@ -28,6 +28,12 @@ GoTrader has a native research-memory contract in `src/lib/researchMemory`, an a
 
 The sidecar persists every accepted document to an atomic Markdown spool before attempting capture into an isolated local gbrain PGLite database. If gbrain is unavailable, the spool remains durable and provides bounded keyword fallback retrieval. No browser token, remote gbrain endpoint, embedding API, execution path, or readiness authority is introduced.
 
+Local MCP clients can query sanitized memory through a GoTrader-owned facade.
+The facade exposes status, bounded keyword search, and compact summary lookup
+only. It does not expose gbrain commands, database access, files, or a memory
+writer. Retrieved content is explicitly untrusted and cannot create evidence or
+change any deterministic gate.
+
 Created packet types:
 
 - `GoTraderResearchCycleMemory`
@@ -87,6 +93,7 @@ GoTrader deterministic cycle
   -> trusted loopback sidecar and atomic spool [IMPLEMENTED]
   -> local gbrain PGLite keyword retrieval [IMPLEMENTED]
   -> Self-Improvement historical context [IMPLEMENTED]
+  -> GoTrader MCP read-only memory facade [IMPLEMENTED]
   -> optional OpenClaw advisory context [FUTURE]
   -> GoTrader explanation/proposal review only
 ```
@@ -118,6 +125,9 @@ The implemented sidecar:
 - starts with the normal local GoTrader stack but does not block deterministic research if offline
 
 See `docs/gbrain-local-sidecar-runbook.md` for setup, storage paths, commands, and recovery behavior.
+
+See `docs/gotrader-runtime/gbrain-mcp-research-memory-facade.md` for MCP tool
+contracts, limits, provenance, audit logging, and poisoning defenses.
 
 ## Safety Boundary
 

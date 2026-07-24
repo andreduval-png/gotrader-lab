@@ -246,6 +246,14 @@ export function buildResearchEvidenceMemoryPacket(
       : null,
     blockers: uniqueText([...record.blockers, ...record.promotionBlockers], 16),
     nextAction: record.nextAction,
+    memoryIdentity: {
+      evidenceRecordId: record.evidenceId,
+      researchCycleId: record.cycleId,
+      profileId: record.identity.strategyProfile,
+      profileVersion: record.identity.strategyProfileVersion,
+      parameterFingerprint: record.identity.parameterFingerprint,
+      outcome: record.resultClass
+    },
     authority: gotraderResearchMemoryAuthorityNone,
     exclusions: gotraderResearchMemoryExcludedSections
   };

@@ -59,6 +59,7 @@ npm.cmd run gbrain:status
 npm.cmd run gbrain:sync
 npm.cmd run test:gbrain-sidecar
 npm.cmd run test:gbrain-sidecar:real
+npm.cmd run test:gotrader-mcp-research-memory
 ```
 
 `test:gbrain-sidecar:real` creates a disposable PGLite brain, captures one compact test
@@ -145,3 +146,18 @@ readinessOverrideAuthority: none
 
 gbrain retrieval can inform a research hypothesis. It cannot create evidence, approve
 readiness, apply calibration, promote Paper-Demo status, or place a trade.
+
+## Local MCP Retrieval
+
+The normal GoTrader stdio MCP now exposes three read-only memory tools:
+
+```text
+gotrader_research_memory_status
+gotrader_search_research_memory
+gotrader_get_research_memory_summary
+```
+
+They use the same loopback sidecar and compact metadata contracts as the local
+UI. No direct gbrain MCP server is exposed, and no memory-write tool exists.
+Searches are bounded, audited by query hash rather than raw query, and returned
+text is marked as untrusted advisory content.

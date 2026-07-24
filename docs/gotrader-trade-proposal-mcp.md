@@ -25,6 +25,10 @@ Codex or Claude may submit a compact research proposal and initiate deterministi
 
 The MCP does not expose tools for accounts, orders, positions, broker mutation, cancellation, closing, or execution.
 
+It also exposes a separate read-only research-memory facade. Memory retrieval
+cannot create evidence, approve readiness, apply calibration, or create trade
+intent.
+
 ## Tools
 
 ### `gotrader_control_plane_status`
@@ -76,6 +80,18 @@ Attempts to prepare a safe proposal for local paper review. It independently che
 ### `gotrader_list_mt5_demo_receipts`
 
 Returns compact MT5 demo gateway status receipts for monitoring. It exposes request identity, scenario geometry, hashed source identity, compact ticket/volume, status, blockers, and the research authority contract. It rejects receipts containing credentials, balances, raw broker responses, candles, account records, or broker state lists.
+
+### Read-only research memory
+
+- `gotrader_research_memory_status`
+- `gotrader_search_research_memory`
+- `gotrader_get_research_memory_summary`
+
+These tools query the loopback GoTrader gbrain sidecar through fixed compact
+contracts. They return no full Markdown, raw candles, runtime snapshots,
+credentials, or account/order/position data. There is no memory write tool.
+Details are in
+`docs/gotrader-runtime/gbrain-mcp-research-memory-facade.md`.
 
 ## Codex CLI Setup
 

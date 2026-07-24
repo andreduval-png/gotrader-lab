@@ -17,6 +17,7 @@
     "test:llm-bridge-concurrency": "node scripts/test-llm-bridge-concurrency.mjs",`r`n    "test:llm-safety-language": "node scripts/test-llm-safety-language.mjs",`r`n    "gbrain:sidecar": "node scripts/gbrain-local-sidecar.mjs",`r`n    "gbrain:setup": "node scripts/setup-gbrain-local.mjs",`r`n    "gbrain:status": "node scripts/test-gbrain-sidecar.mjs --status-only",`r`n    "gbrain:sync": "node scripts/test-gbrain-sidecar.mjs --sync-only",`r`n    "test:gbrain-sidecar": "node scripts/test-gbrain-sidecar.mjs",`r`n    "test:gbrain-sidecar:real": "node scripts/test-gbrain-sidecar.mjs --real-integration",
     "mcp:trade-proposal": "node scripts/gotrader-trade-proposal-mcp.mjs",
     "test:mcp-trade-proposal": "node scripts/test-gotrader-trade-proposal-mcp.mjs",
+    "test:gotrader-mcp-research-memory": "node scripts/test-gotrader-mcp-research-memory.mjs",
     "test:paper-demo-gateway": "node scripts/test-paper-demo-gateway.mjs",
     "test:account-risk-engine": "node scripts/test-account-risk-engine.mjs",
     "import:forward-evidence": "node scripts/import-forward-evidence-report.mjs",
