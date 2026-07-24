@@ -327,6 +327,29 @@ const stale = restarted.markFeedStale({ reason: "fixture_transport_stale" });
 assert.equal(stale.events[0].type, "feed_stale");
 assert.equal(JSON.stringify(stale).includes("placeOrder"), false);
 assert.equal(JSON.stringify(stale).includes("\"candles\":["), false);
+assert.equal(stale.status.warnings.includes("fixture_transport_stale"), true);
+const transportRecovered = restarted.processPoll({
+  quotePayload: quote("2026-07-23T10:10:30.000Z"),
+  candlePayloads: [
+    candles(
+      [
+        candle("2026-07-23T10:05:00.000Z", 105),
+        candle("2026-07-23T10:10:00.000Z", 106)
+      ],
+      "5m"
+    )
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:10:31.000Z"
+});
+assert.equal(
+  transportRecovered.events.some((event) => event.type === "feed_recovered"),
+  true
+);
+assert.equal(
+  transportRecovered.status.warnings.includes("fixture_transport_stale"),
+  false
+);
 
 const identityA = buildRuntimeSourceIdentity({
   requestedSymbol: "MNQ",
@@ -351,6 +374,7 @@ console.log(
       closeEventsEffectivelyOnce: true,
       closedCandleConflictsBlocked: true,
       recoveredCandleDataClearsBlocker: true,
+      recoveredTransportClearsWarning: true,
       rollingStoresBounded: true,
       rawCandlesPersisted: false,
       ...continuousFeedAuthority

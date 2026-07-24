@@ -713,6 +713,7 @@ export function createContinuousFeedEngine({
   });
   const blockers = new Set();
   const warnings = new Set();
+  const transportWarnings = new Set();
   let priorTimeContractBlockers = new Set();
 
   const status = () => ({
@@ -1188,6 +1189,10 @@ export function createContinuousFeedEngine({
 
     if (stale && latestTimeContract.eligible) {
       stale = false;
+      for (const warning of transportWarnings) {
+        warnings.delete(warning);
+      }
+      transportWarnings.clear();
       recoveredEventCount += 1;
       events.push(
         createStateEvent({
@@ -1211,6 +1216,7 @@ export function createContinuousFeedEngine({
   } = {}) => {
     stale = true;
     warnings.add(reason);
+    transportWarnings.add(reason);
     const sourceIdentity = buildRuntimeSourceIdentity({
       requestedSymbol: quote?.requestedSymbol ?? "MNQ",
       brokerSymbol: quote?.brokerSymbol ?? "USTECH",
