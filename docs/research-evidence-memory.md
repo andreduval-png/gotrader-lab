@@ -58,21 +58,31 @@ Auto Research reads the materialized aggregate before its initial bounded candid
 
 Historical ranking cannot change candidate metrics, create evidence, promote readiness, apply calibration, or grant authority.
 
-## gbrain Advisory Outbox
+## gbrain Advisory Memory
 
-Each native evidence record is also converted to the existing compact GoTrader research-memory contract and queued as Markdown for a future local gbrain writer.
+Each native evidence record is also converted to the compact GoTrader research-memory contract and queued as Markdown for the local gbrain sidecar.
 
 - storage: `gotrader.gbrain-memory-outbox.v1`
-- delivery default: `false`
+- delivery default before trusted sidecar handshake: `false`
 - missing or legacy delivery setting: resolves to `false`
 - allowed delivery endpoint: loopback only (`127.0.0.1`, `localhost`, or `::1`)
 - browser tokens: prohibited
+- acknowledged entries: removed from the browser outbox after durable sidecar storage
 
 Suggested gbrain paths are stable, for example:
 
 `gotrader/research-cycle/<cycleId>.md`
 
-The outbox validator rejects unsafe authority and forbidden account/order/position, credential, raw snapshot, or candle-array fields. The local delivery client sends only the compact Markdown document to an explicitly configured trusted loopback gateway. GoTrader does not embed a gbrain token or connect to a remote gbrain host directly.
+The outbox validator rejects unsafe authority and forbidden account/order/position, credential, raw snapshot, or candle-array fields. The delivery client enables transport only after the fixed loopback endpoint identifies itself as the GoTrader gbrain sidecar with none/none/none authority. GoTrader does not embed a gbrain token or connect to a remote gbrain host directly.
+
+The sidecar stores:
+
+- an atomic Markdown copy under `.gotrader/gbrain-sidecar/documents`
+- compact delivery state in `.gotrader/gbrain-sidecar/index.json`
+- capture receipts in `.gotrader/gbrain-sidecar/receipts.jsonl`
+- the gbrain index in `.gotrader/gbrain-sidecar/gbrain-home/.gbrain/brain.pglite`
+
+Self-Improvement can search this history for prior outcomes, recurring blockers, and next-action context. Retrieved memory remains advisory and cannot create validation evidence by itself.
 
 ## Authority
 
@@ -94,8 +104,9 @@ Completed research cycle
   -> replay / walk-forward / evidence / maturity gates
 
 Same compact record
-  -> disabled-by-default gbrain outbox
-  -> optional local gbrain search and synthesis
+  -> fail-closed gbrain transport outbox
+  -> loopback atomic spool and local PGLite index
+  -> compact keyword retrieval
   -> advisory hypothesis or draft proposal
   -> GoTrader deterministic validation
 ```
@@ -107,7 +118,9 @@ Run:
 ```powershell
 npm.cmd run test:research-evidence-memory
 npm.cmd run test:auto-research-lifetime-memory
+npm.cmd run test:gbrain-sidecar
+npm.cmd run test:gbrain-sidecar:real
 npm.cmd run build
 ```
 
-The focused test verifies append/deduplication, aggregation, gbrain fail-closed defaults, loopback-only delivery, packet exclusions, and none/none/none authority.
+The focused tests verify append/deduplication, aggregation, gbrain fail-closed defaults, loopback-only delivery, localStorage cleanup after acknowledgement, packet exclusions, PGLite capture/retrieval, and none/none/none authority.

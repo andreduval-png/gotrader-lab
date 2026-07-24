@@ -34,7 +34,12 @@ const optionalNotes = [
     : undefined,
   diagnostics.find((item) => item.id === "llm-bridge")?.status === "provider_config_missing"
     ? "LLM bridge is online, but OPENAI_API_KEY is not configured. Add it to ignored .env.local or the shell environment, then restart the local stack."
-    : undefined
+    : undefined,
+  diagnostics.find((item) => item.id === "gbrain-sidecar")?.status !== "healthy"
+    ? "gbrain research memory is optional and offline. Native IndexedDB evidence remains authoritative; restart the local stack to restore durable sidecar synchronization."
+    : diagnostics.find((item) => item.id === "gbrain-sidecar")?.health?.payloadSummary?.gbrainInitialized !== true
+      ? "gbrain sidecar durable spool is active, but the optional PGLite index is not initialized."
+      : undefined
 ].filter(Boolean);
 
 const llmProviderMissing = diagnostics.find((item) => item.id === "llm-bridge")?.status === "provider_config_missing";

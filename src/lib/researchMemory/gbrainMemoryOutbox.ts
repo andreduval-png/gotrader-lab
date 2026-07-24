@@ -289,6 +289,13 @@ export async function deliverPendingGbrainMemory(options: {
       });
     }
   }
-  publish({ ...state, entries: state.entries.map((entry) => updated.get(entry.outboxId) ?? entry) });
+  // The browser outbox is transport state only. The sidecar acknowledgement
+  // means the sanitized document has reached durable local storage.
+  publish({
+    ...state,
+    entries: state.entries
+      .map((entry) => updated.get(entry.outboxId) ?? entry)
+      .filter((entry) => entry.status !== "delivered")
+  });
   return { status: failed ? "completed_with_failures" as const : "completed" as const, delivered, failed };
 }

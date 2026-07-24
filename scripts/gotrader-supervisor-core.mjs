@@ -11,6 +11,7 @@ export const gotraderCoreServiceIds = Object.freeze([
   "mt5-upstream",
   "mt5-wrapper",
   "llm-bridge",
+  "gbrain-sidecar",
   "app"
 ]);
 

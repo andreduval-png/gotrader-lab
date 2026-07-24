@@ -1,6 +1,6 @@
 # gbrain Research Memory Plan
 
-Last updated: 2026-06-02
+Last updated: 2026-07-24
 
 ## Purpose
 
@@ -24,7 +24,9 @@ GoTrader treats `garrytan/gbrain` as an optional memory and synthesis reference,
 
 ## Current Implementation
 
-GoTrader has a native research-memory contract in `src/lib/researchMemory` and an authoritative append-only evidence ledger in `src/lib/researchEvidenceLedger`. Completed cycles now create compact evidence records and queue gbrain-compatible Markdown documents. Delivery remains disabled by default and loopback-only; no gbrain dependency or browser token is added. This does not change chart source, walk-forward, readiness, or safety gates.
+GoTrader has a native research-memory contract in `src/lib/researchMemory`, an authoritative append-only evidence ledger in `src/lib/researchEvidenceLedger`, and a loopback-only gbrain sidecar. Completed cycles create compact evidence records, queue sanitized Markdown documents, and synchronize them after a trusted sidecar handshake.
+
+The sidecar persists every accepted document to an atomic Markdown spool before attempting capture into an isolated local gbrain PGLite database. If gbrain is unavailable, the spool remains durable and provides bounded keyword fallback retrieval. No browser token, remote gbrain endpoint, embedding API, execution path, or readiness authority is introduced.
 
 Created packet types:
 
@@ -81,10 +83,11 @@ OpenClaw can eventually read gbrain memory as advisory context for calibration, 
 ```text
 GoTrader deterministic cycle
   -> compact research-memory packet
-  -> disabled-by-default local gbrain outbox [IMPLEMENTED]
-  -> optional trusted loopback writer [OPERATOR CONFIGURATION REQUIRED]
-  -> gbrain search/think synthesis [PLANNED]
-  -> OpenClaw advisory context [PLANNED]
+  -> fail-closed browser transport outbox [IMPLEMENTED]
+  -> trusted loopback sidecar and atomic spool [IMPLEMENTED]
+  -> local gbrain PGLite keyword retrieval [IMPLEMENTED]
+  -> Self-Improvement historical context [IMPLEMENTED]
+  -> optional OpenClaw advisory context [FUTURE]
   -> GoTrader explanation/proposal review only
 ```
 
@@ -101,16 +104,20 @@ gbrain is optional. If gbrain is missing, offline, unconfigured, or rate-limited
 - readiness gates still use GoTrader's own evidence, maturity, and safety logic
 - OpenClaw/LLM advisory can report memory unavailable without blocking deterministic research
 
-## Future Connector Plan
+## Local Sidecar
 
-A future connector may add:
+The implemented sidecar:
 
-- an operator-managed trusted loopback writer for optional gbrain MCP/HTTP writes
-- a dry-run validator that rejects packets containing candles or forbidden authority
-- a queue for best-effort packet writes
-- read-side gap-analysis queries for OpenClaw advisory context
+- binds to `127.0.0.1:8799`
+- validates every document before persistence
+- stores compact Markdown atomically under `.gotrader/gbrain-sidecar/documents`
+- captures documents into `.gotrader/gbrain-sidecar/gbrain-home/.gbrain/brain.pglite`
+- supports compact keyword retrieval
+- backfills existing native evidence
+- removes acknowledged browser outbox payloads to avoid localStorage quota growth
+- starts with the normal local GoTrader stack but does not block deterministic research if offline
 
-The connector should be optional and disabled by default. It must not become a required runtime dependency.
+See `docs/gbrain-local-sidecar-runbook.md` for setup, storage paths, commands, and recovery behavior.
 
 ## Safety Boundary
 

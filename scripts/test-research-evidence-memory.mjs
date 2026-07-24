@@ -255,6 +255,11 @@ async function main() {
   });
   assert.equal(delivered.status, "completed");
   assert.equal(delivered.delivered, 1);
+  assert.equal(
+    gbrain.loadGbrainMemoryOutbox().entries.length,
+    0,
+    "acknowledged Markdown must leave browser localStorage after durable delivery"
+  );
 
   const unsafePacket = structuredClone(packet);
   unsafePacket.authority.brokerAuthority = "read_only";
@@ -267,6 +272,7 @@ async function main() {
   const proposalSource = fs.readFileSync(path.join(root, "src/lib/selfImprovement/createCalibrationProposal.ts"), "utf8");
   assert.match(cycleSource, /appendResearchEvidenceRecord/);
   assert.match(cycleSource, /queueGbrainMemoryPacket/);
+  assert.match(cycleSource, /syncGbrainResearchMemory/);
   assert.match(proposalSource, /lifetimeEvidenceFor/);
   assert.match(proposalSource, /historical_context_only/);
 
@@ -274,7 +280,7 @@ async function main() {
     status: "passed",
     records: backfilled.totalRecords,
     profiles: backfilled.totalProfiles,
-    gbrainDefault: "disabled",
+    gbrainDefault: "disabled_until_trusted_loopback_handshake",
     gbrainDelivery: delivered.status,
     authority: first.authority
   }, null, 2));

@@ -24,7 +24,7 @@ import { loadLocalEnvironment } from "./local-env.mjs";
 
 await loadLocalEnvironment();
 
-const serviceOrder = ["mt5-upstream", "mt5-wrapper", "llm-bridge", "app", "tradingview-mcp"];
+const serviceOrder = ["mt5-upstream", "mt5-wrapper", "llm-bridge", "gbrain-sidecar", "app", "tradingview-mcp"];
 
 const envStatus = mt5UpstreamEnvStatus();
 const enableTradingView = isTruthyEnv(process.env.ENABLE_TRADINGVIEW_MCP);
@@ -109,6 +109,17 @@ const startConfigFor = async (id) => {
       args: ["run", "llm:bridge"],
       cwd: repoRoot,
       commandLabel: "npm.cmd run llm:bridge",
+      waitMs: 300
+    };
+  }
+  if (id === "gbrain-sidecar") {
+    return {
+      id,
+      label: "gbrain research-memory sidecar",
+      command: npmCommand,
+      args: ["run", "gbrain:sidecar"],
+      cwd: repoRoot,
+      commandLabel: "npm.cmd run gbrain:sidecar",
       waitMs: 300
     };
   }

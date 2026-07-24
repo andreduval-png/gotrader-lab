@@ -54,6 +54,14 @@ export const serviceDefinitions = [
     healthUrls: [`http://${stackHost}:8787/health`, `http://${stackHost}:8787/`]
   },
   {
+    id: "gbrain-sidecar",
+    label: "gbrain research-memory sidecar",
+    port: 8799,
+    required: false,
+    defaultEnabled: true,
+    healthUrls: [`http://${stackHost}:8799/health`, `http://${stackHost}:8799/v1/status`]
+  },
+  {
     id: "tradingview-mcp",
     label: "TradingView MCP bridge",
     port: 7331,
@@ -284,6 +292,12 @@ function summarizePayload(payload) {
     advisoryCapabilityStatus: payload.advisoryCapabilityStatus,
     advisoryProviderConfigured: payload.advisoryProviderConfigured,
     modelConfigured: payload.modelConfigured,
+    sidecarStatus: payload.sidecarStatus,
+    gbrainBackend: payload.gbrainBackend,
+    gbrainCliInstalled: payload.gbrainCliInstalled,
+    gbrainInitialized: payload.gbrainInitialized,
+    durableDocumentCount: payload.durableDocumentCount,
+    indexedDocumentCount: payload.indexedDocumentCount,
     executionAuthority: payload.executionAuthority,
     brokerAuthority: payload.brokerAuthority,
     readinessOverrideAuthority: payload.readinessOverrideAuthority

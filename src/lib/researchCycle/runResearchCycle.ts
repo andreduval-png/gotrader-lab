@@ -31,9 +31,7 @@ import {
   buildResearchEvidenceMemoryPacket,
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
-import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
-import { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";
-import { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
+import { queueGbrainMemoryPacket, syncGbrainResearchMemory } from "@/lib/researchMemory";`r`nimport { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";`r`nimport { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -2120,6 +2118,7 @@ export async function runResearchCycle({
       run.evidenceIdentityKey = evidenceRecord.identity.identityKey;
       run.evidenceStorageBackend = appendResult.backend;
       run.gbrainMemoryOutboxId = outboxEntry.outboxId;
+      void syncGbrainResearchMemory({ includeEvidenceBackfill: false });
     } catch (error) {
       run.candleWindowWarnings = uniqueText([
         ...(run.candleWindowWarnings ?? []),
