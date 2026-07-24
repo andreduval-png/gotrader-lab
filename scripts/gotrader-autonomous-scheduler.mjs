@@ -57,7 +57,8 @@ const maximumArtifacts = Math.min(
 await fs.mkdir(schedulerRoot, { recursive: true });
 const shadowContextEnabled = [
   "always_on_shadow_context",
-  "always_on_shadow_context_verified"
+  "always_on_shadow_context_verified",
+  "always_on_shadow_context_operational"
 ].includes(profileId);
 const activeTaskRegistry = buildSchedulerTaskRegistry({
   enableShadowContext: shadowContextEnabled
@@ -128,12 +129,13 @@ let lastStatusWriteAt = 0;
 const buildStatus = () => {
   const engineStatus = engine.status();
   const feedState = lastFeedStatus?.state ?? "unknown";
+  const marketClosedPause = feedState === "paused_market_closed";
   const feedBlockers = Array.isArray(lastFeedStatus?.blockers)
     ? lastFeedStatus.blockers
     : [];
   const blockers = [
     ...(reconciliationBlocker ? [reconciliationBlocker] : []),
-    ...(lastFeedStatus?.timeContractEligible === false
+    ...(lastFeedStatus?.timeContractEligible === false && !marketClosedPause
       ? ["closed_candle_feed_not_eligible"]
       : []),
     ...feedBlockers
@@ -145,6 +147,8 @@ const buildStatus = () => {
   const schedulerState =
     engineStatus.state === "paused"
       ? "paused"
+      : marketClosedPause
+        ? "paused_market_closed"
       : reconciliationBlocker
         ? "blocked"
         : consecutiveFeedFailures >= 3
@@ -159,6 +163,9 @@ const buildStatus = () => {
     feedUrl,
     feedState,
     feedTimeContractEligible: lastFeedStatus?.timeContractEligible === true,
+    marketState: lastFeedStatus?.marketState,
+    proofPausedForMarketClosed:
+      lastFeedStatus?.proofPausedForMarketClosed === true,
     checkpointStatus,
     durableArtifactCount: durableArtifacts.length,
     lastHeartbeatAt: new Date().toISOString(),

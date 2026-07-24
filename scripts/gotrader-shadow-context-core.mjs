@@ -273,6 +273,11 @@ export async function createShadowContextController({
       const timeEligibility = Object.freeze({
         currentLiveEligible: true,
         historicalEligible: false,
+        boundedHistoricalContextEligible:
+          payload.hydration?.status === "ready" &&
+          payload.hydration?.boundedHistoricalContextEligible === true,
+        boundedHistoricalContextArtifactId:
+          payload.hydration?.hydrationFingerprint,
         verificationScope: "current_live",
         verifiedAtUtc: payload.timeContract.verificationGeneratedAtUtc,
         currentLiveValidUntilUtc:

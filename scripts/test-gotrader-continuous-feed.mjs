@@ -8,7 +8,9 @@ import {
   createContinuousFeedEngine,
   evaluateRuntimeTimeContract,
   normalizeRuntimeCandleResponse,
-  normalizeRuntimeQuote
+  normalizeRuntimeProviderTimestamp,
+  normalizeRuntimeQuote,
+  retainFreshRuntimeTimeContractDuringRenewal
 } from "./gotrader-continuous-feed-core.mjs";
 
 const candle = (time, close = 100) => ({
@@ -63,6 +65,103 @@ const normalizedCandles = normalizeRuntimeCandleResponse(
 assert.equal(normalizedCandles.candles[0].candleCloseTime, "2026-07-23T10:01:00.000Z");
 assert.equal(evaluateRuntimeTimeContract(unverifiedTime).eligible, false);
 assert.equal(evaluateRuntimeTimeContract(verifiedTime).eligible, true);
+assert.equal(
+  normalizeRuntimeProviderTimestamp(
+    "2026-07-23T13:00:00.000Z",
+    {
+      providerTimeBasis: "mt5_server_wall_clock",
+      observedOffsetMinutes: 180
+    }
+  ).normalizedTimeUtc,
+  "2026-07-23T10:00:00.000Z"
+);
+
+const freshWatcherArtifact = {
+  artifactId: "sha256:watcher-renewal",
+  generatedAtUtc: "2026-07-23T10:01:30.000Z",
+  expiresAtUtc: "2026-07-23T10:04:30.000Z",
+  validationStatus: "accepted",
+  currentLiveTimeBasisVerified: true,
+  historicalDstPolicyVerified: false,
+  terminalConnected: true,
+  providerTimeBasis: "mt5_server_wall_clock",
+  observedOffsetMinutes: 180,
+  terminalClockClassificationVersion: "1.0.0",
+  continuityStartedAtUtc: "2026-07-23T09:00:00.000Z",
+  probeInstanceFingerprint: "terminal-a",
+  authority: continuousFeedAuthority
+};
+const healthyWatcherStatus = {
+  state: "healthy",
+  currentLiveEligible: true,
+  verificationProofState: "fresh",
+  marketState: "market_open",
+  operationalMarketState: "market_open",
+  verificationArtifactId: freshWatcherArtifact.artifactId,
+  providerTimeBasis: freshWatcherArtifact.providerTimeBasis,
+  observedOffsetMinutes: freshWatcherArtifact.observedOffsetMinutes,
+  terminalInstanceFingerprint:
+    freshWatcherArtifact.probeInstanceFingerprint,
+  ...continuousFeedAuthority
+};
+const retainedRenewal = retainFreshRuntimeTimeContractDuringRenewal({
+  previous: {
+    eligible: true,
+    version: "1.1.0",
+    providerTimeBasis: "mt5_server_wall_clock",
+    observedOffsetMinutes: 180,
+    terminalClockClassificationVersion: "1.0.0",
+    continuityStartedAtUtc: "2026-07-23T09:00:00.000Z",
+    blockers: [],
+    warnings: []
+  },
+  candidate: {
+    eligible: false,
+    pausedForMarketClosed: false,
+    blockers: [
+      "current_live_time_basis_not_verified",
+      "current_live_verification_scope_invalid",
+      "current_live_watcher_provider_basis_mismatch"
+    ]
+  },
+  verificationArtifact: freshWatcherArtifact,
+  verifierStatus: healthyWatcherStatus,
+  nowUtc: "2026-07-23T10:01:31.000Z"
+});
+assert.equal(retainedRenewal?.eligible, true);
+assert.equal(retainedRenewal?.retainedDuringRenewalHandoff, true);
+assert.equal(
+  retainFreshRuntimeTimeContractDuringRenewal({
+    previous: retainedRenewal,
+    candidate: {
+      eligible: false,
+      pausedForMarketClosed: false,
+      blockers: ["current_live_watcher_terminal_not_connected"]
+    },
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: healthyWatcherStatus,
+    nowUtc: "2026-07-23T10:01:32.000Z"
+  }),
+  undefined
+);
+assert.equal(
+  retainFreshRuntimeTimeContractDuringRenewal({
+    previous: retainedRenewal,
+    candidate: {
+      eligible: false,
+      pausedForMarketClosed: false,
+      blockers: ["current_live_time_basis_not_verified"]
+    },
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: {
+      ...healthyWatcherStatus,
+      currentLiveEligible: false,
+      verificationProofState: "stale"
+    },
+    nowUtc: "2026-07-23T10:01:32.000Z"
+  }),
+  undefined
+);
 
 const firstEngine = createContinuousFeedEngine();
 const blocked = firstEngine.processPoll({

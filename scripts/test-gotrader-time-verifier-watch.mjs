@@ -349,6 +349,71 @@ const expired = restartedEngine.status({ nowUtc: at(400) });
 assert.equal(expired.verificationProofState, "stale");
 assert.equal(expired.currentLiveEligible, false);
 
+const marketPauseEngine = createTimeVerifierWatchEngine();
+const marketProof = marketPauseEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(31),
+    proofPauseEligible: false
+  },
+  nowUtc: at(31)
+});
+assert.equal(marketProof.status.currentLiveEligible, true);
+const marketPaused = marketPauseEngine.processEvidence({
+  artifact: {
+    ...second.artifact,
+    validationStatus: "blocked",
+    blockers: ["fixture_market_break_conflict"]
+  },
+  directProbe: second.probe,
+  marketSnapshot: {
+    marketState: "market_closed",
+    operationalState: "market_closed",
+    observedAtUtc: at(61),
+    reason: "configured_daily_maintenance_break",
+    schedule: { scheduleId: "fixture-schedule" },
+    proofPauseEligible: true
+  },
+  nowUtc: at(61)
+});
+assert.equal(marketPaused.action, "paused_market_closed");
+assert.equal(marketPaused.status.state, "healthy_paused_market_closed");
+assert.equal(marketPaused.status.currentLiveEligible, false);
+assert.equal(marketPaused.status.verificationFailureCount, 0);
+const resumePending = marketPauseEngine.processEvidence({
+  artifact: transientArtifact,
+  directProbe: transientProbe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(121),
+    proofPauseEligible: false
+  },
+  nowUtc: at(121)
+});
+assert.equal(resumePending.status.currentLiveEligible, false);
+assert.equal(
+  resumePending.status.awaitingFreshProofAfterMarketResume,
+  true
+);
+const resumed = marketPauseEngine.processEvidence({
+  artifact: third.artifact,
+  directProbe: third.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(91),
+    proofPauseEligible: false
+  },
+  nowUtc: at(91)
+});
+assert.equal(resumed.action, "renewed");
+assert.equal(resumed.status.currentLiveEligible, true);
+assert.equal(resumed.status.marketResumeCount, 1);
+
 const strictEvaluation = evaluateRuntimeTimeContract(third.contract, {
   requireVerificationArtifact: true,
   requireWatcherArtifact: true,

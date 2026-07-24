@@ -13,6 +13,7 @@ import {
   createTimeVerifierWatchEngine,
   TIME_VERIFIER_WATCH_SERVICE_VERSION
 } from "./gotrader-time-verifier-watch-core.mjs";
+import { classifyOperationalMarketState } from "./gotrader-market-state-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -117,7 +118,16 @@ const poll = async () => {
     await persist(
       engine.processEvidence({
         artifact: evidence.artifact,
-        directProbe: evidence.directProbe
+        directProbe: evidence.directProbe,
+        marketSnapshot: classifyOperationalMarketState({
+          nowUtc: new Date().toISOString(),
+          quoteObservedAt: evidence.directProbe?.quoteObservedAt,
+          terminalProbeCapturedAt:
+            evidence.directProbe?.terminalProbeCapturedAt,
+          terminalConnected:
+            evidence.directProbe?.terminalConnected === true,
+          transportConnected: true
+        })
       })
     );
   } catch (error) {

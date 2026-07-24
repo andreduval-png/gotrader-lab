@@ -13,6 +13,8 @@ export const continuousFeedCapability = Object.freeze({
 
 export const CONTINUOUS_FEED_SERVICE_VERSION = "gotrader-continuous-feed-v1";
 export const RUNTIME_MARKET_EVENT_VERSION = "gotrader-runtime-market-event-v1";
+export const RUNTIME_TIME_NORMALIZATION_VERSION =
+  "mt5-provider-wall-clock-to-utc-v1";
 
 export const defaultRollingStoreCapacities = Object.freeze({
   "1m": 2_000,
@@ -84,6 +86,39 @@ const isoTime = (value) => {
   return parsed.toISOString();
 };
 
+export function normalizeRuntimeProviderTimestamp(value, timeContract) {
+  const providerTime = isoTime(value);
+  if (!providerTime) {
+    return {
+      providerTime: undefined,
+      normalizedTimeUtc: undefined,
+      blocker: "provider_timestamp_invalid"
+    };
+  }
+  if (timeContract?.providerTimeBasis !== "mt5_server_wall_clock") {
+    return {
+      providerTime,
+      normalizedTimeUtc: providerTime,
+      offsetAppliedMinutes: 0
+    };
+  }
+  const offsetMinutes = finiteNumber(timeContract?.observedOffsetMinutes);
+  if (!Number.isInteger(offsetMinutes) || Math.abs(offsetMinutes) > 840) {
+    return {
+      providerTime,
+      normalizedTimeUtc: undefined,
+      blocker: "provider_wall_clock_offset_invalid"
+    };
+  }
+  return {
+    providerTime,
+    normalizedTimeUtc: new Date(
+      Date.parse(providerTime) - offsetMinutes * 60_000
+    ).toISOString(),
+    offsetAppliedMinutes: offsetMinutes
+  };
+}
+
 export function buildRuntimeSourceIdentity({
   sourceProvider = "mt5_read_only",
   requestedSymbol,
@@ -130,12 +165,24 @@ export function buildRuntimeCandlePayloadHash(candle) {
   })}`;
 }
 
+export function buildRuntimeTimeIdentityVersion(timeContract) {
+  const version = String(timeContract?.version ?? "unknown");
+  if (timeContract?.providerTimeBasis !== "mt5_server_wall_clock") {
+    return `${version}|provider:${timeContract?.providerTimeBasis ?? "unknown"}`;
+  }
+  const offsetMinutes = finiteNumber(timeContract?.observedOffsetMinutes);
+  return `${version}|provider:mt5_server_wall_clock|offset:${
+    Number.isInteger(offsetMinutes) ? offsetMinutes : "unknown"
+  }|normalization:${RUNTIME_TIME_NORMALIZATION_VERSION}`;
+}
+
 export function evaluateRuntimeTimeContract(
   contract,
   {
     requireVerificationArtifact = false,
     requireWatcherArtifact = false,
     verificationArtifact,
+    verifierStatus,
     nowUtc = new Date().toISOString()
   } = {}
 ) {
@@ -296,9 +343,68 @@ export function evaluateRuntimeTimeContract(
         verificationArtifact?.continuityStartedAtUtc;
     }
   }
+  const pausedForMarketClosed =
+    requireWatcherArtifact &&
+    verifierStatus?.marketState === "market_closed" &&
+    verifierStatus?.proofPausedForMarketClosed === true &&
+    verifierStatus?.currentLiveEligible === false &&
+    verifierStatus?.executionAuthority === "none" &&
+    verifierStatus?.brokerAuthority === "none" &&
+    verifierStatus?.readinessOverrideAuthority === "none";
+  if (pausedForMarketClosed) {
+    const pausedProviderTimeBasis =
+      verificationArtifact?.providerTimeBasis ??
+      contract?.providerTimeBasis ??
+      "unknown";
+    const pausedObservedOffsetMinutes =
+      verificationArtifact?.observedOffsetMinutes ??
+      finiteNumber(
+        contract?.terminalObservedOffsetMinutes ??
+          contract?.observedOffsetMinutes
+      );
+    return {
+      eligible: false,
+      pausedForMarketClosed: true,
+      version,
+      identityVersion: buildRuntimeTimeIdentityVersion({
+        version,
+        providerTimeBasis: pausedProviderTimeBasis,
+        observedOffsetMinutes: pausedObservedOffsetMinutes
+      }),
+      artifactId: verificationArtifact?.artifactId ?? effectiveArtifactId,
+      contractArtifactId: artifactId || undefined,
+      verificationScope: "current_live",
+      generatedAtUtc: verificationArtifact?.generatedAtUtc ?? generatedAtUtc,
+      expiresAtUtc: verificationArtifact?.expiresAtUtc ?? expiresAtUtc,
+      proofState: "paused_market_closed",
+      proofAgeSeconds,
+      terminalClockClassificationVersion:
+        verificationArtifact?.terminalClockClassificationVersion ??
+        contract?.terminalClockClassificationVersion,
+      providerTimeBasis: pausedProviderTimeBasis,
+      observedOffsetMinutes: pausedObservedOffsetMinutes,
+      continuityStartedAtUtc:
+        verificationArtifact?.continuityStartedAtUtc ??
+        continuityStartedAtUtc,
+      watcherArtifactRequired: true,
+      marketState: "market_closed",
+      operationalMarketState:
+        verifierStatus?.operationalMarketState ?? "market_closed",
+      blockers: [],
+      warnings: ["market_closed_verified_pause"]
+    };
+  }
+  const effectiveObservedOffsetMinutes = finiteNumber(
+    contract?.terminalObservedOffsetMinutes ?? contract?.observedOffsetMinutes
+  );
   return {
     eligible: currentLiveVerified && !stale && blockers.length === 0,
     version,
+    identityVersion: buildRuntimeTimeIdentityVersion({
+      version,
+      providerTimeBasis: contract?.providerTimeBasis,
+      observedOffsetMinutes: effectiveObservedOffsetMinutes
+    }),
     artifactId: effectiveArtifactId,
     contractArtifactId: artifactId || undefined,
     verificationScope: contract?.timeVerificationScope ?? "none",
@@ -311,20 +417,115 @@ export function evaluateRuntimeTimeContract(
     terminalClockClassificationVersion:
       contract?.terminalClockClassificationVersion,
     providerTimeBasis: contract?.providerTimeBasis ?? "unknown",
-    observedOffsetMinutes: finiteNumber(
-      contract?.terminalObservedOffsetMinutes ?? contract?.observedOffsetMinutes
-    ),
+    observedOffsetMinutes: effectiveObservedOffsetMinutes,
     continuityStartedAtUtc,
     watcherArtifactRequired: requireWatcherArtifact,
-    blockers
+    pausedForMarketClosed: false,
+    marketState: verifierStatus?.marketState ?? "time_unverified",
+    operationalMarketState:
+      verifierStatus?.operationalMarketState ?? "time_unverified",
+    blockers,
+    warnings: []
   };
 }
 
-export function normalizeRuntimeQuote(payload, receivedAt = new Date().toISOString()) {
+const renewalHandoffBlockers = new Set([
+  "current_live_time_basis_not_verified",
+  "current_live_verification_scope_invalid",
+  "current_live_watcher_provider_basis_mismatch"
+]);
+
+export function retainFreshRuntimeTimeContractDuringRenewal({
+  previous,
+  candidate,
+  verificationArtifact,
+  verifierStatus,
+  nowUtc = new Date().toISOString()
+}) {
+  if (
+    previous?.eligible !== true ||
+    candidate?.eligible !== false ||
+    candidate?.pausedForMarketClosed === true ||
+    !candidate?.blockers?.length ||
+    candidate.blockers.some(
+      (blocker) => !renewalHandoffBlockers.has(blocker)
+    )
+  ) {
+    return undefined;
+  }
+  const nowMs = Date.parse(nowUtc);
+  const artifactGeneratedMs = Date.parse(
+    verificationArtifact?.generatedAtUtc ?? ""
+  );
+  const artifactExpiresMs = Date.parse(
+    verificationArtifact?.expiresAtUtc ?? ""
+  );
+  const artifactAgeMs = nowMs - artifactGeneratedMs;
+  const authority = verificationArtifact?.authority ?? {};
+  const verifierHealthy =
+    verifierStatus?.state === "healthy" &&
+    verifierStatus?.currentLiveEligible === true &&
+    verifierStatus?.verificationProofState === "fresh" &&
+    ["market_open", "market_quiet"].includes(verifierStatus?.marketState) &&
+    verifierStatus?.verificationArtifactId === verificationArtifact?.artifactId &&
+    verifierStatus?.providerTimeBasis === verificationArtifact?.providerTimeBasis &&
+    verifierStatus?.observedOffsetMinutes ===
+      verificationArtifact?.observedOffsetMinutes &&
+    verifierStatus?.terminalInstanceFingerprint ===
+      verificationArtifact?.probeInstanceFingerprint &&
+    verifierStatus?.executionAuthority === "none" &&
+    verifierStatus?.brokerAuthority === "none" &&
+    verifierStatus?.readinessOverrideAuthority === "none";
+  const artifactHealthy =
+    verificationArtifact?.validationStatus === "accepted" &&
+    verificationArtifact?.currentLiveTimeBasisVerified === true &&
+    verificationArtifact?.historicalDstPolicyVerified === false &&
+    verificationArtifact?.terminalConnected === true &&
+    verificationArtifact?.providerTimeBasis === previous?.providerTimeBasis &&
+    verificationArtifact?.observedOffsetMinutes ===
+      previous?.observedOffsetMinutes &&
+    verificationArtifact?.terminalClockClassificationVersion ===
+      previous?.terminalClockClassificationVersion &&
+    verificationArtifact?.continuityStartedAtUtc ===
+      previous?.continuityStartedAtUtc &&
+    authority.executionAuthority === "none" &&
+    authority.brokerAuthority === "none" &&
+    authority.readinessOverrideAuthority === "none" &&
+    Number.isFinite(nowMs) &&
+    Number.isFinite(artifactGeneratedMs) &&
+    Number.isFinite(artifactExpiresMs) &&
+    artifactAgeMs >= -5_000 &&
+    artifactAgeMs <= 120_000 &&
+    nowMs < artifactExpiresMs;
+  if (!verifierHealthy || !artifactHealthy) return undefined;
+  return {
+    ...previous,
+    artifactId: verificationArtifact.artifactId,
+    generatedAtUtc: verificationArtifact.generatedAtUtc,
+    expiresAtUtc: verificationArtifact.expiresAtUtc,
+    proofState: "fresh",
+    proofAgeSeconds: Math.max(0, Math.round(artifactAgeMs / 1_000)),
+    marketState: verifierStatus.marketState,
+    operationalMarketState: verifierStatus.operationalMarketState,
+    retainedDuringRenewalHandoff: true,
+    blockers: [],
+    warnings: ["current_live_contract_renewal_handoff_retained"]
+  };
+}
+
+export function normalizeRuntimeQuote(
+  payload,
+  receivedAt = new Date().toISOString(),
+  timeContract
+) {
   const requestedSymbol = String(payload?.requestedSymbol ?? "MNQ");
   const brokerSymbol = String(payload?.brokerSymbol ?? payload?.symbol ?? "USTECH");
+  const normalizedTimestamp = normalizeRuntimeProviderTimestamp(
+    payload?.timestamp ?? payload?.serverTimestamp ?? payload?.rawTime,
+    timeContract
+  );
   const observedMarketTime =
-    isoTime(payload?.timestamp ?? payload?.serverTimestamp ?? payload?.rawTime) ?? receivedAt;
+    normalizedTimestamp.normalizedTimeUtc ?? receivedAt;
   const bid = finiteNumber(payload?.bid);
   const ask = finiteNumber(payload?.ask);
   const mid =
@@ -334,6 +535,8 @@ export function normalizeRuntimeQuote(payload, receivedAt = new Date().toISOStri
     requestedSymbol,
     brokerSymbol,
     observedMarketTime,
+    providerObservedMarketTime: normalizedTimestamp.providerTime,
+    offsetAppliedMinutes: normalizedTimestamp.offsetAppliedMinutes,
     bid,
     ask,
     mid,
@@ -342,7 +545,11 @@ export function normalizeRuntimeQuote(payload, receivedAt = new Date().toISOStri
   };
 }
 
-export function normalizeRuntimeCandleResponse(payload, receivedAt = new Date().toISOString()) {
+export function normalizeRuntimeCandleResponse(
+  payload,
+  receivedAt = new Date().toISOString(),
+  timeContract
+) {
   const requestedSymbol = String(payload?.requestedSymbol ?? "MNQ");
   const brokerSymbol = String(payload?.brokerSymbol ?? payload?.symbol ?? "USTECH");
   const timeframe = normalizeRuntimeTimeframe(payload?.timeframe ?? payload?.requestedTimeframe);
@@ -356,9 +563,17 @@ export function normalizeRuntimeCandleResponse(payload, receivedAt = new Date().
       blockers: ["unsupported_timeframe"]
     };
   }
+  const normalizationBlockers = new Set();
   const candles = (Array.isArray(payload?.candles) ? payload.candles : [])
     .map((candle) => {
-      const candleOpenTime = isoTime(candle?.timestamp ?? candle?.time ?? candle?.rawTime);
+      const normalizedTimestamp = normalizeRuntimeProviderTimestamp(
+        candle?.timestamp ?? candle?.time ?? candle?.rawTime,
+        timeContract
+      );
+      if (normalizedTimestamp.blocker) {
+        normalizationBlockers.add(normalizedTimestamp.blocker);
+      }
+      const candleOpenTime = normalizedTimestamp.normalizedTimeUtc;
       const open = finiteNumber(candle?.open);
       const high = finiteNumber(candle?.high);
       const low = finiteNumber(candle?.low);
@@ -377,6 +592,13 @@ export function normalizeRuntimeCandleResponse(payload, receivedAt = new Date().
       return {
         candleOpenTime,
         candleCloseTime: new Date(Date.parse(candleOpenTime) + durationMs).toISOString(),
+        providerCandleOpenTime: normalizedTimestamp.providerTime,
+        providerCandleCloseTime: normalizedTimestamp.providerTime
+          ? new Date(
+              Date.parse(normalizedTimestamp.providerTime) + durationMs
+            ).toISOString()
+          : undefined,
+        offsetAppliedMinutes: normalizedTimestamp.offsetAppliedMinutes,
         open,
         high,
         low,
@@ -394,7 +616,10 @@ export function normalizeRuntimeCandleResponse(payload, receivedAt = new Date().
     brokerSymbol,
     timeframe,
     candles,
-    blockers: candles.length ? [] : ["candle_data_unavailable"]
+    blockers: [
+      ...normalizationBlockers,
+      ...(candles.length ? [] : ["candle_data_unavailable"])
+    ]
   };
 }
 
@@ -476,6 +701,9 @@ export function createContinuousFeedEngine({
   let rejectedCloseEventCount = Number(
     checkpoint?.rejectedCloseEventCount ?? 0
   );
+  let renewalHandoffRetentionCount = Number(
+    checkpoint?.renewalHandoffRetentionCount ?? 0
+  );
   let lastRejectedClose;
   let lastFormingCandleUpdate;
   let lastClosedCandleEvent;
@@ -491,6 +719,8 @@ export function createContinuousFeedEngine({
     serviceVersion: CONTINUOUS_FEED_SERVICE_VERSION,
     state: stale
       ? "stale"
+      : latestTimeContract.pausedForMarketClosed
+        ? "paused_market_closed"
       : blockers.size
         ? "blocked"
         : latestTimeContract.eligible
@@ -517,9 +747,18 @@ export function createContinuousFeedEngine({
     quoteUpdateCount,
     formingCandleUpdateCount,
     rejectedCloseEventCount,
+    renewalHandoffRetentionCount,
+    renewalHandoffRetained:
+      latestTimeContract.retainedDuringRenewalHandoff === true,
     lastRejectedClose,
     timeContractEligible: latestTimeContract.eligible,
+    marketState: latestTimeContract.marketState,
+    operationalMarketState: latestTimeContract.operationalMarketState,
+    proofPausedForMarketClosed:
+      latestTimeContract.pausedForMarketClosed === true,
     timeContractVersion: latestTimeContract.version,
+    timeIdentityVersion:
+      latestTimeContract.identityVersion ?? latestTimeContract.version,
     verificationArtifactRequired: requireVerificationArtifact,
     watcherArtifactRequired: requireWatcherArtifact,
     verificationArtifactId: latestTimeContract.artifactId,
@@ -535,7 +774,7 @@ export function createContinuousFeedEngine({
       latestTimeContract.terminalClockClassificationVersion,
     offsetRegimeStartUtc: latestTimeContract.continuityStartedAtUtc,
     blockers: [...blockers],
-    warnings: [...warnings],
+    warnings: [...new Set([...warnings, ...(latestTimeContract.warnings ?? [])])],
     ...continuousFeedCapability,
     ...continuousFeedAuthority
   });
@@ -567,6 +806,7 @@ export function createContinuousFeedEngine({
     quoteUpdateCount,
     formingCandleUpdateCount,
     rejectedCloseEventCount,
+    renewalHandoffRetentionCount,
     checkpointedAt: new Date().toISOString(),
     ...continuousFeedAuthority
   });
@@ -612,15 +852,27 @@ export function createContinuousFeedEngine({
     candlePayloads = [],
     timeContract,
     verificationArtifact,
+    verifierStatus,
     receivedAt = new Date().toISOString()
   }) => {
     const eligibilityBeforePoll = latestTimeContract.eligible;
-    latestTimeContract = evaluateRuntimeTimeContract(timeContract, {
+    const evaluatedTimeContract = evaluateRuntimeTimeContract(timeContract, {
       requireVerificationArtifact,
       requireWatcherArtifact,
       verificationArtifact,
+      verifierStatus,
       nowUtc: receivedAt
     });
+    const retainedTimeContract =
+      retainFreshRuntimeTimeContractDuringRenewal({
+        previous: latestTimeContract,
+        candidate: evaluatedTimeContract,
+        verificationArtifact,
+        verifierStatus,
+        nowUtc: receivedAt
+      });
+    latestTimeContract = retainedTimeContract ?? evaluatedTimeContract;
+    if (retainedTimeContract) renewalHandoffRetentionCount += 1;
     for (const blocker of priorTimeContractBlockers) blockers.delete(blocker);
     priorTimeContractBlockers = new Set(latestTimeContract.blockers);
     const eligibilityRecoveredThisPoll =
@@ -628,7 +880,11 @@ export function createContinuousFeedEngine({
       timeContractStateObserved &&
       !eligibilityBeforePoll;
     const events = [];
-    const nextQuote = normalizeRuntimeQuote(quotePayload, receivedAt);
+    const nextQuote = normalizeRuntimeQuote(
+      quotePayload,
+      receivedAt,
+      latestTimeContract
+    );
     const quoteChanged =
       !quote ||
       quote.observedMarketTime !== nextQuote.observedMarketTime ||
@@ -638,7 +894,8 @@ export function createContinuousFeedEngine({
     const quoteSourceIdentity = buildRuntimeSourceIdentity({
       requestedSymbol: quote.requestedSymbol,
       brokerSymbol: quote.brokerSymbol,
-      timeContractVersion: latestTimeContract.version
+      timeContractVersion:
+        latestTimeContract.identityVersion ?? latestTimeContract.version
     });
     if (quoteChanged) {
       quoteUpdateCount += 1;
@@ -666,23 +923,31 @@ export function createContinuousFeedEngine({
     }
 
     if (!latestTimeContract.eligible) {
-      for (const blocker of latestTimeContract.blockers) blockers.add(blocker);
-      warnings.add("closed_candle_events_paused_until_time_contract_is_verified");
-      if (!timeContractStateObserved || lastEligibility) {
-        events.push(
-          createStateEvent({
-            type: "source_blocked",
-            reason: latestTimeContract.blockers.join(","),
-            receivedAt,
-            sourceIdentity: quoteSourceIdentity
-          })
+      if (latestTimeContract.pausedForMarketClosed) {
+        warnings.add("market_closed_verified_pause");
+        warnings.delete(
+          "closed_candle_events_paused_until_time_contract_is_verified"
         );
+      } else {
+        for (const blocker of latestTimeContract.blockers) blockers.add(blocker);
+        warnings.add("closed_candle_events_paused_until_time_contract_is_verified");
+        if (!timeContractStateObserved || lastEligibility) {
+          events.push(
+            createStateEvent({
+              type: "source_blocked",
+              reason: latestTimeContract.blockers.join(","),
+              receivedAt,
+              sourceIdentity: quoteSourceIdentity
+            })
+          );
+        }
       }
     } else {
       for (const blocker of latestTimeContract.blockers) blockers.delete(blocker);
       blockers.delete("current_live_time_basis_not_verified");
       blockers.delete("terminal_time_evidence_stale");
       warnings.delete("closed_candle_events_paused_until_time_contract_is_verified");
+      warnings.delete("market_closed_verified_pause");
       if (!lastEligibility) {
         recoveredEventCount += 1;
         events.push(
@@ -700,7 +965,11 @@ export function createContinuousFeedEngine({
 
     let candleDataUnavailable = false;
     for (const payload of candlePayloads) {
-      const normalized = normalizeRuntimeCandleResponse(payload, receivedAt);
+      const normalized = normalizeRuntimeCandleResponse(
+        payload,
+        receivedAt,
+        latestTimeContract
+      );
       if (!normalized.timeframe || normalized.blockers.length) {
         candleDataUnavailable = true;
         for (const blocker of normalized.blockers) {
@@ -726,7 +995,8 @@ export function createContinuousFeedEngine({
         requestedSymbol: normalized.requestedSymbol,
         brokerSymbol: normalized.brokerSymbol,
         timeframe: normalized.timeframe,
-        timeContractVersion: latestTimeContract.version
+        timeContractVersion:
+          latestTimeContract.identityVersion ?? latestTimeContract.version
       });
       const marketReferenceMs = Date.parse(quote.observedMarketTime);
       const eligibleByMarketTime = merged.filter(
@@ -737,7 +1007,10 @@ export function createContinuousFeedEngine({
       const closed = latestTimeContract.eligible
         ? eligibleByMarketTime
         : [];
-      if (!latestTimeContract.eligible) {
+      if (
+        !latestTimeContract.eligible &&
+        !latestTimeContract.pausedForMarketClosed
+      ) {
         for (const candle of eligibleByMarketTime.slice(-maximumCatchUpCandles)) {
           const rejectedIdentity = `${key}:${candle.candleOpenTime}`;
           if (rejectedCloseIdentities.has(rejectedIdentity)) continue;
@@ -941,7 +1214,8 @@ export function createContinuousFeedEngine({
     const sourceIdentity = buildRuntimeSourceIdentity({
       requestedSymbol: quote?.requestedSymbol ?? "MNQ",
       brokerSymbol: quote?.brokerSymbol ?? "USTECH",
-      timeContractVersion: latestTimeContract.version
+      timeContractVersion:
+        latestTimeContract.identityVersion ?? latestTimeContract.version
     });
     const event = createStateEvent({
       type: "feed_stale",
@@ -984,4 +1258,58 @@ export function compactDurableMarketEvent(event) {
     ...compact
   } = event;
   return compact;
+}
+
+export function selectRuntimeContextWindows({
+  snapshot,
+  requestedSymbol,
+  brokerSymbol,
+  timeframes,
+  asOf,
+  continuityStartedAtUtc,
+  hydrationArtifact,
+  limit = 300
+}) {
+  const asOfMs = Date.parse(String(asOf ?? ""));
+  const continuityStartMs = Date.parse(
+    String(continuityStartedAtUtc ?? "")
+  );
+  const boundedLimit = Math.min(500, Math.max(3, Number(limit ?? 300)));
+  return Object.fromEntries(
+    timeframes.map((timeframeValue) => {
+      const timeframe = normalizeRuntimeTimeframe(timeframeValue);
+      const key = `${requestedSymbol}:${brokerSymbol}:${timeframe}`;
+      const hydratedTimeframeReady =
+        hydrationArtifact?.status === "ready" &&
+        hydrationArtifact?.boundedHistoricalContextEligible === true &&
+        hydrationArtifact?.timeframeSummaries?.some(
+          (summary) => summary.timeframe === timeframe && summary.ready
+        );
+      const candles = (snapshot?.[key] ?? [])
+        .filter(
+          (candle) =>
+            Number.isFinite(asOfMs) &&
+            Date.parse(candle.candleCloseTime) <= asOfMs
+        )
+        .filter(
+          (candle) =>
+            hydratedTimeframeReady ||
+            !Number.isFinite(continuityStartMs) ||
+            Date.parse(candle.candleOpenTime) >= continuityStartMs
+        )
+        .slice(-boundedLimit)
+        .map((candle) => ({
+          candleOpenTime: candle.candleOpenTime,
+          candleCloseTime: candle.candleCloseTime,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+          tickVolume: candle.tickVolume,
+          spread: candle.spread
+        }));
+      return [timeframe, candles];
+    })
+  );
 }

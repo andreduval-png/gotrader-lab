@@ -75,6 +75,8 @@ export interface V2EvidencePolicy {
 export interface V2SourceTimeEligibility {
   currentLiveEligible: boolean;
   historicalEligible: boolean;
+  boundedHistoricalContextEligible?: boolean;
+  boundedHistoricalContextArtifactId?: string;
   verificationScope: "none" | "current_live" | "historical";
   verifiedAtUtc?: string;
   currentLiveValidUntilUtc?: string;

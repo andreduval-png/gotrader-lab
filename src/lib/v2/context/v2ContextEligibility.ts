@@ -90,9 +90,27 @@ export function evaluateV2ContextEligibility(
       if (!eligibility?.historicalEligible) {
         const regimeStartMs = validIsoMs(eligibility?.offsetRegimeStartUtc ?? "");
         const windowStartMs = validIsoMs(window.identity.dataWindowStart);
-        if (regimeStartMs === undefined || windowStartMs === undefined || windowStartMs < regimeStartMs) {
+        const boundedHistoricalContextEligible =
+          eligibility?.boundedHistoricalContextEligible === true &&
+          Boolean(eligibility?.boundedHistoricalContextArtifactId);
+        if (
+          !boundedHistoricalContextEligible &&
+          (regimeStartMs === undefined ||
+            windowStartMs === undefined ||
+            windowStartMs < regimeStartMs)
+        ) {
           preVerificationWindows.push(timeframe);
           blockers.push(`window_precedes_verified_offset_regime:${timeframe}`);
+        } else if (
+          boundedHistoricalContextEligible &&
+          windowStartMs !== undefined &&
+          regimeStartMs !== undefined &&
+          windowStartMs < regimeStartMs
+        ) {
+          warnings.push(
+            `bounded_historical_context_used_with_historical_dst_unverified:${timeframe}`
+          );
+          comparisonEligible = false;
         }
       }
     } else if (request.source.sourceKind === "mock_sample") {

@@ -15,6 +15,9 @@ export const emptyTimeVerifierWatchState = () => ({
   version: TIME_VERIFIER_WATCH_STATE_VERSION,
   renewalCount: 0,
   failureCount: 0,
+  marketClosedPauseCount: 0,
+  marketResumeCount: 0,
+  marketStateTransitionCount: 0,
   duplicateObservationCount: 0,
   conflictCount: 0,
   continuityResetCount: 0,
@@ -63,8 +66,9 @@ export function createTimeVerifierWatchEngine({
       Number.isFinite(activeGeneratedMs) && Number.isFinite(nowMs)
         ? Math.max(0, Math.round((nowMs - activeGeneratedMs) / 1_000))
         : undefined;
-    const proofState =
-      ageSeconds === undefined
+    const proofState = state.pausedForMarketClosed
+      ? "paused_market_closed"
+      : ageSeconds === undefined
         ? "missing"
         : ageSeconds <= 120
           ? "fresh"
@@ -76,6 +80,10 @@ export function createTimeVerifierWatchEngine({
       state:
         state.paused === true
           ? "paused"
+          : state.pausedForMarketClosed === true
+            ? "healthy_paused_market_closed"
+            : state.awaitingFreshProofAfterMarketResume === true
+              ? "degraded_awaiting_fresh_market_proof"
           : state.activeArtifact?.validationStatus === "accepted" &&
               proofState === "fresh"
             ? "healthy"
@@ -91,6 +99,20 @@ export function createTimeVerifierWatchEngine({
       verificationProofState: proofState,
       verificationRenewalCount: state.renewalCount,
       verificationFailureCount: state.failureCount,
+      marketState: state.marketSnapshot?.marketState ?? "time_unverified",
+      operationalMarketState:
+        state.marketSnapshot?.operationalState ?? "time_unverified",
+      marketStateReason: state.marketSnapshot?.reason,
+      marketStateObservedAtUtc: state.marketSnapshot?.observedAtUtc,
+      marketScheduleId: state.marketSnapshot?.schedule?.scheduleId,
+      marketClosedPauseCount: state.marketClosedPauseCount,
+      marketResumeCount: state.marketResumeCount,
+      marketStateTransitionCount: state.marketStateTransitionCount,
+      proofPausedForMarketClosed: state.pausedForMarketClosed === true,
+      awaitingFreshProofAfterMarketResume:
+        state.awaitingFreshProofAfterMarketResume === true,
+      proofPausedAtUtc: state.proofPausedAtUtc,
+      proofResumedAtUtc: state.proofResumedAtUtc,
       duplicateObservationCount: state.duplicateObservationCount,
       conflictCount: state.conflictCount,
       continuityStartedAtUtc: state.continuityStartedAtUtc,
@@ -99,12 +121,26 @@ export function createTimeVerifierWatchEngine({
       providerTimeBasis: state.activeArtifact?.providerTimeBasis,
       observedOffsetMinutes: state.activeArtifact?.observedOffsetMinutes,
       currentLiveEligible:
+        state.pausedForMarketClosed !== true &&
+        state.awaitingFreshProofAfterMarketResume !== true &&
         state.activeArtifact?.validationStatus === "accepted" &&
         proofState === "fresh",
       historicalEligible: false,
       blockers: unique([
         ...(state.lastRenewalResult?.blockers ?? []),
-        ...(proofState !== "fresh" ? [`current_live_proof_${proofState}`] : [])
+        ...(state.pausedForMarketClosed
+          ? []
+          : proofState !== "fresh"
+            ? [`current_live_proof_${proofState}`]
+            : []),
+        ...(state.awaitingFreshProofAfterMarketResume
+          ? ["fresh_market_correlation_required_after_resume"]
+          : [])
+      ]),
+      warnings: unique([
+        ...(state.pausedForMarketClosed
+          ? ["market_closed_verified_pause"]
+          : [])
       ]),
       rawProbePersisted: false,
       rawCandlesPersisted: false,
@@ -116,8 +152,43 @@ export function createTimeVerifierWatchEngine({
   const processEvidence = ({
     artifact,
     directProbe,
+    marketSnapshot,
     nowUtc = new Date().toISOString()
   }) => {
+    const priorMarketState = state.marketSnapshot?.marketState;
+    const nextMarketState = marketSnapshot?.marketState;
+    if (marketSnapshot) {
+      state.marketSnapshot = marketSnapshot;
+      if (priorMarketState && priorMarketState !== nextMarketState) {
+        state.marketStateTransitionCount += 1;
+      }
+    }
+    if (marketSnapshot?.proofPauseEligible === true) {
+      if (state.pausedForMarketClosed !== true) {
+        state.marketClosedPauseCount += 1;
+        state.proofPausedAtUtc = nowUtc;
+      }
+      state.pausedForMarketClosed = true;
+      state.awaitingFreshProofAfterMarketResume = false;
+      state.lastRenewalResult = {
+        status: "paused_market_closed",
+        observedAt: nowUtc,
+        blockers: []
+      };
+      return {
+        action: "paused_market_closed",
+        persistArtifact: false,
+        state: { ...state },
+        status: status({ nowUtc })
+      };
+    }
+    if (
+      state.pausedForMarketClosed === true &&
+      marketSnapshot?.marketState !== "market_closed"
+    ) {
+      state.pausedForMarketClosed = false;
+      state.awaitingFreshProofAfterMarketResume = true;
+    }
     const probeId = directProbe?.observationId;
     const probeFingerprint = directProbe?.contentFingerprint;
     const probeGeneratedAtUtc = directProbe?.terminalProbeCapturedAt;
@@ -246,6 +317,11 @@ export function createTimeVerifierWatchEngine({
       );
     }
     state.activeArtifact = renewedArtifact;
+    if (state.awaitingFreshProofAfterMarketResume === true) {
+      state.marketResumeCount += 1;
+      state.proofResumedAtUtc = nowUtc;
+    }
+    state.awaitingFreshProofAfterMarketResume = false;
     state.lastRenewalResult = {
       status: "renewed",
       observedAt: nowUtc,
@@ -269,8 +345,17 @@ export function createTimeVerifierWatchEngine({
 
   const recordFailure = ({
     blockers = ["current_live_time_verifier_poll_failed"],
+    marketSnapshot,
     nowUtc = new Date().toISOString()
   } = {}) => {
+    if (marketSnapshot?.proofPauseEligible === true) {
+      return processEvidence({
+        artifact: state.activeArtifact,
+        directProbe: undefined,
+        marketSnapshot,
+        nowUtc
+      });
+    }
     state.failureCount = Number(state.failureCount ?? 0) + 1;
     state.lastRenewalResult = {
       status: "failed_preserving_active_proof",

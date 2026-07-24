@@ -11,8 +11,15 @@ import {
   continuousFeedCapability,
   createContinuousFeedEngine,
   defaultRollingStoreCapacities,
-  normalizeRuntimeTimeframe
+  evaluateRuntimeTimeContract,
+  normalizeRuntimeProviderTimestamp,
+  normalizeRuntimeTimeframe,
+  selectRuntimeContextWindows
 } from "./gotrader-continuous-feed-core.mjs";
+import {
+  buildHistoricalContextHydrationArtifact,
+  validateHistoricalContextHydrationArtifact
+} from "./gotrader-historical-context-hydrator-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -20,10 +27,15 @@ const profileId =
   process.env.GOTRADER_RUNTIME_PROFILE_ID || "always_on_read_only_scheduler";
 const requireVerificationArtifact = [
   "always_on_shadow_context",
-  "always_on_shadow_context_verified"
+  "always_on_shadow_context_verified",
+  "always_on_shadow_context_operational"
 ].includes(profileId);
-const requireWatcherArtifact =
-  profileId === "always_on_shadow_context_verified";
+const requireWatcherArtifact = [
+  "always_on_shadow_context_verified",
+  "always_on_shadow_context_operational"
+].includes(profileId);
+const requireHistoricalContextHydration =
+  profileId === "always_on_shadow_context_operational";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
   ? path.resolve(process.env.GOTRADER_RUNTIME_STATE_ROOT)
   : path.join(repoRoot, ".gotrader", "runtime");
@@ -36,10 +48,19 @@ const verificationArtifactFile =
         "time",
         "current-live-verification.json"
       );
+const verifierStatusFile = path.join(
+  runtimeRoot,
+  "time",
+  "watcher-status.json"
+);
 const feedRoot = path.join(runtimeRoot, "feed");
 const checkpointFile = path.join(feedRoot, "checkpoint.json");
 const eventLedgerFile = path.join(feedRoot, "events.json");
 const statusFile = path.join(feedRoot, "status.json");
+const hydrationArtifactFile = path.join(
+  feedRoot,
+  "historical-context-hydration.json"
+);
 
 const host = process.env.GOTRADER_FEED_HOST || "127.0.0.1";
 const port = Math.min(
@@ -72,6 +93,10 @@ const maximumDurableEvents = Math.min(
 const bootstrapLimit = Math.min(
   2_000,
   Math.max(3, Number(process.env.GOTRADER_FEED_BOOTSTRAP_LIMIT || 300))
+);
+const liveLimit = Math.min(
+  24,
+  Math.max(3, Number(process.env.GOTRADER_FEED_LIVE_LIMIT || 3))
 );
 const requestedSymbol = process.env.GOTRADER_FEED_REQUESTED_SYMBOL || "MNQ";
 const brokerSymbol = process.env.GOTRADER_FEED_BROKER_SYMBOL || "USTECH";
@@ -132,7 +157,10 @@ let lastStatus = {
 };
 let latestTimeContract;
 let latestVerificationArtifact;
+let latestVerifierStatus;
 let latestCandlePayloads = [];
+let hydrationArtifact;
+let hydrationReady = !requireHistoricalContextHydration;
 let consecutiveFailures = 0;
 let lastCandlePollAt = 0;
 let lastTimeContractPollAt = 0;
@@ -200,6 +228,10 @@ const persistResult = async (result) => {
     lastHeartbeatAt: new Date().toISOString(),
     processId: process.pid,
     durableEventCount: durableEvents.length,
+    historicalContextHydration: hydrationArtifact ?? {
+      status: requireHistoricalContextHydration ? "pending" : "not_required",
+      rawCandlesPersisted: false
+    },
     lastSequence: nextSequence,
     pollIntervalsMs: lastStatus.pollIntervalsMs,
     ...processResources(),
@@ -227,6 +259,9 @@ const poll = async () => {
       latestVerificationArtifact = requireWatcherArtifact
         ? await readJsonFile(verificationArtifactFile)
         : undefined;
+      latestVerifierStatus = requireWatcherArtifact
+        ? await readJsonFile(verifierStatusFile)
+        : undefined;
     }
     const quotePayload = await fetchJson(
       `${bridgeUrl}/quote?requestedSymbol=${encodeURIComponent(
@@ -241,18 +276,65 @@ const poll = async () => {
               requestedSymbol
             )}&symbol=${encodeURIComponent(
               brokerSymbol
-            )}&timeframe=${encodeURIComponent(timeframe)}&limit=${bootstrapLimit}`
+            )}&timeframe=${encodeURIComponent(timeframe)}&limit=${
+              hydrationReady ? liveLimit : bootstrapLimit
+            }`
           )
         )
       );
       candlePayloadsForPoll = latestCandlePayloads;
       lastCandlePollAt = now;
     }
+    if (requireHistoricalContextHydration && !hydrationReady) {
+      const hydrationTimeContract = evaluateRuntimeTimeContract(
+        latestTimeContract,
+        {
+          requireVerificationArtifact,
+          requireWatcherArtifact,
+          verificationArtifact: latestVerificationArtifact,
+          verifierStatus: latestVerifierStatus,
+          nowUtc: new Date().toISOString()
+        }
+      );
+      if (!hydrationTimeContract.eligible) {
+        throw new Error(
+          `historical_context_hydration_waiting_for_verified_time:${hydrationTimeContract.blockers.join(",")}`
+        );
+      }
+      const hydrationAsOf = normalizeRuntimeProviderTimestamp(
+        quotePayload?.timestamp ??
+          quotePayload?.serverTimestamp ??
+          quotePayload?.rawTime,
+        hydrationTimeContract
+      );
+      hydrationArtifact = buildHistoricalContextHydrationArtifact({
+        candlePayloads: latestCandlePayloads,
+        asOfUtc:
+          hydrationAsOf.normalizedTimeUtc ?? new Date().toISOString(),
+        timeContractVersion:
+          latestTimeContract?.version ??
+          latestTimeContract?.wrapperContractVersion ??
+          "unknown",
+        timeContractIdentityVersion:
+          hydrationTimeContract.identityVersion,
+        timeContract: hydrationTimeContract
+      });
+      const validation =
+        validateHistoricalContextHydrationArtifact(hydrationArtifact);
+      if (!validation.valid) {
+        throw new Error(
+          `historical_context_hydration_invalid:${validation.errors.join(",")}`
+        );
+      }
+      await writeJsonAtomic(hydrationArtifactFile, hydrationArtifact);
+      hydrationReady = hydrationArtifact.status === "ready";
+    }
     const result = engine.processPoll({
       quotePayload,
       candlePayloads: candlePayloadsForPoll,
       timeContract: latestTimeContract,
       verificationArtifact: latestVerificationArtifact,
+      verifierStatus: latestVerifierStatus,
       receivedAt: new Date().toISOString()
     });
     consecutiveFailures = 0;
@@ -345,40 +427,21 @@ const server = http.createServer((request, response) => {
     ];
     const asOf =
       new Date(url.searchParams.get("asOf") || Date.now()).toISOString();
-    const asOfMs = Date.parse(asOf);
-    const continuityStartMs = Date.parse(
-      lastStatus.offsetRegimeStartUtc ?? ""
-    );
     const limit = Math.min(
       500,
       Math.max(3, Number(url.searchParams.get("limit") ?? 300))
     );
     const snapshot = engine.rollingStoreSnapshot();
-    const windows = Object.fromEntries(
-      requestedTimeframes.map((timeframe) => {
-        const key = `${requested}:${broker}:${timeframe}`;
-        const candles = (snapshot[key] ?? [])
-          .filter((candle) => Date.parse(candle.candleCloseTime) <= asOfMs)
-          .filter(
-            (candle) =>
-              !Number.isFinite(continuityStartMs) ||
-              Date.parse(candle.candleOpenTime) >= continuityStartMs
-          )
-          .slice(-limit)
-          .map((candle) => ({
-            candleOpenTime: candle.candleOpenTime,
-            candleCloseTime: candle.candleCloseTime,
-            open: candle.open,
-            high: candle.high,
-            low: candle.low,
-            close: candle.close,
-            volume: candle.volume,
-            tickVolume: candle.tickVolume,
-            spread: candle.spread
-          }));
-        return [timeframe, candles];
-      })
-    );
+    const windows = selectRuntimeContextWindows({
+      snapshot,
+      requestedSymbol: requested,
+      brokerSymbol: broker,
+      timeframes: requestedTimeframes,
+      asOf,
+      continuityStartedAtUtc: lastStatus.offsetRegimeStartUtc,
+      hydrationArtifact: hydrationReady ? hydrationArtifact : undefined,
+      limit
+    });
     json(response, 200, {
       requestedSymbol: requested,
       brokerSymbol: broker,
@@ -395,6 +458,13 @@ const server = http.createServer((request, response) => {
         offsetRegimeStartUtc: lastStatus.offsetRegimeStartUtc,
         providerTimeBasis: lastStatus.providerTimeBasis,
         observedOffsetMinutes: lastStatus.observedOffsetMinutes
+      },
+      hydration: hydrationArtifact ?? {
+        status: requireHistoricalContextHydration ? "pending" : "not_required",
+        boundedHistoricalContextEligible: false,
+        historicalEligible: false,
+        historicalDstPolicyVerified: false,
+        rawCandlesPersisted: false
       },
       sourceProvider: "mt5_read_only",
       rawCandlesPersisted: false,

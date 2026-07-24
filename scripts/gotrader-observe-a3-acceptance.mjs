@@ -11,6 +11,7 @@ import {
   resolveAcceptanceBaselineSequence
 } from "./gotrader-a3-acceptance-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
+import { fetchObserverJsonWithRetry } from "./gotrader-observer-transport-core.mjs";
 
 const args = process.argv.slice(2);
 const argument = (name) => {
@@ -19,6 +20,7 @@ const argument = (name) => {
 };
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const profileId =
+  argument("--profile") ||
   process.env.GOTRADER_RUNTIME_PROFILE_ID ||
   "always_on_shadow_context_verified";
 const stateRoot = process.env.GOTRADER_RUNTIME_STATE_ROOT
@@ -78,7 +80,12 @@ let afterSequence = 0;
 let baselineSequence;
 let totalSamples = 0;
 let freshProofSamples = 0;
+let activeMarketSamples = 0;
+let freshActiveMarketProofSamples = 0;
+let marketClosedPauseSamples = 0;
+let unsafeMarketClosedSamples = 0;
 let transportFailures = 0;
+let observerTransportWarnings = 0;
 let maximumFeedMemoryBytes = 0;
 let maximumSchedulerMemoryBytes = 0;
 let maximumVerifierMemoryBytes = 0;
@@ -100,12 +107,9 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 }
 
 const fetchJson = async (url) => {
-  const response = await fetch(url, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(4_000)
-  });
-  if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
-  return response.json();
+  const result = await fetchObserverJsonWithRetry(url);
+  if (result.recovered) observerTransportWarnings += 1;
+  return result.payload;
 };
 const compactCheckpoint = async ({ final = false } = {}) => {
   const closeEntries = [...verifiedCloses.values()];
@@ -134,8 +138,13 @@ const compactCheckpoint = async ({ final = false } = {}) => {
       )
   ).length;
   const elapsedSeconds = Math.round((Date.now() - startMs) / 1_000);
-  const proofUptimePercentage = totalSamples
-      ? Number(((freshProofSamples / totalSamples) * 100).toFixed(2))
+  const proofUptimePercentage = activeMarketSamples
+      ? Number(
+          (
+            (freshActiveMarketProofSamples / activeMarketSamples) *
+            100
+          ).toFixed(2)
+        )
       : 0;
   const proofRenewalCount = Math.max(
     0,
@@ -186,7 +195,10 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     noPayloadConflicts: payloadConflictCount === 0,
     noLedgerGaps: ledgerGapCount === 0,
     proofFreshnessMaintained:
-      totalSamples > 0 && freshProofSamples === totalSamples,
+      activeMarketSamples > 0 &&
+      freshActiveMarketProofSamples === activeMarketSamples,
+    marketBreakHandledSafely:
+      marketClosedPauseSamples > 0 && unsafeMarketClosedSamples === 0,
     noObserverTransportFailures: transportFailures === 0
   };
   const acceptancePassed = Object.values(acceptanceChecks).every(Boolean);
@@ -219,8 +231,14 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     verifierRestartCount,
     proofRenewalCount,
     proofUptimePercentage,
+    totalSamples,
+    activeMarketSamples,
+    freshActiveMarketProofSamples,
+    marketClosedPauseSamples,
+    unsafeMarketClosedSamples,
     verificationFailureCount,
     transportFailures,
+    observerTransportWarnings,
     maximumQueueDepth,
     maximumFeedMemoryBytes,
     maximumSchedulerMemoryBytes,
@@ -259,6 +277,29 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
         fetchJson(`${feedUrl}/events?afterSequence=${afterSequence}&limit=500`)
       ]);
     totalSamples += 1;
+    if (
+      verifierStatus.marketState === "market_open" ||
+      verifierStatus.marketState === "market_quiet"
+    ) {
+      activeMarketSamples += 1;
+      if (
+        verifierStatus.currentLiveEligible === true &&
+        verifierStatus.verificationProofState === "fresh"
+      ) {
+        freshActiveMarketProofSamples += 1;
+      }
+    }
+    if (verifierStatus.marketState === "market_closed") {
+      marketClosedPauseSamples += 1;
+      if (
+        verifierStatus.proofPausedForMarketClosed !== true ||
+        verifierStatus.currentLiveEligible !== false ||
+        feedStatus.state !== "paused_market_closed" ||
+        schedulerStatus.state !== "paused_market_closed"
+      ) {
+        unsafeMarketClosedSamples += 1;
+      }
+    }
     if (
       verifierStatus.currentLiveEligible === true &&
       verifierStatus.verificationProofState === "fresh"
@@ -340,6 +381,9 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
           duplicateCloseCount: checkpoint.duplicateCloseCount,
           payloadConflictCount: checkpoint.payloadConflictCount,
           ledgerGapCount: checkpoint.ledgerGapCount,
+          marketClosedPauseSamples: checkpoint.marketClosedPauseSamples,
+          observerTransportWarnings:
+            checkpoint.observerTransportWarnings,
           authority: currentLiveVerificationAuthority
         })
       );
