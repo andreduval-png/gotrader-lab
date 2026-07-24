@@ -7,7 +7,9 @@ import {
   currentLiveVerificationAuthority
 } from "./gotrader-current-live-time-verification-core.mjs";
 import {
+  buildA3OperationalAcceptanceChecks,
   eventsAfterAcceptanceBaseline,
+  managedRestartCountDelta,
   resolveAcceptanceBaselineSequence
 } from "./gotrader-a3-acceptance-core.mjs";
 import { readJsonFile, writeJsonAtomic } from "./gotrader-runtime-io.mjs";
@@ -60,7 +62,10 @@ const pollMs = Math.min(
     )
   )
 );
-const observationId = `a3_1_acceptance_${Date.now()}`;
+const observationTrack = profileId === "always_on_shadow_context_operational"
+  ? "a3_2"
+  : "a3_1";
+const observationId = `${observationTrack}_acceptance_${Date.now()}`;
 const observationsRoot = path.join(runtimeRoot, "observations");
 const checkpointFile = path.join(
   observationsRoot,
@@ -84,6 +89,12 @@ let activeMarketSamples = 0;
 let freshActiveMarketProofSamples = 0;
 let marketClosedPauseSamples = 0;
 let unsafeMarketClosedSamples = 0;
+let marketClosedSeen = false;
+let freshProofAfterMarketClose = false;
+let hydrationNotReadySamples = 0;
+let historicalVerificationViolationSamples = 0;
+let authorityViolationSamples = 0;
+let ledgerGapSamples = 0;
 let transportFailures = 0;
 let observerTransportWarnings = 0;
 let maximumFeedMemoryBytes = 0;
@@ -96,6 +107,24 @@ let firstScheduler;
 let lastScheduler;
 let firstVerifier;
 let lastVerifier;
+const restartCountSnapshot = (supervisor) =>
+  Object.fromEntries(
+    [
+      "market_data_feed",
+      "autonomous_cycle_scheduler",
+      "current_live_time_verifier"
+    ].map((serviceId) => [
+      serviceId,
+      Number(
+        supervisor?.services?.find?.(
+          (service) => service.serviceId === serviceId
+        )?.restartCount ?? 0
+      )
+    ])
+  );
+const baselineManagedRestartCounts = restartCountSnapshot(
+  await readJsonFile(supervisorFile)
+);
 const verifiedCloses = new Map();
 const contextCycles = new Map();
 const blockers = new Set();
@@ -156,51 +185,83 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     Number(lastVerifier?.verificationFailureCount ?? 0) -
       Number(firstVerifier?.verificationFailureCount ?? 0)
   );
-  const feedRestartCount = Number(
-    (await readJsonFile(supervisorFile))?.services?.find?.(
-      (service) => service.serviceId === "market_data_feed"
-    )?.restartCount ?? 0
+  const currentManagedRestartCounts = restartCountSnapshot(
+    await readJsonFile(supervisorFile)
   );
-  const schedulerRestartCount = Number(
-    (await readJsonFile(supervisorFile))?.services?.find?.(
-      (service) => service.serviceId === "autonomous_cycle_scheduler"
-    )?.restartCount ?? 0
-  );
-  const verifierRestartCount = Number(
-    (await readJsonFile(supervisorFile))?.services?.find?.(
-      (service) => service.serviceId === "current_live_time_verifier"
-    )?.restartCount ?? 0
-  );
+  const feedRestartCount =
+    Math.max(
+      0,
+      currentManagedRestartCounts.market_data_feed -
+        baselineManagedRestartCounts.market_data_feed
+    );
+  const schedulerRestartCount =
+    Math.max(
+      0,
+      currentManagedRestartCounts.autonomous_cycle_scheduler -
+        baselineManagedRestartCounts.autonomous_cycle_scheduler
+    );
+  const verifierRestartCount =
+    Math.max(
+      0,
+      currentManagedRestartCounts.current_live_time_verifier -
+        baselineManagedRestartCounts.current_live_time_verifier
+    );
+  const managedRestartDelta = managedRestartCountDelta({
+    baseline: baselineManagedRestartCounts,
+    current: currentManagedRestartCounts
+  });
   const duplicateCloseCount =
     Number(lastFeed?.duplicateCloseEventCount ?? 0) -
     Number(firstFeed?.duplicateCloseEventCount ?? 0);
   const payloadConflictCount =
     Number(lastFeed?.conflictingCandleCount ?? 0) -
     Number(firstFeed?.conflictingCandleCount ?? 0);
-  const ledgerGapCount = lastScheduler?.blockers?.includes(
-    "durable_event_ledger_gap_reconciliation_required"
-  )
-    ? 1
-    : 0;
+  const ledgerGapCount = ledgerGapSamples;
   const duplicateContextCount =
     contextEntries.length -
     new Set(contextEntries.map((item) => item.cycleId)).size;
-  const acceptanceChecks = {
-    observationDurationPassed: elapsedSeconds >= 4 * 3_600,
-    marketHourSpanPassed: marketHourSpan >= 2,
-    verifiedM5CloseCountPassed: closeEntries.length >= 3,
-    completedContextCycleCountPassed: completedContextCount >= 3,
-    noDuplicateCloses: duplicateCloseCount === 0,
-    noDuplicateContextArtifacts: duplicateContextCount === 0,
-    noPayloadConflicts: payloadConflictCount === 0,
-    noLedgerGaps: ledgerGapCount === 0,
-    proofFreshnessMaintained:
-      activeMarketSamples > 0 &&
-      freshActiveMarketProofSamples === activeMarketSamples,
-    marketBreakHandledSafely:
-      marketClosedPauseSamples > 0 && unsafeMarketClosedSamples === 0,
-    noObserverTransportFailures: transportFailures === 0
-  };
+  const finalHydrationReady =
+    lastFeed?.historicalContextHydration?.status === "ready";
+  const finalRuntimeHealthy =
+    lastVerifier?.state === "healthy" &&
+    lastFeed?.state === "healthy" &&
+    lastScheduler?.state === "healthy";
+  const finalRuntimeBlockersClear = [
+    lastVerifier,
+    lastFeed,
+    lastScheduler
+  ].every((status) => (status?.blockers ?? []).length === 0);
+  const marketResumeCountDelta = Math.max(
+    0,
+    Number(lastVerifier?.marketResumeCount ?? 0) -
+      Number(firstVerifier?.marketResumeCount ?? 0)
+  );
+  const acceptanceChecks = buildA3OperationalAcceptanceChecks({
+    elapsedSeconds,
+    marketHourSpan,
+    verifiedM5CloseCount: closeEntries.length,
+    completedContextCount,
+    blockedInsufficientContextCount,
+    duplicateCloseCount,
+    duplicateContextCount,
+    payloadConflictCount,
+    ledgerGapCount,
+    activeMarketSamples,
+    freshActiveMarketProofSamples,
+    marketClosedPauseSamples,
+    unsafeMarketClosedSamples,
+    marketResumeCountDelta,
+    freshProofAfterMarketClose,
+    verificationFailureCount,
+    observerTransportFailures: transportFailures,
+    managedRestartDelta,
+    hydrationNotReadySamples,
+    historicalVerificationViolationSamples,
+    authorityViolationSamples,
+    finalRuntimeHealthy,
+    finalHydrationReady,
+    finalRuntimeBlockersClear
+  });
   const acceptancePassed = Object.values(acceptanceChecks).every(Boolean);
   const core = {
     version: 1,
@@ -236,9 +297,16 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     freshActiveMarketProofSamples,
     marketClosedPauseSamples,
     unsafeMarketClosedSamples,
+    marketResumeCountDelta,
+    freshProofAfterMarketClose,
     verificationFailureCount,
     transportFailures,
     observerTransportWarnings,
+    hydrationNotReadySamples,
+    historicalVerificationViolationSamples,
+    authorityViolationSamples,
+    ledgerGapSamples,
+    managedRestartDelta,
     maximumQueueDepth,
     maximumFeedMemoryBytes,
     maximumSchedulerMemoryBytes,
@@ -287,9 +355,11 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
         verifierStatus.verificationProofState === "fresh"
       ) {
         freshActiveMarketProofSamples += 1;
+        if (marketClosedSeen) freshProofAfterMarketClose = true;
       }
     }
     if (verifierStatus.marketState === "market_closed") {
+      marketClosedSeen = true;
       marketClosedPauseSamples += 1;
       if (
         verifierStatus.proofPausedForMarketClosed !== true ||
@@ -299,6 +369,39 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
       ) {
         unsafeMarketClosedSamples += 1;
       }
+    }
+    if (feedStatus.historicalContextHydration?.status !== "ready") {
+      hydrationNotReadySamples += 1;
+    }
+    if (
+      verifierStatus.historicalEligible !== false ||
+      feedStatus.historicalContextHydration?.historicalEligible !== false ||
+      feedStatus.historicalContextHydration?.historicalDstPolicyVerified !==
+        false
+    ) {
+      historicalVerificationViolationSamples += 1;
+    }
+    if (
+      [
+        feedStatus,
+        schedulerStatus,
+        verifierStatus,
+        feedStatus.historicalContextHydration
+      ].some(
+        (status) =>
+          status?.executionAuthority !== "none" ||
+          status?.brokerAuthority !== "none" ||
+          status?.readinessOverrideAuthority !== "none"
+      )
+    ) {
+      authorityViolationSamples += 1;
+    }
+    if (
+      schedulerStatus.blockers?.includes(
+        "durable_event_ledger_gap_reconciliation_required"
+      )
+    ) {
+      ledgerGapSamples += 1;
     }
     if (
       verifierStatus.currentLiveEligible === true &&
@@ -382,6 +485,11 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
           payloadConflictCount: checkpoint.payloadConflictCount,
           ledgerGapCount: checkpoint.ledgerGapCount,
           marketClosedPauseSamples: checkpoint.marketClosedPauseSamples,
+          freshProofAfterMarketClose:
+            checkpoint.freshProofAfterMarketClose,
+          managedRestartDelta: checkpoint.managedRestartDelta,
+          hydrationNotReadySamples:
+            checkpoint.hydrationNotReadySamples,
           observerTransportWarnings:
             checkpoint.observerTransportWarnings,
           authority: currentLiveVerificationAuthority
