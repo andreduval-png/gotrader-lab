@@ -1,7 +1,10 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-export const TRADE_PROPOSAL_MCP_POLICY_VERSION = "gotrader_trade_proposal_mcp_research_v1";
+import { withFileLock } from "./gotrader-file-lock.mjs";
+import { findAuthoritativeProfile } from "./gotrader-mcp-context-core.mjs";
+
+export const TRADE_PROPOSAL_MCP_POLICY_VERSION = "gotrader_trade_proposal_mcp_research_v2";
 export const TRADE_PROPOSAL_MCP_AUTHORITY = Object.freeze({
   executionAuthority: "none",
   brokerAuthority: "none",
@@ -141,7 +144,12 @@ const buildPaperSizingPreview = ({ entry, stop, sizingPolicy }) => {
 
 export const evaluateTradeProposal = (
   proposal,
-  { sizingPolicy = loadPaperSizingPreviewPolicy(), now = new Date().toISOString() } = {}
+  {
+    actor = {},
+    authoritativeContext,
+    sizingPolicy = loadPaperSizingPreviewPolicy(),
+    now = new Date().toISOString()
+  } = {}
 ) => {
   const blockedFields = scanTradeProposalForForbiddenContent(proposal);
   const blockers = [];
@@ -150,9 +158,9 @@ export const evaluateTradeProposal = (
   const brokerSymbol = String(proposal?.brokerSymbol || "").trim().toUpperCase();
   const timeframe = String(proposal?.timeframe || "").trim().toLowerCase();
   const strategyProfileId = String(proposal?.strategyProfileId || "").trim();
-  const sourceProvider = String(proposal?.sourceProvider || "").trim();
-  const sourceFingerprint = String(proposal?.sourceFingerprint || "").trim();
-  const validationChainId = String(proposal?.validationChainId || "").trim();
+  const claimedSourceProvider = String(proposal?.sourceProvider || "").trim();
+  const claimedSourceFingerprint = String(proposal?.sourceFingerprint || "").trim();
+  const claimedValidationChainId = String(proposal?.validationChainId || "").trim();
   const direction = proposal?.direction;
   const entry = proposal?.entry;
   const stop = proposal?.stop;
@@ -168,11 +176,41 @@ export const evaluateTradeProposal = (
   }
   if (proposal?.autoApplyAllowed === true) blockers.push("auto_apply_not_allowed");
   if (!TRADE_PROPOSAL_MCP_ALLOWED_PROFILES.includes(strategyProfileId)) blockers.push("strategy_profile_not_allowlisted");
-  if (sourceProvider !== "mt5_read_only") blockers.push("canonical_mt5_source_required");
-  if (!sourceFingerprint || sourceFingerprint.length < 8) blockers.push("source_fingerprint_required");
-  if (!(requestedSymbol === "MNQ" && brokerSymbol === "USTECH")) blockers.push("mnq_ustech_identity_required");
-  if (timeframe !== "5m") blockers.push("five_minute_profile_required");
-  if (!validationChainId) blockers.push("validation_chain_reference_required");
+  const authoritativeProfile = findAuthoritativeProfile(authoritativeContext, strategyProfileId);
+  const authoritativeSource = authoritativeContext?.source;
+  if (authoritativeContext?.status !== "available") blockers.push("authoritative_context_required");
+  if (!authoritativeProfile) blockers.push("authoritative_profile_evidence_required");
+  if (authoritativeProfile?.evidenceStatus !== "authoritative_compact_evidence") {
+    blockers.push("authoritative_profile_evidence_blocked");
+  }
+  if (authoritativeSource?.provider !== "mt5_read_only") blockers.push("canonical_mt5_source_required");
+  if (
+    !authoritativeSource?.fingerprint ||
+    authoritativeProfile?.sourceFingerprint !== authoritativeSource.fingerprint
+  ) {
+    blockers.push("authoritative_source_fingerprint_required");
+  }
+  if (
+    !(
+      requestedSymbol === authoritativeSource?.requestedSymbol &&
+      brokerSymbol === authoritativeSource?.brokerSymbol
+    )
+  ) {
+    blockers.push("authoritative_symbol_identity_mismatch");
+  }
+  if (timeframe !== authoritativeSource?.timeframe) blockers.push("authoritative_timeframe_mismatch");
+  if (claimedSourceProvider && claimedSourceProvider !== authoritativeSource?.provider) {
+    blockers.push("claimed_source_provider_mismatch");
+  }
+  if (claimedSourceFingerprint && claimedSourceFingerprint !== authoritativeSource?.fingerprint) {
+    blockers.push("claimed_source_fingerprint_mismatch");
+  }
+  if (
+    claimedValidationChainId &&
+    claimedValidationChainId !== authoritativeProfile?.validationChainId
+  ) {
+    blockers.push("claimed_validation_chain_mismatch");
+  }
   if (direction !== "long" && direction !== "short") blockers.push("direction_must_be_long_or_short");
   if (!finiteNumber(entry)) blockers.push("entry_required");
   if (!finiteNumber(stop)) blockers.push("stop_required");
@@ -194,16 +232,28 @@ export const evaluateTradeProposal = (
   if (frozenProfiles.has(strategyProfileId)) {
     warnings.push("Frozen profile parameters cannot be mutated; changes require a new candidate profile version.");
   }
-  warnings.push("Validation-chain identity is referenced but must be resolved against GoTrader-owned runtime evidence before progression.");
+  if (authoritativeProfile) {
+    warnings.push("Validation and source identities were resolved from GoTrader-owned compact evidence.");
+  }
 
   const uniqueBlockers = unique(blockers);
   const safeDraft = uniqueBlockers.length === 0;
   const sizingPreview = buildPaperSizingPreview({ entry, stop, sizingPolicy });
   const proposalId = createId("mcp_trade_proposal");
+  const sourceProvider = authoritativeSource?.provider ?? claimedSourceProvider;
+  const sourceFingerprint = authoritativeSource?.fingerprint ?? claimedSourceFingerprint;
+  const validationChainId =
+    authoritativeProfile?.validationChainId ?? claimedValidationChainId;
   return {
     proposalId,
     createdAt: now,
     policyVersion: TRADE_PROPOSAL_MCP_POLICY_VERSION,
+    audit: {
+      agentId: String(actor.agentId || "local_stdio_agent").slice(0, 80),
+      sessionId: String(actor.sessionId || "unattributed_session").slice(0, 120),
+      correlationId: String(actor.correlationId || proposalId).slice(0, 120),
+      transport: "stdio"
+    },
     status: safeDraft ? "queued_for_deterministic_validation" : "blocked",
     compactProposal: {
       requestedSymbol,
@@ -217,22 +267,27 @@ export const evaluateTradeProposal = (
       sourceProvider,
       sourceFingerprint: sourceFingerprint || null,
       validationChainId: validationChainId || null
-    },
-    deterministicChecks: {
-      payloadSafe: blockedFields.length === 0,
-      sourceIdentityValid: sourceProvider === "mt5_read_only" && requestedSymbol === "MNQ" && brokerSymbol === "USTECH",
+      },
+      deterministicChecks: {
+        payloadSafe: blockedFields.length === 0,
+      sourceIdentityValid:
+        sourceProvider === "mt5_read_only" &&
+        requestedSymbol === authoritativeSource?.requestedSymbol &&
+        brokerSymbol === authoritativeSource?.brokerSymbol &&
+        timeframe === authoritativeSource?.timeframe &&
+        sourceFingerprint === authoritativeSource?.fingerprint,
       profileAllowlisted: TRADE_PROPOSAL_MCP_ALLOWED_PROFILES.includes(strategyProfileId),
       geometryValid: !uniqueBlockers.includes("invalid_price_order"),
       rr: finiteNumber(rr) ? round(rr) : null,
       minimumRr: 2,
-      validationContext: validationChainId ? "reference_supplied_unverified" : "missing"
+      validationContext: safeDraft ? "authoritative_match" : "blocked"
     },
     sizingPreview,
     blockedFields,
     blockers: uniqueBlockers,
     warnings,
     nextAction: safeDraft
-      ? "Resolve the validation-chain reference against canonical GoTrader evidence; only then may an operator review a paper-only candidate."
+      ? "The compact proposal is identity-bound and queued for deterministic GoTrader validation. No broker request was created."
       : "Correct the compact proposal and resubmit it for deterministic validation.",
     brokerGateway: {
       status: "disabled",
@@ -250,8 +305,11 @@ export const evaluateTradeProposal = (
 export const appendTradeProposalAudit = async (evaluation, { repoRoot = process.cwd() } = {}) => {
   const runtimeDir = path.join(repoRoot, ".gotrader");
   const ledgerPath = path.join(runtimeDir, "mcp-trade-proposals.jsonl");
+  const lockPath = path.join(runtimeDir, "locks", "mcp-trade-proposals.lock");
   await mkdir(runtimeDir, { recursive: true });
-  await appendFile(ledgerPath, `${JSON.stringify(evaluation)}\n`, "utf8");
+  await withFileLock(lockPath, () =>
+    appendFile(ledgerPath, `${JSON.stringify(evaluation)}\n`, "utf8")
+  );
   return ledgerPath;
 };
 
@@ -270,7 +328,10 @@ export const readRecentTradeProposalAudits = async ({ limit = 10, repoRoot = pro
   }
 };
 
-export const buildTradeProposalControlPlaneStatus = ({ sizingPolicy = loadPaperSizingPreviewPolicy() } = {}) => ({
+export const buildTradeProposalControlPlaneStatus = ({
+  authoritativeContext,
+  sizingPolicy = loadPaperSizingPreviewPolicy()
+} = {}) => ({
   provider: "gotrader_trade_proposal_mcp",
   stage: "research_validation",
   policyVersion: TRADE_PROPOSAL_MCP_POLICY_VERSION,
@@ -288,6 +349,12 @@ export const buildTradeProposalControlPlaneStatus = ({ sizingPolicy = loadPaperS
     configured: sizingPolicy.configured,
     mode: sizingPolicy.mode,
     llmMayOverride: false
+  },
+  authoritativeContext: {
+    status: authoritativeContext?.status ?? "unavailable",
+    sourceFingerprintBound: Boolean(authoritativeContext?.source?.fingerprint),
+    validationIdentityBound: Boolean(authoritativeContext?.profiles?.some((profile) => profile.validationChainId)),
+    blockers: authoritativeContext?.blockers ?? ["authoritative_context_not_loaded"]
   },
   forbiddenCapabilities: [
     "account_access",

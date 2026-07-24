@@ -10,9 +10,9 @@ export interface CompactTradeEvaluationProposal {
   entry: number;
   stop: number;
   targets: number[];
-  sourceProvider: "mt5_read_only";
-  sourceFingerprint: string;
-  validationChainId: string;
+  sourceProvider?: "mt5_read_only";
+  sourceFingerprint?: string;
+  validationChainId?: string;
   rationale?: string;
   autoApplyAllowed?: false;
   authority?: {
@@ -41,7 +41,15 @@ export interface TradeProposalSizingPreview {
 export interface TradeProposalMcpEvaluation {
   proposalId: string;
   createdAt: string;
-  policyVersion: "gotrader_trade_proposal_mcp_research_v1";
+  policyVersion:
+    | "gotrader_trade_proposal_mcp_research_v1"
+    | "gotrader_trade_proposal_mcp_research_v2";
+  audit?: {
+    agentId: string;
+    sessionId: string;
+    correlationId: string;
+    transport: "stdio";
+  };
   status: TradeProposalStatus;
   compactProposal: Omit<CompactTradeEvaluationProposal, "rationale" | "authority" | "autoApplyAllowed">;
   deterministicChecks: {
@@ -51,7 +59,11 @@ export interface TradeProposalMcpEvaluation {
     geometryValid: boolean;
     rr: number | null;
     minimumRr: 2;
-    validationContext: "reference_supplied_unverified" | "missing";
+    validationContext:
+      | "reference_supplied_unverified"
+      | "authoritative_match"
+      | "blocked"
+      | "missing";
   };
   sizingPreview: TradeProposalSizingPreview;
   blockedFields: string[];

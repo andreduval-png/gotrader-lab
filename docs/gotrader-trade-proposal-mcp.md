@@ -14,7 +14,8 @@ Codex or Claude may submit a compact research proposal and initiate deterministi
 - Allowlisted profile: `ifvg_fresh_retest_v3_research`
 - Canonical source: `mt5_read_only`
 - Research identity: `MNQ` requested label, `USTECH` broker symbol, `5m`
-- Validation-chain reference: required, but resolved by GoTrader before progression
+- Validation identity: derived by GoTrader from its compact validation report
+- Source fingerprint: derived by GoTrader; an optional agent claim must match exactly
 - Paper sizing: preview only and disabled until the operator configures its local policy
 - MT5 demo handoff: disabled by default with a default-active kill switch
 - Live MT5 gateway: unavailable
@@ -42,12 +43,23 @@ Accepts a compact proposal containing:
 - `entry`
 - `stop`
 - `targets`
-- `sourceProvider`
-- `sourceFingerprint`
-- `validationChainId`
 - optional compact `rationale`
 
+The agent does not need to provide a source fingerprint or validation-chain ID. GoTrader resolves both from its own compact evidence. Legacy/defensive claims are accepted only when they match the authoritative values exactly.
+
 Safe proposals are recorded as `queued_for_deterministic_validation`. This is not readiness, Paper-Demo approval, or permission to submit an order.
+
+### `gotrader_get_current_research_context`
+
+Returns compact GoTrader-owned MT5 source identity, allowlisted validation summaries, forward-evidence counts, safety flags, and authority. It never returns candle arrays or broker state.
+
+### `gotrader_list_eligible_profiles`
+
+Lists allowlisted research profiles and whether authoritative compact evidence is available. `proposalAllowed` is not Paper-Demo eligibility and never means execution is allowed.
+
+### `gotrader_get_validation_chain`
+
+Returns the deterministic validation binding for one allowlisted profile. The binding is derived from GoTrader's candidate, validation-run, walk-forward, and exact source identity. Agents cannot create or override it.
 
 ### `gotrader_list_recent_trade_proposals`
 
@@ -77,6 +89,16 @@ codex mcp list
 
 Restart the Codex CLI session after adding the server. The server uses stdio and does not listen on a network port.
 
+Set a stable local agent identity in the host configuration when more than one agent connects:
+
+```text
+GOTRADER_MCP_AGENT_ID=codex_primary
+```
+
+The MCP records the host-owned agent ID, a server-session ID, and a server-generated correlation ID. The local MCP host configuration is the authentication boundary; no remote network listener is exposed.
+
+The server resolves the GoTrader repository from its own script path. A host may set `GOTRADER_REPO_ROOT` explicitly when the runtime evidence directory belongs to another checked-out worktree.
+
 For Claude Desktop or another MCP host, configure the same `node` command and absolute script path in that host's local MCP server configuration.
 
 ## Optional Paper Sizing Preview
@@ -94,6 +116,8 @@ When all three values are configured, GoTrader returns a deterministic `paperUni
 ## Rejected Content
 
 The validator rejects raw candle arrays, raw snapshots, screenshots/base64, secrets, API keys, tokens, MT5 credentials, account/order/position data, broker mutation, execution requests, readiness overrides, auto-apply, non-none authority, and imperative order-placement language.
+
+The stdio tool schema is strict. Unknown fields are rejected before proposal evaluation. Shared proposal-ledger writes and MCP Paper-Demo preparation calls use local process locks; stale locks expire fail-closed.
 
 Frozen profiles cannot be mutated through MCP. Any parameter change requires a new candidate profile version and the normal replay, walk-forward, OOS, evidence, maturity, and Paper-Demo gates.
 

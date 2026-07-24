@@ -20,6 +20,7 @@ import {
   refreshSimulationAccountHeartbeat,
   saveSimulationAccountRiskState
 } from "./gotrader-account-risk-core.mjs";
+import { summarizeAuthoritativeValidationProfile } from "./gotrader-mcp-context-core.mjs";
 
 export const PAPER_DEMO_GATEWAY_POLICY_VERSION = "gotrader_paper_demo_gateway_v1";
 export const PAPER_DEMO_GATEWAY_AUTHORITY = TRADE_PROPOSAL_MCP_AUTHORITY;
@@ -116,6 +117,7 @@ export const loadPaperDemoGatewayPolicy = (env = process.env) => {
 };
 
 export const summarizeValidationReport = (report, strategyProfileId = PAPER_DEMO_GATEWAY_PROFILE) => {
+  const authoritative = summarizeAuthoritativeValidationProfile(report, strategyProfileId);
   const candidate = report?.candidates?.find((item) => item?.candidateFamily === strategyProfileId);
   const temporal = candidate?.temporalRobustness;
   return {
@@ -127,6 +129,7 @@ export const summarizeValidationReport = (report, strategyProfileId = PAPER_DEMO
     timeframe: report?.source?.timeframe,
     sourceFingerprint: report?.source?.fingerprint,
     strategyProfileId: candidate?.candidateFamily,
+    validationChainId: authoritative?.profile?.validationChainId,
     validationReadinessStatus: candidate?.validationReadinessStatus,
     walkForwardVerdict: candidate?.walkForwardVerdict,
     completedTrades: temporal?.summary?.trades,
@@ -158,7 +161,8 @@ const sourceIdentityMatches = (proposal, validation) =>
   proposal?.sourceProvider === validation.sourceProvider &&
   proposal?.requestedSymbol === validation.requestedSymbol &&
   proposal?.brokerSymbol === validation.brokerSymbol &&
-  proposal?.timeframe === validation.timeframe;
+  proposal?.timeframe === validation.timeframe &&
+  proposal?.sourceFingerprint === validation.sourceFingerprint;
 
 const sizingIsPrepared = (proposalEvaluation) =>
   proposalEvaluation?.sizingPreview?.status === "paper_preview_only" &&
@@ -224,6 +228,12 @@ export const evaluatePaperDemoPreparation = ({
   if (!validationEvidence?.available) blockers.push("authoritative_validation_report_missing");
   if (validationEvidence?.reportStatus !== "completed") blockers.push("authoritative_validation_incomplete");
   if (!sourceIdentityMatches(proposal, validationEvidence)) blockers.push("validation_source_identity_mismatch");
+  if (proposal?.sourceFingerprint !== validationEvidence?.sourceFingerprint) {
+    blockers.push("validation_source_fingerprint_mismatch");
+  }
+  if (proposal?.validationChainId !== validationEvidence?.validationChainId) {
+    blockers.push("validation_chain_identity_mismatch");
+  }
   if (!sourceFingerprintIsCanonical(proposal)) blockers.push("proposal_source_fingerprint_not_canonical");
   if (proposal?.strategyProfileId !== validationEvidence?.strategyProfileId) blockers.push("validation_profile_mismatch");
   if (validationEvidence?.walkForwardVerdict !== "passed") blockers.push("walk_forward_not_passed");
@@ -617,7 +627,9 @@ export const savePaperDemoGatewayState = async (state, { repoRoot = process.cwd(
   }
   const filePath = resolveInsideRepo(repoRoot, STATE_FILE);
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, filePath);
   return filePath;
 };
 

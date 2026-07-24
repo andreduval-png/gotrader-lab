@@ -97,6 +97,8 @@ A preparation is blocked unless all checks pass:
 - operator-owned paper sizing configured
 - proposal no older than the configured freshness window
 - completed validation report
+- exact validation binding derived from the same report
+- exact source-fingerprint equality between proposal and validation evidence
 - passed walk-forward/OOS verdict
 - at least 30 validation trades
 - at least 20 validation dates
@@ -112,7 +114,7 @@ A preparation is blocked unless all checks pass:
 
 ## Idempotency And State
 
-The compact state file is `.gotrader/paper-demo-gateway-state.json`. A proposal and validation-chain pair can be prepared once per day. Repeated requests return `already_prepared` and do not create duplicates.
+The compact state file is `.gotrader/paper-demo-gateway-state.json`. A proposal and authoritative validation-binding pair can be prepared once per day. Repeated requests return `already_prepared` and do not create duplicates. MCP preparation calls are serialized with a local process lock, and state replacement is atomic.
 
 Each passed preparation creates one `gotrader.paper_demo_execution_request` document. Its SHA-256 hash covers the complete request payload. A retry with identical content returns `already_queued`; a request ID collision with different content is rejected. Atomic rename prevents the consumer from reading a partially written request.
 

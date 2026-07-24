@@ -36,35 +36,6 @@ const authorityNone = {
   readinessOverrideAuthority: "none"
 };
 const now = "2026-07-18T14:00:00.000Z";
-const proposal = evaluateTradeProposal(
-  {
-    requestedSymbol: "MNQ",
-    brokerSymbol: "USTECH",
-    timeframe: "5m",
-    strategyProfileId: "ifvg_fresh_retest_v3_research",
-    direction: "short",
-    entry: 28570,
-    stop: 28600,
-    targets: [28510],
-    sourceProvider: "mt5_read_only",
-    sourceFingerprint: "mt5_read_only|MNQ|USTECH|5m|1000|start|1|end|2",
-    validationChainId: "validation_ifvg_v3_current",
-    autoApplyAllowed: false,
-    authority: authorityNone
-  },
-  {
-    now,
-    sizingPolicy: {
-      mode: "paper_preview",
-      configured: true,
-      riskBudgetUsd: 300,
-      pointValueUsd: 2,
-      maxUnits: 5,
-      operatorConfigured: true,
-      llmMayOverride: false
-    }
-  }
-);
 const validationReport = {
   status: "completed",
   source: {
@@ -90,6 +61,55 @@ const validationReport = {
   ],
   safetyAuthority: authorityNone
 };
+const validationEvidence = summarizeValidationReport(validationReport);
+const authoritativeContext = {
+  status: "available",
+  source: {
+    provider: validationEvidence.sourceProvider,
+    requestedSymbol: validationEvidence.requestedSymbol,
+    brokerSymbol: validationEvidence.brokerSymbol,
+    timeframe: validationEvidence.timeframe,
+    fingerprint: validationEvidence.sourceFingerprint
+  },
+  profiles: [
+    {
+      profileId: validationEvidence.strategyProfileId,
+      validationChainId: validationEvidence.validationChainId,
+      sourceFingerprint: validationEvidence.sourceFingerprint,
+      evidenceStatus: "authoritative_compact_evidence",
+      authority: authorityNone
+    }
+  ],
+  blockers: [],
+  authority: authorityNone
+};
+const proposal = evaluateTradeProposal(
+  {
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "5m",
+    strategyProfileId: "ifvg_fresh_retest_v3_research",
+    direction: "short",
+    entry: 28570,
+    stop: 28600,
+    targets: [28510],
+    autoApplyAllowed: false,
+    authority: authorityNone
+  },
+  {
+    authoritativeContext,
+    now,
+    sizingPolicy: {
+      mode: "paper_preview",
+      configured: true,
+      riskBudgetUsd: 300,
+      pointValueUsd: 2,
+      maxUnits: 5,
+      operatorConfigured: true,
+      llmMayOverride: false
+    }
+  }
+);
 const forwardReport = {
   profileId: "ifvg_fresh_retest_v3_research",
   completedForwardOutcomes: 40,
@@ -258,6 +278,23 @@ const nonCanonicalFingerprint = evaluatePaperDemoPreparation({
   now: "2026-07-18T14:03:00.000Z"
 });
 assert(nonCanonicalFingerprint.blockers.includes("proposal_source_fingerprint_not_canonical"));
+assert(nonCanonicalFingerprint.blockers.includes("validation_source_fingerprint_mismatch"));
+
+const wrongValidationBinding = evaluatePaperDemoPreparation({
+  proposalEvaluation: {
+    ...proposal,
+    compactProposal: {
+      ...proposal.compactProposal,
+      validationChainId: "validation_binding_v1_wrong_identity"
+    }
+  },
+  validationEvidence: summarizeValidationReport(validationReport),
+  forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
+  policy: enabledPolicy,
+  state: emptyState,
+  now: "2026-07-18T14:03:00.000Z"
+});
+assert(wrongValidationBinding.blockers.includes("validation_chain_identity_mismatch"));
 
 const noForward = evaluatePaperDemoPreparation({
   accountRiskEvaluation,
