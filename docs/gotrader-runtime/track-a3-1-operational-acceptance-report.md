@@ -3,14 +3,17 @@
 ## Final Status
 
 ```text
-TRACK A3 IMPLEMENTATION COMPLETE - OPERATIONAL OBSERVATION INCOMPLETE
+TRACK A3.1 FOUR-HOUR OBSERVATION COMPLETE - PARTIAL ACCEPTANCE / TRACK A4 BLOCKED
 ```
 
 The persistent probe, verifier watcher, verified runtime profile, restart
 reconciliation, and acceptance observer are implemented and deterministic tests
-pass. Live acceptance is intentionally not claimed: the compiled EA has not yet
-been attached to an actively quoting USTECH chart, and the required four-hour
-observation has not run.
+pass. A four-hour live observation completed on 2026-07-23 with 21 verified M5
+closes, exact-once event delivery, automatic post-market-break recovery, and
+zero duplicate, conflict, or ledger-gap failures. Full operational acceptance
+is not claimed because proof freshness did not span the scheduled market break,
+no higher-timeframe context cycle completed, and the observer recorded one
+transport timeout.
 
 ## 1. Starting Branch And Commit
 
@@ -23,7 +26,11 @@ observation has not run.
 
 - Persistent probe commit:
   `2afc41eead474f4543bd447cd67173d62fbac95d`
-- Final A3.1 integration commit: recorded after this report is committed.
+- A3.1 implementation commit:
+  `1e10113`
+- Live-discovered stabilization commits:
+  `5501a92`, `1695cf1`, `d470e8a`, and `143342f`
+- Final operational report commit: recorded after this report is committed.
 
 ## 3. Files Created And Modified
 
@@ -148,23 +155,34 @@ served.
 Deterministic integration accepted two sequential fixture close boundaries,
 including one after restart/expiry recovery, with zero duplicates.
 
-Live isolated observation on 2026-07-23:
+Four-hour live observation on 2026-07-23:
 
-- accepted M5 closes: 0;
-- rejected/blocked because persistent probe was stale;
-- quote and candle endpoints remained available;
-- no missed close was accepted retroactively.
+- accepted M5 closes: 21;
+- matching shadow-context task triggers: 21;
+- duplicate closes: 0;
+- payload conflicts: 0;
+- ledger gaps: 0;
+- managed feed, scheduler, and verifier restarts: 0;
+- market-break closes were not accepted while verified time was unavailable;
+- processing resumed automatically after fresh terminal correlation returned.
 
 ## 14. Context-Cycle Results
 
 Deterministic integration produced exactly two context task cycles for two
-accepted close IDs. Live context cycles: 0 because close eligibility was
-blocked before scheduling.
+accepted close IDs. The live observer recorded 21 exactly-once context task
+triggers. Completed live context cycles remained 0 because all 21 attempts
+failed closed on:
+
+```text
+insufficient_context_window:4h
+insufficient_context_window:1d
+```
 
 Higher-timeframe windows are limited to the live rolling store. Missing M5,
 M15, H1, H4, or D1 data returns an explicit
 `insufficient_context_window:<timeframe>` blocker; the live queue does not fetch
-deep history.
+deep history. The live result confirms that historical higher-timeframe
+hydration is required before Track A4.
 
 ## 15. Restart Reconciliation Results
 
@@ -180,18 +198,24 @@ Deterministic A3.1 integration passed:
 ## 16. Observation Duration
 
 - required: 14,400 seconds (four hours);
-- live diagnostic sample: 12 seconds;
-- market-hour span: 0 hours;
-- status: incomplete.
-
-The short sample verifies fail-closed operations only; it is not operational
-acceptance.
+- live observation: 14,403 seconds;
+- market-hour span: 3.75 hours;
+- duration check: passed;
+- market-hour-span check: passed;
+- status: `observation_incomplete` because not all acceptance checks passed.
 
 ## 17. Proof Uptime
 
-Live accepted-proof uptime was 0%. The active terminal was connected, but its
-previous one-shot observation was stale and the persistent EA was not attached.
-Accepted verifier renewals were therefore 0.
+Live accepted-proof uptime was 75.72%, with 358 accepted renewals. Proof was
+fresh before the scheduled market break, failed closed while the terminal
+server/tick clock remained frozen at the last market timestamp, and recovered
+automatically when quoting resumed. The break produced 368 failed verification
+samples and caused `proofFreshnessMaintained` to fail.
+
+The behavior protected the feed correctly, but market-closed state must be
+classified separately from a broken live time contract. A future acceptance run
+must show an explicit healthy paused state during the break and require fresh
+correlation before resuming.
 
 ## 18. Duplicate Counts
 
@@ -209,21 +233,24 @@ Accepted verifier renewals were therefore 0.
 ## 20. Ledger-Gap Counts
 
 - deterministic ledger gaps: 0;
-- live sampled ledger gaps: 0.
+- live four-hour ledger gaps: 0.
 
 ## 21. Resource Metrics
 
-Twelve-second isolated live sample:
+Four-hour live observation:
 
-- maximum feed RSS: 75,853,824 bytes;
-- maximum scheduler RSS: 96,141,312 bytes;
-- maximum verifier RSS: 57,098,240 bytes;
+- maximum feed RSS: 181,673,984 bytes;
+- maximum scheduler RSS: 109,133,824 bytes;
+- maximum verifier RSS: 73,089,024 bytes;
 - maximum queue depth: 0;
-- feed CPU delta: 78,000 microseconds;
-- scheduler CPU delta: 62,000 microseconds;
-- verifier CPU delta: 0 microseconds;
-- transport failures: 0;
+- feed CPU delta: 157,704,000 microseconds;
+- scheduler CPU delta: 39,109,000 microseconds;
+- verifier CPU delta: 21,266,000 microseconds;
+- observer transport failures: 1;
 - managed restarts: 0.
+
+The isolated observer timeout did not stop any runtime process and subsequent
+checkpoints continued, but `noObserverTransportFailures` correctly failed.
 
 ## 22. Test Commands And Exact Results
 
@@ -253,6 +280,22 @@ All required suites passed:
 | `npm.cmd run test:v2-ifvg-phase3-evidence` | passed |
 | `git diff --check` | passed; line-ending notices only |
 
+Final four-hour close-out validation:
+
+| Command | Result |
+| --- | --- |
+| integrity-hash recomputation | passed; `sha256:9cd59f43c4758810e1eac5b548477f2de0753708589a279a4c1429789c7e8567` |
+| `npm.cmd run typecheck` | passed |
+| `npm.cmd run build` | passed; existing Rollup circular-chunk and size warnings only |
+| `npm.cmd run test:gotrader-terminal-clock-probe` | passed |
+| `npm.cmd run test:gotrader-current-live-time-verification` | passed |
+| `npm.cmd run test:gotrader-time-verifier-watch` | passed |
+| `npm.cmd run test:gotrader-runtime-a3-1-integration` | passed |
+| `npm.cmd run test:gotrader-continuous-feed` | passed |
+| `npm.cmd run test:gotrader-autonomous-scheduler` | passed |
+| `npm.cmd run test:gotrader-shadow-context` | passed |
+| `npm.cmd run test:mt5-readonly-safety` | passed |
+
 ## 23. Frozen Hashes
 
 Unchanged:
@@ -280,14 +323,14 @@ mutation, or calibration capability was added.
 
 ## 25. Known Limitations
 
-1. The operator must attach the compiled EA to an actively quoting USTECH chart
-   once after installation.
-2. Four-hour operational observation remains unrun.
-3. Three real verified M5 closes and three real context cycles remain
-   unobserved.
-4. Higher-timeframe live windows need natural accumulation and may initially
-   block context while M5 closes are still accepted.
-5. Historical DST/time normalization remains a separate unverified contract.
+1. Scheduled market closure freezes the terminal server/tick clock and currently
+   appears as proof degradation rather than an explicit market-closed pause.
+2. Higher-timeframe live windows are not hydrated from read-only historical
+   candles, so `4h` and `1d` context remain unavailable after a fresh startup.
+3. One observer HTTP request timed out during the four-hour run.
+4. Historical DST/time normalization remains a separate unverified contract.
+5. Full operational acceptance remains blocked until the failed checks pass in
+   a new observation.
 
 ## 26. Rollback
 
@@ -302,14 +345,16 @@ mutation, or calibration capability was added.
 
 Before Track A4:
 
-- attach and verify the persistent EA;
-- run at least four continuous hours during active market time;
-- observe at least three accepted M5 closes;
+- add an explicit market-closed or market-quiet verifier state;
+- pause safely without treating a frozen last tick as new time evidence;
+- require fresh terminal correlation before reopening the feed;
+- hydrate `4h` and `1d` canonical windows from MT5 read-only history;
+- make observer transport sampling tolerant of one transient request without
+  hiding or deleting the failure;
+- rerun at least four continuous hours across active and closed/open boundaries;
 - observe at least three completed context cycles;
-- span at least two market hours;
 - retain zero duplicate closes/context artifacts, conflicts, and ledger gaps;
-- document restart reconciliation from live events;
-- review the complete integrity-hashed acceptance report.
+- achieve all acceptance checks in the integrity-hashed final report.
 
 ## 28. Explicit Disabled-Capability Confirmation
 
