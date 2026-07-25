@@ -57,9 +57,12 @@ Useful commands:
 ```powershell
 npm.cmd run gbrain:status
 npm.cmd run gbrain:sync
+npm.cmd run gbrain:backfill -- --input-file <research-evidence-export.json> --dry-run
 npm.cmd run test:gbrain-sidecar
 npm.cmd run test:gbrain-sidecar:real
 npm.cmd run test:gotrader-mcp-research-memory
+npm.cmd run test:gbrain-backfill
+npm.cmd run test:gbrain-mcp-real-client
 ```
 
 `test:gbrain-sidecar:real` creates a disposable PGLite brain, captures one compact test
@@ -109,6 +112,9 @@ Completed deterministic research cycle
 
 The sidecar also backfills existing compact native evidence records when the
 Self-Improvement memory panel is opened or the operator selects **Sync memory**.
+Interactive backfill is bounded to 100 records per run by default and resumes
+from a compact checkpoint. The CLI accepts a sanitized native-evidence export;
+it does not open browser IndexedDB files directly.
 
 ## Offline Behavior
 
@@ -161,3 +167,14 @@ They use the same loopback sidecar and compact metadata contracts as the local
 UI. No direct gbrain MCP server is exposed, and no memory-write tool exists.
 Searches are bounded, audited by query hash rather than raw query, and returned
 text is marked as untrusted advisory content.
+
+For clients that should see only research memory, use the dedicated stdio
+entrypoint:
+
+```powershell
+npm.cmd run mcp:research-memory
+```
+
+This endpoint exposes exactly the three tools above. It does not include trade
+proposal or Paper-Demo tools. MCP client configuration changes require that
+client to reload its MCP registry.

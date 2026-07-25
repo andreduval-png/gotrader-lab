@@ -243,7 +243,10 @@ export const sanitizeResearchMemorySummary = (value, retrievalMode = "bounded_fa
 
 const validateLoopbackUrl = (value) => {
   const parsed = new URL(value);
-  if (parsed.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) {
+  if (
+    parsed.protocol !== "http:" ||
+    !["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname)
+  ) {
     throw new Error("gbrain_sidecar_must_be_loopback");
   }
   return parsed.origin;
