@@ -1,0 +1,59 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "safe_strategy_shadow_request",
+  "request": {
+    "jobType": "strategy_shadow",
+    "jobVersion": "gotrader-b1-strategy-shadow-job-v1",
+    "requestedAt": "2026-07-27T14:00:00.000Z",
+    "triggerEventId": "mt5-candle-closed:USTECH:5m:2026-07-27T13:55:00.000Z",
+    "triggerCandleIdentity": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "requestedSymbol": "MNQ",
+    "brokerSymbol": "USTECH",
+    "primaryTimeframe": "5m",
+    "contextArtifactId": "v2-context:2222222222222222222222222222222222222222222222222222222222222222",
+    "contextIdentity": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "strategyId": "ifvg_v3",
+    "profileId": "ifvg_fresh_retest_v3_research",
+    "profileVersion": "3.0.0-frozen",
+    "parameterHash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "costModelId": "mnq_proxy_conservative_v1",
+    "requiredFacts": [
+      "dealing_range",
+      "displacement_fvg",
+      "higher_timeframe_bias",
+      "session_opening"
+    ],
+    "requiredTimeframes": [
+      "15m",
+      "1h",
+      "5m"
+    ],
+    "sourceFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "timeContractId": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "schemaVersions": {
+      "adapter": "gotrader-v2-ifvg-v3-adapter-v1",
+      "candle": "gotrader-v2-canonical-candle-v1",
+      "context": "gotrader-v2-canonical-market-context-v1",
+      "job": "gotrader-b1-canonical-research-job-v1"
+    },
+    "shadowOnly": true,
+    "authority": {
+      "executionAuthority": "none",
+      "brokerAuthority": "none",
+      "readinessOverrideAuthority": "none"
+    }
+  },
+  "expected": {
+    "accepted": true,
+    "initialStatus": "queued",
+    "allowedResultClassifications": [
+      "strategy_shadow_blocked",
+      "strategy_shadow_detected",
+      "strategy_shadow_expired",
+      "strategy_shadow_rejected"
+    ],
+    "canCreateEvidence": false,
+    "readinessChanged": false,
+    "productionAdoptionAllowed": false
+  }
+}

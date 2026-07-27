@@ -1,0 +1,49 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "identity_drift_matrix",
+  "baseRequestFile": "safe-strategy-shadow.request.json",
+  "cases": [
+    {
+      "id": "source_fingerprint_drift",
+      "path": "sourceFingerprint",
+      "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "context_identity_drift",
+      "path": "contextIdentity",
+      "value": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "profile_version_drift",
+      "path": "profileVersion",
+      "value": "3.0.1-candidate",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "parameter_hash_drift",
+      "path": "parameterHash",
+      "value": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "cost_model_drift",
+      "path": "costModelId",
+      "value": "mnq_proxy_stressed_v1",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "time_contract_drift",
+      "path": "timeContractId",
+      "value": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "expectedRelationship": "different_logical_job"
+    },
+    {
+      "id": "schema_version_drift",
+      "path": "schemaVersions.context",
+      "value": "gotrader-v2-canonical-market-context-v2-candidate",
+      "expectedRelationship": "different_logical_job"
+    }
+  ]
+}

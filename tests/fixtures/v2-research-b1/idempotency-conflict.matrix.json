@@ -1,0 +1,24 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "idempotency_conflict_matrix",
+  "baseRequestFile": "safe-context-lineage.request.json",
+  "cases": [
+    {
+      "id": "exact_duplicate",
+      "overrides": {},
+      "expectedJobIdentity": "same",
+      "expectedPayloadHash": "same",
+      "expectedDisposition": "coalesce_idempotently"
+    },
+    {
+      "id": "same_job_changed_submission_time",
+      "overrides": {
+        "requestedAt": "2026-07-27T14:00:05.000Z"
+      },
+      "expectedJobIdentity": "same",
+      "expectedPayloadHash": "different",
+      "expectedDisposition": "quarantine_payload_conflict",
+      "expectedBlocker": "logical_job_payload_conflict"
+    }
+  ]
+}

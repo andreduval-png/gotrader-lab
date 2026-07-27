@@ -1,0 +1,79 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "forbidden_fields_matrix",
+  "baseRequestFile": "safe-context-lineage.request.json",
+  "cases": [
+    {
+      "id": "raw_candle_field",
+      "path": "rawCandles",
+      "value": [
+        "forbidden-test-sentinel"
+      ],
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_raw_market_data"
+    },
+    {
+      "id": "raw_runtime_snapshot",
+      "path": "rawRuntimeSnapshot",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_raw_runtime_snapshot"
+    },
+    {
+      "id": "credential_field",
+      "path": "credentials",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_secret_or_credential"
+    },
+    {
+      "id": "account_field",
+      "path": "accountData",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_account_data"
+    },
+    {
+      "id": "order_field",
+      "path": "orderData",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_order_data"
+    },
+    {
+      "id": "position_field",
+      "path": "positionData",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_position_data"
+    },
+    {
+      "id": "execution_request",
+      "path": "executionRequest",
+      "value": "forbidden-test-sentinel",
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_execution_request"
+    },
+    {
+      "id": "authority_drift",
+      "path": "authority.executionAuthority",
+      "value": "paper",
+      "expectedAccepted": false,
+      "expectedBlocker": "execution_authority_must_be_none"
+    },
+    {
+      "id": "readiness_override",
+      "path": "readinessOverride",
+      "value": true,
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_readiness_override"
+    },
+    {
+      "id": "auto_apply",
+      "path": "autoApplyAllowed",
+      "value": true,
+      "expectedAccepted": false,
+      "expectedBlocker": "forbidden_auto_apply"
+    }
+  ]
+}

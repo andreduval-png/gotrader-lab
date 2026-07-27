@@ -1,0 +1,36 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "cancellation_lease_matrix",
+  "baseRequestFile": "safe-context-lineage.request.json",
+  "cases": [
+    {
+      "id": "cancelled_before_seal",
+      "checkpoint": {
+        "status": "cancelled",
+        "currentStage": "result_validation",
+        "pendingNextStage": "result_seal",
+        "cancelRequestedAt": "2026-07-27T14:01:00.000Z",
+        "leaseOwner": "b1-fixture-worker-a",
+        "leaseExpiresAt": "2026-07-27T14:05:00.000Z",
+        "lastHeartbeatAt": "2026-07-27T14:00:59.000Z"
+      },
+      "sealAttemptAt": "2026-07-27T14:01:01.000Z",
+      "expectedSealAllowed": false,
+      "expectedBlocker": "job_cancelled_before_seal"
+    },
+    {
+      "id": "expired_lease_before_seal",
+      "checkpoint": {
+        "status": "running",
+        "currentStage": "result_validation",
+        "pendingNextStage": "result_seal",
+        "leaseOwner": "b1-fixture-worker-a",
+        "leaseExpiresAt": "2026-07-27T14:01:00.000Z",
+        "lastHeartbeatAt": "2026-07-27T14:00:55.000Z"
+      },
+      "sealAttemptAt": "2026-07-27T14:01:01.000Z",
+      "expectedSealAllowed": false,
+      "expectedBlocker": "job_lease_expired_before_seal"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "gotrader-b1-contract-fixture-manifest-v1",
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "canonicalHashVersion": "gotrader-v2-sha256-v1",
+  "planningBaseline": "ad8608a6f40361a3a9a84b92c93a4da4d64e59b1",
+  "runtimeIntegrationAllowed": false,
+  "schedulerRegistrationAllowed": false,
+  "evidenceCreationAllowed": false,
+  "readinessChangeAllowed": false,
+  "productionAdoptionAllowed": false,
+  "files": [
+    "safe-context-lineage.request.json",
+    "safe-strategy-shadow.request.json",
+    "identity-drift.matrix.json",
+    "idempotency-conflict.matrix.json",
+    "cancellation-lease.matrix.json",
+    "forbidden-fields.matrix.json"
+  ],
+  "expected": {
+    "acceptedRequestCount": 2,
+    "identityDriftCaseCount": 7,
+    "idempotencyCaseCount": 1,
+    "payloadConflictCaseCount": 1,
+    "sealBlockerCaseCount": 2,
+    "forbiddenCaseCount": 10,
+    "authority": {
+      "executionAuthority": "none",
+      "brokerAuthority": "none",
+      "readinessOverrideAuthority": "none"
+    }
+  }
+}

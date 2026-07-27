@@ -1,0 +1,47 @@
+{
+  "fixtureVersion": "gotrader-b1-planning-fixture-v1",
+  "caseId": "safe_context_lineage_request",
+  "request": {
+    "jobType": "context_lineage",
+    "jobVersion": "gotrader-b1-context-lineage-job-v1",
+    "requestedAt": "2026-07-27T14:00:00.000Z",
+    "triggerEventId": "mt5-candle-closed:USTECH:5m:2026-07-27T13:55:00.000Z",
+    "triggerCandleIdentity": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "requestedSymbol": "MNQ",
+    "brokerSymbol": "USTECH",
+    "primaryTimeframe": "5m",
+    "contextArtifactId": "v2-context:2222222222222222222222222222222222222222222222222222222222222222",
+    "contextIdentity": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "requiredFacts": [
+      "dealing_range",
+      "displacement_fvg",
+      "higher_timeframe_bias",
+      "session_opening"
+    ],
+    "requiredTimeframes": [
+      "15m",
+      "1h",
+      "5m"
+    ],
+    "sourceFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "timeContractId": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "schemaVersions": {
+      "candle": "gotrader-v2-canonical-candle-v1",
+      "context": "gotrader-v2-canonical-market-context-v1",
+      "job": "gotrader-b1-canonical-research-job-v1"
+    },
+    "shadowOnly": true,
+    "authority": {
+      "executionAuthority": "none",
+      "brokerAuthority": "none",
+      "readinessOverrideAuthority": "none"
+    }
+  },
+  "expected": {
+    "accepted": true,
+    "initialStatus": "queued",
+    "canCreateEvidence": false,
+    "readinessChanged": false,
+    "productionAdoptionAllowed": false
+  }
+}
