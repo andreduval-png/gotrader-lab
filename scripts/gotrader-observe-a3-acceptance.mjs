@@ -89,6 +89,7 @@ let activeMarketSamples = 0;
 let freshActiveMarketProofSamples = 0;
 let marketClosedPauseSamples = 0;
 let unsafeMarketClosedSamples = 0;
+let resumePendingSamples = 0;
 let marketClosedSeen = false;
 let freshProofAfterMarketClose = false;
 let hydrationNotReadySamples = 0;
@@ -128,6 +129,7 @@ const baselineManagedRestartCounts = restartCountSnapshot(
 const verifiedCloses = new Map();
 const contextCycles = new Map();
 const blockers = new Set();
+const transientResumeBlockers = new Set();
 
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, () => {
@@ -250,6 +252,7 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     freshActiveMarketProofSamples,
     marketClosedPauseSamples,
     unsafeMarketClosedSamples,
+    resumePendingSamples,
     marketResumeCountDelta,
     freshProofAfterMarketClose,
     verificationFailureCount,
@@ -322,6 +325,7 @@ const compactCheckpoint = async ({ final = false } = {}) => {
       Number(firstVerifier?.cpuUserMicroseconds ?? 0),
     acceptanceChecks,
     blockers: [...blockers],
+    transientResumeBlockers: [...transientResumeBlockers],
     shadowIfvgComparisonEnabled: false,
     rawCandlesPersisted: false,
     rawContextFactsPersisted: false,
@@ -368,6 +372,15 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
         schedulerStatus.state !== "paused_market_closed"
       ) {
         unsafeMarketClosedSamples += 1;
+      }
+    }
+    if (verifierStatus.awaitingFreshProofAfterMarketResume === true) {
+      resumePendingSamples += 1;
+      for (const blocker of verifierStatus.blockers ?? []) {
+        transientResumeBlockers.add(blocker);
+      }
+      for (const blocker of verifierStatus.resumeTransientBlockers ?? []) {
+        transientResumeBlockers.add(blocker);
       }
     }
     if (feedStatus.historicalContextHydration?.status !== "ready") {
@@ -467,7 +480,9 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
         blockers: artifact.blockers ?? []
       });
     }
-    for (const blocker of verifierStatus.blockers ?? []) blockers.add(blocker);
+    if (verifierStatus.awaitingFreshProofAfterMarketResume !== true) {
+      for (const blocker of verifierStatus.blockers ?? []) blockers.add(blocker);
+    }
     if (Date.now() >= nextProgressAt) {
       const checkpoint = await compactCheckpoint();
       await writeJsonAtomic(checkpointFile, checkpoint);
@@ -485,6 +500,7 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
           payloadConflictCount: checkpoint.payloadConflictCount,
           ledgerGapCount: checkpoint.ledgerGapCount,
           marketClosedPauseSamples: checkpoint.marketClosedPauseSamples,
+          resumePendingSamples: checkpoint.resumePendingSamples,
           freshProofAfterMarketClose:
             checkpoint.freshProofAfterMarketClose,
           managedRestartDelta: checkpoint.managedRestartDelta,

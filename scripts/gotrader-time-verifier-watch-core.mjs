@@ -8,8 +8,15 @@ export const TIME_VERIFIER_WATCH_SERVICE_VERSION =
   "gotrader-current-live-time-verifier-v1";
 export const TIME_VERIFIER_WATCH_STATE_VERSION = 1;
 export const TIME_VERIFIER_MAX_CONTINUITY_GAP_MS = 180_000;
+export const TIME_VERIFIER_RESUME_GRACE_MS = 120_000;
 
 const unique = (values) => [...new Set(values.filter(Boolean))];
+const isoAfter = (value, milliseconds) => {
+  const parsed = Date.parse(value ?? "");
+  return Number.isFinite(parsed)
+    ? new Date(parsed + milliseconds).toISOString()
+    : undefined;
+};
 
 export const emptyTimeVerifierWatchState = () => ({
   version: TIME_VERIFIER_WATCH_STATE_VERSION,
@@ -21,6 +28,7 @@ export const emptyTimeVerifierWatchState = () => ({
   duplicateObservationCount: 0,
   conflictCount: 0,
   continuityResetCount: 0,
+  resumePendingAttemptCount: 0,
   probeArtifactIds: {},
   rawProbePersisted: false,
   rawCandlesPersisted: false,
@@ -39,13 +47,44 @@ const continuityKeyFor = (artifact) =>
   });
 
 const requiresImmediateProofRevocation = (blocker) =>
-  /terminal_observation_conflicting_duplicate|direct_terminal_probe_(?:not_persistent|version_invalid|disconnected|stopped|malformed|future|invalid|symbol_mismatch)|authority_not_none|raw_payload_persistence_not_false/i.test(
+  /terminal_observation_conflicting_duplicate|direct_terminal_probe_.*(?:disconnected|stopped|malformed|future|symbol_mismatch|instance_mismatch|authority|forbidden|version_invalid|mode_invalid|path_outside)|authority_not_none|raw_payload_persistence_not_false/i.test(
     String(blocker)
   );
 
+const expectedResumeContractBlockerPattern =
+  /^(?:upstream_bridge_.+_mismatch|direct_upstream_(?:probe_observation|probe_instance|probe_generated_time|classifier|observed_offset|provider_basis)_mismatch|verification_artifact_id_missing|verification_scope_not_current_live|current_live_time_basis_not_verified|current_live_proof_(?:missing|expiring|stale|conflicting)|time_contract_proof_state_mismatch|terminal_observation_out_of_order)$/;
+const expectedResumeProbeBlockerPattern =
+  /^(?:terminal_observation_stale|terminal_quote_stale|terminal_python_basis_conflict)$/;
+
+const isExpectedResumeTransientBlocker = (blocker) => {
+  const text = String(blocker);
+  if (expectedResumeContractBlockerPattern.test(text)) return true;
+  if (!text.startsWith("direct_terminal_probe_")) return false;
+  return text
+    .slice("direct_terminal_probe_".length)
+    .split(",")
+    .every((token) => expectedResumeProbeBlockerPattern.test(token));
+};
+
+const resumeGraceActive = ({
+  state,
+  nowUtc,
+  resumeGraceMs = TIME_VERIFIER_RESUME_GRACE_MS
+}) => {
+  if (state.awaitingFreshProofAfterMarketResume !== true) return false;
+  const startedMs = Date.parse(state.resumeAwaitingStartedAtUtc ?? "");
+  const nowMs = Date.parse(nowUtc);
+  return (
+    Number.isFinite(startedMs) &&
+    Number.isFinite(nowMs) &&
+    nowMs - startedMs <= resumeGraceMs
+  );
+};
+
 export function createTimeVerifierWatchEngine({
   state: savedState,
-  maximumContinuityGapMs = TIME_VERIFIER_MAX_CONTINUITY_GAP_MS
+  maximumContinuityGapMs = TIME_VERIFIER_MAX_CONTINUITY_GAP_MS,
+  resumeGraceMs = TIME_VERIFIER_RESUME_GRACE_MS
 } = {}) {
   let state = {
     ...emptyTimeVerifierWatchState(),
@@ -117,6 +156,16 @@ export function createTimeVerifierWatchEngine({
       conflictCount: state.conflictCount,
       continuityStartedAtUtc: state.continuityStartedAtUtc,
       continuityResetCount: state.continuityResetCount,
+      resumePendingAttemptCount: state.resumePendingAttemptCount,
+      resumeAwaitingStartedAtUtc: state.resumeAwaitingStartedAtUtc,
+      resumeGraceExpiresAtUtc: isoAfter(
+        state.resumeAwaitingStartedAtUtc,
+        resumeGraceMs
+      ),
+      resumeTransientBlockers:
+        state.lastRenewalResult?.status === "awaiting_fresh_market_proof"
+          ? state.lastRenewalResult.transientBlockers ?? []
+          : [],
       lastRenewalResult: state.lastRenewalResult,
       providerTimeBasis: state.activeArtifact?.providerTimeBasis,
       observedOffsetMinutes: state.activeArtifact?.observedOffsetMinutes,
@@ -170,6 +219,7 @@ export function createTimeVerifierWatchEngine({
       }
       state.pausedForMarketClosed = true;
       state.awaitingFreshProofAfterMarketResume = false;
+      state.resumeAwaitingStartedAtUtc = undefined;
       state.lastRenewalResult = {
         status: "paused_market_closed",
         observedAt: nowUtc,
@@ -188,6 +238,7 @@ export function createTimeVerifierWatchEngine({
     ) {
       state.pausedForMarketClosed = false;
       state.awaitingFreshProofAfterMarketResume = true;
+      state.resumeAwaitingStartedAtUtc = nowUtc;
     }
     const probeId = directProbe?.observationId;
     const probeFingerprint = directProbe?.contentFingerprint;
@@ -206,6 +257,25 @@ export function createTimeVerifierWatchEngine({
         state.conflictCount += 1;
       } else if (priorFingerprint === probeFingerprint) {
         state.duplicateObservationCount += 1;
+        if (
+          state.awaitingFreshProofAfterMarketResume === true &&
+          resumeGraceActive({ state, nowUtc, resumeGraceMs })
+        ) {
+          state.resumePendingAttemptCount += 1;
+          state.lastRenewalResult = {
+            status: "awaiting_fresh_market_proof",
+            observedAt: nowUtc,
+            probeObservationId: probeId,
+            blockers: ["fresh_market_correlation_required_after_resume"],
+            transientBlockers: ["terminal_observation_unchanged_after_resume"]
+          };
+          return {
+            action: "awaiting",
+            persistArtifact: false,
+            state: { ...state },
+            status: status({ nowUtc })
+          };
+        }
         state.lastRenewalResult = {
           status: "no_change",
           observedAt: nowUtc,
@@ -236,6 +306,26 @@ export function createTimeVerifierWatchEngine({
     const accepted =
       artifact?.validationStatus === "accepted" && blockers.length === 0;
     if (!accepted) {
+      const expectedResumePending =
+        blockers.length > 0 &&
+        blockers.every(isExpectedResumeTransientBlocker) &&
+        resumeGraceActive({ state, nowUtc, resumeGraceMs });
+      if (expectedResumePending) {
+        state.resumePendingAttemptCount += 1;
+        state.lastRenewalResult = {
+          status: "awaiting_fresh_market_proof",
+          observedAt: nowUtc,
+          probeObservationId: probeId,
+          blockers: ["fresh_market_correlation_required_after_resume"],
+          transientBlockers: unique(blockers)
+        };
+        return {
+          action: "awaiting",
+          persistArtifact: false,
+          state: { ...state },
+          status: status({ nowUtc })
+        };
+      }
       state.failureCount += 1;
       const activeProofAccepted =
         state.activeArtifact?.validationStatus === "accepted" &&
@@ -322,6 +412,7 @@ export function createTimeVerifierWatchEngine({
       state.proofResumedAtUtc = nowUtc;
     }
     state.awaitingFreshProofAfterMarketResume = false;
+    state.resumeAwaitingStartedAtUtc = undefined;
     state.lastRenewalResult = {
       status: "renewed",
       observedAt: nowUtc,
@@ -355,6 +446,25 @@ export function createTimeVerifierWatchEngine({
         marketSnapshot,
         nowUtc
       });
+    }
+    if (
+      blockers.length > 0 &&
+      blockers.every(isExpectedResumeTransientBlocker) &&
+      resumeGraceActive({ state, nowUtc, resumeGraceMs })
+    ) {
+      state.resumePendingAttemptCount += 1;
+      state.lastRenewalResult = {
+        status: "awaiting_fresh_market_proof",
+        observedAt: nowUtc,
+        blockers: ["fresh_market_correlation_required_after_resume"],
+        transientBlockers: unique(blockers.map(String))
+      };
+      return {
+        action: "awaiting",
+        persistArtifact: false,
+        state: { ...state },
+        status: status({ nowUtc })
+      };
     }
     state.failureCount = Number(state.failureCount ?? 0) + 1;
     state.lastRenewalResult = {

@@ -163,7 +163,8 @@ export async function collectCurrentLiveTimeEvidence({
   bridgeUrl,
   requestedSymbol = "MNQ",
   brokerSymbol = "USTECH",
-  nowUtc = new Date().toISOString(),
+  nowUtc,
+  currentTime = () => new Date().toISOString(),
   environment = process.env,
   fetchJson = defaultFetchJson,
   readProbe = readTerminalProbe,
@@ -201,7 +202,7 @@ export async function collectCurrentLiveTimeEvidence({
       directProbe,
       requestedSymbol,
       brokerSymbol,
-      nowUtc,
+      nowUtc: nowUtc ?? currentTime(),
       requireDirectProbe
     });
     latestEvidence = Object.freeze({

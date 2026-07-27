@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  canonicalizeProviderQuoteTime,
   classifyOperationalMarketState,
   evaluateConfiguredMarketSession,
   operationalMarketStateAuthority
@@ -47,6 +48,31 @@ const reopened = classifyOperationalMarketState({
 assert.equal(reopened.marketState, "market_open");
 assert.equal(reopened.proofPauseEligible, false);
 
+const normalizedPreBreakQuote = canonicalizeProviderQuoteTime({
+  quoteObservedAt: "2026-07-24T00:00:00.000Z",
+  providerTimeBasis: "verified_trade_server_wall_clock",
+  observedOffsetMinutes: 180,
+  currentLiveTimeBasisVerified: true
+});
+assert.equal(normalizedPreBreakQuote, "2026-07-23T21:00:00.000Z");
+const awaitingFreshReopenQuote = classifyOperationalMarketState({
+  nowUtc: "2026-07-23T22:00:30.000Z",
+  quoteObservedAt: normalizedPreBreakQuote,
+  terminalProbeCapturedAt: "2026-07-23T22:00:21.000Z",
+  terminalConnected: true,
+  transportConnected: true
+});
+assert.equal(awaitingFreshReopenQuote.marketState, "time_unverified");
+assert.equal(
+  canonicalizeProviderQuoteTime({
+    quoteObservedAt: "2026-07-24T00:00:00.000Z",
+    providerTimeBasis: "insufficient_evidence",
+    observedOffsetMinutes: 180,
+    currentLiveTimeBasisVerified: false
+  }),
+  undefined
+);
+
 const transportDisconnected = classifyOperationalMarketState({
   nowUtc: "2026-07-23T20:00:00.000Z",
   terminalConnected: true,
@@ -80,6 +106,8 @@ console.log(
       marketQuiet: true,
       marketClosed: true,
       freshCorrelationRequiredOnReopen: true,
+      providerWallClockNormalizedBeforeFreshnessCheck: true,
+      unverifiedQuoteCannotResumeMarket: true,
       transportStateOrthogonal: true,
       terminalStateOrthogonal: true,
       historicalDstPolicyVerified: false,

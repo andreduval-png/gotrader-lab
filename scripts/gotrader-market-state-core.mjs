@@ -31,6 +31,29 @@ const finiteTime = (value) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+export function canonicalizeProviderQuoteTime({
+  quoteObservedAt,
+  providerTimeBasis,
+  observedOffsetMinutes,
+  currentLiveTimeBasisVerified
+} = {}) {
+  if (currentLiveTimeBasisVerified !== true) return undefined;
+  const quoteMs = finiteTime(quoteObservedAt);
+  if (quoteMs === undefined) return undefined;
+  if (
+    providerTimeBasis === "verified_trade_server_wall_clock" ||
+    providerTimeBasis === "current_offset_verified_only"
+  ) {
+    const offset = Number(observedOffsetMinutes);
+    if (!Number.isFinite(offset)) return undefined;
+    return new Date(quoteMs - offset * 60_000).toISOString();
+  }
+  if (providerTimeBasis === "verified_utc_epoch") {
+    return new Date(quoteMs).toISOString();
+  }
+  return undefined;
+}
+
 const zonedParts = (nowUtc, timeZone) => {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,

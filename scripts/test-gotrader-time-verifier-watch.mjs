@@ -189,6 +189,37 @@ assert.equal(correlatedEvidence.correlationAttemptCount, 2);
 assert.equal(correlationFetchCount, 4);
 assert.deepEqual(correlationDelays, [25]);
 
+const postFetchClockOrder = [];
+const postFetchClockProbe = directProbe(6);
+const postFetchClockContract = contractFor(postFetchClockProbe);
+const postFetchClockEvidence = await collectCurrentLiveTimeEvidence({
+  repoRoot: ".",
+  upstreamUrl: "http://upstream.test",
+  bridgeUrl: "http://bridge.test",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  requireDirectProbe: true,
+  readProbe: async () => {
+    postFetchClockOrder.push("probe");
+    return postFetchClockProbe;
+  },
+  fetchJson: async () => {
+    postFetchClockOrder.push("surface");
+    return postFetchClockContract;
+  },
+  currentTime: () => {
+    postFetchClockOrder.push("clock");
+    return at(181);
+  }
+});
+assert.equal(postFetchClockEvidence.artifact.validationStatus, "accepted");
+assert.deepEqual(postFetchClockOrder, [
+  "probe",
+  "surface",
+  "surface",
+  "clock"
+]);
+
 const engine = createTimeVerifierWatchEngine();
 const first = evidenceFor(1);
 const firstResult = engine.processEvidence({
@@ -296,6 +327,32 @@ assert.equal(activeDisconnectResult.action, "blocked");
 assert.equal(activeDisconnectResult.persistArtifact, true);
 assert.equal(activeDisconnectResult.status.currentLiveEligible, false);
 
+const readerStyleDisconnect = {
+  ...evidenceFor(3).artifact,
+  validationStatus: "blocked",
+  currentLiveTimeBasisVerified: false,
+  blockers: [
+    "direct_terminal_probe_terminal_observation_disconnected"
+  ]
+};
+const readerStyleDisconnectResult = renewalRaceEngine.processEvidence({
+  artifact: readerStyleDisconnect,
+  directProbe: {
+    ...third.probe,
+    status: "probe_unavailable",
+    reason: "terminal_observation_disconnected",
+    terminalConnected: false,
+    contentFingerprint: "sha256:reader-style-disconnected"
+  },
+  nowUtc: at(91)
+});
+assert.equal(readerStyleDisconnectResult.action, "blocked");
+assert.equal(readerStyleDisconnectResult.persistArtifact, true);
+assert.equal(
+  readerStyleDisconnectResult.status.currentLiveEligible,
+  false
+);
+
 const conflictingProbe = {
   ...third.probe,
   contentFingerprint: "sha256:changed-content"
@@ -383,18 +440,31 @@ assert.equal(marketPaused.action, "paused_market_closed");
 assert.equal(marketPaused.status.state, "healthy_paused_market_closed");
 assert.equal(marketPaused.status.currentLiveEligible, false);
 assert.equal(marketPaused.status.verificationFailureCount, 0);
+const expectedResumeArtifact = {
+  ...transientArtifact,
+  blockers: [
+    "verification_artifact_id_missing",
+    "verification_scope_not_current_live",
+    "current_live_time_basis_not_verified",
+    "current_live_proof_stale",
+    "direct_terminal_probe_terminal_observation_stale"
+  ]
+};
 const resumePending = marketPauseEngine.processEvidence({
-  artifact: transientArtifact,
+  artifact: expectedResumeArtifact,
   directProbe: transientProbe,
   marketSnapshot: {
-    marketState: "market_open",
-    operationalState: "market_open",
+    marketState: "time_unverified",
+    operationalState: "time_unverified",
     observedAtUtc: at(121),
     proofPauseEligible: false
   },
   nowUtc: at(121)
 });
+assert.equal(resumePending.action, "awaiting");
 assert.equal(resumePending.status.currentLiveEligible, false);
+assert.equal(resumePending.status.verificationFailureCount, 0);
+assert.equal(resumePending.status.resumePendingAttemptCount, 1);
 assert.equal(
   resumePending.status.awaitingFreshProofAfterMarketResume,
   true
@@ -405,14 +475,65 @@ const resumed = marketPauseEngine.processEvidence({
   marketSnapshot: {
     marketState: "market_open",
     operationalState: "market_open",
-    observedAtUtc: at(91),
+    observedAtUtc: at(151),
     proofPauseEligible: false
   },
-  nowUtc: at(91)
+  nowUtc: at(151)
 });
 assert.equal(resumed.action, "renewed");
 assert.equal(resumed.status.currentLiveEligible, true);
 assert.equal(resumed.status.marketResumeCount, 1);
+assert.equal(resumed.status.verificationFailureCount, 0);
+
+const expiredResumeGraceEngine = createTimeVerifierWatchEngine({
+  resumeGraceMs: 30_000
+});
+expiredResumeGraceEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(31),
+    proofPauseEligible: false
+  },
+  nowUtc: at(31)
+});
+expiredResumeGraceEngine.processEvidence({
+  artifact: second.artifact,
+  directProbe: second.probe,
+  marketSnapshot: {
+    marketState: "market_closed",
+    operationalState: "market_closed",
+    observedAtUtc: at(61),
+    proofPauseEligible: true
+  },
+  nowUtc: at(61)
+});
+expiredResumeGraceEngine.processEvidence({
+  artifact: expectedResumeArtifact,
+  directProbe: transientProbe,
+  marketSnapshot: {
+    marketState: "time_unverified",
+    operationalState: "time_unverified",
+    observedAtUtc: at(121),
+    proofPauseEligible: false
+  },
+  nowUtc: at(121)
+});
+const expiredResumeGrace = expiredResumeGraceEngine.processEvidence({
+  artifact: expectedResumeArtifact,
+  directProbe: transientProbe,
+  marketSnapshot: {
+    marketState: "time_unverified",
+    operationalState: "time_unverified",
+    observedAtUtc: at(152),
+    proofPauseEligible: false
+  },
+  nowUtc: at(152)
+});
+assert.notEqual(expiredResumeGrace.action, "awaiting");
+assert.equal(expiredResumeGrace.status.verificationFailureCount, 1);
 
 const strictEvaluation = evaluateRuntimeTimeContract(third.contract, {
   requireVerificationArtifact: true,
