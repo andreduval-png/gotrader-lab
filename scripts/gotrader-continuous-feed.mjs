@@ -14,6 +14,7 @@ import {
   evaluateRuntimeTimeContract,
   normalizeRuntimeProviderTimestamp,
   normalizeRuntimeTimeframe,
+  runtimeTimeVerificationSnapshotCoherent,
   selectRuntimeContextWindows
 } from "./gotrader-continuous-feed-core.mjs";
 import {
@@ -158,6 +159,28 @@ let lastStatus = {
 let latestTimeContract;
 let latestVerificationArtifact;
 let latestVerifierStatus;
+const readCoherentWatcherSnapshot = async () => {
+  let verificationArtifact;
+  let verifierStatus;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    // The verifier commits artifact before status. Reading status first means a
+    // matching pair is always one bounded retry away during renewal.
+    verifierStatus = await readJsonFile(verifierStatusFile);
+    verificationArtifact = await readJsonFile(verificationArtifactFile);
+    if (
+      runtimeTimeVerificationSnapshotCoherent({
+        verificationArtifact,
+        verifierStatus
+      })
+    ) {
+      return { verificationArtifact, verifierStatus };
+    }
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  return { verificationArtifact, verifierStatus };
+};
 let latestCandlePayloads = [];
 let hydrationArtifact;
 let hydrationReady = !requireHistoricalContextHydration;
@@ -256,12 +279,14 @@ const poll = async () => {
         `${bridgeUrl}/time-contract?symbol=${encodeURIComponent(brokerSymbol)}`
       );
       lastTimeContractPollAt = now;
-      latestVerificationArtifact = requireWatcherArtifact
-        ? await readJsonFile(verificationArtifactFile)
-        : undefined;
-      latestVerifierStatus = requireWatcherArtifact
-        ? await readJsonFile(verifierStatusFile)
-        : undefined;
+      if (requireWatcherArtifact) {
+        const watcherSnapshot = await readCoherentWatcherSnapshot();
+        latestVerificationArtifact = watcherSnapshot.verificationArtifact;
+        latestVerifierStatus = watcherSnapshot.verifierStatus;
+      } else {
+        latestVerificationArtifact = undefined;
+        latestVerifierStatus = undefined;
+      }
     }
     const quotePayload = await fetchJson(
       `${bridgeUrl}/quote?requestedSymbol=${encodeURIComponent(

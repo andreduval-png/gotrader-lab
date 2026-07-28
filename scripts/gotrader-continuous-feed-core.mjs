@@ -429,6 +429,27 @@ export function evaluateRuntimeTimeContract(
   };
 }
 
+export function runtimeTimeVerificationSnapshotCoherent({
+  verificationArtifact,
+  verifierStatus
+}) {
+  if (!verificationArtifact || !verifierStatus) return false;
+  const artifactId = String(verificationArtifact.artifactId ?? "");
+  const statusArtifactId = String(verifierStatus.verificationArtifactId ?? "");
+  if (!artifactId || artifactId !== statusArtifactId) return false;
+  const artifactGeneratedMs = Date.parse(
+    verificationArtifact.generatedAtUtc ?? ""
+  );
+  const statusGeneratedMs = Date.parse(
+    verifierStatus.verificationGeneratedAtUtc ?? ""
+  );
+  return (
+    Number.isFinite(artifactGeneratedMs) &&
+    Number.isFinite(statusGeneratedMs) &&
+    artifactGeneratedMs === statusGeneratedMs
+  );
+}
+
 const renewalHandoffBlockers = new Set([
   "current_live_time_basis_not_verified",
   "current_live_verification_scope_invalid",

@@ -10,7 +10,8 @@ import {
   normalizeRuntimeCandleResponse,
   normalizeRuntimeProviderTimestamp,
   normalizeRuntimeQuote,
-  retainFreshRuntimeTimeContractDuringRenewal
+  retainFreshRuntimeTimeContractDuringRenewal,
+  runtimeTimeVerificationSnapshotCoherent
 } from "./gotrader-continuous-feed-core.mjs";
 
 const candle = (time, close = 100) => ({
@@ -104,6 +105,37 @@ const healthyWatcherStatus = {
     freshWatcherArtifact.probeInstanceFingerprint,
   ...continuousFeedAuthority
 };
+assert.equal(
+  runtimeTimeVerificationSnapshotCoherent({
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: {
+      ...healthyWatcherStatus,
+      verificationGeneratedAtUtc: freshWatcherArtifact.generatedAtUtc
+    }
+  }),
+  true
+);
+assert.equal(
+  runtimeTimeVerificationSnapshotCoherent({
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: {
+      ...healthyWatcherStatus,
+      verificationArtifactId: "sha256:previous-renewal",
+      verificationGeneratedAtUtc: freshWatcherArtifact.generatedAtUtc
+    }
+  }),
+  false
+);
+assert.equal(
+  runtimeTimeVerificationSnapshotCoherent({
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: {
+      ...healthyWatcherStatus,
+      verificationGeneratedAtUtc: "2026-07-23T10:01:00.000Z"
+    }
+  }),
+  false
+);
 const retainedRenewal = retainFreshRuntimeTimeContractDuringRenewal({
   previous: {
     eligible: true,
