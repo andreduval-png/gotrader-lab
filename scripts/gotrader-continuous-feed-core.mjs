@@ -685,9 +685,14 @@ export function createContinuousFeedEngine({
   knownEvents = [],
   maximumCloseEventIds = 5_000,
   maximumCatchUpCandles = 24,
+  closeFinalizationDelayMs = 15_000,
   requireVerificationArtifact = false,
   requireWatcherArtifact = false
 } = {}) {
+  const boundedCloseFinalizationDelayMs = Math.min(
+    60_000,
+    Math.max(0, Number(closeFinalizationDelayMs) || 0)
+  );
   const stores = new Map();
   const formingHashes = new Map();
   const knownEventIds = new Set([
@@ -770,6 +775,7 @@ export function createContinuousFeedEngine({
     formingCandleUpdateCount,
     rejectedCloseEventCount,
     renewalHandoffRetentionCount,
+    closeFinalizationDelayMs: boundedCloseFinalizationDelayMs,
     renewalHandoffRetained:
       latestTimeContract.retainedDuringRenewalHandoff === true,
     lastRejectedClose,
@@ -1021,9 +1027,11 @@ export function createContinuousFeedEngine({
           latestTimeContract.identityVersion ?? latestTimeContract.version
       });
       const marketReferenceMs = Date.parse(quote.observedMarketTime);
+      const finalizedMarketReferenceMs =
+        marketReferenceMs - boundedCloseFinalizationDelayMs;
       const eligibleByMarketTime = merged.filter(
         (candle) =>
-          Date.parse(candle.candleCloseTime) <= marketReferenceMs &&
+          Date.parse(candle.candleCloseTime) <= finalizedMarketReferenceMs &&
           Date.parse(candle.candleOpenTime) <= marketReferenceMs
       );
       const closed = latestTimeContract.eligible

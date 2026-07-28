@@ -99,6 +99,13 @@ const liveLimit = Math.min(
   24,
   Math.max(3, Number(process.env.GOTRADER_FEED_LIVE_LIMIT || 3))
 );
+const closeFinalizationDelayMs = Math.min(
+  60_000,
+  Math.max(
+    0,
+    Number(process.env.GOTRADER_FEED_CLOSE_FINALIZATION_DELAY_MS || 15_000)
+  )
+);
 const requestedSymbol = process.env.GOTRADER_FEED_REQUESTED_SYMBOL || "MNQ";
 const brokerSymbol = process.env.GOTRADER_FEED_BROKER_SYMBOL || "USTECH";
 const timeframes = [
@@ -132,6 +139,7 @@ const engine = createContinuousFeedEngine({
   checkpoint: savedCheckpoint,
   knownEvents: durableEvents,
   maximumCloseEventIds: maximumDurableEvents,
+  closeFinalizationDelayMs,
   requireVerificationArtifact,
   requireWatcherArtifact
 });
@@ -151,7 +159,8 @@ let lastStatus = {
   pollIntervalsMs: {
     quote: quotePollMs,
     candle: candlePollMs,
-    timeContract: timeContractPollMs
+    timeContract: timeContractPollMs,
+    closeFinalizationDelay: closeFinalizationDelayMs
   },
   ...continuousFeedCapability,
   ...continuousFeedAuthority

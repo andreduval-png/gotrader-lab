@@ -306,6 +306,68 @@ assert.equal(
 );
 assert.equal(conflicting.status.conflictingCandleCount, 1);
 
+const finalizationEngine = createContinuousFeedEngine({
+  closeFinalizationDelayMs: 15_000
+});
+const settling = finalizationEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:01:10.000Z"),
+  candlePayloads: [
+    candles([
+      candle("2026-07-23T10:00:00.000Z", 100),
+      candle("2026-07-23T10:01:00.000Z", 101)
+    ])
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:01:11.000Z"
+});
+assert.equal(
+  settling.events.some((event) => event.type === "candle_closed"),
+  false
+);
+assert.equal(settling.status.closeFinalizationDelayMs, 15_000);
+
+const finalized = finalizationEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:01:20.000Z"),
+  candlePayloads: [
+    candles([
+      candle("2026-07-23T10:00:00.000Z", 100.5),
+      candle("2026-07-23T10:01:00.000Z", 101)
+    ])
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:01:21.000Z"
+});
+assert.equal(
+  finalized.events.some(
+    (event) =>
+      event.type === "source_blocked" &&
+      event.reason === "conflicting_closed_candle"
+  ),
+  false
+);
+assert.equal(finalized.status.conflictingCandleCount, 0);
+
+const postFinalizationRevision = finalizationEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:01:30.000Z"),
+  candlePayloads: [
+    candles([
+      candle("2026-07-23T10:00:00.000Z", 999),
+      candle("2026-07-23T10:01:00.000Z", 101)
+    ])
+  ],
+  timeContract: verifiedTime,
+  receivedAt: "2026-07-23T10:01:31.000Z"
+});
+assert.equal(
+  postFinalizationRevision.events.some(
+    (event) =>
+      event.type === "source_blocked" &&
+      event.reason === "conflicting_closed_candle"
+  ),
+  true
+);
+assert.equal(postFinalizationRevision.status.conflictingCandleCount, 1);
+
 const many = Array.from({ length: 2_105 }, (_, index) =>
   candle(new Date(Date.parse("2026-01-01T00:00:00.000Z") + index * 60_000).toISOString(), 100 + index)
 );
