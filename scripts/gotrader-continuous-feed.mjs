@@ -284,10 +284,6 @@ const poll = async () => {
       now - lastTimeContractPollAt >= timeContractPollMs ||
       candlePollDue
     ) {
-      latestTimeContract = await fetchJson(
-        `${bridgeUrl}/time-contract?symbol=${encodeURIComponent(brokerSymbol)}`
-      );
-      lastTimeContractPollAt = now;
       if (requireWatcherArtifact) {
         const watcherSnapshot = await readCoherentWatcherSnapshot();
         latestVerificationArtifact = watcherSnapshot.verificationArtifact;
@@ -296,6 +292,13 @@ const poll = async () => {
         latestVerificationArtifact = undefined;
         latestVerifierStatus = undefined;
       }
+      // Sample the bridge contract after the coherent watcher pair. A newer
+      // contract is safe to correlate; an older contract is a bounded handoff
+      // that the feed retains fail-closed against the prior fresh proof.
+      latestTimeContract = await fetchJson(
+        `${bridgeUrl}/time-contract?symbol=${encodeURIComponent(brokerSymbol)}`
+      );
+      lastTimeContractPollAt = now;
     }
     const quotePayload = await fetchJson(
       `${bridgeUrl}/quote?requestedSymbol=${encodeURIComponent(

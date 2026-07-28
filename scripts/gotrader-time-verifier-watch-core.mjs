@@ -28,6 +28,7 @@ export const emptyTimeVerifierWatchState = () => ({
   duplicateObservationCount: 0,
   conflictCount: 0,
   continuityResetCount: 0,
+  transientCorrelationPreservationCount: 0,
   resumePendingAttemptCount: 0,
   probeArtifactIds: {},
   rawProbePersisted: false,
@@ -64,6 +65,28 @@ const isExpectedResumeTransientBlocker = (blocker) => {
     .slice("direct_terminal_probe_".length)
     .split(",")
     .every((token) => expectedResumeProbeBlockerPattern.test(token));
+};
+
+const activeProofIsFresh = ({ state, nowUtc }) => {
+  const generatedMs = Date.parse(state.activeArtifact?.generatedAtUtc ?? "");
+  const expiresMs = Date.parse(state.activeArtifact?.expiresAtUtc ?? "");
+  const nowMs = Date.parse(nowUtc);
+  const authority = state.activeArtifact?.authority ?? {};
+  return (
+    state.activeArtifact?.validationStatus === "accepted" &&
+    state.activeArtifact?.currentLiveTimeBasisVerified === true &&
+    state.activeArtifact?.historicalDstPolicyVerified === false &&
+    state.activeArtifact?.terminalConnected === true &&
+    authority.executionAuthority === "none" &&
+    authority.brokerAuthority === "none" &&
+    authority.readinessOverrideAuthority === "none" &&
+    Number.isFinite(generatedMs) &&
+    Number.isFinite(expiresMs) &&
+    Number.isFinite(nowMs) &&
+    nowMs >= generatedMs - 5_000 &&
+    nowMs - generatedMs <= 120_000 &&
+    nowMs < expiresMs
+  );
 };
 
 const resumeGraceActive = ({
@@ -156,6 +179,8 @@ export function createTimeVerifierWatchEngine({
       conflictCount: state.conflictCount,
       continuityStartedAtUtc: state.continuityStartedAtUtc,
       continuityResetCount: state.continuityResetCount,
+      transientCorrelationPreservationCount:
+        state.transientCorrelationPreservationCount,
       resumePendingAttemptCount: state.resumePendingAttemptCount,
       resumeAwaitingStartedAtUtc: state.resumeAwaitingStartedAtUtc,
       resumeGraceExpiresAtUtc: isoAfter(
@@ -164,6 +189,11 @@ export function createTimeVerifierWatchEngine({
       ),
       resumeTransientBlockers:
         state.lastRenewalResult?.status === "awaiting_fresh_market_proof"
+          ? state.lastRenewalResult.transientBlockers ?? []
+          : [],
+      transientCorrelationBlockers:
+        state.lastRenewalResult?.status ===
+        "transient_correlation_preserved"
           ? state.lastRenewalResult.transientBlockers ?? []
           : [],
       lastRenewalResult: state.lastRenewalResult,
@@ -204,12 +234,19 @@ export function createTimeVerifierWatchEngine({
     marketSnapshot,
     nowUtc = new Date().toISOString()
   }) => {
+    const priorMarketSnapshot = state.marketSnapshot;
+    const priorProbeState = state.lastProbeState;
+    const priorProbeGeneratedAtUtc = state.lastProbeGeneratedAtUtc;
+    const priorProbeInstanceFingerprint =
+      state.lastProbeInstanceFingerprint;
     const priorMarketState = state.marketSnapshot?.marketState;
     const nextMarketState = marketSnapshot?.marketState;
+    let marketStateTransitionRecorded = false;
     if (marketSnapshot) {
       state.marketSnapshot = marketSnapshot;
       if (priorMarketState && priorMarketState !== nextMarketState) {
         state.marketStateTransitionCount += 1;
+        marketStateTransitionRecorded = true;
       }
     }
     if (marketSnapshot?.proofPauseEligible === true) {
@@ -306,9 +343,11 @@ export function createTimeVerifierWatchEngine({
     const accepted =
       artifact?.validationStatus === "accepted" && blockers.length === 0;
     if (!accepted) {
-      const expectedResumePending =
+      const transientCorrelation =
         blockers.length > 0 &&
-        blockers.every(isExpectedResumeTransientBlocker) &&
+        blockers.every(isExpectedResumeTransientBlocker);
+      const expectedResumePending =
+        transientCorrelation &&
         resumeGraceActive({ state, nowUtc, resumeGraceMs });
       if (expectedResumePending) {
         state.resumePendingAttemptCount += 1;
@@ -321,6 +360,37 @@ export function createTimeVerifierWatchEngine({
         };
         return {
           action: "awaiting",
+          persistArtifact: false,
+          state: { ...state },
+          status: status({ nowUtc })
+        };
+      }
+      if (
+        transientCorrelation &&
+        state.awaitingFreshProofAfterMarketResume !== true &&
+        activeProofIsFresh({ state, nowUtc })
+      ) {
+        state.marketSnapshot = priorMarketSnapshot;
+        state.lastProbeState = priorProbeState;
+        state.lastProbeGeneratedAtUtc = priorProbeGeneratedAtUtc;
+        state.lastProbeInstanceFingerprint =
+          priorProbeInstanceFingerprint;
+        if (marketStateTransitionRecorded) {
+          state.marketStateTransitionCount = Math.max(
+            0,
+            state.marketStateTransitionCount - 1
+          );
+        }
+        state.transientCorrelationPreservationCount += 1;
+        state.lastRenewalResult = {
+          status: "transient_correlation_preserved",
+          observedAt: nowUtc,
+          probeObservationId: probeId,
+          blockers: [],
+          transientBlockers: unique(blockers)
+        };
+        return {
+          action: "preserved_transient_correlation",
           persistArtifact: false,
           state: { ...state },
           status: status({ nowUtc })

@@ -169,8 +169,8 @@ export async function collectCurrentLiveTimeEvidence({
   fetchJson = defaultFetchJson,
   readProbe = readTerminalProbe,
   requireDirectProbe = false,
-  maximumCorrelationAttempts = 3,
-  correlationRetryDelayMs = 100,
+  maximumCorrelationAttempts = 5,
+  correlationRetryDelayMs = 250,
   delay = wait
 }) {
   const attempts = Math.min(

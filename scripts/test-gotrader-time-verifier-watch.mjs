@@ -303,13 +303,44 @@ const preservedRenewalRace = renewalRaceEngine.processEvidence({
   directProbe: renewalRace.probe,
   nowUtc: at(61)
 });
-assert.equal(preservedRenewalRace.action, "preserved");
+assert.equal(
+  preservedRenewalRace.action,
+  "preserved_transient_correlation"
+);
 assert.equal(preservedRenewalRace.persistArtifact, false);
 assert.equal(preservedRenewalRace.status.currentLiveEligible, true);
+assert.equal(preservedRenewalRace.status.verificationFailureCount, 0);
+assert.equal(
+  preservedRenewalRace.status.transientCorrelationPreservationCount,
+  1
+);
+assert.deepEqual(preservedRenewalRace.status.blockers, []);
+assert.equal(
+  preservedRenewalRace.status.lastRenewalResult.status,
+  "transient_correlation_preserved"
+);
 assert.equal(
   preservedRenewalRace.status.verificationArtifactId,
   renewalRaceAccepted.artifact.artifactId
 );
+
+const staleRenewalRaceEngine = createTimeVerifierWatchEngine();
+staleRenewalRaceEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  nowUtc: at(31)
+});
+const staleRenewalRace = staleRenewalRaceEngine.processEvidence({
+  artifact: renewalRace.artifact,
+  directProbe: renewalRace.probe,
+  nowUtc: at(200)
+});
+assert.notEqual(
+  staleRenewalRace.action,
+  "preserved_transient_correlation"
+);
+assert.equal(staleRenewalRace.status.verificationFailureCount, 1);
+assert.equal(staleRenewalRace.status.currentLiveEligible, false);
 
 const activeDisconnect = evidenceFor(2, {
   probe: {
