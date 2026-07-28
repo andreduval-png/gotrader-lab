@@ -307,10 +307,10 @@ assert.equal(
 assert.equal(conflicting.status.conflictingCandleCount, 1);
 
 const finalizationEngine = createContinuousFeedEngine({
-  closeFinalizationDelayMs: 15_000
+  closeFinalizationDelayMs: 60_000
 });
 const settling = finalizationEngine.processPoll({
-  quotePayload: quote("2026-07-23T10:01:10.000Z"),
+  quotePayload: quote("2026-07-23T10:01:30.000Z"),
   candlePayloads: [
     candles([
       candle("2026-07-23T10:00:00.000Z", 100),
@@ -318,16 +318,16 @@ const settling = finalizationEngine.processPoll({
     ])
   ],
   timeContract: verifiedTime,
-  receivedAt: "2026-07-23T10:01:11.000Z"
+  receivedAt: "2026-07-23T10:01:31.000Z"
 });
 assert.equal(
   settling.events.some((event) => event.type === "candle_closed"),
   false
 );
-assert.equal(settling.status.closeFinalizationDelayMs, 15_000);
+assert.equal(settling.status.closeFinalizationDelayMs, 60_000);
 
 const finalized = finalizationEngine.processPoll({
-  quotePayload: quote("2026-07-23T10:01:20.000Z"),
+  quotePayload: quote("2026-07-23T10:02:05.000Z"),
   candlePayloads: [
     candles([
       candle("2026-07-23T10:00:00.000Z", 100.5),
@@ -335,7 +335,7 @@ const finalized = finalizationEngine.processPoll({
     ])
   ],
   timeContract: verifiedTime,
-  receivedAt: "2026-07-23T10:01:21.000Z"
+  receivedAt: "2026-07-23T10:02:06.000Z"
 });
 assert.equal(
   finalized.events.some(
@@ -348,7 +348,7 @@ assert.equal(
 assert.equal(finalized.status.conflictingCandleCount, 0);
 
 const postFinalizationRevision = finalizationEngine.processPoll({
-  quotePayload: quote("2026-07-23T10:01:30.000Z"),
+  quotePayload: quote("2026-07-23T10:02:10.000Z"),
   candlePayloads: [
     candles([
       candle("2026-07-23T10:00:00.000Z", 999),
@@ -356,7 +356,7 @@ const postFinalizationRevision = finalizationEngine.processPoll({
     ])
   ],
   timeContract: verifiedTime,
-  receivedAt: "2026-07-23T10:01:31.000Z"
+  receivedAt: "2026-07-23T10:02:11.000Z"
 });
 assert.equal(
   postFinalizationRevision.events.some(
