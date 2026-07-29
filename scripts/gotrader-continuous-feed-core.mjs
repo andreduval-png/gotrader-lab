@@ -343,6 +343,59 @@ export function evaluateRuntimeTimeContract(
         verificationArtifact?.continuityStartedAtUtc;
     }
   }
+  const pausedForTerminalDisconnected =
+    requireWatcherArtifact &&
+    ["terminal_disconnected", "transport_disconnected"].includes(
+      verifierStatus?.operationalMarketState
+    ) &&
+    verifierStatus?.proofPausedForTerminalDisconnected === true &&
+    verifierStatus?.currentLiveEligible === false &&
+    verifierStatus?.executionAuthority === "none" &&
+    verifierStatus?.brokerAuthority === "none" &&
+    verifierStatus?.readinessOverrideAuthority === "none";
+  if (pausedForTerminalDisconnected) {
+    const pausedProviderTimeBasis =
+      verificationArtifact?.providerTimeBasis ??
+      contract?.providerTimeBasis ??
+      "unknown";
+    const pausedObservedOffsetMinutes =
+      verificationArtifact?.observedOffsetMinutes ??
+      finiteNumber(
+        contract?.terminalObservedOffsetMinutes ??
+          contract?.observedOffsetMinutes
+      );
+    return {
+      eligible: false,
+      pausedForMarketClosed: false,
+      pausedForTerminalDisconnected: true,
+      version,
+      identityVersion: buildRuntimeTimeIdentityVersion({
+        version,
+        providerTimeBasis: pausedProviderTimeBasis,
+        observedOffsetMinutes: pausedObservedOffsetMinutes
+      }),
+      artifactId: verificationArtifact?.artifactId ?? effectiveArtifactId,
+      contractArtifactId: artifactId || undefined,
+      verificationScope: "current_live",
+      generatedAtUtc: verificationArtifact?.generatedAtUtc ?? generatedAtUtc,
+      expiresAtUtc: verificationArtifact?.expiresAtUtc ?? expiresAtUtc,
+      proofState: "paused_terminal_disconnected",
+      proofAgeSeconds,
+      terminalClockClassificationVersion:
+        verificationArtifact?.terminalClockClassificationVersion ??
+        contract?.terminalClockClassificationVersion,
+      providerTimeBasis: pausedProviderTimeBasis,
+      observedOffsetMinutes: pausedObservedOffsetMinutes,
+      continuityStartedAtUtc:
+        verificationArtifact?.continuityStartedAtUtc ??
+        continuityStartedAtUtc,
+      watcherArtifactRequired: true,
+      marketState: verifierStatus?.marketState ?? "time_unverified",
+      operationalMarketState: verifierStatus.operationalMarketState,
+      blockers: [],
+      warnings: ["terminal_disconnected_fail_closed_pause"]
+    };
+  }
   const pausedForMarketClosed =
     requireWatcherArtifact &&
     verifierStatus?.marketState === "market_closed" &&
@@ -365,6 +418,7 @@ export function evaluateRuntimeTimeContract(
     return {
       eligible: false,
       pausedForMarketClosed: true,
+      pausedForTerminalDisconnected: false,
       version,
       identityVersion: buildRuntimeTimeIdentityVersion({
         version,
@@ -421,6 +475,7 @@ export function evaluateRuntimeTimeContract(
     continuityStartedAtUtc,
     watcherArtifactRequired: requireWatcherArtifact,
     pausedForMarketClosed: false,
+    pausedForTerminalDisconnected: false,
     marketState: verifierStatus?.marketState ?? "time_unverified",
     operationalMarketState:
       verifierStatus?.operationalMarketState ?? "time_unverified",
@@ -467,6 +522,7 @@ export function retainFreshRuntimeTimeContractDuringRenewal({
     previous?.eligible !== true ||
     candidate?.eligible !== false ||
     candidate?.pausedForMarketClosed === true ||
+    candidate?.pausedForTerminalDisconnected === true ||
     !candidate?.blockers?.length ||
     candidate.blockers.some(
       (blocker) => !renewalHandoffBlockers.has(blocker)
@@ -748,6 +804,8 @@ export function createContinuousFeedEngine({
       ? "stale"
       : latestTimeContract.pausedForMarketClosed
         ? "paused_market_closed"
+      : latestTimeContract.pausedForTerminalDisconnected
+        ? "paused_terminal_disconnected"
       : blockers.size
         ? "blocked"
         : latestTimeContract.eligible
@@ -784,6 +842,8 @@ export function createContinuousFeedEngine({
     operationalMarketState: latestTimeContract.operationalMarketState,
     proofPausedForMarketClosed:
       latestTimeContract.pausedForMarketClosed === true,
+    proofPausedForTerminalDisconnected:
+      latestTimeContract.pausedForTerminalDisconnected === true,
     timeContractVersion: latestTimeContract.version,
     timeIdentityVersion:
       latestTimeContract.identityVersion ?? latestTimeContract.version,
@@ -956,6 +1016,13 @@ export function createContinuousFeedEngine({
         warnings.delete(
           "closed_candle_events_paused_until_time_contract_is_verified"
         );
+        warnings.delete("terminal_disconnected_fail_closed_pause");
+      } else if (latestTimeContract.pausedForTerminalDisconnected) {
+        warnings.add("terminal_disconnected_fail_closed_pause");
+        warnings.delete(
+          "closed_candle_events_paused_until_time_contract_is_verified"
+        );
+        warnings.delete("market_closed_verified_pause");
       } else {
         for (const blocker of latestTimeContract.blockers) blockers.add(blocker);
         warnings.add("closed_candle_events_paused_until_time_contract_is_verified");
@@ -976,6 +1043,7 @@ export function createContinuousFeedEngine({
       blockers.delete("terminal_time_evidence_stale");
       warnings.delete("closed_candle_events_paused_until_time_contract_is_verified");
       warnings.delete("market_closed_verified_pause");
+      warnings.delete("terminal_disconnected_fail_closed_pause");
       if (!lastEligibility) {
         recoveredEventCount += 1;
         events.push(
@@ -1039,7 +1107,8 @@ export function createContinuousFeedEngine({
         : [];
       if (
         !latestTimeContract.eligible &&
-        !latestTimeContract.pausedForMarketClosed
+        !latestTimeContract.pausedForMarketClosed &&
+        !latestTimeContract.pausedForTerminalDisconnected
       ) {
         for (const candle of eligibleByMarketTime.slice(-maximumCatchUpCandles)) {
           const rejectedIdentity = `${key}:${candle.candleOpenTime}`;

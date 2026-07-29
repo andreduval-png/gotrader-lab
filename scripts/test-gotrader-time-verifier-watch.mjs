@@ -11,7 +11,8 @@ import {
 } from "./gotrader-time-verifier-watch-core.mjs";
 import {
   collectCurrentLiveTimeEvidence,
-  compactTerminalProbeResult
+  compactTerminalProbeResult,
+  readTerminalProbe
 } from "./gotrader-current-live-time-collector.mjs";
 import {
   createContinuousFeedEngine,
@@ -150,6 +151,34 @@ const compactProbeB = compactTerminalProbeResult({
 });
 assert.equal(compactProbeA.contentFingerprint, immutableObservationFingerprint);
 assert.equal(compactProbeB.contentFingerprint, immutableObservationFingerprint);
+
+let verifierEventLoopAdvanced = false;
+setTimeout(() => {
+  verifierEventLoopAdvanced = true;
+}, 0);
+const asynchronousProbe = await readTerminalProbe({
+  repoRoot: ".",
+  execute: (_command, _args, _options, callback) => {
+    setTimeout(
+      () =>
+        callback(
+          null,
+          JSON.stringify({
+            status: "source_unavailable",
+            reason: "fixture_terminal_disconnected"
+          }),
+          ""
+        ),
+      25
+    );
+  }
+});
+assert.equal(verifierEventLoopAdvanced, true);
+assert.equal(asynchronousProbe.status, "source_unavailable");
+assert.equal(
+  asynchronousProbe.reason,
+  "fixture_terminal_disconnected"
+);
 
 const correlatedProbe = directProbe(5);
 const correlatedContract = contractFor(correlatedProbe);
@@ -357,6 +386,91 @@ const activeDisconnectResult = renewalRaceEngine.processEvidence({
 assert.equal(activeDisconnectResult.action, "blocked");
 assert.equal(activeDisconnectResult.persistArtifact, true);
 assert.equal(activeDisconnectResult.status.currentLiveEligible, false);
+
+const failClosedPauseEngine = createTimeVerifierWatchEngine();
+failClosedPauseEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(31),
+    proofPauseEligible: false
+  },
+  nowUtc: at(31)
+});
+const terminalPaused = failClosedPauseEngine.processEvidence({
+  artifact: activeDisconnect.artifact,
+  directProbe: activeDisconnect.probe,
+  marketSnapshot: {
+    marketState: "time_unverified",
+    operationalState: "terminal_disconnected",
+    observedAtUtc: at(61),
+    proofPauseEligible: false
+  },
+  nowUtc: at(61)
+});
+assert.equal(terminalPaused.action, "paused_terminal_disconnected");
+assert.equal(
+  terminalPaused.status.state,
+  "degraded_paused_terminal_disconnected"
+);
+assert.equal(terminalPaused.status.currentLiveEligible, false);
+assert.equal(
+  terminalPaused.status.proofPausedForTerminalDisconnected,
+  true
+);
+assert.equal(terminalPaused.status.verificationFailureCount, 0);
+assert.deepEqual(terminalPaused.status.blockers, []);
+const terminalReconnected = failClosedPauseEngine.processEvidence({
+  artifact: second.artifact,
+  directProbe: second.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(62),
+    proofPauseEligible: false
+  },
+  nowUtc: at(62)
+});
+assert.equal(terminalReconnected.action, "renewed");
+assert.equal(terminalReconnected.status.currentLiveEligible, true);
+assert.equal(terminalReconnected.status.terminalReconnectCount, 1);
+
+const transportFailurePauseEngine = createTimeVerifierWatchEngine();
+transportFailurePauseEngine.processEvidence({
+  artifact: first.artifact,
+  directProbe: first.probe,
+  marketSnapshot: {
+    marketState: "market_open",
+    operationalState: "market_open",
+    observedAtUtc: at(31),
+    proofPauseEligible: false
+  },
+  nowUtc: at(31)
+});
+const transportFailurePaused = transportFailurePauseEngine.recordFailure({
+  blockers: ["fixture_transport_timeout"],
+  marketSnapshot: {
+    marketState: "time_unverified",
+    operationalState: "transport_disconnected",
+    observedAtUtc: at(61),
+    proofPauseEligible: false
+  },
+  nowUtc: at(61)
+});
+assert.equal(
+  transportFailurePaused.action,
+  "paused_terminal_disconnected"
+);
+assert.equal(
+  transportFailurePaused.status.verificationFailureCount,
+  0
+);
+assert.equal(
+  transportFailurePaused.status.currentLiveEligible,
+  false
+);
 
 const readerStyleDisconnect = {
   ...evidenceFor(3).artifact,

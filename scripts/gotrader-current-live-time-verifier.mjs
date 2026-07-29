@@ -136,7 +136,9 @@ const poll = async () => {
             evidence.directProbe?.terminalProbeCapturedAt,
           terminalConnected:
             evidence.directProbe?.terminalConnected === true,
-          transportConnected: true
+          transportConnected:
+            evidence.surfaces?.upstreamAvailable === true &&
+            evidence.surfaces?.bridgeAvailable === true
         })
       })
     );
@@ -145,7 +147,12 @@ const poll = async () => {
       engine.recordFailure({
         blockers: [
           error instanceof Error ? error.message : String(error)
-        ]
+        ],
+        marketSnapshot: classifyOperationalMarketState({
+          nowUtc: new Date().toISOString(),
+          terminalConnected: false,
+          transportConnected: false
+        })
       })
     );
   }

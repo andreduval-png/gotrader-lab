@@ -471,35 +471,169 @@ def build_time_contract(
 
 
 class Mt5ReadOnlyState:
-    def __init__(self, terminal_path: str):
+    def __init__(
+        self,
+        terminal_path: str,
+        mt5_module: Any = mt5,
+        initialize_timeout_ms: int = 5_000,
+        health_check_interval_seconds: float = 2.0,
+        reconnect_backoff_seconds: tuple[float, ...] = (1.0, 2.0, 5.0, 10.0, 30.0),
+    ):
         self.terminal_path = terminal_path
+        self.mt5 = mt5_module
+        self.initialize_timeout_ms = max(1_000, min(15_000, int(initialize_timeout_ms)))
+        self.health_check_interval_seconds = max(0.1, float(health_check_interval_seconds))
+        self.reconnect_backoff_seconds = reconnect_backoff_seconds or (1.0,)
+        self.state_lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.wake_event = threading.Event()
+        self.worker: threading.Thread | None = None
         self.connected = False
+        self.connection_state = "starting"
         self.last_error: str | None = None
         self.last_connected_at: str | None = None
+        self.last_disconnected_at: str | None = None
+        self.last_connection_attempt_at: str | None = None
+        self.next_connection_attempt_at: str | None = None
+        self.next_connection_attempt_monotonic = 0.0
+        self.connection_failure_count = 0
+        self.connection_epoch = 0
+
+    @staticmethod
+    def now_utc() -> str:
+        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def start(self) -> None:
+        with self.state_lock:
+            if self.worker is not None and self.worker.is_alive():
+                return
+            self.stop_event.clear()
+            self.worker = threading.Thread(
+                target=self.connection_loop,
+                name="gotrader-mt5-readonly-connection",
+                daemon=True,
+            )
+            self.worker.start()
+        self.wake_event.set()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        self.wake_event.set()
+        worker = self.worker
+        if worker is not None:
+            worker.join(timeout=(self.initialize_timeout_ms / 1_000) + 2)
+
+    def schedule_next_attempt(self, delay_seconds: float) -> None:
+        next_monotonic = time.monotonic() + max(0.0, delay_seconds)
+        next_utc = datetime.now(timezone.utc) + timedelta(seconds=max(0.0, delay_seconds))
+        with self.state_lock:
+            self.next_connection_attempt_monotonic = next_monotonic
+            self.next_connection_attempt_at = next_utc.isoformat().replace("+00:00", "Z")
+
+    def record_connection_result(self, connected: bool, error: str | None = None) -> None:
+        now = self.now_utc()
+        with self.state_lock:
+            was_connected = self.connected
+            self.connected = connected
+            self.connection_state = "connected" if connected else "terminal_disconnected"
+            if connected:
+                self.last_error = None
+                self.last_connected_at = now
+                self.connection_failure_count = 0
+                if not was_connected:
+                    self.connection_epoch += 1
+            else:
+                self.last_error = error or "MT5 terminal is disconnected"
+                self.connection_failure_count += 1
+                if was_connected or self.last_disconnected_at is None:
+                    self.last_disconnected_at = now
+
+    def attempt_connection(self) -> None:
+        with self.state_lock:
+            cached_connected = self.connected
+            self.connection_state = "checking" if cached_connected else "reconnecting"
+            self.last_connection_attempt_at = self.now_utc()
+        connected = False
+        error: str | None = None
+        try:
+            with MT5_LOCK:
+                terminal = self.mt5.terminal_info() if cached_connected else None
+                if terminal is not None and bool(getattr(terminal, "connected", False)):
+                    connected = True
+                else:
+                    self.mt5.shutdown()
+                    initialized = self.mt5.initialize(
+                        path=self.terminal_path,
+                        timeout=self.initialize_timeout_ms,
+                    )
+                    terminal = self.mt5.terminal_info() if initialized else None
+                    connected = bool(
+                        initialized and
+                        terminal is not None and
+                        getattr(terminal, "connected", False)
+                    )
+                    if not connected:
+                        code, message = self.mt5.last_error()
+                        error = f"MT5 initialize failed ({code}): {message}"
+        except Exception as connect_error:
+            error = f"MT5 connection probe failed: {connect_error}"
+        self.record_connection_result(connected, error)
+        with self.state_lock:
+            failure_count = self.connection_failure_count
+        if connected:
+            self.schedule_next_attempt(self.health_check_interval_seconds)
+        else:
+            backoff_index = min(
+                max(0, failure_count - 1),
+                len(self.reconnect_backoff_seconds) - 1,
+            )
+            self.schedule_next_attempt(self.reconnect_backoff_seconds[backoff_index])
+
+    def connection_loop(self) -> None:
+        while not self.stop_event.is_set():
+            with self.state_lock:
+                next_attempt = self.next_connection_attempt_monotonic
+            now = time.monotonic()
+            if now >= next_attempt:
+                self.attempt_connection()
+                continue
+            self.wake_event.wait(timeout=min(1.0, max(0.05, next_attempt - now)))
+            self.wake_event.clear()
+
+    def mark_disconnected(self, error: str) -> None:
+        with self.state_lock:
+            was_connected = self.connected
+        self.record_connection_result(False, error)
+        if was_connected:
+            self.schedule_next_attempt(0)
+        self.wake_event.set()
 
     def ensure_connected(self) -> bool:
-        with MT5_LOCK:
-            terminal = mt5.terminal_info() if self.connected else None
-            if terminal is not None and bool(getattr(terminal, "connected", False)):
-                return True
+        with self.state_lock:
+            connected = self.connected
+        if not connected:
+            self.wake_event.set()
+        return connected
 
-            mt5.shutdown()
-            initialized = mt5.initialize(path=self.terminal_path, timeout=15000)
-            terminal = mt5.terminal_info() if initialized else None
-            self.connected = bool(initialized and terminal and getattr(terminal, "connected", False))
-            if self.connected:
-                self.last_error = None
-                self.last_connected_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            else:
-                code, message = mt5.last_error()
-                self.last_error = f"MT5 initialize failed ({code}): {message}"
-            return self.connected
+    def snapshot(self) -> dict[str, Any]:
+        with self.state_lock:
+            return {
+                "connected": self.connected,
+                "connectionState": self.connection_state,
+                "lastError": self.last_error,
+                "lastConnectedAt": self.last_connected_at,
+                "lastDisconnectedAt": self.last_disconnected_at,
+                "lastConnectionAttemptAt": self.last_connection_attempt_at,
+                "nextConnectionAttemptAt": self.next_connection_attempt_at,
+                "connectionFailureCount": self.connection_failure_count,
+                "connectionEpoch": self.connection_epoch,
+            }
 
     def status(self, probe_terminal: bool = True) -> dict[str, Any]:
-        # Process health must not queue behind a potentially slow MT5 history call.
-        # The supervisor uses /health only to decide whether the service is alive;
-        # /status and every data route still perform a live terminal check.
-        connected = self.ensure_connected() if probe_terminal else self.connected
+        # Health and status never queue behind MT5 IPC. The single background
+        # worker owns reconnect attempts; data routes fail fast from this cache.
+        snapshot = self.snapshot()
+        connected = snapshot["connected"]
         return {
             "provider": "mt5_read_only_upstream",
             "serviceVersion": SERVICE_VERSION,
@@ -507,15 +641,16 @@ class Mt5ReadOnlyState:
             "connectionStatus": "connected" if connected else "degraded",
             "bridgeMode": "live" if connected else "degraded",
             "processHealth": "healthy",
-            "terminalProbe": "live" if probe_terminal else "cached",
+            "terminalProbe": "cached",
+            "connectionMonitor": "background_serialized",
+            "terminalConnectionState": snapshot["connectionState"],
             "source": "mt5_terminal_session",
             "readOnly": True,
             "marketDataOnly": True,
             "latestEndpointAvailable": connected,
             "rangeEndpointAvailable": connected,
             "timeContractEndpointAvailable": connected,
-            "lastConnectedAt": self.last_connected_at,
-            "lastError": self.last_error,
+            **{key: value for key, value in snapshot.items() if key != "connected"},
             "authority": AUTHORITY,
             **AUTHORITY,
         }
@@ -629,7 +764,17 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
     def require_connection(self) -> bool:
         if self.state.ensure_connected():
             return True
-        self.send_json(503, {"error": "mt5_terminal_unavailable", "message": self.state.last_error, **AUTHORITY})
+        status = self.state.status(probe_terminal=False)
+        self.send_json(
+            503,
+            {
+                "error": "mt5_terminal_disconnected",
+                "message": status.get("lastError") or "MT5 terminal is disconnected; reconnect is pending.",
+                "terminalConnectionState": status.get("terminalConnectionState"),
+                "retryAfter": status.get("nextConnectionAttemptAt"),
+                **AUTHORITY,
+            },
+        )
         return False
 
     def do_GET(self) -> None:  # noqa: N802
@@ -682,6 +827,7 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_json(400, {"error": "invalid_request", "message": str(error), **AUTHORITY})
         except Exception as error:  # keep the local service alive on MT5 IPC errors
+            self.state.mark_disconnected(str(error))
             self.send_json(503, {"error": "market_data_unavailable", "message": str(error), **AUTHORITY})
 
     @staticmethod
@@ -802,9 +948,7 @@ def main() -> None:
         raise SystemExit(f"MT5 terminal was not found at {args.path}")
 
     state = Mt5ReadOnlyState(args.path)
-    if not state.ensure_connected():
-        raise SystemExit(state.last_error or "Unable to attach to the logged-in MT5 terminal.")
-
+    state.start()
     server = ThreadingHTTPServer((args.host, args.port), Mt5ReadOnlyHandler)
     server.state = state  # type: ignore[attr-defined]
 
@@ -819,6 +963,7 @@ def main() -> None:
         server.serve_forever(poll_interval=0.25)
     finally:
         server.server_close()
+        state.stop()
         with MT5_LOCK:
             mt5.shutdown()
 

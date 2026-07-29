@@ -333,38 +333,43 @@ const poll = async () => {
           nowUtc: new Date().toISOString()
         }
       );
-      if (!hydrationTimeContract.eligible) {
+      if (
+        !hydrationTimeContract.eligible &&
+        !hydrationTimeContract.pausedForTerminalDisconnected
+      ) {
         throw new Error(
           `historical_context_hydration_waiting_for_verified_time:${hydrationTimeContract.blockers.join(",")}`
         );
       }
-      const hydrationAsOf = normalizeRuntimeProviderTimestamp(
-        quotePayload?.timestamp ??
-          quotePayload?.serverTimestamp ??
-          quotePayload?.rawTime,
-        hydrationTimeContract
-      );
-      hydrationArtifact = buildHistoricalContextHydrationArtifact({
-        candlePayloads: latestCandlePayloads,
-        asOfUtc:
-          hydrationAsOf.normalizedTimeUtc ?? new Date().toISOString(),
-        timeContractVersion:
-          latestTimeContract?.version ??
-          latestTimeContract?.wrapperContractVersion ??
-          "unknown",
-        timeContractIdentityVersion:
-          hydrationTimeContract.identityVersion,
-        timeContract: hydrationTimeContract
-      });
-      const validation =
-        validateHistoricalContextHydrationArtifact(hydrationArtifact);
-      if (!validation.valid) {
-        throw new Error(
-          `historical_context_hydration_invalid:${validation.errors.join(",")}`
+      if (hydrationTimeContract.eligible) {
+        const hydrationAsOf = normalizeRuntimeProviderTimestamp(
+          quotePayload?.timestamp ??
+            quotePayload?.serverTimestamp ??
+            quotePayload?.rawTime,
+          hydrationTimeContract
         );
+        hydrationArtifact = buildHistoricalContextHydrationArtifact({
+          candlePayloads: latestCandlePayloads,
+          asOfUtc:
+            hydrationAsOf.normalizedTimeUtc ?? new Date().toISOString(),
+          timeContractVersion:
+            latestTimeContract?.version ??
+            latestTimeContract?.wrapperContractVersion ??
+            "unknown",
+          timeContractIdentityVersion:
+            hydrationTimeContract.identityVersion,
+          timeContract: hydrationTimeContract
+        });
+        const validation =
+          validateHistoricalContextHydrationArtifact(hydrationArtifact);
+        if (!validation.valid) {
+          throw new Error(
+            `historical_context_hydration_invalid:${validation.errors.join(",")}`
+          );
+        }
+        await writeJsonAtomic(hydrationArtifactFile, hydrationArtifact);
+        hydrationReady = hydrationArtifact.status === "ready";
       }
-      await writeJsonAtomic(hydrationArtifactFile, hydrationArtifact);
-      hydrationReady = hydrationArtifact.status === "ready";
     }
     const result = engine.processPoll({
       quotePayload,

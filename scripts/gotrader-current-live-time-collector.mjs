@@ -1,5 +1,5 @@
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   buildCurrentLiveVerificationArtifact,
   canonicalHash,
@@ -45,6 +45,18 @@ const isCorrelationRace = (artifact) =>
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const timeSurfaceAvailable = (payload) => {
+  const sourceMethod = String(payload?.sourceMethod ?? "");
+  return (
+    payload &&
+    typeof payload === "object" &&
+    sourceMethod !== "unavailable" &&
+    !sourceMethod.startsWith("contract_stub") &&
+    payload.currentLiveTimeBasisVerified === true &&
+    payload.timeVerificationScope === "current_live"
+  );
+};
 
 export function compactTerminalProbeResult(result = {}) {
   const observation = result?.observation ?? {};
@@ -121,30 +133,40 @@ export function compactTerminalProbeResult(result = {}) {
   });
 }
 
-export function readTerminalProbe({
+export async function readTerminalProbe({
   repoRoot,
   brokerSymbol = "USTECH",
   environment = process.env,
-  spawn = spawnSync
+  execute = execFile,
+  timeoutMs = 8_000
 }) {
-  const python = spawn(
-    environment.PYTHON || "python",
-    [
-      path.join("scripts", "read-v2-mt5-terminal-clock.py"),
-      "--symbol",
-      brokerSymbol
-    ],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 25_000
-    }
-  );
+  const python = await new Promise((resolve) => {
+    execute(
+      environment.PYTHON || "python",
+      [
+        path.join("scripts", "read-v2-mt5-terminal-clock.py"),
+        "--symbol",
+        brokerSymbol
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: timeoutMs,
+        maxBuffer: 1024 * 1024
+      },
+      (error, stdout, stderr) => {
+        resolve({ error, stdout, stderr });
+      }
+    );
+  });
   if (python.error) {
     return compactTerminalProbeResult({
       status: "probe_unavailable",
-      reason: python.error.message
+      reason:
+        python.error.code === "ETIMEDOUT"
+          ? "terminal_probe_timeout"
+          : python.error.message
     });
   }
   try {
@@ -210,8 +232,8 @@ export async function collectCurrentLiveTimeEvidence({
       directProbe,
       correlationAttemptCount: attempt,
       surfaces: Object.freeze({
-        upstreamAvailable: upstream?.sourceMethod !== "unavailable",
-        bridgeAvailable: bridge?.sourceMethod !== "unavailable"
+        upstreamAvailable: timeSurfaceAvailable(upstream),
+        bridgeAvailable: timeSurfaceAvailable(bridge)
       }),
       authority: currentLiveVerificationAuthority
     });

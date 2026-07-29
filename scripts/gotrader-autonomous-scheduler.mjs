@@ -130,12 +130,16 @@ const buildStatus = () => {
   const engineStatus = engine.status();
   const feedState = lastFeedStatus?.state ?? "unknown";
   const marketClosedPause = feedState === "paused_market_closed";
+  const terminalDisconnectedPause =
+    feedState === "paused_terminal_disconnected";
   const feedBlockers = Array.isArray(lastFeedStatus?.blockers)
     ? lastFeedStatus.blockers
     : [];
   const blockers = [
     ...(reconciliationBlocker ? [reconciliationBlocker] : []),
-    ...(lastFeedStatus?.timeContractEligible === false && !marketClosedPause
+    ...(lastFeedStatus?.timeContractEligible === false &&
+    !marketClosedPause &&
+    !terminalDisconnectedPause
       ? ["closed_candle_feed_not_eligible"]
       : []),
     ...feedBlockers
@@ -149,6 +153,8 @@ const buildStatus = () => {
       ? "paused"
       : marketClosedPause
         ? "paused_market_closed"
+      : terminalDisconnectedPause
+        ? "paused_terminal_disconnected"
       : reconciliationBlocker
         ? "blocked"
         : consecutiveFeedFailures >= 3
@@ -166,6 +172,8 @@ const buildStatus = () => {
     marketState: lastFeedStatus?.marketState,
     proofPausedForMarketClosed:
       lastFeedStatus?.proofPausedForMarketClosed === true,
+    proofPausedForTerminalDisconnected:
+      lastFeedStatus?.proofPausedForTerminalDisconnected === true,
     checkpointStatus,
     durableArtifactCount: durableArtifacts.length,
     lastHeartbeatAt: new Date().toISOString(),

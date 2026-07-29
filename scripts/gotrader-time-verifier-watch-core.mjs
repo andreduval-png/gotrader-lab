@@ -24,6 +24,8 @@ export const emptyTimeVerifierWatchState = () => ({
   failureCount: 0,
   marketClosedPauseCount: 0,
   marketResumeCount: 0,
+  terminalDisconnectedPauseCount: 0,
+  terminalReconnectCount: 0,
   marketStateTransitionCount: 0,
   duplicateObservationCount: 0,
   conflictCount: 0,
@@ -130,6 +132,8 @@ export function createTimeVerifierWatchEngine({
         : undefined;
     const proofState = state.pausedForMarketClosed
       ? "paused_market_closed"
+      : state.pausedForTerminalDisconnected
+        ? "paused_terminal_disconnected"
       : ageSeconds === undefined
         ? "missing"
         : ageSeconds <= 120
@@ -144,6 +148,8 @@ export function createTimeVerifierWatchEngine({
           ? "paused"
           : state.pausedForMarketClosed === true
             ? "healthy_paused_market_closed"
+            : state.pausedForTerminalDisconnected === true
+              ? "degraded_paused_terminal_disconnected"
             : state.awaitingFreshProofAfterMarketResume === true
               ? "degraded_awaiting_fresh_market_proof"
           : state.activeArtifact?.validationStatus === "accepted" &&
@@ -171,9 +177,15 @@ export function createTimeVerifierWatchEngine({
       marketResumeCount: state.marketResumeCount,
       marketStateTransitionCount: state.marketStateTransitionCount,
       proofPausedForMarketClosed: state.pausedForMarketClosed === true,
+      proofPausedForTerminalDisconnected:
+        state.pausedForTerminalDisconnected === true,
       awaitingFreshProofAfterMarketResume:
         state.awaitingFreshProofAfterMarketResume === true,
       proofPausedAtUtc: state.proofPausedAtUtc,
+      terminalDisconnectedAtUtc: state.terminalDisconnectedAtUtc,
+      terminalDisconnectedPauseCount:
+        state.terminalDisconnectedPauseCount,
+      terminalReconnectCount: state.terminalReconnectCount,
       proofResumedAtUtc: state.proofResumedAtUtc,
       duplicateObservationCount: state.duplicateObservationCount,
       conflictCount: state.conflictCount,
@@ -201,13 +213,15 @@ export function createTimeVerifierWatchEngine({
       observedOffsetMinutes: state.activeArtifact?.observedOffsetMinutes,
       currentLiveEligible:
         state.pausedForMarketClosed !== true &&
+        state.pausedForTerminalDisconnected !== true &&
         state.awaitingFreshProofAfterMarketResume !== true &&
         state.activeArtifact?.validationStatus === "accepted" &&
         proofState === "fresh",
       historicalEligible: false,
       blockers: unique([
         ...(state.lastRenewalResult?.blockers ?? []),
-        ...(state.pausedForMarketClosed
+        ...(state.pausedForMarketClosed ||
+        state.pausedForTerminalDisconnected
           ? []
           : proofState !== "fresh"
             ? [`current_live_proof_${proofState}`]
@@ -219,6 +233,9 @@ export function createTimeVerifierWatchEngine({
       warnings: unique([
         ...(state.pausedForMarketClosed
           ? ["market_closed_verified_pause"]
+          : []),
+        ...(state.pausedForTerminalDisconnected
+          ? ["terminal_disconnected_fail_closed_pause"]
           : [])
       ]),
       rawProbePersisted: false,
@@ -255,6 +272,7 @@ export function createTimeVerifierWatchEngine({
         state.proofPausedAtUtc = nowUtc;
       }
       state.pausedForMarketClosed = true;
+      state.pausedForTerminalDisconnected = false;
       state.awaitingFreshProofAfterMarketResume = false;
       state.resumeAwaitingStartedAtUtc = undefined;
       state.lastRenewalResult = {
@@ -274,6 +292,36 @@ export function createTimeVerifierWatchEngine({
       marketSnapshot?.marketState !== "market_closed"
     ) {
       state.pausedForMarketClosed = false;
+      state.awaitingFreshProofAfterMarketResume = true;
+      state.resumeAwaitingStartedAtUtc = nowUtc;
+    }
+    const terminalDisconnected =
+      ["terminal_disconnected", "transport_disconnected"].includes(
+        marketSnapshot?.operationalState
+      );
+    if (terminalDisconnected) {
+      if (state.pausedForTerminalDisconnected !== true) {
+        state.terminalDisconnectedPauseCount += 1;
+        state.terminalDisconnectedAtUtc = nowUtc;
+      }
+      state.pausedForTerminalDisconnected = true;
+      state.awaitingFreshProofAfterMarketResume = false;
+      state.resumeAwaitingStartedAtUtc = undefined;
+      state.lastRenewalResult = {
+        status: "paused_terminal_disconnected",
+        observedAt: nowUtc,
+        blockers: []
+      };
+      return {
+        action: "paused_terminal_disconnected",
+        persistArtifact: false,
+        state: { ...state },
+        status: status({ nowUtc })
+      };
+    }
+    if (state.pausedForTerminalDisconnected === true) {
+      state.pausedForTerminalDisconnected = false;
+      state.terminalReconnectCount += 1;
       state.awaitingFreshProofAfterMarketResume = true;
       state.resumeAwaitingStartedAtUtc = nowUtc;
     }
@@ -513,6 +561,22 @@ export function createTimeVerifierWatchEngine({
       return processEvidence({
         artifact: state.activeArtifact,
         directProbe: undefined,
+        marketSnapshot,
+        nowUtc
+      });
+    }
+    if (
+      ["terminal_disconnected", "transport_disconnected"].includes(
+        marketSnapshot?.operationalState
+      )
+    ) {
+      return processEvidence({
+        artifact: state.activeArtifact,
+        directProbe: {
+          status: "source_unavailable",
+          probeState: "disconnected",
+          terminalConnected: false
+        },
         marketSnapshot,
         nowUtc
       });

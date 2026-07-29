@@ -8,10 +8,12 @@ TRACK A3.2 BLOCKED - OPERATIONAL ACCEPTANCE INCOMPLETE
 
 The market-state layer, bounded higher-timeframe hydration, observer retry
 policy, operational runtime profile, canonical time handoff, and deterministic
-tests are complete. A live canary produced real M5 close events and completed
-five-timeframe canonical contexts. Full acceptance is not claimed because the
-required fresh four-hour observation has not yet spanned a scheduled market
-break. Infrastructure Track B1 and Track A4 remain blocked.
+tests are complete. A full four-hour observation spanning the scheduled market
+break was completed on 2026-07-29. The market-break behavior passed, but an
+independent internet/broker connection loss later caused MT5 IPC timeouts,
+proof loss, observer transport failures, and managed restarts. Full acceptance
+is therefore not claimed. Infrastructure Track B1 and Track A4 remain blocked
+until a fresh four-hour observation passes every criterion.
 
 ## 1. Starting Point
 
@@ -215,7 +217,7 @@ Disabled capabilities remain:
 - autonomous calibration apply;
 - replay, walk-forward, OOS, and Monte Carlo.
 
-## 10. Live Canary Result
+## 10. Live Canary And Reacceptance Result
 
 Canary snapshot captured on 2026-07-24:
 
@@ -239,6 +241,88 @@ Earlier development-canary counters remain in the local ledger for audit. They
 include blocked artifacts from the pre-normalization attempt and are not
 silently deleted. The formal observer must establish a new compact baseline
 and evaluate deltas from that point.
+
+### 2026-07-29 four-hour reacceptance
+
+Observer:
+
+```text
+a3_2_acceptance_1785352322549
+```
+
+The integrity-hashed report completed the requested 14,400-second duration and
+recorded:
+
+- elapsed time: 14,403 seconds;
+- active-market span: 3.167 hours;
+- verified M5 closes: 25;
+- completed canonical contexts: 20;
+- safe scheduled-break pause samples: 714;
+- unsafe scheduled-break samples: 0;
+- fresh proof resumed after the scheduled break: yes;
+- duplicate close delta: 0;
+- duplicate context delta: 0;
+- payload conflict delta: 0;
+- ledger gap delta: 0;
+- raw candles or context facts persisted: no;
+- authority: `none / none / none`.
+
+The observer did not pass. At 18:30 America/New_York, the MT5 terminal journal
+recorded a connection loss during an external internet/broker outage. It
+recorded authorization and reconnection at 18:56. During that interruption,
+the prior implementation allowed blocking terminal IPC to delay health
+surfaces and trigger a verifier/feed restart cascade.
+
+Failure deltas:
+
+- verifier failures: 182;
+- unrecovered observer transport failures: 93;
+- managed restart delta: 2;
+- final status: `observation_incomplete`.
+
+The report remains preserved at:
+
+```text
+.gotrader/runtime/always_on_shadow_context_operational/observations/a3_2_acceptance_1785352322549.json
+```
+
+Integrity hash:
+
+```text
+sha256:4bb5fb0d2ffd87610fde1e189694b1eb4317ccd60076c9b2bc8692b62f6461b2
+```
+
+This run proves that the scheduled maintenance break is handled correctly. It
+does not prove uninterrupted operational acceptance because the later external
+disconnect exposed a local nonblocking-recovery defect.
+
+### Disconnect-recovery remediation
+
+The local runtime now:
+
+- collects the direct terminal clock asynchronously with an eight-second bound;
+- uses one serialized background MT5 connection monitor;
+- serves nonblocking cached health and status while MT5 IPC is unavailable;
+- applies bounded exponential reconnect backoff;
+- fails market-data routes closed with
+  `mt5_terminal_disconnected`;
+- pauses verifier, feed, and scheduler as
+  `paused_terminal_disconnected`;
+- does not emit candle closes, context tasks, or rejection events while paused;
+- does not count a known disconnect pause as repeated verifier failure;
+- requires a fresh accepted terminal/quote/candle correlation before resuming.
+
+The remediation preserves all ledgers and the failed checkpoint. It does not
+weaken proof freshness, historical-time, comparison, evidence, readiness,
+Paper Demo, broker, production, or execution gates.
+
+An initial post-remediation live canary started at 23:29 UTC. By 23:42 UTC it
+had handled three terminal-disconnect pause/reconnect transitions without a
+managed service restart. The verifier returned to fresh current-live proof,
+the feed and scheduler were healthy, hydration remained ready, a new M5 close
+and completed canonical context were recorded, and all authority fields
+remained `none`. This is useful recovery evidence, but it is not a substitute
+for the required four-hour acceptance observation.
 
 ## 11. Resource Snapshot
 
@@ -270,6 +354,7 @@ Passed:
 - `npm.cmd run test:source-integrity`;
 - `npm.cmd run test:provenance`;
 - `npm.cmd run test:safety`;
+- `npm.cmd run test:mt5-readonly-disconnect-recovery`;
 - `npm.cmd run test:mt5-readonly-safety`.
 
 The existing Rollup circular-chunk and large-chunk warnings remain unchanged.
@@ -295,7 +380,7 @@ position, pending-order, trade-history, and execution paths remain blocked.
 
 ## 15. Remaining Acceptance Work
 
-A fresh four-hour observer run must:
+A fresh four-hour observer run after the disconnect-recovery remediation must:
 
 - use `always_on_shadow_context_operational`;
 - span a scheduled market break;
@@ -306,6 +391,9 @@ A fresh four-hour observer run must:
 - show zero duplicate close and context deltas;
 - show zero payload-conflict and ledger-gap deltas;
 - show zero unrecovered observer transport failures.
+- show zero verifier-failure and managed-restart deltas during any recoverable
+  disconnect pause;
+- resume only after fresh current-live proof.
 
 Until that run completes, A3.2 remains blocked.
 
@@ -328,6 +416,7 @@ Infrastructure Track B1: NOT AUTHORIZED
 Track A4: NOT AUTHORIZED
 ```
 
-The architecture and canary behavior are ready for final operational
-reacceptance. Authorization requires a fresh passing four-hour report, not
-this shorter canary.
+The architecture, canary behavior, scheduled-break handling, and
+disconnect-recovery behavior are ready for final operational reacceptance.
+Authorization requires a fresh passing four-hour report, not the failed
+2026-07-29 observation.

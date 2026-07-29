@@ -26,7 +26,7 @@ def main() -> int:
     parser.add_argument("--symbol", default="USTECH")
     args = parser.parse_args()
     system_before_ms = time.time_ns() // 1_000_000
-    if not mt5.initialize(path=args.terminal_path, timeout=15_000):
+    if not mt5.initialize(path=args.terminal_path, timeout=5_000):
         print(json.dumps({"status": "source_unavailable", "reason": str(mt5.last_error()), "authority": AUTHORITY}))
         return 0
     try:

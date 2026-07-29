@@ -105,6 +105,31 @@ const healthyWatcherStatus = {
     freshWatcherArtifact.probeInstanceFingerprint,
   ...continuousFeedAuthority
 };
+const terminalDisconnectedWatcherStatus = {
+  ...healthyWatcherStatus,
+  state: "degraded_paused_terminal_disconnected",
+  currentLiveEligible: false,
+  verificationProofState: "paused_terminal_disconnected",
+  marketState: "time_unverified",
+  operationalMarketState: "terminal_disconnected",
+  proofPausedForTerminalDisconnected: true
+};
+const disconnectedTimeContract = evaluateRuntimeTimeContract(
+  unverifiedTime,
+  {
+    requireVerificationArtifact: true,
+    requireWatcherArtifact: true,
+    verificationArtifact: freshWatcherArtifact,
+    verifierStatus: terminalDisconnectedWatcherStatus,
+    nowUtc: "2026-07-23T10:01:31.000Z"
+  }
+);
+assert.equal(disconnectedTimeContract.eligible, false);
+assert.equal(
+  disconnectedTimeContract.pausedForTerminalDisconnected,
+  true
+);
+assert.deepEqual(disconnectedTimeContract.blockers, []);
 assert.equal(
   runtimeTimeVerificationSnapshotCoherent({
     verificationArtifact: freshWatcherArtifact,
@@ -213,6 +238,38 @@ assert.equal(blocked.events.some((event) => event.type === "quote_updated"), tru
 assert.equal(blocked.events.some((event) => event.type === "forming_candle_updated"), true);
 assert.equal(blocked.status.timeContractEligible, false);
 assert.equal(blocked.status.blockers.includes("current_live_time_basis_not_verified"), true);
+
+const disconnectedEngine = createContinuousFeedEngine({
+  requireVerificationArtifact: true,
+  requireWatcherArtifact: true
+});
+const disconnectedPoll = disconnectedEngine.processPoll({
+  quotePayload: quote("2026-07-23T10:01:30.000Z"),
+  candlePayloads: [
+    candles([
+      candle("2026-07-23T10:00:00.000Z"),
+      candle("2026-07-23T10:01:00.000Z", 101)
+    ])
+  ],
+  timeContract: unverifiedTime,
+  verificationArtifact: freshWatcherArtifact,
+  verifierStatus: terminalDisconnectedWatcherStatus,
+  receivedAt: "2026-07-23T10:01:31.000Z"
+});
+assert.equal(disconnectedPoll.status.state, "paused_terminal_disconnected");
+assert.equal(
+  disconnectedPoll.status.proofPausedForTerminalDisconnected,
+  true
+);
+assert.equal(
+  disconnectedPoll.events.some((event) => event.type === "candle_closed"),
+  false
+);
+assert.equal(
+  disconnectedPoll.events.some((event) => event.type === "source_blocked"),
+  false
+);
+assert.equal(disconnectedPoll.status.rejectedCloseEventCount, 0);
 
 const baseline = firstEngine.processPoll({
   quotePayload: quote("2026-07-23T10:01:30.000Z"),
