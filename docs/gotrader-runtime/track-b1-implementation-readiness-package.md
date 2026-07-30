@@ -8,6 +8,18 @@ Planning branch:
 Governing index:
 `docs/gotrader-runtime/architecture-index.md`
 
+Verified pre-authorization review:
+`docs/gotrader-runtime/track-b1-pre-authorization-verification-report.md`
+
+Current remediated A3.2 candidate:
+`481cbaaee2c7fbcd291349f54a8fe20f417d1fda`
+
+The runtime candidate and this planning branch diverge at
+`ad8608a6f40361a3a9a84b92c93a4da4d64e59b1`. After A3.2 passes, the accepted
+planning commits must be integrated through a reviewed bounded patch or
+cherry-pick sequence onto the frozen runtime baseline. An unreviewed branch
+merge is not authorized.
+
 ## 1. Purpose
 
 This package converts the accepted B1 architecture into an implementation
@@ -398,6 +410,12 @@ currently passes with:
 
 The architecture is ready for baseline review preparation, but B1
 implementation remains blocked.
+
+The pre-authorization verification confirms that the B1 fixture oracle and all
+baseline suites pass. It also confirms that B1 planning artifacts are absent
+from the A3.2 runtime candidate by design. Runtime Freeze must therefore occur
+after controlled planning-artifact integration, while the accepted A3.2
+runtime code and evidence remain unchanged.
 
 ```text
 B1 PLANNING READY

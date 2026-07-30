@@ -11,6 +11,13 @@ Use this prompt only after:
    commit;
 5. B1.0 implementation is explicitly authorized.
 
+Before creating the implementation worktree, verify that the accepted B1
+planning artifact set was integrated onto the accepted A3.2 runtime through
+the bounded procedure in
+`docs/gotrader-runtime/track-b1-pre-authorization-verification-report.md`.
+Do not start B1.0 directly from the planning branch and do not use an
+unreviewed merge of the planning and runtime branches.
+
 ---
 
 Working directory:
@@ -39,6 +46,7 @@ Read first:
 - `docs/gotrader-runtime/architecture-index.md`
 - `docs/gotrader-runtime/architecture-roadmap.md`
 - `docs/gotrader-runtime/architecture-change-control.md`
+- `docs/gotrader-runtime/track-b1-pre-authorization-verification-report.md`
 - `docs/gotrader-runtime/track-b1-implementation-readiness-package.md`
 - `docs/gotrader-runtime/track-b1-autonomous-canonical-research-engine-plan.md`
 - `docs/gotrader-runtime/track-b1-contract-fixture-spec.md`
