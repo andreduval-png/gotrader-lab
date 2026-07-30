@@ -8,6 +8,7 @@ import {
 } from "./gotrader-current-live-time-verification-core.mjs";
 import {
   buildA3OperationalAcceptanceChecks,
+  classifyA3MarketClosedPauseSample,
   eventsAfterAcceptanceBaseline,
   managedRestartCountDelta,
   resolveAcceptanceBaselineSequence
@@ -89,6 +90,9 @@ let activeMarketSamples = 0;
 let freshActiveMarketProofSamples = 0;
 let marketClosedPauseSamples = 0;
 let unsafeMarketClosedSamples = 0;
+let terminalDisconnectedMarketClosedPauseSamples = 0;
+let mixedFailClosedMarketPauseSamples = 0;
+let recoveredMarketPauseTransitionSamples = 0;
 let resumePendingSamples = 0;
 let marketClosedSeen = false;
 let freshProofAfterMarketClose = false;
@@ -252,6 +256,9 @@ const compactCheckpoint = async ({ final = false } = {}) => {
     freshActiveMarketProofSamples,
     marketClosedPauseSamples,
     unsafeMarketClosedSamples,
+    terminalDisconnectedMarketClosedPauseSamples,
+    mixedFailClosedMarketPauseSamples,
+    recoveredMarketPauseTransitionSamples,
     resumePendingSamples,
     marketResumeCountDelta,
     freshProofAfterMarketClose,
@@ -341,7 +348,7 @@ const compactCheckpoint = async ({ final = false } = {}) => {
 let nextProgressAt = 0;
 while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
   try {
-    const [feedStatus, schedulerStatus, verifierStatus, events] =
+    let [feedStatus, schedulerStatus, verifierStatus, events] =
       await Promise.all([
         fetchJson(`${feedUrl}/status`),
         fetchJson(`${schedulerUrl}/status`),
@@ -365,13 +372,39 @@ while (!stopping && Date.now() - startMs < durationSeconds * 1_000) {
     if (verifierStatus.marketState === "market_closed") {
       marketClosedSeen = true;
       marketClosedPauseSamples += 1;
-      if (
-        verifierStatus.proofPausedForMarketClosed !== true ||
-        verifierStatus.currentLiveEligible !== false ||
-        feedStatus.state !== "paused_market_closed" ||
-        schedulerStatus.state !== "paused_market_closed"
-      ) {
+      let pauseSample = classifyA3MarketClosedPauseSample({
+        verifierStatus,
+        feedStatus,
+        schedulerStatus
+      });
+      if (!pauseSample.safe) {
+        // The verifier, feed, and scheduler publish separate atomic status
+        // files. Give a bounded propagation window before classifying the
+        // distributed pause as unsafe.
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        [feedStatus, schedulerStatus, verifierStatus] = await Promise.all([
+          fetchJson(`${feedUrl}/status`),
+          fetchJson(`${schedulerUrl}/status`),
+          fetchJson(`${verifierUrl}/status`)
+        ]);
+        pauseSample = classifyA3MarketClosedPauseSample({
+          verifierStatus,
+          feedStatus,
+          schedulerStatus
+        });
+        if (pauseSample.safe) {
+          recoveredMarketPauseTransitionSamples += 1;
+        }
+      }
+      if (!pauseSample.safe) {
         unsafeMarketClosedSamples += 1;
+      }
+      if (pauseSample.safe) {
+        if (pauseSample.mode === "terminal_disconnected") {
+          terminalDisconnectedMarketClosedPauseSamples += 1;
+        } else if (pauseSample.mode === "mixed_fail_closed") {
+          mixedFailClosedMarketPauseSamples += 1;
+        }
       }
     }
     if (verifierStatus.awaitingFreshProofAfterMarketResume === true) {

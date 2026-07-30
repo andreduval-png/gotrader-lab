@@ -34,6 +34,71 @@ const finiteCount = (value) => {
   return Number.isFinite(count) ? count : 0;
 };
 
+const failClosedPauseStates = new Set([
+  "paused_market_closed",
+  "paused_terminal_disconnected"
+]);
+
+const authorityIsNone = (status) =>
+  status?.executionAuthority === "none" &&
+  status?.brokerAuthority === "none" &&
+  status?.readinessOverrideAuthority === "none";
+
+export function classifyA3MarketClosedPauseSample({
+  verifierStatus,
+  feedStatus,
+  schedulerStatus
+} = {}) {
+  const verifierMarketPaused =
+    verifierStatus?.proofPausedForMarketClosed === true;
+  const verifierTerminalPaused =
+    verifierStatus?.proofPausedForTerminalDisconnected === true;
+  const verifierFailClosed =
+    verifierStatus?.marketState === "market_closed" &&
+    verifierStatus?.currentLiveEligible === false &&
+    (verifierMarketPaused || verifierTerminalPaused) &&
+    authorityIsNone(verifierStatus);
+  const feedFailClosed =
+    failClosedPauseStates.has(feedStatus?.state) &&
+    feedStatus?.timeContractEligible === false &&
+    (feedStatus?.proofPausedForMarketClosed === true ||
+      feedStatus?.proofPausedForTerminalDisconnected === true) &&
+    authorityIsNone(feedStatus);
+  const schedulerFailClosed =
+    failClosedPauseStates.has(schedulerStatus?.state) &&
+    schedulerStatus?.feedTimeContractEligible === false &&
+    (schedulerStatus?.proofPausedForMarketClosed === true ||
+      schedulerStatus?.proofPausedForTerminalDisconnected === true) &&
+    authorityIsNone(schedulerStatus);
+  const terminalDisconnectPause =
+    verifierTerminalPaused ||
+    feedStatus?.state === "paused_terminal_disconnected" ||
+    schedulerStatus?.state === "paused_terminal_disconnected";
+  const mixedPauseReasons =
+    new Set([
+      verifierTerminalPaused ? "terminal" : "market",
+      feedStatus?.state === "paused_terminal_disconnected"
+        ? "terminal"
+        : "market",
+      schedulerStatus?.state === "paused_terminal_disconnected"
+        ? "terminal"
+        : "market"
+    ]).size > 1;
+
+  return Object.freeze({
+    safe:
+      verifierFailClosed && feedFailClosed && schedulerFailClosed,
+    mode: terminalDisconnectPause
+      ? mixedPauseReasons
+        ? "mixed_fail_closed"
+        : "terminal_disconnected"
+      : "market_closed",
+    verifierFailClosed,
+    feedFailClosed,
+    schedulerFailClosed
+  });
+}
+
 export function managedRestartCountDelta({
   baseline = {},
   current = {}

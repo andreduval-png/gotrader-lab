@@ -12,6 +12,7 @@ import {
 } from "./gotrader-runtime-core.mjs";
 import {
   buildA3OperationalAcceptanceChecks,
+  classifyA3MarketClosedPauseSample,
   managedRestartCountDelta
 } from "./gotrader-a3-acceptance-core.mjs";
 
@@ -83,6 +84,103 @@ assert.ok(
   Object.values(
     buildA3OperationalAcceptanceChecks(passingAcceptanceInput)
   ).every(Boolean)
+);
+const authority = {
+  executionAuthority: "none",
+  brokerAuthority: "none",
+  readinessOverrideAuthority: "none"
+};
+const marketPause = classifyA3MarketClosedPauseSample({
+  verifierStatus: {
+    marketState: "market_closed",
+    currentLiveEligible: false,
+    proofPausedForMarketClosed: true,
+    ...authority
+  },
+  feedStatus: {
+    state: "paused_market_closed",
+    timeContractEligible: false,
+    proofPausedForMarketClosed: true,
+    ...authority
+  },
+  schedulerStatus: {
+    state: "paused_market_closed",
+    feedTimeContractEligible: false,
+    proofPausedForMarketClosed: true,
+    ...authority
+  }
+});
+assert.equal(marketPause.safe, true);
+assert.equal(marketPause.mode, "market_closed");
+
+const disconnectedPause = classifyA3MarketClosedPauseSample({
+  verifierStatus: {
+    marketState: "market_closed",
+    currentLiveEligible: false,
+    proofPausedForTerminalDisconnected: true,
+    ...authority
+  },
+  feedStatus: {
+    state: "paused_terminal_disconnected",
+    timeContractEligible: false,
+    proofPausedForTerminalDisconnected: true,
+    ...authority
+  },
+  schedulerStatus: {
+    state: "paused_terminal_disconnected",
+    feedTimeContractEligible: false,
+    proofPausedForTerminalDisconnected: true,
+    ...authority
+  }
+});
+assert.equal(disconnectedPause.safe, true);
+assert.equal(disconnectedPause.mode, "terminal_disconnected");
+
+const mixedFailClosedPause = classifyA3MarketClosedPauseSample({
+  verifierStatus: {
+    marketState: "market_closed",
+    currentLiveEligible: false,
+    proofPausedForTerminalDisconnected: true,
+    ...authority
+  },
+  feedStatus: {
+    state: "paused_market_closed",
+    timeContractEligible: false,
+    proofPausedForMarketClosed: true,
+    ...authority
+  },
+  schedulerStatus: {
+    state: "paused_terminal_disconnected",
+    feedTimeContractEligible: false,
+    proofPausedForTerminalDisconnected: true,
+    ...authority
+  }
+});
+assert.equal(mixedFailClosedPause.safe, true);
+assert.equal(mixedFailClosedPause.mode, "mixed_fail_closed");
+
+assert.equal(
+  classifyA3MarketClosedPauseSample({
+    verifierStatus: {
+      marketState: "market_closed",
+      currentLiveEligible: false,
+      proofPausedForMarketClosed: true,
+      ...authority
+    },
+    feedStatus: {
+      state: "healthy",
+      timeContractEligible: true,
+      proofPausedForMarketClosed: false,
+      ...authority
+    },
+    schedulerStatus: {
+      state: "healthy",
+      feedTimeContractEligible: true,
+      proofPausedForMarketClosed: false,
+      ...authority
+    }
+  }).safe,
+  false
 );
 for (const [field, value, expectedCheck] of [
   ["freshProofAfterMarketClose", false, "freshProofResumedAfterMarketBreak"],

@@ -279,19 +279,19 @@ const poll = async () => {
     let candlePayloadsForPoll = [];
     const candlePollDue =
       !latestCandlePayloads.length || now - lastCandlePollAt >= candlePollMs;
+    if (requireWatcherArtifact) {
+      const watcherSnapshot = await readCoherentWatcherSnapshot();
+      latestVerificationArtifact = watcherSnapshot.verificationArtifact;
+      latestVerifierStatus = watcherSnapshot.verifierStatus;
+    } else {
+      latestVerificationArtifact = undefined;
+      latestVerifierStatus = undefined;
+    }
     if (
       !latestTimeContract ||
       now - lastTimeContractPollAt >= timeContractPollMs ||
       candlePollDue
     ) {
-      if (requireWatcherArtifact) {
-        const watcherSnapshot = await readCoherentWatcherSnapshot();
-        latestVerificationArtifact = watcherSnapshot.verificationArtifact;
-        latestVerifierStatus = watcherSnapshot.verifierStatus;
-      } else {
-        latestVerificationArtifact = undefined;
-        latestVerifierStatus = undefined;
-      }
       // Sample the bridge contract after the coherent watcher pair. A newer
       // contract is safe to correlate; an older contract is a bounded handoff
       // that the feed retains fail-closed against the prior fresh proof.
