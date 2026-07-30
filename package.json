@@ -56,6 +56,7 @@
     "test:gotrader-runtime-a3-2": "node scripts/test-gotrader-runtime-a3-2.mjs",
     "test:gotrader-runtime-a3-2-integration": "node scripts/test-gotrader-runtime-a3-2-integration.mjs",
     "test:b1-contract-fixtures": "node scripts/test-b1-contract-fixtures.mjs",
+    "test:b1-contracts": "node scripts/test-b1-contracts.mjs",
     "test:gotrader-supervisor": "node scripts/test-gotrader-supervisor.mjs",
     "llm:bridge": "node scripts/llm-local-bridge-server.mjs",
     "mcp:trade-proposal": "node scripts/gotrader-trade-proposal-mcp.mjs",
