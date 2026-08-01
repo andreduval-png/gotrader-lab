@@ -59,6 +59,7 @@
     "test:b1-contracts": "node scripts/test-b1-contracts.mjs",
     "test:b1-local-engine": "node scripts/test-b1-local-engine.mjs",
     "test:b1-shadow-context-adapter": "node scripts/test-b1-shadow-context-adapter.mjs",
+    "test:b1-shadow-canary-harness": "node scripts/test-b1-shadow-canary-harness.mjs",
     "test:gotrader-supervisor": "node scripts/test-gotrader-supervisor.mjs",
     "llm:bridge": "node scripts/llm-local-bridge-server.mjs",
     "mcp:trade-proposal": "node scripts/gotrader-trade-proposal-mcp.mjs",
