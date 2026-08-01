@@ -2,4 +2,8 @@ export * from "./authority/canonicalResearchAuthority";
 export * from "./contracts/canonicalLineageTypes";
 export * from "./contracts/canonicalResearchTypes";
 export * from "./contracts/canonicalResearchValidation";
+export * from "./engine/canonicalResearchEngine";
+export * from "./identity/canonicalResearchArtifactIdentity";
 export * from "./identity/canonicalResearchIdentity";
+export * from "./repository/canonicalResearchFileRepository";
+export * from "./repository/canonicalResearchRepositoryTypes";

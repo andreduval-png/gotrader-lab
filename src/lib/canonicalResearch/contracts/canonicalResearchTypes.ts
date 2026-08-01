@@ -174,6 +174,7 @@ export interface CanonicalResearchJobCheckpoint {
 export interface CanonicalResearchResultArtifact {
   readonly schemaVersion: typeof CANONICAL_RESEARCH_RESULT_SCHEMA_VERSION;
   readonly resultArtifactId: string;
+  readonly payloadHash: string;
   readonly identity: CanonicalResearchJobIdentity;
   readonly classification: CanonicalResearchResultClassification;
   readonly sealedAt: string;
@@ -187,6 +188,19 @@ export interface CanonicalResearchResultArtifact {
   readonly canCreateEvidence: false;
   readonly readinessChanged: false;
   readonly productionAdoptionAllowed: false;
+  readonly authority: CanonicalResearchAuthority;
+  readonly capabilities: CanonicalResearchCapabilities;
+}
+
+export interface CanonicalResearchAttemptTelemetry {
+  readonly attemptId: string;
+  readonly logicalJobId: string;
+  readonly leaseOwner: string;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly status: CanonicalResearchJobStatus;
+  readonly retryCount: number;
+  readonly blockers: readonly CanonicalResearchBlockerCode[];
   readonly authority: CanonicalResearchAuthority;
   readonly capabilities: CanonicalResearchCapabilities;
 }
