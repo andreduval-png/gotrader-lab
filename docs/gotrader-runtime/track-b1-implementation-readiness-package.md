@@ -1,6 +1,6 @@
 # GoTrader Track B1 - Implementation Readiness Package
 
-Status: planning-ready; implementation not authorized
+Status: B1.0 accepted; B1.1 implementation not authorized
 
 Planning branch:
 `codex/gotrader-infrastructure-track-b1-planning`
@@ -11,14 +11,15 @@ Governing index:
 Verified pre-authorization review:
 `docs/gotrader-runtime/track-b1-pre-authorization-verification-report.md`
 
-Current remediated A3.2 candidate:
-`481cbaaee2c7fbcd291349f54a8fe20f417d1fda`
+Frozen A3.2 runtime baseline:
+`e605c10ed6681512da89fa2a4b29791b03a67168`
 
-The runtime candidate and this planning branch diverge at
-`ad8608a6f40361a3a9a84b92c93a4da4d64e59b1`. After A3.2 passes, the accepted
-planning commits must be integrated through a reviewed bounded patch or
-cherry-pick sequence onto the frozen runtime baseline. An unreviewed branch
-merge is not authorized.
+B1.0 accepted branch and record:
+`codex/gotrader-b1-0-authorized` at
+`25b2c1acab0bbf76e9d65860995b51d12431b1d4`. The accepted implementation was
+integrated through a bounded commit sequence from the frozen baseline. The
+larger preparation branch was not merged because it also contains B1.1/B1.2
+work that remains unauthorized.
 
 ## 1. Purpose
 
@@ -26,17 +27,18 @@ This package converts the accepted B1 architecture into an implementation
 sequence that can be reviewed, authorized, tested, and rolled back one
 milestone at a time.
 
-It does not authorize B1 implementation. The current gate remains:
+It authorizes B1.0 only. The completed and current gates are:
 
 ```text
 A3.2 final operational acceptance
   -> Runtime Freeze
   -> Baseline Review
-  -> explicit B1.0 authorization
+  -> B1.0 acceptance
+  -> explicit B1.1 authorization (current)
 ```
 
-Until every gate passes, work is limited to documentation, frozen-hash
-verification, fixture validation, and diagnosis of acceptance failures.
+B1.1 work remains limited to authorization review and non-runtime verification
+until its separate gate passes.
 
 ## 2. Sources Of Truth
 
@@ -100,11 +102,11 @@ by immutable identity and reads them only inside deterministic stage execution.
 
 | Gate | Required proof | Current state | Failure behavior |
 | --- | --- | --- | --- |
-| A3.2 operational acceptance | Accepted observation spans the scheduled market break with fresh proof resume, healthy services, clean ledgers, and authority none/none/none. | pending | Preserve failed checkpoint and diagnose; do not start B1. |
-| Runtime Freeze | Exact accepted commit, configuration allowlist, service registry, ports, contracts, fixture hashes, reports, and safety results are recorded. | blocked by A3.2 | No implementation worktree. |
-| Baseline Review | Frozen runtime matches A3.2 evidence; Phase 2A/3 parity and GBrain advisory boundaries remain intact. | blocked by Runtime Freeze | Correct the baseline or architecture through change control. |
-| B1.0 authorization | Named base commit, isolated worktree, approved scope, test plan, rollback plan, and reviewer approval. | blocked by Baseline Review | Planning only. |
-| B1.1 authorization | B1.0 contracts, identity, fixture parity, and negative safety tests pass. | blocked by B1.0 | No repository or job engine. |
+| A3.2 operational acceptance | Accepted observation spans the scheduled market break with fresh proof resume, healthy services, clean ledgers, and authority none/none/none. | accepted_with_limitations | Preserve the documented transition limitation. |
+| Runtime Freeze | Exact accepted commit, configuration allowlist, service registry, ports, contracts, fixture hashes, reports, and safety results are recorded. | accepted | Preserve immutable hashes. |
+| Baseline Review | Frozen runtime matches A3.2 evidence; Phase 2A/3 parity and GBrain advisory boundaries remain intact. | accepted | Use change control for drift. |
+| B1.0 authorization | Named base commit, isolated worktree, approved scope, test plan, rollback plan, and reviewer approval. | accepted | Preserve the exact 20-file scope and zero production consumers. |
+| B1.1 authorization | B1.0 contracts, identity, fixture parity, and negative safety tests pass. | pending decision | No repository or job engine adoption. |
 | B1.2 authorization | B1.1 recovery, idempotency, conflict, cancellation, stale-lease, and crash tests pass. | blocked by B1.1 | No live scheduler registration. |
 | B1.3 authorization | B1.2 shadow canary accepted with clean identity and integrity deltas. | blocked by B1.2 | No strategy adapter job. |
 | B1.4 authorization | B1.3 parity accepted and historical time basis/DST authority independently verified. | blocked | No historical jobs. |
@@ -381,12 +383,9 @@ These are labels, not advance authorization.
 
 ## 11. Open Decisions
 
-The following must be resolved at the named gate, not guessed during coding:
+The following remaining items must be resolved at the named gate, not guessed
+during coding:
 
-- exact frozen base commit after A3.2 acceptance;
-- exact B1.0 schema/version constants approved by review;
-- whether the Node fixture validator imports built shared contracts or compares
-  against an independent oracle;
 - B1.1 filesystem layout, quotas, and retention bounds;
 - B1.2 runtime profile name and acceptance duration;
 - historical server-time/DST authority for B1.4;
@@ -396,8 +395,8 @@ None of these decisions may weaken the universal authority boundary.
 
 ## 12. Current Readiness Decision
 
-The planning materials and fixture oracle are coherent. The fixture suite
-currently passes with:
+The B1.0 implementation, signed authorization record, and fixture oracle are
+coherent. The accepted fixture suite passes with:
 
 - two accepted shadow requests;
 - seven identity-drift cases;
@@ -408,23 +407,20 @@ currently passes with:
 - runtime, scheduler, evidence, readiness, and production integration disabled;
 - authority `none / none / none`.
 
-The architecture is ready for baseline review preparation, but B1
-implementation remains blocked.
+The contracts-and-identity milestone is accepted. The local engine and
+repository milestone remains blocked pending separate B1.1 authorization.
 
-The pre-authorization verification confirms that the B1 fixture oracle and all
-baseline suites pass. It also confirms that B1 planning artifacts are absent
-from the A3.2 runtime candidate by design. Runtime Freeze must therefore occur
-after controlled planning-artifact integration, while the accepted A3.2
-runtime code and evidence remain unchanged.
+The B1.0 authorization verifier confirms a valid canonical decision hash, exact
+frozen-base diff parity for all 20 allowlisted files, zero production consumers,
+and authority `none / none / none`. Core, strategy, source-integrity,
+provenance, safety, MT5 read-only safety, and production-build validation pass.
 
 ```text
-B1 PLANNING READY
+B1.0 AUTHORIZED AND ACCEPTED
 
-A3.2 ACCEPTANCE REQUIRED
+B1.0 PRODUCTION CONSUMERS: 0
 
-RUNTIME FREEZE REQUIRED
+B1.1 AUTHORIZATION REQUIRED
 
-BASELINE REVIEW REQUIRED
-
-B1.0 IMPLEMENTATION NOT YET AUTHORIZED
+B1.1 IMPLEMENTATION NOT YET AUTHORIZED
 ```

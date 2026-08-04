@@ -19,13 +19,16 @@ A3.2 ACCEPTED WITH LIMITATIONS
 RUNTIME FROZEN
 
 BASELINE ACCEPTED
+
+B1.0 CONTRACTS AND IDENTITY ACCEPTED
 ```
 
 The exact runtime baseline is frozen at
 `e605c10ed6681512da89fa2a4b29791b03a67168`. The preserved observer artifact
 remains `observation_incomplete`; one distributed break-transition sample is
-accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. The next gate is
-explicit authorization of B1.0. No later milestone is authorized by the freeze.
+accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. B1.0 is accepted at
+`25b2c1acab0bbf76e9d65860995b51d12431b1d4`. The next gate is explicit
+authorization of B1.1; no later milestone is authorized by B1.0 acceptance.
 
 ## 2. Milestone Namespace Rules
 
@@ -55,8 +58,9 @@ flowchart LR
   A32["A3.2<br/>accepted with limitations"]
   RF["Runtime Freeze<br/>complete"]
   BR["Baseline Review<br/>accepted"]
+  B10["B1.0<br/>accepted"]
   P0 --> P1 --> P2 --> P3
-  A1 --> A2 --> A31 --> A32 --> RF --> BR
+  A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -73,8 +77,8 @@ grant production, evidence, readiness, broker, or execution authority.
 | A3.2 | A3.1 | A3.2 operational report and operator decision | complete | accepted with limitations |
 | Runtime Freeze | A3.2 accepted | freeze manifest and baseline record | complete | accepted |
 | Baseline Review | Runtime Freeze | baseline review and change control | complete | accepted |
-| B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix | partial in isolation | awaiting explicit authorization |
-| B1.1 | B1.0 | B1 local engine/repository design | partial in isolation | blocked pending B1.0 authorization |
+| B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix, authorization record | complete | accepted |
+| B1.1 | B1.0 | B1 local engine/repository design | partial in isolation | awaiting explicit authorization |
 | B1.2 | B1.1 | B1 live shadow context-lineage canary | preparation only | blocked pending prior milestone adoption |
 | B1.3 | B1.2 | IFVG v3 canonical research adapter | not_started | blocked |
 | B1.4 | B1.3, historical time authority | historical job design | not_started | blocked |
@@ -118,11 +122,18 @@ The review proved:
 - no hidden runtime profile grants new authority;
 - B1 prerequisites still match the accepted specifications.
 
-### 5.4 B1.0 explicit authorization - next
+### 5.4 B1.0 contracts and identity - complete
 
-The remaining gate is an explicit decision authorizing the fixture-backed B1.0
-contracts and identity milestone. Existing B1 commits are isolated
-pre-authorization artifacts; they are not runtime adoption or production use.
+The fixture-backed contracts, authority invariants, validators, canonical
+identity, lineage identity contracts, and accepted fixture oracle are frozen in
+the isolated B1.0 branch. The signed record proves an exact 20-file implementation
+diff, zero production consumers, and authority `none / none / none`.
+
+### 5.5 B1.1 explicit authorization - next
+
+The next decision may authorize only the local deterministic engine and compact
+repository milestone. Existing B1.1 and B1.2 preparation commits remain isolated
+and unadopted until their named gates pass.
 
 ## 6. B1 Implementation Sequence
 
@@ -172,14 +183,15 @@ Native deterministic evidence remains authoritative.
 - documentation and frozen-hash verification;
 - fixture validation;
 - non-runtime architecture review;
-- explicit B1.0 authorization review;
+- explicit B1.1 authorization review;
+- non-runtime verification of isolated B1.1 preparation artifacts;
 - optional corrected-observer follow-up monitoring that does not alter the
   frozen evidence.
 
 ### Blocked now
 
-- B1 runtime implementation;
-- B1 repository or scheduler services;
+- B1.1 engine/repository runtime adoption;
+- B1 scheduler services;
 - lineage runtime persistence;
 - new always-on profiles;
 - GBrain production-baseline merge;
@@ -226,5 +238,7 @@ Runtime Frozen
 
 Baseline Review Accepted
 
-B1 Runtime Implementation Not Authorized
+B1.0 Contracts And Identity Accepted
+
+B1.1 Runtime Implementation Not Authorized
 ```

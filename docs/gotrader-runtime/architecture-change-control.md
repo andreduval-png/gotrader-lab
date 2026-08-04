@@ -281,10 +281,16 @@ Runtime Frozen
 
 Baseline Review Accepted
 
-B1 Runtime Implementation Not Authorized
+B1.0 Contracts And Identity Accepted
+
+B1.1 Runtime Implementation Not Authorized
 ```
 
-The only remaining B1 entry gate is explicit authorization of the specific B1
-milestone. The accepted A3.2 limitation, freeze record, and baseline review do
-not grant production, evidence, readiness, broker, execution, or calibration
-authority.
+Change record `B1.0-AUTHORIZATION-2026-08-03` accepts only the B1.0 contracts,
+authority, validation, identity, lineage identity, and fixture scope at commit
+`25b2c1acab0bbf76e9d65860995b51d12431b1d4`. Its canonical record hash is
+`sha256:3e8b37fd2f574dd8929ca1815226ecc7c834a40a4bd6d865dd452ea2fe0fbf10`.
+
+The next B1 gate is separate B1.1 authorization. B1.0 acceptance does not grant
+runtime, production, evidence, readiness, broker, execution, or calibration
+authority and does not adopt any existing B1.1/B1.2 preparation artifacts.

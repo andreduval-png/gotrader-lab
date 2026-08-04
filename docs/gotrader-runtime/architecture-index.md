@@ -83,7 +83,8 @@ implementation is not permission to adopt it in production.
 | Phase 3A-3F | IFVG shadow canary chain implemented in stages; no production adoption. |
 | GBrain G1-G2 | Read-only sidecar and MCP research-memory facade accepted. |
 | GBrain G3 | Accepted in isolation; now eligible for a separate baseline-integration decision. |
-| B1 | Design and isolated pre-authorization artifacts exist; runtime adoption awaits explicit B1 authorization. |
+| B1.0 | Contracts, authority, validation, identity, and fixtures are accepted in an isolated worktree; no runtime adoption. |
+| B1.1-B1.6 | Isolated preparation may exist, but each milestone remains unauthorized until its separate gate passes. |
 | B2-B4 | Reserved names only; unspecified and unauthorized. |
 | Future execution | Unimplemented and blocked. |
 
@@ -139,6 +140,8 @@ The short labels below are used in the master tables.
 | `B1-FIXTURES` | B1 planning worktree | `d4261e6e39f7a0e0f821ab333002be6573a29fe8` |
 | `B1-PIPELINE` | B1 planning worktree | `a9564d888b86b2548f37b882f39c7229af6c11f4` |
 | `B1-L1` | B1 planning worktree | `f73b219d9574586f49340138a6a99b5bacb59210` |
+| `B1.0-IMPLEMENTATION` | `codex/gotrader-b1-0-authorized` | `149c53a84df537296b46ffdd694fedc054d43a8d` |
+| `B1.0-ACCEPTANCE` | `codex/gotrader-b1-0-authorized` | `25b2c1acab0bbf76e9d65860995b51d12431b1d4` |
 
 ## 5. Master Document Index
 
@@ -262,7 +265,7 @@ G3 is technically accepted in its isolated worktree. A3.2 and the baseline
 review no longer block a separate GBrain baseline-integration decision, but no
 production merge is implied by this index update.
 
-### 5.7 B1 planning records
+### 5.7 B1 planning and accepted implementation records
 
 | Specification | Doc | Impl | Ops | Commit | Blob | Domain |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -274,6 +277,8 @@ production merge is implied by this index update.
 | `docs/gotrader-runtime/track-b1-canonical-lineage-graph-specification.md` | accepted | not_started | blocked | B1-L1 | `2731f1891a096a96afe8e0a2ae6db1baf032086e` | Lineage |
 | `docs/gotrader-runtime/track-b1-lineage-node-reference.md` | accepted | not_started | blocked | B1-L1 | `808451cf85d7bc0095f01aba923adad500d6e87c` | Lineage |
 | `docs/gotrader-runtime/track-b1-lineage-edge-reference.md` | accepted | not_started | blocked | B1-L1 | `a781fd040d430915f389fc0f92c291ec261999f6` | Lineage |
+| `docs/gotrader-runtime/track-b1-0-implementation-report.md` | accepted | complete | not_applicable | B1.0-ACCEPTANCE | `bf566acd3505d23323f5cc89d111b0d8b243afc1` | Research |
+| `docs/gotrader-runtime/track-b1-0-authorization-record.json` | accepted | complete | not_applicable | B1.0-ACCEPTANCE | `d44e8cd82d4efc9e89045f0e0fad6fa1489941b4` | Governance |
 
 `B1-L1` is the lineage planning subtrack. It does not rename or replace the
 runtime milestone `B1.2`.
@@ -296,12 +301,13 @@ runtime milestone `B1.2`.
 | A3.1 | Four-hour observation, 21 verified M5 closes, exact-once checks, zero duplicate/conflict/ledger gaps. | Partial acceptance; A4 remained blocked. |
 | A3.2 | Four-hour scheduled-break observation, 35 verified closes, 32 contexts, 100% proof uptime, zero safety/integrity failures, and one bounded observer-transition sample. | Accepted with the limitation preserved in `A3.2-ACCEPTANCE-2026-08-03`. |
 | Runtime Freeze | Clean exact runtime HEAD, allowlisted file hashes, profile validation, and preserved evidence identities. | Frozen at `e605c10ed6681512da89fa2a4b29791b03a67168`. |
-| Baseline Review | Integrity-hashed preparation manifest with zero blockers and authority `none / none / none`. | Accepted; explicit B1 milestone authorization is next. |
+| Baseline Review | Integrity-hashed preparation manifest with zero blockers and authority `none / none / none`. | Accepted. |
 | Phase 2A | Deterministic fact-family reports and compatibility policy. | Complete shadow context engine; no production adoption. |
 | Phase 3 | Detection, geometry, selection, live gate, and evidence reports. | Canary chain only; evidence completion remains blocked. |
 | GBrain G1-G2 | Sidecar and read-only MCP acceptance reports. | Accepted research-memory integration. |
 | GBrain G3 | Backfill and real MCP acceptance reports. | Accepted with limitations in isolation; baseline integration blocked. |
-| B1 | Contract fixtures and accepted specifications. | Planning accepted; runtime implementation blocked. |
+| B1.0 | Signed authorization record, exact 20-file implementation allowlist, fixture parity, negative safety checks, and full regression/build validation. | Accepted contracts-and-identity milestone; zero production consumers and no runtime adoption. |
+| B1.1 | Isolated engine/repository preparation artifacts. | Not adopted; separate authorization is the next gate. |
 
 ## 7. Governance Map
 
@@ -375,6 +381,7 @@ Primary enforcing records:
 - `track-b1-autonomous-research-pipeline-specification.md`;
 - `track-b1-authority-matrix.md`;
 - `track-b1-canonical-lineage-graph-specification.md`;
+- `track-b1-0-authorization-record.json`;
 - GBrain G1-G3 reports.
 
 No accepted record grants execution, broker, evidence, readiness, production,
@@ -382,25 +389,30 @@ or calibration-apply authority.
 
 ## 10. Current Implementation Gate
 
-No B1 runtime adoption is authorized until all of the following are complete:
+The B1.0 contracts-and-identity milestone completed all of the following:
 
 1. A3.2 final operational acceptance - complete with limitations;
 2. runtime baseline freeze - complete;
 3. baseline review against this index - complete;
 4. an isolated B1 implementation worktree - complete;
-5. explicit authorization of the specific B1 milestone - pending.
+5. explicit authorization of B1.0 - complete and accepted at
+   `25b2c1acab0bbf76e9d65860995b51d12431b1d4`.
+
+The active gate is now separate authorization of B1.1. B1.0 acceptance does not
+adopt the prepared B1.1 engine/repository or any later milestone.
 
 Permitted now:
 
 - documentation correction;
 - committed-fixture verification;
 - architecture review;
-- explicit B1.0 authorization review;
-- non-runtime verification of existing isolated B1 artifacts.
+- B1.0 acceptance and frozen-hash verification;
+- explicit B1.1 authorization review;
+- non-runtime verification of existing isolated B1.1 artifacts.
 
 Blocked now:
 
-- B1 runtime services or repositories;
+- B1.1 runtime engine or repository adoption;
 - lineage persistence;
 - B1 live runtime profiles;
 - B2-B4 implementation;
@@ -417,7 +429,8 @@ Blocked now:
 | Historical DST/time-basis authority | blocked | Obtain terminal-authoritative historical verification. |
 | Phase 3F evidence completion | blocked | Resolve historical source identity and collect sufficient live ledger evidence. |
 | GBrain G3 baseline integration | pending decision | Perform a separate integration and compatibility review. |
-| B1 implementation | blocked | Record explicit authorization for the specific B1 milestone. |
+| B1.0 contracts and identity | accepted | Preserve the signed 20-file scope and zero-production-consumer boundary. |
+| B1.1 engine and repository | blocked | Record separate B1.1 authorization; do not promote preparation artifacts implicitly. |
 | B2 strategy expansion | reserved / unspecified | New accepted specification required. |
 | B3 consensus | reserved / unspecified | New accepted specification required. |
 | B4 AI supervision | reserved / unspecified | New accepted specification required. |
@@ -436,5 +449,7 @@ Runtime Frozen
 
 Baseline Review Accepted
 
-B1 Runtime Implementation Not Authorized
+B1.0 Contracts And Identity Accepted
+
+B1.1 Runtime Implementation Not Authorized
 ```
