@@ -85,7 +85,8 @@ implementation is not permission to adopt it in production.
 | GBrain G3 | Accepted in isolation; now eligible for a separate baseline-integration decision. |
 | B1.0 | Contracts, authority, validation, identity, and fixtures are accepted in an isolated worktree; no runtime adoption. |
 | B1.1 | Local deterministic engine and compact repository are accepted in isolation with zero production consumers. |
-| B1.2-B1.6 | Isolated preparation may exist, but each milestone remains unauthorized until its separate gate passes. |
+| B1.2 | Live context-lineage canary implemented and authorized in an isolated shadow profile; operational acceptance pending. |
+| B1.3-B1.6 | Unauthorized until each separate prerequisite and gate passes. |
 | B2-B4 | Reserved names only; unspecified and unauthorized. |
 | Future execution | Unimplemented and blocked. |
 
@@ -145,6 +146,8 @@ The short labels below are used in the master tables.
 | `B1.0-ACCEPTANCE` | `codex/gotrader-b1-0-authorized` | `25b2c1acab0bbf76e9d65860995b51d12431b1d4` |
 | `B1.1-IMPLEMENTATION` | `codex/gotrader-b1-1-authorized` | `43beff495af6a470979e4f5f7956433f26407f04` |
 | `B1.1-ACCEPTANCE` | `codex/gotrader-b1-1-authorized` | `92da83b7b550eac31d3114acffc4e8748d880cfe` |
+| `B1.2-IMPLEMENTATION` | `codex/gotrader-b1-2-authorized` | `820a6278fcdadf061c354c4e30c89af034d20780` |
+| `B1.2-AUTHORIZATION` | `codex/gotrader-b1-2-authorized` | `89ba4b276fdfdc5dd5396959636fb0e86bdba436` |
 
 ## 5. Master Document Index
 
@@ -284,6 +287,8 @@ production merge is implied by this index update.
 | `docs/gotrader-runtime/track-b1-0-authorization-record.json` | accepted | complete | not_applicable | B1.0-ACCEPTANCE | `d44e8cd82d4efc9e89045f0e0fad6fa1489941b4` | Governance |
 | `docs/gotrader-runtime/track-b1-1-implementation-report.md` | accepted | complete | not_applicable | B1.1-ACCEPTANCE | `acda598a2ab118bf6c4240377a308355549e83bb` | Research |
 | `docs/gotrader-runtime/track-b1-1-authorization-record.json` | accepted | complete | not_applicable | B1.1-ACCEPTANCE | `8dc5f610e6fae778a065cb2096e81b763a1f527d` | Governance |
+| `docs/gotrader-runtime/track-b1-2-implementation-report.md` | accepted | complete | blocked | B1.2-AUTHORIZATION | `04cb66695846d68d23d96700bec02ec92d0e19f6` | Research |
+| `docs/gotrader-runtime/track-b1-2-authorization-record.json` | accepted | complete | blocked | B1.2-AUTHORIZATION | `b91f869345e5f2c6b849905dacc57e12cd6a897f` | Governance |
 
 `B1-L1` is the lineage planning subtrack. It does not rename or replace the
 runtime milestone `B1.2`.
@@ -313,6 +318,7 @@ runtime milestone `B1.2`.
 | GBrain G3 | Backfill and real MCP acceptance reports. | Accepted with limitations in isolation; baseline integration blocked. |
 | B1.0 | Signed authorization record, exact 20-file implementation allowlist, fixture parity, negative safety checks, and full regression/build validation. | Accepted contracts-and-identity milestone; zero production consumers and no runtime adoption. |
 | B1.1 | Signed authorization record, exact 10-file implementation allowlist, recovery/lease/conflict safety tests, and full regression/build validation. | Accepted local engine-and-repository milestone; zero production consumers and no live runtime adoption. |
+| B1.2 | Signed authorization record, exact 14-file implementation allowlist, deterministic identity/restart/lookahead/profile tests, runtime regressions, and an integrity-hashed observer. | Implementation complete in the isolated shadow profile; four-hour operational acceptance has not yet run. |
 
 ## 7. Governance Map
 
@@ -387,6 +393,8 @@ Primary enforcing records:
 - `track-b1-authority-matrix.md`;
 - `track-b1-canonical-lineage-graph-specification.md`;
 - `track-b1-0-authorization-record.json`;
+- `track-b1-1-authorization-record.json`;
+- `track-b1-2-authorization-record.json`;
 - GBrain G1-G3 reports.
 
 No accepted record grants execution, broker, evidence, readiness, production,
@@ -394,7 +402,8 @@ or calibration-apply authority.
 
 ## 10. Current Implementation Gate
 
-The B1.0 and B1.1 milestones completed all of the following:
+The B1.0, B1.1, and B1.2 implementation milestones completed all of the
+following:
 
 1. A3.2 final operational acceptance - complete with limitations;
 2. runtime baseline freeze - complete;
@@ -403,11 +412,13 @@ The B1.0 and B1.1 milestones completed all of the following:
 5. explicit authorization of B1.0 - complete and accepted at
    `25b2c1acab0bbf76e9d65860995b51d12431b1d4`;
 6. explicit authorization of B1.1 - complete and accepted at
-   `92da83b7b550eac31d3114acffc4e8748d880cfe`.
+   `92da83b7b550eac31d3114acffc4e8748d880cfe`;
+7. explicit authorization and deterministic implementation of B1.2 - complete
+   at `89ba4b276fdfdc5dd5396959636fb0e86bdba436`.
 
-The active gate is now separate authorization of B1.2. B1.1 acceptance adopts
-only the local fixture-driven engine and compact repository; it does not adopt
-the prepared live canary, scheduler integration, or any later milestone.
+The active gate is the B1.2 four-hour operational observation. B1.2 remains
+isolated and shadow-only; its implementation does not authorize B1.3 or any
+production, strategy, evidence, readiness, memory, broker, or execution path.
 
 Permitted now:
 
@@ -415,14 +426,13 @@ Permitted now:
 - committed-fixture verification;
 - architecture review;
 - B1.0 and B1.1 acceptance and frozen-hash verification;
-- explicit B1.2 authorization review;
-- non-runtime verification of existing isolated B1.2 preparation artifacts.
+- B1.2 operational preflight and four-hour isolated observation;
+- verification and preservation of its integrity-hashed report.
 
 Blocked now:
 
-- B1.2 live event adapter or scheduler adoption;
-- lineage persistence;
-- B1 live runtime profiles;
+- B1.2 production adoption outside its isolated shadow profile;
+- B1.3 implementation or authorization;
 - B2-B4 implementation;
 - GBrain baseline merge;
 - evidence or readiness authority;
@@ -439,7 +449,7 @@ Blocked now:
 | GBrain G3 baseline integration | pending decision | Perform a separate integration and compatibility review. |
 | B1.0 contracts and identity | accepted | Preserve the signed 20-file scope and zero-production-consumer boundary. |
 | B1.1 engine and repository | accepted | Preserve the signed 10-file scope, bounded repository, and zero-production-consumer boundary. |
-| B1.2 live shadow context-lineage canary | blocked | Record separate B1.2 authorization; do not promote preparation artifacts implicitly. |
+| B1.2 live shadow context-lineage canary | implementation complete / operationally blocked | Run and preserve the required four-hour maintenance-break observation. |
 | B2 strategy expansion | reserved / unspecified | New accepted specification required. |
 | B3 consensus | reserved / unspecified | New accepted specification required. |
 | B4 AI supervision | reserved / unspecified | New accepted specification required. |
@@ -462,5 +472,7 @@ B1.0 Contracts And Identity Accepted
 
 B1.1 Local Engine And Repository Accepted
 
-B1.2 Live Canary Not Authorized
+B1.2 Implementation Complete - Operational Acceptance Pending
+
+B1.3 Not Authorized
 ```

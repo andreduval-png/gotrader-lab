@@ -23,6 +23,10 @@ BASELINE ACCEPTED
 B1.0 CONTRACTS AND IDENTITY ACCEPTED
 
 B1.1 LOCAL ENGINE AND REPOSITORY ACCEPTED
+
+B1.2 LIVE CONTEXT-LINEAGE CANARY IMPLEMENTED
+
+B1.2 OPERATIONAL ACCEPTANCE PENDING
 ```
 
 The exact runtime baseline is frozen at
@@ -30,8 +34,10 @@ The exact runtime baseline is frozen at
 remains `observation_incomplete`; one distributed break-transition sample is
 accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. B1.0 is accepted at
 `25b2c1acab0bbf76e9d65860995b51d12431b1d4`, and B1.1 is accepted at
-`92da83b7b550eac31d3114acffc4e8748d880cfe`. The next gate is explicit
-authorization of B1.2; no later milestone is authorized by B1.1 acceptance.
+`92da83b7b550eac31d3114acffc4e8748d880cfe`. B1.2 is implemented at
+`820a6278fcdadf061c354c4e30c89af034d20780` with its authorization record at
+`89ba4b276fdfdc5dd5396959636fb0e86bdba436`. Its four-hour live operational
+observation remains pending; no later milestone is authorized.
 
 ## 2. Milestone Namespace Rules
 
@@ -63,8 +69,9 @@ flowchart LR
   BR["Baseline Review<br/>accepted"]
   B10["B1.0<br/>accepted"]
   B11["B1.1<br/>accepted"]
+  B12["B1.2<br/>implemented, ops pending"]
   P0 --> P1 --> P2 --> P3
-  A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10 --> B11
+  A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10 --> B11 --> B12
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -83,7 +90,7 @@ grant production, evidence, readiness, broker, or execution authority.
 | Baseline Review | Runtime Freeze | baseline review and change control | complete | accepted |
 | B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix, authorization record | complete | accepted |
 | B1.1 | B1.0 | B1 local engine/repository design and authorization record | complete | accepted |
-| B1.2 | B1.1 | B1 live shadow context-lineage canary | preparation only | awaiting explicit authorization |
+| B1.2 | B1.1 | B1 live shadow context-lineage canary and authorization record | complete | blocked pending four-hour operational observation |
 | B1.3 | B1.2 | IFVG v3 canonical research adapter | not_started | blocked |
 | B1.4 | B1.3, historical time authority | historical job design | not_started | blocked |
 | B1.5 | B1.4 | compatibility projection design | not_started | blocked |
@@ -140,11 +147,12 @@ accepted in the isolated B1.1 branch. The signed record proves an exact 10-file
 implementation diff, recovery and lease safety, zero production consumers, and
 authority `none / none / none`.
 
-### 5.6 B1.2 explicit authorization - next
+### 5.6 B1.2 operational observation - next
 
-The next decision may authorize only the live read-only context-lineage canary.
-Existing B1.2 preparation remains isolated and unadopted until that named gate
-passes.
+The live read-only context-lineage canary is implemented and authorized only in
+its isolated profile. The next action is one integrity-hashed four-hour
+observation spanning the maintenance break. B1.3 remains blocked until every
+B1.2 acceptance check passes.
 
 ## 6. B1 Implementation Sequence
 
@@ -195,16 +203,15 @@ Native deterministic evidence remains authoritative.
 - fixture validation;
 - non-runtime architecture review;
 - B1.1 acceptance verification;
-- explicit B1.2 authorization review;
-- non-runtime verification of isolated B1.2 preparation artifacts;
+- B1.2 operational preflight and four-hour isolated canary observation;
+- verification of the B1.2 integrity-hashed final report;
 - optional corrected-observer follow-up monitoring that does not alter the
   frozen evidence.
 
 ### Blocked now
 
-- B1.2 live event adapter adoption;
-- B1 scheduler services and lineage runtime persistence;
-- new always-on profiles;
+- B1.2 production adoption outside its isolated shadow profile;
+- B1.3 strategy adapter implementation or authorization;
 - GBrain production-baseline merge;
 - historical B1 jobs;
 - B2-B4 design or implementation without new specifications;
@@ -253,5 +260,7 @@ B1.0 Contracts And Identity Accepted
 
 B1.1 Local Engine And Repository Accepted
 
-B1.2 Live Canary Not Authorized
+B1.2 Implementation Complete - Operational Acceptance Pending
+
+B1.3 Not Authorized
 ```

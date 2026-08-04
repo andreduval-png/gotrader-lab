@@ -112,7 +112,7 @@ by immutable identity and reads them only inside deterministic stage execution.
 | Baseline Review | Frozen runtime matches A3.2 evidence; Phase 2A/3 parity and GBrain advisory boundaries remain intact. | accepted | Use change control for drift. |
 | B1.0 authorization | Named base commit, isolated worktree, approved scope, test plan, rollback plan, and reviewer approval. | accepted | Preserve the exact 20-file scope and zero production consumers. |
 | B1.1 authorization | B1.0 contracts, identity, fixture parity, and negative safety tests pass. | accepted | Preserve the exact 10-file implementation scope and zero production consumers. |
-| B1.2 authorization | B1.1 recovery, idempotency, conflict, cancellation, stale-lease, and crash tests pass. | pending decision | No live scheduler registration. |
+| B1.2 authorization | B1.1 recovery, idempotency, conflict, cancellation, stale-lease, and crash tests pass. | accepted; implementation complete; operational observation pending | Isolated shadow profile only; no strategy or production adoption. |
 | B1.3 authorization | B1.2 shadow canary accepted with clean identity and integrity deltas. | blocked by B1.2 | No strategy adapter job. |
 | B1.4 authorization | B1.3 parity accepted and historical time basis/DST authority independently verified. | blocked | No historical jobs. |
 | B1.5 authorization | B1.4 results accepted and compatibility projection contract reviewed. | blocked | Legacy views remain authoritative. |
@@ -284,9 +284,11 @@ Not allowed:
 - page-load or timer-driven deep history;
 - mutation of the accepted runtime ledgers.
 
-Exit criteria include a separately prescribed live observation with zero
-identity conflicts, duplicate artifacts, ledger gaps, authority drift, and raw
-data leakage.
+Implementation is complete at
+`820a6278fcdadf061c354c4e30c89af034d20780`. Exit criteria still require a
+separately prescribed four-hour live observation with zero identity conflicts,
+duplicate artifacts, ledger gaps, authority drift, and raw-data leakage, plus a
+safe maintenance-break pause and fresh-proof resume.
 
 Rollback disables only the isolated B1.2 profile. The accepted A3.2 runtime
 continues unchanged.

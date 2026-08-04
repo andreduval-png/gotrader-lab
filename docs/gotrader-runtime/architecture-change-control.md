@@ -285,7 +285,9 @@ B1.0 Contracts And Identity Accepted
 
 B1.1 Local Engine And Repository Accepted
 
-B1.2 Live Canary Not Authorized
+B1.2 Live Canary Implemented - Operational Acceptance Pending
+
+B1.3 Not Authorized
 ```
 
 Change record `B1.0-AUTHORIZATION-2026-08-03` accepts only the B1.0 contracts,
@@ -298,6 +300,10 @@ deterministic engine and compact repository scope at commit
 `92da83b7b550eac31d3114acffc4e8748d880cfe`. Its canonical record hash is
 `sha256:2a752f183bf8abd3a46245f219512b62d478b161490e9eca83a6183d19acdaf8`.
 
-The next B1 gate is separate B1.2 authorization. B1.1 acceptance grants no live
-runtime, scheduler, production, evidence, readiness, broker, execution, or
-calibration authority and does not adopt any B1.2 preparation artifacts.
+Change record `B1.2-AUTHORIZATION-2026-08-03` authorizes only the isolated
+current-live context-lineage canary implementation at
+`820a6278fcdadf061c354c4e30c89af034d20780`. Its canonical record hash is
+`sha256:f1d9e2706bf434e2cec42166037d8541862acb13ea8484399dd1ed5d2efee928`.
+Operational acceptance remains pending. B1.3 is not authorized, and B1.2 grants
+no strategy, production, evidence, readiness, memory, broker, execution, or
+calibration authority.
