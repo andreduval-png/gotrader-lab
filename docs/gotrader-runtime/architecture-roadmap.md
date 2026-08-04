@@ -11,17 +11,21 @@ GoTrader has an implemented read-only runtime foundation, a deterministic
 canonical market-context engine, an IFVG shadow-canary path, and accepted
 read-only GBrain research-memory integration.
 
-The immediate gate is not feature development. It is the incomplete A3.2
-operational acceptance:
+The A3.2 operational gate, Runtime Freeze, and Baseline Review are complete:
 
 ```text
-TRACK A3.2 BLOCKED - OPERATIONAL ACCEPTANCE INCOMPLETE
+A3.2 ACCEPTED WITH LIMITATIONS
+
+RUNTIME FROZEN
+
+BASELINE ACCEPTED
 ```
 
-The A3.2 runtime produced real M5 close events and complete five-timeframe
-contexts, but the prescribed fresh observation has not yet spanned a scheduled
-market break. Until that gate passes, B1 implementation and later tracks remain
-unauthorized.
+The exact runtime baseline is frozen at
+`e605c10ed6681512da89fa2a4b29791b03a67168`. The preserved observer artifact
+remains `observation_incomplete`; one distributed break-transition sample is
+accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. The next gate is
+explicit authorization of B1.0. No later milestone is authorized by the freeze.
 
 ## 2. Milestone Namespace Rules
 
@@ -48,9 +52,11 @@ flowchart LR
   A1["A1<br/>runtime foundation"]
   A2["A2<br/>continuous feed"]
   A31["A3.1<br/>partial acceptance"]
-  A32["A3.2<br/>implemented, acceptance blocked"]
+  A32["A3.2<br/>accepted with limitations"]
+  RF["Runtime Freeze<br/>complete"]
+  BR["Baseline Review<br/>accepted"]
   P0 --> P1 --> P2 --> P3
-  A1 --> A2 --> A31 --> A32
+  A1 --> A2 --> A31 --> A32 --> RF --> BR
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -64,12 +70,12 @@ grant production, evidence, readiness, broker, or execution authority.
 | A2 | A1 | A2 continuous feed and scheduler designs | complete | accepted with limitations |
 | A3 | A2, verified-time contracts | A3 verified-time context design | complete | superseded operationally |
 | A3.1 | A3 | A3.1 acceptance report | complete | partial acceptance |
-| A3.2 | A3.1 | A3.2 operational report | complete | blocked pending final observation |
-| Runtime Freeze | A3.2 accepted | architecture index and A3.2 evidence | not_started | blocked |
-| Baseline Review | Runtime Freeze | architecture index and change control | not_started | blocked |
-| B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix | not_started | blocked |
-| B1.1 | B1.0 | B1 local engine/repository design | not_started | blocked |
-| B1.2 | B1.1 | B1 live shadow context-lineage canary | not_started | blocked |
+| A3.2 | A3.1 | A3.2 operational report and operator decision | complete | accepted with limitations |
+| Runtime Freeze | A3.2 accepted | freeze manifest and baseline record | complete | accepted |
+| Baseline Review | Runtime Freeze | baseline review and change control | complete | accepted |
+| B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix | partial in isolation | awaiting explicit authorization |
+| B1.1 | B1.0 | B1 local engine/repository design | partial in isolation | blocked pending B1.0 authorization |
+| B1.2 | B1.1 | B1 live shadow context-lineage canary | preparation only | blocked pending prior milestone adoption |
 | B1.3 | B1.2 | IFVG v3 canonical research adapter | not_started | blocked |
 | B1.4 | B1.3, historical time authority | historical job design | not_started | blocked |
 | B1.5 | B1.4 | compatibility projection design | not_started | blocked |
@@ -81,36 +87,30 @@ grant production, evidence, readiness, broker, or execution authority.
 
 ## 5. Immediate Next Milestone
 
-### 5.1 A3.2 operational reacceptance
+### 5.1 A3.2 operational acceptance - complete
 
-Required work:
+Completed evidence:
 
-1. run the prescribed clean operational observation;
-2. span a scheduled market maintenance break;
-3. preserve fresh terminal-time proof behavior;
-4. prove safe pause during the break;
-5. prove fresh-proof resume after reopening;
-6. preserve supervisor, feed, scheduler, and context continuity;
-7. retain zero duplicate, conflict, and ledger-gap counts;
-8. produce an integrity-hashed final report;
-9. update the A3.2 operational report honestly.
+1. 14,400-second operational observation;
+2. scheduled market maintenance break coverage;
+3. 100% active-market proof uptime;
+4. fail-closed maintenance pause and fresh-proof resume;
+5. 35 verified M5 closes and 32 completed contexts;
+6. zero verification, transport, hydration, restart, duplicate, conflict,
+   ledger-gap, or authority failures;
+7. integrity-valid observer and operator-decision records.
 
-Failure does not authorize bypassing the gate. It creates a new diagnosis and
-reacceptance cycle.
+One observer-transition sample is retained as an explicit limitation. It does
+not waive any other acceptance predicate or authority boundary.
 
-### 5.2 Runtime freeze
+### 5.2 Runtime freeze - complete
 
-After A3.2 passes:
+The exact runtime commit, profile, allowlisted files, evidence, and decision
+identities are frozen in the Runtime Freeze records.
 
-- record the exact accepted runtime commit;
-- verify a clean worktree;
-- freeze required configs, contracts, tests, and reports by blob ID;
-- run the baseline safety and authority suite;
-- update this index through change control.
+### 5.3 Baseline review - complete
 
-### 5.3 Baseline review
-
-The review must prove:
+The review proved:
 
 - A3.2 evidence matches the frozen runtime;
 - Phase 2A and Phase 3 compatibility remains intact;
@@ -118,7 +118,11 @@ The review must prove:
 - no hidden runtime profile grants new authority;
 - B1 prerequisites still match the accepted specifications.
 
-Only then may B1.0 be proposed for implementation.
+### 5.4 B1.0 explicit authorization - next
+
+The remaining gate is an explicit decision authorizing the fixture-backed B1.0
+contracts and identity milestone. Existing B1 commits are isolated
+pre-authorization artifacts; they are not runtime adoption or production use.
 
 ## 6. B1 Implementation Sequence
 
@@ -165,11 +169,12 @@ Native deterministic evidence remains authoritative.
 
 ### Approved now
 
-- A3.2 operational observation and report correction;
 - documentation and frozen-hash verification;
 - fixture validation;
 - non-runtime architecture review;
-- diagnosis of a failed acceptance observation.
+- explicit B1.0 authorization review;
+- optional corrected-observer follow-up monitoring that does not alter the
+  frozen evidence.
 
 ### Blocked now
 
@@ -215,7 +220,11 @@ GOTRADER ARCHITECTURE INDEX FROZEN
 
 Accepted Architecture Indexed
 
-A3.2 Operational Acceptance Blocked
+A3.2 Accepted With Limitations
+
+Runtime Frozen
+
+Baseline Review Accepted
 
 B1 Runtime Implementation Not Authorized
 ```

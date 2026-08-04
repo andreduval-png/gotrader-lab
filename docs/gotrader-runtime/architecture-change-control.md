@@ -275,7 +275,16 @@ GOTRADER ARCHITECTURE INDEX FROZEN
 
 Accepted Architecture Indexed
 
-A3.2 Operational Acceptance Blocked
+A3.2 Accepted With Limitations
+
+Runtime Frozen
+
+Baseline Review Accepted
 
 B1 Runtime Implementation Not Authorized
 ```
+
+The only remaining B1 entry gate is explicit authorization of the specific B1
+milestone. The accepted A3.2 limitation, freeze record, and baseline review do
+not grant production, evidence, readiness, broker, execution, or calibration
+authority.

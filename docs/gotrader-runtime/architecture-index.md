@@ -2,12 +2,12 @@
 
 Status: frozen accepted-architecture index
 
-Index baseline: `f73b219d9574586f49340138a6a99b5bacb59210`
+Index revision basis: `2cc5a2afccdc0f3043e2d471f9261b18d6f657ca`
 
-Planning branch: `codex/gotrader-infrastructure-track-b1-planning`
+Planning branch: `codex/gotrader-runtime-freeze-baseline`
 
-Runtime baseline under qualification:
-`ad8608a6f40361a3a9a84b92c93a4da4d64e59b1`
+Frozen runtime baseline:
+`e605c10ed6681512da89fa2a4b29791b03a67168`
 
 ## 1. Purpose
 
@@ -76,12 +76,14 @@ implementation is not permission to adopt it in production.
 | Runtime A2 | Implemented; accepted with feed/observation limitations. |
 | Runtime A3 | Implemented but operationally blocked; superseded by A3.1/A3.2 qualification. |
 | Runtime A3.1 | Four-hour observation complete; partial acceptance only. |
-| Runtime A3.2 | Implementation complete; operational acceptance blocked. |
+| Runtime A3.2 | Implementation complete; accepted with one documented observer-transition limitation. |
+| Runtime Freeze | Complete; exact runtime and allowlisted file hashes frozen. |
+| Baseline Review | Complete; integrity, lineage, compatibility, and authority checks passed. |
 | Phase 2A | Deterministic shadow canonical context engine complete. |
 | Phase 3A-3F | IFVG shadow canary chain implemented in stages; no production adoption. |
 | GBrain G1-G2 | Read-only sidecar and MCP research-memory facade accepted. |
-| GBrain G3 | Accepted in isolated worktree; baseline merge blocked by A3.2. |
-| B1 | Design and fixtures accepted; runtime implementation not authorized. |
+| GBrain G3 | Accepted in isolation; now eligible for a separate baseline-integration decision. |
+| B1 | Design and isolated pre-authorization artifacts exist; runtime adoption awaits explicit B1 authorization. |
 | B2-B4 | Reserved names only; unspecified and unauthorized. |
 | Future execution | Unimplemented and blocked. |
 
@@ -124,7 +126,11 @@ The short labels below are used in the master tables.
 | `A3` | Runtime lineage | `168ee5a776b13f9e4522e459e68c3e728afc0499` |
 | `A3-OPS` | Runtime lineage | `1e10113b72f216746ea4957463f8f1116134177d` |
 | `A3.1` | Runtime lineage | `b1f7b7f8718faecfeebb53dcdf9d1f82f1f83da1` |
-| `A3.2` | Runtime lineage | `c35a2592516eb5d9dfad75b5f3ca180bd483c33d` |
+| `A3.2` | Runtime lineage | `e605c10ed6681512da89fa2a4b29791b03a67168` |
+| `A3.2-OBSERVED` | Runtime lineage | `841cf965172b04d4dfd5dcfc797d12d907bd56b6` |
+| `A3.2-OBSERVER-FIX` | Runtime lineage | `e91baa633ad52be67ab07d040562824e83dcb994` |
+| `RUNTIME-FREEZE-AUDIT` | Runtime Freeze lineage | `908c3abf6573f2c5902f39c0a3689bc6ba85aa0c` |
+| `RUNTIME-FREEZE` | Runtime Freeze lineage | `2cc5a2afccdc0f3043e2d471f9261b18d6f657ca` |
 | `GB-G1` | Isolated GBrain lineage | `7a64d97d02c166f3bfb7105060a8f8f1780d9625` |
 | `GB-G2` | Isolated GBrain lineage | `29ae35634007f2fea9a1b74f0a71abe809c26e86` |
 | `GB-G3-BACKFILL` | Isolated GBrain lineage | `0cda33388cd08d0389d249751780bd6e90d1b385` |
@@ -233,7 +239,9 @@ The short labels below are used in the master tables.
 | `docs/gotrader-runtime/track-a3-runtime-report.md` | superseded | complete | blocked | A3 | `706d30cf9b7cf6c15f0d06c7e5b99287063b2f9d` | Runtime |
 | `docs/gotrader-runtime/track-a3-operations-runbook.md` | accepted | complete | not_run | A3-OPS | `530083a98c569f5d0267a2da3869c27a2fa404aa` | Operations |
 | `docs/gotrader-runtime/track-a3-1-operational-acceptance-report.md` | accepted | complete | partial_acceptance | A3.1 | `9213f4e48d21f2706316748a232532f3f3e223e1` | Acceptance |
-| `docs/gotrader-runtime/track-a3-2-operational-report.md` | accepted | complete | blocked | A3.2 | `a5d0f3114db16a6b475bdbce6097b0778d08bb31` | Acceptance |
+| `docs/gotrader-runtime/track-a3-2-operational-report.md` | accepted | complete | accepted_with_limitations | A3.2 | `9c86600d780343e5126e6f95d714006d4dc72697` | Acceptance |
+| `docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.md` | accepted | not_applicable | accepted_with_limitations | A3.2 | `94949d17b31c9f051406937e56a733c5a3b398f4` | Governance |
+| `docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.json` | accepted | not_applicable | accepted_with_limitations | A3.2 | `8d754d644713694dbbfa3602fbd485126256cbd1` | Governance |
 
 ### 5.6 GBrain records
 
@@ -250,9 +258,9 @@ Git objects, not from its current dirty working tree.
 | `docs/gotrader-runtime/gbrain-real-mcp-client-acceptance.md` | accepted | complete | accepted_with_limitations | GB-G3 | `0a135b370d9fb751bee16672941e6195f4e19a3c` | MCP |
 | `docs/gotrader-runtime/gbrain-g3-baseline-integration-report.md` | accepted | complete | blocked | GB-G3 | `3a65bd8e8db1fe83389acbf459de04d1605d7af2` | Baseline |
 
-G3 is technically accepted in its isolated worktree. Integration into the
-production baseline remains blocked until A3.2 operational acceptance and the
-subsequent baseline review.
+G3 is technically accepted in its isolated worktree. A3.2 and the baseline
+review no longer block a separate GBrain baseline-integration decision, but no
+production merge is implied by this index update.
 
 ### 5.7 B1 planning records
 
@@ -270,6 +278,14 @@ subsequent baseline review.
 `B1-L1` is the lineage planning subtrack. It does not rename or replace the
 runtime milestone `B1.2`.
 
+### 5.8 Runtime Freeze records
+
+| Specification | Doc | Impl | Ops | Commit | Blob | Domain |
+| --- | --- | --- | --- | --- | --- | --- |
+| `docs/gotrader-runtime/runtime-freeze-preparation-manifest.json` | accepted | not_applicable | accepted | RUNTIME-FREEZE | `4337d70e3b6950033c1c0e06fc109c937fbe8f64` | Baseline |
+| `docs/gotrader-runtime/runtime-freeze-baseline-record.json` | accepted | not_applicable | accepted | RUNTIME-FREEZE | `ec8ab01548eb043ed394f1fa12aed75e488389c5` | Baseline |
+| `docs/gotrader-runtime/runtime-freeze-baseline-review.md` | accepted | not_applicable | accepted | RUNTIME-FREEZE | `b84e7feba0aa1bdb8e5967c956bb0db0deaea6d8` | Governance |
+
 ## 6. Acceptance Evidence
 
 | Milestone | Evidence | Honest conclusion |
@@ -278,7 +294,9 @@ runtime milestone `B1.2`.
 | A2 | Continuous feed, scheduler, task registry, and observation report. | Passed with feed/observation limitations. |
 | A3 | Verified-time context tests and operational report. | Blocked; insufficient verified close/context idempotency evidence. |
 | A3.1 | Four-hour observation, 21 verified M5 closes, exact-once checks, zero duplicate/conflict/ledger gaps. | Partial acceptance; A4 remained blocked. |
-| A3.2 | Real M5 close events, five-timeframe canonical contexts, market-state pause/resume implementation. | Blocked until a fresh required observation spans a scheduled market break. |
+| A3.2 | Four-hour scheduled-break observation, 35 verified closes, 32 contexts, 100% proof uptime, zero safety/integrity failures, and one bounded observer-transition sample. | Accepted with the limitation preserved in `A3.2-ACCEPTANCE-2026-08-03`. |
+| Runtime Freeze | Clean exact runtime HEAD, allowlisted file hashes, profile validation, and preserved evidence identities. | Frozen at `e605c10ed6681512da89fa2a4b29791b03a67168`. |
+| Baseline Review | Integrity-hashed preparation manifest with zero blockers and authority `none / none / none`. | Accepted; explicit B1 milestone authorization is next. |
 | Phase 2A | Deterministic fact-family reports and compatibility policy. | Complete shadow context engine; no production adoption. |
 | Phase 3 | Detection, geometry, selection, live gate, and evidence reports. | Canary chain only; evidence completion remains blocked. |
 | GBrain G1-G2 | Sidecar and read-only MCP acceptance reports. | Accepted research-memory integration. |
@@ -364,21 +382,21 @@ or calibration-apply authority.
 
 ## 10. Current Implementation Gate
 
-No B1 runtime implementation is authorized until all of the following are
-complete:
+No B1 runtime adoption is authorized until all of the following are complete:
 
-1. A3.2 final operational acceptance;
-2. runtime baseline freeze;
-3. baseline review against this index;
-4. an isolated B1 implementation worktree;
-5. explicit authorization of the specific B1 milestone.
+1. A3.2 final operational acceptance - complete with limitations;
+2. runtime baseline freeze - complete;
+3. baseline review against this index - complete;
+4. an isolated B1 implementation worktree - complete;
+5. explicit authorization of the specific B1 milestone - pending.
 
 Permitted now:
 
 - documentation correction;
 - committed-fixture verification;
 - architecture review;
-- operational observation required by A3.2.
+- explicit B1.0 authorization review;
+- non-runtime verification of existing isolated B1 artifacts.
 
 Blocked now:
 
@@ -395,11 +413,11 @@ Blocked now:
 
 | Item | Status | Resolution required |
 | --- | --- | --- |
-| A3.2 final live observation | blocked | Pass the prescribed fresh observation spanning a scheduled market break. |
+| A3.2 operational acceptance | accepted_with_limitations | Preserve the single observer-transition limitation and optional follow-up monitoring. |
 | Historical DST/time-basis authority | blocked | Obtain terminal-authoritative historical verification. |
 | Phase 3F evidence completion | blocked | Resolve historical source identity and collect sufficient live ledger evidence. |
-| GBrain G3 baseline integration | blocked | Complete A3.2 and baseline review. |
-| B1 implementation | blocked | Satisfy the five implementation gates above. |
+| GBrain G3 baseline integration | pending decision | Perform a separate integration and compatibility review. |
+| B1 implementation | blocked | Record explicit authorization for the specific B1 milestone. |
 | B2 strategy expansion | reserved / unspecified | New accepted specification required. |
 | B3 consensus | reserved / unspecified | New accepted specification required. |
 | B4 AI supervision | reserved / unspecified | New accepted specification required. |
@@ -412,7 +430,11 @@ GOTRADER ARCHITECTURE INDEX FROZEN
 
 Accepted Architecture Indexed
 
-A3.2 Operational Acceptance Blocked
+A3.2 Accepted With Limitations
+
+Runtime Frozen
+
+Baseline Review Accepted
 
 B1 Runtime Implementation Not Authorized
 ```
