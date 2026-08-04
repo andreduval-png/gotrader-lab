@@ -1,4 +1,4 @@
-import { canonicalHash } from "../../v2/serialization/canonicalSerialization";
+import { canonicalHash } from "../../canonical/canonicalValueSerialization";
 import type {
   CanonicalResearchProjection,
   CanonicalResearchResultArtifact,

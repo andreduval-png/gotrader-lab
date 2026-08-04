@@ -1,7 +1,7 @@
 import {
   canonicalHash,
   canonicalSerialize
-} from "../../v2/serialization/canonicalSerialization";
+} from "../../canonical/canonicalValueSerialization";
 import {
   CANONICAL_RESEARCH_AUTHORITY_NONE,
   CANONICAL_RESEARCH_CAPABILITIES_DISABLED,

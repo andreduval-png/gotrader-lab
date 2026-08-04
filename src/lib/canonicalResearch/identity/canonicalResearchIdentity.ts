@@ -1,7 +1,7 @@
 import {
   canonicalHash,
   V2_CANONICAL_HASH_VERSION
-} from "../../v2/serialization/canonicalSerialization";
+} from "../../canonical/canonicalValueSerialization";
 import {
   CANONICAL_RESEARCH_JOB_SCHEMA_VERSION,
   type CanonicalResearchDuplicateResult,
