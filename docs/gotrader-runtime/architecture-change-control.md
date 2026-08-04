@@ -283,7 +283,9 @@ Baseline Review Accepted
 
 B1.0 Contracts And Identity Accepted
 
-B1.1 Runtime Implementation Not Authorized
+B1.1 Local Engine And Repository Accepted
+
+B1.2 Live Canary Not Authorized
 ```
 
 Change record `B1.0-AUTHORIZATION-2026-08-03` accepts only the B1.0 contracts,
@@ -291,6 +293,11 @@ authority, validation, identity, lineage identity, and fixture scope at commit
 `25b2c1acab0bbf76e9d65860995b51d12431b1d4`. Its canonical record hash is
 `sha256:3e8b37fd2f574dd8929ca1815226ecc7c834a40a4bd6d865dd452ea2fe0fbf10`.
 
-The next B1 gate is separate B1.1 authorization. B1.0 acceptance does not grant
-runtime, production, evidence, readiness, broker, execution, or calibration
-authority and does not adopt any existing B1.1/B1.2 preparation artifacts.
+Change record `B1.1-AUTHORIZATION-2026-08-03` accepts only the local
+deterministic engine and compact repository scope at commit
+`92da83b7b550eac31d3114acffc4e8748d880cfe`. Its canonical record hash is
+`sha256:2a752f183bf8abd3a46245f219512b62d478b161490e9eca83a6183d19acdaf8`.
+
+The next B1 gate is separate B1.2 authorization. B1.1 acceptance grants no live
+runtime, scheduler, production, evidence, readiness, broker, execution, or
+calibration authority and does not adopt any B1.2 preparation artifacts.

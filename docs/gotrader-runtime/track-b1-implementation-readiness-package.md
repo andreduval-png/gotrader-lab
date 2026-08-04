@@ -1,6 +1,6 @@
 # GoTrader Track B1 - Implementation Readiness Package
 
-Status: B1.0 accepted; B1.1 implementation not authorized
+Status: B1.0 and B1.1 accepted; B1.2 implementation not authorized
 
 Planning branch:
 `codex/gotrader-infrastructure-track-b1-planning`
@@ -18,8 +18,12 @@ B1.0 accepted branch and record:
 `codex/gotrader-b1-0-authorized` at
 `25b2c1acab0bbf76e9d65860995b51d12431b1d4`. The accepted implementation was
 integrated through a bounded commit sequence from the frozen baseline. The
-larger preparation branch was not merged because it also contains B1.1/B1.2
-work that remains unauthorized.
+larger preparation branch was not merged because it also contains later work.
+
+B1.1 accepted branch and record:
+`codex/gotrader-b1-1-authorized` at
+`92da83b7b550eac31d3114acffc4e8748d880cfe`. Its exact implementation head is
+`43beff495af6a470979e4f5f7956433f26407f04` and B1.2 remains unauthorized.
 
 ## 1. Purpose
 
@@ -27,17 +31,18 @@ This package converts the accepted B1 architecture into an implementation
 sequence that can be reviewed, authorized, tested, and rolled back one
 milestone at a time.
 
-It authorizes B1.0 only. The completed and current gates are:
+It records authorization through B1.1 only. The completed and current gates are:
 
 ```text
 A3.2 final operational acceptance
   -> Runtime Freeze
   -> Baseline Review
   -> B1.0 acceptance
-  -> explicit B1.1 authorization (current)
+  -> B1.1 acceptance
+  -> explicit B1.2 authorization (current)
 ```
 
-B1.1 work remains limited to authorization review and non-runtime verification
+B1.2 work remains limited to authorization review and non-runtime verification
 until its separate gate passes.
 
 ## 2. Sources Of Truth
@@ -106,8 +111,8 @@ by immutable identity and reads them only inside deterministic stage execution.
 | Runtime Freeze | Exact accepted commit, configuration allowlist, service registry, ports, contracts, fixture hashes, reports, and safety results are recorded. | accepted | Preserve immutable hashes. |
 | Baseline Review | Frozen runtime matches A3.2 evidence; Phase 2A/3 parity and GBrain advisory boundaries remain intact. | accepted | Use change control for drift. |
 | B1.0 authorization | Named base commit, isolated worktree, approved scope, test plan, rollback plan, and reviewer approval. | accepted | Preserve the exact 20-file scope and zero production consumers. |
-| B1.1 authorization | B1.0 contracts, identity, fixture parity, and negative safety tests pass. | pending decision | No repository or job engine adoption. |
-| B1.2 authorization | B1.1 recovery, idempotency, conflict, cancellation, stale-lease, and crash tests pass. | blocked by B1.1 | No live scheduler registration. |
+| B1.1 authorization | B1.0 contracts, identity, fixture parity, and negative safety tests pass. | accepted | Preserve the exact 10-file implementation scope and zero production consumers. |
+| B1.2 authorization | B1.1 recovery, idempotency, conflict, cancellation, stale-lease, and crash tests pass. | pending decision | No live scheduler registration. |
 | B1.3 authorization | B1.2 shadow canary accepted with clean identity and integrity deltas. | blocked by B1.2 | No strategy adapter job. |
 | B1.4 authorization | B1.3 parity accepted and historical time basis/DST authority independently verified. | blocked | No historical jobs. |
 | B1.5 authorization | B1.4 results accepted and compatibility projection contract reviewed. | blocked | Legacy views remain authoritative. |
@@ -395,32 +400,28 @@ None of these decisions may weaken the universal authority boundary.
 
 ## 12. Current Readiness Decision
 
-The B1.0 implementation, signed authorization record, and fixture oracle are
-coherent. The accepted fixture suite passes with:
+B1.0 contracts and identity and B1.1 local engine and repository are accepted.
+The B1.1 verifier confirms a valid canonical decision hash, exact B1.0-to-B1.1
+diff parity for all 10 allowlisted files, zero production consumers, zero B1.2
+files, and authority `none / none / none`.
 
-- two accepted shadow requests;
-- seven identity-drift cases;
-- one idempotent duplicate;
-- one payload conflict;
-- two sealing blockers;
-- ten forbidden-field cases;
-- runtime, scheduler, evidence, readiness, and production integration disabled;
-- authority `none / none / none`.
+Focused B1.1 tests prove deterministic seven-stage completion, duplicate
+coalescing, conflict and tamper quarantine, cancellation and stale-lease seal
+blocking, crash recovery, checkpoint and projection rebuild, bounded retention,
+path isolation, atomic-write retry, and raw-data exclusion. Core, strategy,
+source-integrity, provenance, safety, MT5 read-only safety, and production-build
+validation pass.
 
-The contracts-and-identity milestone is accepted. The local engine and
-repository milestone remains blocked pending separate B1.1 authorization.
-
-The B1.0 authorization verifier confirms a valid canonical decision hash, exact
-frozen-base diff parity for all 20 allowlisted files, zero production consumers,
-and authority `none / none / none`. Core, strategy, source-integrity,
-provenance, safety, MT5 read-only safety, and production-build validation pass.
+B1.2 remains a separate live canary milestone. Nothing in B1.1 authorizes live
+event consumption, scheduler registration, runtime adoption, evidence,
+readiness, Paper Demo, broker, production, or execution capabilities.
 
 ```text
-B1.0 AUTHORIZED AND ACCEPTED
+B1.0 AND B1.1 AUTHORIZED AND ACCEPTED
 
-B1.0 PRODUCTION CONSUMERS: 0
+B1.1 PRODUCTION CONSUMERS: 0
 
-B1.1 AUTHORIZATION REQUIRED
+B1.2 AUTHORIZATION REQUIRED
 
-B1.1 IMPLEMENTATION NOT YET AUTHORIZED
+B1.2 IMPLEMENTATION NOT YET AUTHORIZED
 ```

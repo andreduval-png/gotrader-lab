@@ -21,14 +21,17 @@ RUNTIME FROZEN
 BASELINE ACCEPTED
 
 B1.0 CONTRACTS AND IDENTITY ACCEPTED
+
+B1.1 LOCAL ENGINE AND REPOSITORY ACCEPTED
 ```
 
 The exact runtime baseline is frozen at
 `e605c10ed6681512da89fa2a4b29791b03a67168`. The preserved observer artifact
 remains `observation_incomplete`; one distributed break-transition sample is
 accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. B1.0 is accepted at
-`25b2c1acab0bbf76e9d65860995b51d12431b1d4`. The next gate is explicit
-authorization of B1.1; no later milestone is authorized by B1.0 acceptance.
+`25b2c1acab0bbf76e9d65860995b51d12431b1d4`, and B1.1 is accepted at
+`92da83b7b550eac31d3114acffc4e8748d880cfe`. The next gate is explicit
+authorization of B1.2; no later milestone is authorized by B1.1 acceptance.
 
 ## 2. Milestone Namespace Rules
 
@@ -59,8 +62,9 @@ flowchart LR
   RF["Runtime Freeze<br/>complete"]
   BR["Baseline Review<br/>accepted"]
   B10["B1.0<br/>accepted"]
+  B11["B1.1<br/>accepted"]
   P0 --> P1 --> P2 --> P3
-  A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10
+  A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10 --> B11
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -78,8 +82,8 @@ grant production, evidence, readiness, broker, or execution authority.
 | Runtime Freeze | A3.2 accepted | freeze manifest and baseline record | complete | accepted |
 | Baseline Review | Runtime Freeze | baseline review and change control | complete | accepted |
 | B1.0 | Baseline Review | B1 plan, fixtures, pipeline, authority matrix, authorization record | complete | accepted |
-| B1.1 | B1.0 | B1 local engine/repository design | partial in isolation | awaiting explicit authorization |
-| B1.2 | B1.1 | B1 live shadow context-lineage canary | preparation only | blocked pending prior milestone adoption |
+| B1.1 | B1.0 | B1 local engine/repository design and authorization record | complete | accepted |
+| B1.2 | B1.1 | B1 live shadow context-lineage canary | preparation only | awaiting explicit authorization |
 | B1.3 | B1.2 | IFVG v3 canonical research adapter | not_started | blocked |
 | B1.4 | B1.3, historical time authority | historical job design | not_started | blocked |
 | B1.5 | B1.4 | compatibility projection design | not_started | blocked |
@@ -129,11 +133,18 @@ identity, lineage identity contracts, and accepted fixture oracle are frozen in
 the isolated B1.0 branch. The signed record proves an exact 20-file implementation
 diff, zero production consumers, and authority `none / none / none`.
 
-### 5.5 B1.1 explicit authorization - next
+### 5.5 B1.1 local engine and repository - complete
 
-The next decision may authorize only the local deterministic engine and compact
-repository milestone. Existing B1.1 and B1.2 preparation commits remain isolated
-and unadopted until their named gates pass.
+The local deterministic seven-stage engine and compact bounded repository are
+accepted in the isolated B1.1 branch. The signed record proves an exact 10-file
+implementation diff, recovery and lease safety, zero production consumers, and
+authority `none / none / none`.
+
+### 5.6 B1.2 explicit authorization - next
+
+The next decision may authorize only the live read-only context-lineage canary.
+Existing B1.2 preparation remains isolated and unadopted until that named gate
+passes.
 
 ## 6. B1 Implementation Sequence
 
@@ -183,16 +194,16 @@ Native deterministic evidence remains authoritative.
 - documentation and frozen-hash verification;
 - fixture validation;
 - non-runtime architecture review;
-- explicit B1.1 authorization review;
-- non-runtime verification of isolated B1.1 preparation artifacts;
+- B1.1 acceptance verification;
+- explicit B1.2 authorization review;
+- non-runtime verification of isolated B1.2 preparation artifacts;
 - optional corrected-observer follow-up monitoring that does not alter the
   frozen evidence.
 
 ### Blocked now
 
-- B1.1 engine/repository runtime adoption;
-- B1 scheduler services;
-- lineage runtime persistence;
+- B1.2 live event adapter adoption;
+- B1 scheduler services and lineage runtime persistence;
 - new always-on profiles;
 - GBrain production-baseline merge;
 - historical B1 jobs;
@@ -240,5 +251,7 @@ Baseline Review Accepted
 
 B1.0 Contracts And Identity Accepted
 
-B1.1 Runtime Implementation Not Authorized
+B1.1 Local Engine And Repository Accepted
+
+B1.2 Live Canary Not Authorized
 ```
