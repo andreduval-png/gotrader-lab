@@ -8,10 +8,12 @@ import {
   RUNTIME_FREEZE_REQUIRED_B1_COMMITS,
   RUNTIME_FREEZE_REQUIRED_PREPARATION_FILES,
   RUNTIME_FREEZE_REQUIRED_RUNTIME_FILES,
+  a3AcceptedWithLimitationsEvidenceIsValid,
   buildRuntimeFreezePreparationManifest,
   classifyA3OperationalReport,
   runtimeFreezeCanonicalHash,
-  summarizeA3ObserverEvidence
+  summarizeA3ObserverEvidence,
+  summarizeA3OperatorDecision
 } from "./support/gotrader-runtime-freeze-manifest.mjs";
 
 const authority = RUNTIME_FREEZE_AUTHORITY_NONE;
@@ -55,6 +57,97 @@ TRACK A3.2 ACCEPTED
 
 Final observer status: \`operationally_accepted\`.
 `;
+
+const limitedReport = `
+# GoTrader Infrastructure Track A3.2 Operational Report
+
+TRACK A3.2 ACCEPTED WITH LIMITATIONS
+
+The preserved observer status remains \`observation_incomplete\`.
+
+blocked -> accepted_with_limitations
+`;
+
+const limitedEvidencePayload = () => {
+  const payload = acceptedEvidencePayload();
+  payload.status = "observation_incomplete";
+  payload.marketHourSpan = 3.917;
+  payload.activeMarketSamples = 2010;
+  payload.freshActiveMarketProofSamples = 2010;
+  payload.proofUptimePercentage = 100;
+  payload.marketClosedPauseSamples = 716;
+  payload.unsafeMarketClosedSamples = 1;
+  payload.freshProofAfterMarketClose = true;
+  payload.verificationFailureCount = 0;
+  payload.transportFailures = 0;
+  payload.observerTransportWarnings = 0;
+  payload.hydrationNotReadySamples = 0;
+  payload.managedRestartDelta = 0;
+  payload.duplicateCloseCount = 0;
+  payload.duplicateContextCount = 0;
+  payload.payloadConflictCount = 0;
+  payload.ledgerGapCount = 0;
+  payload.blockedInsufficientContextCount = 0;
+  payload.authorityViolationSamples = 0;
+  payload.historicalVerificationViolationSamples = 0;
+  payload.maximumQueueDepth = 0;
+  payload.blockers = [];
+  payload.acceptanceChecks.marketBreakHandledSafely = false;
+  const { integrityHash: ignoredIntegrity, ...core } = payload;
+  return { ...core, integrityHash: runtimeFreezeCanonicalHash(core) };
+};
+
+const limitedDecisionPayload = (evidence) => {
+  const core = {
+    version: "gotrader-a3-2-operator-acceptance-decision-v1",
+    changeId: "A3.2-ACCEPTANCE-2026-08-03",
+    decision: "accepted_with_limitations",
+    statusTransition: { from: "blocked", to: "accepted_with_limitations" },
+    runtimeObservedCommit: "0".repeat(40),
+    acceptedRuntimeCandidateCommit: runtimeHead,
+    observerEvidence: {
+      observationId: evidence.observationId,
+      integrityHash: evidence.integrityHash,
+      status: evidence.status,
+      onlyFailedAcceptanceCheck: "marketBreakHandledSafely",
+      unsafeMarketClosedSamples: 1
+    },
+    acceptanceBasis: {
+      elapsedSeconds: evidence.elapsedSeconds,
+      verifiedM5CloseCount: evidence.verifiedM5CloseCount,
+      completedContextCycleCount: evidence.completedContextCycleCount,
+      proofUptimePercentage: evidence.proofUptimePercentage,
+      marketClosedPauseSamples: evidence.marketClosedPauseSamples,
+      verificationFailureCount: 0,
+      transportFailures: 0,
+      hydrationNotReadySamples: 0,
+      managedRestartDelta: 0,
+      duplicateCloseCount: 0,
+      duplicateContextCount: 0,
+      payloadConflictCount: 0,
+      ledgerGapCount: 0,
+      finalBlockers: []
+    },
+    limitations: ["one bounded observer transition sample"],
+    operationalGate: {
+      runtimeFreezeAuthorized: true,
+      baselineReviewAuthorized: true,
+      b1RuntimeAuthorized: false,
+      productionAdoptionAllowed: false
+    },
+    authority,
+    capabilities: {
+      canCreateEvidence: false,
+      canApproveReadiness: false,
+      canApplyCalibration: false,
+      canCreateTradeIntent: false,
+      paperDemoEnabled: false,
+      brokerEnabled: false,
+      executionEnabled: false
+    }
+  };
+  return { ...core, integrityHash: runtimeFreezeCanonicalHash(core) };
+};
 
 const baseInput = () => ({
   generatedAt: "2026-08-03T23:00:00.000Z",
@@ -118,6 +211,10 @@ const baseInput = () => ({
 
 assert.equal(classifyA3OperationalReport(acceptedReport), "accepted");
 assert.equal(
+  classifyA3OperationalReport(limitedReport),
+  "accepted_with_limitations"
+);
+assert.equal(
   classifyA3OperationalReport("TRACK A3.2 BLOCKED - OPERATIONAL ACCEPTANCE INCOMPLETE"),
   "incomplete"
 );
@@ -136,6 +233,32 @@ assert.equal(ready.capabilities.writesTargetRepository, false);
 assert.equal(ready.capabilities.startsRuntimeServices, false);
 assert.equal(ready.capabilities.enablesExecution, false);
 assert.match(ready.manifestHash, /^sha256:[a-f0-9]{64}$/);
+
+const limitedEvidencePayloadValue = limitedEvidencePayload();
+const limitedEvidence = summarizeA3ObserverEvidence(limitedEvidencePayloadValue);
+assert.equal(a3AcceptedWithLimitationsEvidenceIsValid(limitedEvidence), true);
+const limitedDecision = {
+  ...summarizeA3OperatorDecision(
+    limitedDecisionPayload(limitedEvidencePayloadValue)
+  ),
+  acceptedRuntimeCandidateAncestorOfHead: true
+};
+assert.equal(limitedDecision.integrityValid, true);
+assert.equal(limitedDecision.boundaryValid, true);
+const limitedInput = baseInput();
+limitedInput.runtime.operationalReport = {
+  ...limitedInput.runtime.operationalReport,
+  byteLength: limitedReport.length,
+  status: classifyA3OperationalReport(limitedReport)
+};
+limitedInput.runtime.observerEvidence = limitedEvidence;
+limitedInput.runtime.operatorDecision = limitedDecision;
+const readyWithLimitations = buildRuntimeFreezePreparationManifest(limitedInput);
+assert.equal(readyWithLimitations.status, "ready_for_baseline_review");
+assert.equal(
+  readyWithLimitations.runtime.acceptanceMode,
+  "accepted_with_limitations"
+);
 
 const incomplete = baseInput();
 incomplete.runtime.operationalReport.status = "incomplete";
@@ -209,6 +332,37 @@ const { integrityHash: unsafeIgnored, ...unsafeCore } = unsafeEvidence;
 unsafeEvidence.integrityHash = runtimeFreezeCanonicalHash(unsafeCore);
 assert.equal(summarizeA3ObserverEvidence(unsafeEvidence).safetyBoundaryValid, false);
 
+const excessiveTransitionInput = structuredClone(limitedInput);
+const excessiveTransitionPayload = limitedEvidencePayload();
+excessiveTransitionPayload.unsafeMarketClosedSamples = 2;
+const { integrityHash: transitionIntegrity, ...transitionCore } =
+  excessiveTransitionPayload;
+excessiveTransitionPayload.integrityHash = runtimeFreezeCanonicalHash(transitionCore);
+excessiveTransitionInput.runtime.observerEvidence = summarizeA3ObserverEvidence(
+  excessiveTransitionPayload
+);
+assert.equal(
+  buildRuntimeFreezePreparationManifest(excessiveTransitionInput).status,
+  "blocked_baseline_mismatch"
+);
+
+const tamperedDecisionInput = structuredClone(limitedInput);
+tamperedDecisionInput.runtime.operatorDecision.integrityValid = false;
+assert.ok(
+  buildRuntimeFreezePreparationManifest(tamperedDecisionInput).blockers.includes(
+    "a3_2_operator_decision_integrity_invalid"
+  )
+);
+
+const unrelatedRuntimeInput = structuredClone(limitedInput);
+unrelatedRuntimeInput.runtime.operatorDecision.acceptedRuntimeCandidateAncestorOfHead =
+  false;
+assert.ok(
+  buildRuntimeFreezePreparationManifest(unrelatedRuntimeInput).blockers.includes(
+    "a3_2_operator_decision_runtime_lineage_invalid"
+  )
+);
+
 assert.deepEqual(RUNTIME_FREEZE_PREPARATION_BOUNDARY.authority, authority);
 assert.equal(RUNTIME_FREEZE_PREPARATION_BOUNDARY.canDeclareRuntimeFrozen, false);
 assert.equal(RUNTIME_FREEZE_PREPARATION_BOUNDARY.canAcceptBaseline, false);
@@ -227,6 +381,7 @@ assert.doesNotMatch(helperSource + collectorSource, /placeOrder|buyMarket|sellMa
 
 console.log("Runtime Freeze and Baseline Review preparation harness tests passed.");
 console.log(`- ready fixture: ${ready.status}`);
+console.log(`- accepted-with-limitations fixture: ${readyWithLimitations.status}`);
 console.log(`- current incomplete evidence behavior: ${pending.status}`);
 console.log("- target repository access is read-only; no service or ledger mutation exists");
 console.log("- runtimeFrozen=false; baselineAccepted=false; authority none/none/none");

@@ -13,7 +13,8 @@ import {
   buildRuntimeFreezePreparationManifest,
   classifyA3OperationalReport,
   runtimeFreezeContentHash,
-  summarizeA3ObserverEvidence
+  summarizeA3ObserverEvidence,
+  summarizeA3OperatorDecision
 } from "./support/gotrader-runtime-freeze-manifest.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,7 @@ const runtimeRepoRoot = path.resolve(
 );
 const expectedRuntimeHead = argument("--expected-runtime-head");
 const explicitEvidencePath = argument("--evidence");
+const explicitDecisionPath = argument("--decision");
 
 const git = async (repoRoot, gitArgs, { allowFailure = false } = {}) => {
   try {
@@ -227,6 +229,41 @@ if (evidencePath) {
   };
 }
 
+const operatorDecisionPath = explicitDecisionPath
+  ? path.resolve(explicitDecisionPath)
+  : path.join(
+      runtimeRepoRoot,
+      "docs",
+      "gotrader-runtime",
+      "track-a3-2-operator-acceptance-decision.json"
+    );
+let operatorDecision = summarizeA3OperatorDecision();
+let operatorDecisionFile;
+try {
+  const decisionBytes = await fs.readFile(operatorDecisionPath);
+  const decisionPayload = JSON.parse(decisionBytes.toString("utf8"));
+  const summary = summarizeA3OperatorDecision(decisionPayload);
+  const candidateCommit = summary.acceptedRuntimeCandidateCommit;
+  const candidateAncestor = candidateCommit
+    ? (await git(
+        runtimeRepoRoot,
+        ["merge-base", "--is-ancestor", candidateCommit, runtimeIdentity.headCommit],
+        { allowFailure: true }
+      )) !== undefined
+    : false;
+  operatorDecision = {
+    ...summary,
+    acceptedRuntimeCandidateAncestorOfHead: candidateAncestor
+  };
+  operatorDecisionFile = {
+    path: relativePortable(runtimeRepoRoot, operatorDecisionPath),
+    contentHash: runtimeFreezeContentHash(decisionBytes),
+    byteLength: decisionBytes.byteLength
+  };
+} catch {
+  operatorDecision = summarizeA3OperatorDecision();
+}
+
 const manifest = buildRuntimeFreezePreparationManifest({
   generatedAt: new Date().toISOString(),
   expectedRuntimeHead,
@@ -243,6 +280,10 @@ const manifest = buildRuntimeFreezePreparationManifest({
     observerEvidence: {
       ...observerEvidence,
       file: observerEvidenceFile
+    },
+    operatorDecision: {
+      ...operatorDecision,
+      file: operatorDecisionFile
     }
   },
   preparation: preparationIdentity

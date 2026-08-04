@@ -38,7 +38,9 @@ export const RUNTIME_FREEZE_REQUIRED_RUNTIME_FILES = Object.freeze([
   "scripts/gotrader-observe-a3-acceptance.mjs",
   "scripts/mt5-readonly-upstream.py",
   "scripts/start-mt5-readonly-bridge.mjs",
-  "docs/gotrader-runtime/track-a3-2-operational-report.md"
+  "docs/gotrader-runtime/track-a3-2-operational-report.md",
+  "docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.json",
+  "docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.md"
 ]);
 
 export const RUNTIME_FREEZE_REQUIRED_PREPARATION_FILES = Object.freeze([
@@ -102,17 +104,22 @@ export function classifyA3OperationalReport(text) {
   const explicitlyBlocked = /TRACK A3\.2 BLOCKED|OPERATIONAL ACCEPTANCE INCOMPLETE/i.test(
     content
   );
+  const acceptedWithLimitations =
+    /TRACK A3\.2 ACCEPTED WITH LIMITATIONS/i.test(content) &&
+    /blocked\s*->\s*accepted_with_limitations/i.test(content);
   const acceptedStatus = /`?operationally_accepted`?/i.test(content);
   const acceptedHeading = /TRACK A3\.2 (?:OPERATIONALLY )?ACCEPTED|A3\.2 OPERATIONAL ACCEPTANCE PASSED/i.test(
     content
   );
   return explicitlyBlocked
     ? "incomplete"
-    : acceptedStatus && acceptedHeading
-      ? "accepted"
-      : /observation_incomplete/i.test(content)
-        ? "incomplete"
-        : "unknown";
+    : acceptedWithLimitations
+      ? "accepted_with_limitations"
+      : acceptedStatus && acceptedHeading
+        ? "accepted"
+        : /observation_incomplete/i.test(content)
+          ? "incomplete"
+          : "unknown";
 }
 
 export function summarizeA3ObserverEvidence(payload) {
@@ -136,6 +143,9 @@ export function summarizeA3ObserverEvidence(payload) {
     core.rawCandlesPersisted === false &&
     core.rawContextFactsPersisted === false &&
     core.productionAdoptionAllowed === false;
+  const failedAcceptanceChecks = Object.entries(acceptanceChecks ?? {})
+    .filter(([, value]) => value !== true)
+    .map(([key]) => key);
   return Object.freeze({
     present: true,
     integrityValid:
@@ -147,11 +157,160 @@ export function summarizeA3ObserverEvidence(payload) {
     elapsedSeconds: Number(core.elapsedSeconds ?? 0),
     verifiedM5CloseCount: Number(core.verifiedM5CloseCount ?? 0),
     completedContextCycleCount: Number(core.completedContextCycleCount ?? 0),
+    marketHourSpan: Number(core.marketHourSpan ?? 0),
+    activeMarketSamples: Number(core.activeMarketSamples ?? 0),
+    freshActiveMarketProofSamples: Number(core.freshActiveMarketProofSamples ?? 0),
+    proofUptimePercentage: Number(core.proofUptimePercentage ?? 0),
+    marketClosedPauseSamples: Number(core.marketClosedPauseSamples ?? 0),
+    unsafeMarketClosedSamples: Number(core.unsafeMarketClosedSamples ?? 0),
+    freshProofAfterMarketClose: core.freshProofAfterMarketClose === true,
+    verificationFailureCount: Number(core.verificationFailureCount ?? 0),
+    transportFailures: Number(core.transportFailures ?? 0),
+    observerTransportWarnings: Number(core.observerTransportWarnings ?? 0),
+    hydrationNotReadySamples: Number(core.hydrationNotReadySamples ?? 0),
+    managedRestartDelta: Number(core.managedRestartDelta ?? 0),
+    duplicateCloseCount: Number(core.duplicateCloseCount ?? 0),
+    duplicateContextCount: Number(core.duplicateContextCount ?? 0),
+    payloadConflictCount: Number(core.payloadConflictCount ?? 0),
+    ledgerGapCount: Number(core.ledgerGapCount ?? 0),
+    blockedInsufficientContextCount: Number(core.blockedInsufficientContextCount ?? 0),
+    authorityViolationSamples: Number(core.authorityViolationSamples ?? 0),
+    historicalVerificationViolationSamples: Number(
+      core.historicalVerificationViolationSamples ?? 0
+    ),
+    maximumQueueDepth: Number(core.maximumQueueDepth ?? 0),
+    blockers: [...(core.blockers ?? [])],
+    integrityHash,
+    acceptanceChecks: { ...(acceptanceChecks ?? {}) },
+    failedAcceptanceChecks,
     acceptanceChecksAllPassed,
     safetyBoundaryValid,
     authority: RUNTIME_FREEZE_AUTHORITY_NONE
   });
 }
+
+export function summarizeA3OperatorDecision(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return Object.freeze({
+      present: false,
+      integrityValid: false,
+      decision: "missing",
+      boundaryValid: false
+    });
+  }
+  const { integrityHash, ...core } = payload;
+  const authorityValid = authorityIsNone(core.authority);
+  const gates = core.operationalGate ?? {};
+  const capabilities = core.capabilities ?? {};
+  const gateBoundaryValid =
+    gates.runtimeFreezeAuthorized === true &&
+    gates.baselineReviewAuthorized === true &&
+    gates.b1RuntimeAuthorized === false &&
+    gates.productionAdoptionAllowed === false;
+  const capabilityBoundaryValid = [
+    "canCreateEvidence",
+    "canApproveReadiness",
+    "canApplyCalibration",
+    "canCreateTradeIntent",
+    "paperDemoEnabled",
+    "brokerEnabled",
+    "executionEnabled"
+  ].every((key) => capabilities[key] === false);
+  return Object.freeze({
+    present: true,
+    integrityValid:
+      typeof integrityHash === "string" &&
+      integrityHash === runtimeFreezeCanonicalHash(core),
+    integrityHash,
+    version: core.version,
+    changeId: core.changeId,
+    decision: core.decision,
+    statusTransition: { ...(core.statusTransition ?? {}) },
+    runtimeObservedCommit: core.runtimeObservedCommit,
+    acceptedRuntimeCandidateCommit: core.acceptedRuntimeCandidateCommit,
+    observerEvidence: { ...(core.observerEvidence ?? {}) },
+    acceptanceBasis: { ...(core.acceptanceBasis ?? {}) },
+    limitations: [...(core.limitations ?? [])],
+    authorityValid,
+    gateBoundaryValid,
+    capabilityBoundaryValid,
+    boundaryValid:
+      core.version === "gotrader-a3-2-operator-acceptance-decision-v1" &&
+      core.decision === "accepted_with_limitations" &&
+      core.statusTransition?.from === "blocked" &&
+      core.statusTransition?.to === "accepted_with_limitations" &&
+      authorityValid &&
+      gateBoundaryValid &&
+      capabilityBoundaryValid
+  });
+}
+
+export function a3AcceptedWithLimitationsEvidenceIsValid(evidence) {
+  const zeroFields = [
+    "verificationFailureCount",
+    "transportFailures",
+    "observerTransportWarnings",
+    "hydrationNotReadySamples",
+    "managedRestartDelta",
+    "duplicateCloseCount",
+    "duplicateContextCount",
+    "payloadConflictCount",
+    "ledgerGapCount",
+    "blockedInsufficientContextCount",
+    "authorityViolationSamples",
+    "historicalVerificationViolationSamples",
+    "maximumQueueDepth"
+  ];
+  return (
+    evidence?.present === true &&
+    evidence.integrityValid === true &&
+    evidence.status === "observation_incomplete" &&
+    evidence.safetyBoundaryValid === true &&
+    evidence.elapsedSeconds >= 14_400 &&
+    evidence.marketHourSpan > 0 &&
+    evidence.verifiedM5CloseCount >= 3 &&
+    evidence.completedContextCycleCount >= 3 &&
+    evidence.activeMarketSamples > 0 &&
+    evidence.freshActiveMarketProofSamples === evidence.activeMarketSamples &&
+    evidence.proofUptimePercentage === 100 &&
+    evidence.marketClosedPauseSamples > 0 &&
+    evidence.unsafeMarketClosedSamples === 1 &&
+    evidence.freshProofAfterMarketClose === true &&
+    evidence.failedAcceptanceChecks?.length === 1 &&
+    evidence.failedAcceptanceChecks[0] === "marketBreakHandledSafely" &&
+    zeroFields.every((field) => evidence[field] === 0) &&
+    evidence.blockers?.length === 0
+  );
+}
+
+const operatorDecisionMatchesEvidence = (decision, evidence) => {
+  const declared = decision?.observerEvidence ?? {};
+  const basis = decision?.acceptanceBasis ?? {};
+  return (
+    decision?.boundaryValid === true &&
+    decision.acceptedRuntimeCandidateAncestorOfHead === true &&
+    declared.observationId === evidence?.observationId &&
+    declared.integrityHash === evidence?.integrityHash &&
+    declared.status === evidence?.status &&
+    declared.onlyFailedAcceptanceCheck === "marketBreakHandledSafely" &&
+    declared.unsafeMarketClosedSamples === evidence?.unsafeMarketClosedSamples &&
+    basis.elapsedSeconds === evidence?.elapsedSeconds &&
+    basis.verifiedM5CloseCount === evidence?.verifiedM5CloseCount &&
+    basis.completedContextCycleCount === evidence?.completedContextCycleCount &&
+    basis.proofUptimePercentage === evidence?.proofUptimePercentage &&
+    basis.marketClosedPauseSamples === evidence?.marketClosedPauseSamples &&
+    basis.verificationFailureCount === evidence?.verificationFailureCount &&
+    basis.transportFailures === evidence?.transportFailures &&
+    basis.hydrationNotReadySamples === evidence?.hydrationNotReadySamples &&
+    basis.managedRestartDelta === evidence?.managedRestartDelta &&
+    basis.duplicateCloseCount === evidence?.duplicateCloseCount &&
+    basis.duplicateContextCount === evidence?.duplicateContextCount &&
+    basis.payloadConflictCount === evidence?.payloadConflictCount &&
+    basis.ledgerGapCount === evidence?.ledgerGapCount &&
+    Array.isArray(basis.finalBlockers) &&
+    basis.finalBlockers.length === 0
+  );
+};
 
 const hashRecordIsValid = (record) =>
   typeof record?.path === "string" &&
@@ -213,6 +372,8 @@ export function buildRuntimeFreezePreparationManifest(input) {
   const preparation = input?.preparation ?? {};
   const report = runtime.operationalReport ?? {};
   const evidence = runtime.observerEvidence ?? summarizeA3ObserverEvidence();
+  const operatorDecision =
+    runtime.operatorDecision ?? summarizeA3OperatorDecision();
   const blockers = [];
 
   if (runtime.clean !== true) blockers.push("runtime_repository_not_clean");
@@ -234,18 +395,51 @@ export function buildRuntimeFreezePreparationManifest(input) {
     if (!hashRecordIsValid(record)) blockers.push(`runtime_file_hash_missing:${requiredPath}`);
   }
   if (!hashRecordIsValid(report)) blockers.push("a3_2_operational_report_hash_missing");
-  if (report.status !== "accepted") blockers.push("a3_2_operational_report_not_accepted");
+  const strictAcceptance =
+    report.status === "accepted" &&
+    evidence.status === "operationally_accepted" &&
+    evidence.acceptanceChecksAllPassed === true &&
+    evidence.integrityValid === true &&
+    evidence.safetyBoundaryValid === true;
+  const acceptedWithLimitations =
+    report.status === "accepted_with_limitations" &&
+    operatorDecision.integrityValid === true &&
+    operatorDecisionMatchesEvidence(operatorDecision, evidence) &&
+    a3AcceptedWithLimitationsEvidenceIsValid(evidence);
+  if (!strictAcceptance && !acceptedWithLimitations) {
+    blockers.push("a3_2_operational_report_not_accepted");
+  }
   if (!evidence.present) blockers.push("a3_2_observer_evidence_missing");
   else {
     if (!evidence.integrityValid) blockers.push("a3_2_observer_evidence_integrity_invalid");
-    if (evidence.status !== "operationally_accepted") {
+    if (!strictAcceptance && !acceptedWithLimitations) {
       blockers.push("a3_2_observer_evidence_not_accepted");
     }
-    if (!evidence.acceptanceChecksAllPassed) {
+    if (!strictAcceptance && !acceptedWithLimitations) {
       blockers.push("a3_2_observer_acceptance_checks_incomplete");
     }
     if (!evidence.safetyBoundaryValid) {
       blockers.push("a3_2_observer_safety_boundary_invalid");
+    }
+  }
+  if (report.status === "accepted_with_limitations") {
+    if (!operatorDecision.present) blockers.push("a3_2_operator_decision_missing");
+    else {
+      if (!operatorDecision.integrityValid) {
+        blockers.push("a3_2_operator_decision_integrity_invalid");
+      }
+      if (!operatorDecision.boundaryValid) {
+        blockers.push("a3_2_operator_decision_boundary_invalid");
+      }
+      if (operatorDecision.acceptedRuntimeCandidateAncestorOfHead !== true) {
+        blockers.push("a3_2_operator_decision_runtime_lineage_invalid");
+      }
+      if (!operatorDecisionMatchesEvidence(operatorDecision, evidence)) {
+        blockers.push("a3_2_operator_decision_evidence_mismatch");
+      }
+      if (!a3AcceptedWithLimitationsEvidenceIsValid(evidence)) {
+        blockers.push("a3_2_limited_acceptance_evidence_invalid");
+      }
     }
   }
   blockers.push(...b1CompatibilityBlockers(preparation));
@@ -289,7 +483,13 @@ export function buildRuntimeFreezePreparationManifest(input) {
       profile: runtime.profile,
       fileHashes,
       operationalReport: report,
-      observerEvidence: evidence
+      observerEvidence: evidence,
+      operatorDecision,
+      acceptanceMode: strictAcceptance
+        ? "strict"
+        : acceptedWithLimitations
+          ? "accepted_with_limitations"
+          : "not_accepted"
     },
     preparation: {
       repositoryRoot: preparation.repositoryRoot,

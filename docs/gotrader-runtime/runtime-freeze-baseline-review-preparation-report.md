@@ -5,7 +5,7 @@
 ```text
 PREPARATION COMPLETE
 
-FORMAL A3.2 ACCEPTANCE STILL REQUIRED
+STRICT OR GOVERNED LIMITED A3.2 ACCEPTANCE REQUIRED
 
 RUNTIME NOT FROZEN
 
@@ -15,8 +15,10 @@ BASELINE NOT ACCEPTED
 ## Purpose
 
 This change prepares the read-only gate between A3.2 operational acceptance and
-the formal Runtime Freeze / Baseline Review. It does not reinterpret the prior
-A3.2 observation as accepted and does not modify the A3.2 runtime candidate.
+the formal Runtime Freeze / Baseline Review. It does not modify the A3.2 runtime
+candidate or any observer artifact. It supports either strict observer
+acceptance or a separately integrity-hashed `accepted_with_limitations`
+operator decision governed by architecture change control.
 
 The preparation harness reads two repositories:
 
@@ -40,6 +42,8 @@ The manifest records:
 - the A3.2 operational report classification and content hash;
 - the observer evidence file hash, canonical integrity result, acceptance-check
   result, and compact counts;
+- the operator acceptance decision hash, runtime lineage, evidence binding,
+  authority boundary, and permitted next gates when limited acceptance is used;
 - the B1 preparation commit chain through `d642887`;
 - authority `none / none / none`.
 
@@ -59,8 +63,14 @@ The evaluator can return only:
   only the formal A3.2 report/evidence gate remains;
 - `blocked_baseline_mismatch` when repository identity, hashes, profile,
   authority, safety flags, integrity, or B1 compatibility are invalid; or
-- `ready_for_baseline_review` after the committed A3.2 report and
-  integrity-valid observer evidence are both operationally accepted.
+- `ready_for_baseline_review` after either strict A3.2 acceptance or a valid,
+  narrowly bounded `accepted_with_limitations` decision.
+
+Limited acceptance is valid only when the observer artifact is integrity-valid,
+exactly `marketBreakHandledSafely` is false, exactly one transition sample is
+unsafe, all other checks pass, proof uptime is 100%, fresh proof resumes, every
+safety and data-integrity counter is zero, the decision matches the evidence,
+and the accepted candidate is an ancestor of the reviewed runtime HEAD.
 
 Even `ready_for_baseline_review` preserves:
 
@@ -73,15 +83,11 @@ An explicit review is still required to freeze and accept the baseline.
 
 ## Current A3.2 Interpretation
 
-The preserved July 30 observation is operationally strong evidence: it produced
-verified closes and complete contexts with fail-closed behavior and no data
-integrity or authority failures. It is sufficient to continue isolated
-preparation work.
-
-It is not the formal corrected-observer acceptance artifact. The committed A3.2
-report still says `observation_incomplete`; therefore the honest manifest result
-remains `blocked_pending_a3_2_acceptance` until the corrected observation passes
-and the accepted report is committed.
+The 2026-08-03 observer artifact remains `observation_incomplete` and is never
+rewritten by this harness. The committed operator record may govern that result
+as `accepted_with_limitations` only through the narrow validation described
+above. Missing, tampered, unrelated, broadened, or authority-changing decisions
+fail the baseline audit.
 
 ## Safety Boundary
 
@@ -108,9 +114,8 @@ npm.cmd run test:runtime-freeze-baseline-review
 Inspect a runtime candidate without modifying it:
 
 ```powershell
-npm.cmd run audit:runtime-freeze-baseline-review -- --runtime-repo "C:\Users\andre\OneDrive\Documents\gotrader-runtime-track-a3" --expected-runtime-head 841cf965172b04d4dfd5dcfc797d12d907bd56b6
+npm.cmd run audit:runtime-freeze-baseline-review -- --runtime-repo "C:\Users\andre\OneDrive\Documents\gotrader-runtime-track-a3" --expected-runtime-head e605c10ed6681512da89fa2a4b29791b03a67168
 ```
 
-After the corrected A3.2 observer passes, rerun against the new committed HEAD
-and its final evidence artifact. A ready result authorizes baseline review only;
-it does not activate B1.2.
+A ready result authorizes baseline review only; it does not activate B1.2,
+production, Paper Demo, broker, execution, evidence, or readiness capabilities.
