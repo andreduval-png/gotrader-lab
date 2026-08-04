@@ -1,0 +1,93 @@
+{
+  "version": "gotrader-runtime-freeze-baseline-record-v1",
+  "changeId": "RUNTIME-FREEZE-2026-08-03",
+  "acceptedAt": "2026-08-04T00:45:19.529Z",
+  "status": "runtime_frozen_baseline_accepted",
+  "runtimeFrozen": true,
+  "baselineAccepted": true,
+  "runtime": {
+    "repositoryRoot": "C:/Users/andre/OneDrive/Documents/gotrader-runtime-track-a3",
+    "branch": "codex/gotrader-infrastructure-track-a3-2",
+    "repositoryHead": "e605c10ed6681512da89fa2a4b29791b03a67168",
+    "implementationCommit": "e91baa633ad52be67ab07d040562824e83dcb994",
+    "observedRuntimeCommit": "841cf965172b04d4dfd5dcfc797d12d907bd56b6",
+    "profileId": "always_on_shadow_context_operational",
+    "profileVersion": "track-a3-2-market-aware-hydrated-shadow-context-v1"
+  },
+  "preparation": {
+    "repositoryRoot": "C:/Users/andre/OneDrive/Documents/gotrader-runtime-track-b1-0",
+    "branch": "codex/gotrader-runtime-freeze-baseline",
+    "auditCommit": "908c3abf6573f2c5902f39c0a3689bc6ba85aa0c",
+    "requiredB1CommitOrderValid": true
+  },
+  "a3Acceptance": {
+    "mode": "accepted_with_limitations",
+    "changeId": "A3.2-ACCEPTANCE-2026-08-03",
+    "decisionIntegrityHash": "sha256:d9d558ba1a1b7f8a853afbd09922f4231c8f89f3cb8256b4c4fc610f55e71f4b",
+    "observerId": "a3_2_acceptance_1785784305179",
+    "observerStatus": "observation_incomplete",
+    "observerIntegrityHash": "sha256:9004fdac2e7190526c85b84923842be4dea6c3181690ac518d565e325a20bffc",
+    "onlyFailedAcceptanceCheck": "marketBreakHandledSafely",
+    "unsafeMarketClosedSamples": 1,
+    "allOtherAcceptanceChecksPassed": true,
+    "safetyBoundaryValid": true
+  },
+  "preparationManifest": {
+    "path": "docs/gotrader-runtime/runtime-freeze-preparation-manifest.json",
+    "generatedAt": "2026-08-04T00:44:33.982Z",
+    "status": "ready_for_baseline_review",
+    "manifestHash": "sha256:0816171508957702fad690406200da3e5486f5bb916ceafde125609ffc59d094",
+    "contentHash": "sha256:05458e5e1d3f3db56f286a07d9c22d5428eca28eef901b7e416b080f398e4080",
+    "blockerCount": 0,
+    "runtimeFileHashCount": 18
+  },
+  "acceptedEvidence": {
+    "elapsedSeconds": 14400,
+    "marketHourSpan": 3.917,
+    "proofUptimePercentage": 100,
+    "verifiedM5CloseCount": 35,
+    "completedContextCycleCount": 32,
+    "marketClosedPauseSamples": 716,
+    "freshProofAfterMarketClose": true,
+    "verificationFailureCount": 0,
+    "transportFailures": 0,
+    "hydrationNotReadySamples": 0,
+    "managedRestartDelta": 0,
+    "duplicateCloseCount": 0,
+    "duplicateContextCount": 0,
+    "payloadConflictCount": 0,
+    "ledgerGapCount": 0,
+    "authorityViolationSamples": 0
+  },
+  "authority": {
+    "executionAuthority": "none",
+    "brokerAuthority": "none",
+    "readinessOverrideAuthority": "none"
+  },
+  "capabilities": {
+    "productionAdoptionAllowed": false,
+    "canCreateEvidence": false,
+    "canApproveReadiness": false,
+    "canApplyCalibration": false,
+    "canCreateTradeIntent": false,
+    "paperDemoEnabled": false,
+    "brokerEnabled": false,
+    "executionEnabled": false
+  },
+  "limitations": [
+    "The source observer artifact remains observation_incomplete and is preserved unchanged.",
+    "One distributed market-break transition sample is accepted under the operator decision.",
+    "A corrected repeat observation remains recommended monitoring but does not block this freeze."
+  ],
+  "nextGate": {
+    "milestone": "B1.0",
+    "runtimeImplementationAuthorized": false,
+    "requiredAction": "Explicit B1 milestone authorization"
+  },
+  "rollback": {
+    "runtimeCommit": "841cf965172b04d4dfd5dcfc797d12d907bd56b6",
+    "preserveEvidence": true,
+    "authorityRemainsNone": true
+  },
+  "integrityHash": "sha256:85139444699e0a4b5e0c5e963180f45836f3b2f21d52d60369797874ce0ac2e4"
+}

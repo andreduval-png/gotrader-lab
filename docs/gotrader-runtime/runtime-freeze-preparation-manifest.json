@@ -1,0 +1,548 @@
+{
+  "manifestVersion": "gotrader-runtime-freeze-preparation-manifest-v1",
+  "generatedAt": "2026-08-04T00:44:33.982Z",
+  "status": "ready_for_baseline_review",
+  "runtimeFrozen": false,
+  "baselineAccepted": false,
+  "nextAction": "Conduct the explicit baseline review; this manifest does not freeze or accept the runtime.",
+  "blockers": [],
+  "runtime": {
+    "repositoryRoot": "C:/Users/andre/OneDrive/Documents/gotrader-runtime-track-a3",
+    "branch": "codex/gotrader-infrastructure-track-a3-2",
+    "headCommit": "e605c10ed6681512da89fa2a4b29791b03a67168",
+    "clean": true,
+    "profile": {
+      "profileId": "always_on_shadow_context_operational",
+      "profileVersion": "track-a3-2-market-aware-hydrated-shadow-context-v1",
+      "continuousFeedEnabled": true,
+      "closedCandleSchedulerEnabled": true,
+      "strategySchedulerEnabled": false,
+      "paperDemoEnabled": false,
+      "executionEnabled": false,
+      "aiSupervisorEnabled": false,
+      "productionAdoptionAllowed": false,
+      "operationalMarketStateEnabled": true,
+      "historicalContextHydrationEnabled": true,
+      "enabledTaskTypes": [
+        "runtime_health_snapshot",
+        "current_market_snapshot",
+        "shadow_context_refresh"
+      ],
+      "services": [
+        {
+          "serviceId": "mt5_terminal",
+          "runtime": "external",
+          "dependencies": [],
+          "expectedPorts": [],
+          "scriptPath": "../../../../../Program Files/MetaTrader 5/terminal64.exe",
+          "healthProbes": [
+            {
+              "probeId": "mt5_process",
+              "kind": "process",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        },
+        {
+          "serviceId": "mt5_readonly_upstream",
+          "runtime": "python",
+          "dependencies": [
+            "mt5_terminal"
+          ],
+          "expectedPorts": [
+            8000
+          ],
+          "scriptPath": "scripts/mt5-readonly-upstream.py",
+          "healthProbes": [
+            {
+              "probeId": "upstream_health",
+              "kind": "health",
+              "restartRelevant": true
+            },
+            {
+              "probeId": "upstream_transport",
+              "kind": "transport",
+              "restartRelevant": false
+            },
+            {
+              "probeId": "upstream_time_contract",
+              "kind": "time_contract",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        },
+        {
+          "serviceId": "mt5_readonly_bridge",
+          "runtime": "node",
+          "dependencies": [
+            "mt5_readonly_upstream"
+          ],
+          "expectedPorts": [
+            7341
+          ],
+          "scriptPath": "scripts/start-mt5-readonly-bridge.mjs",
+          "healthProbes": [
+            {
+              "probeId": "bridge_health",
+              "kind": "health",
+              "restartRelevant": true
+            },
+            {
+              "probeId": "bridge_transport",
+              "kind": "transport",
+              "restartRelevant": false
+            },
+            {
+              "probeId": "bridge_time_contract",
+              "kind": "time_contract",
+              "restartRelevant": false
+            },
+            {
+              "probeId": "bridge_quote",
+              "kind": "quote",
+              "restartRelevant": false
+            },
+            {
+              "probeId": "bridge_candles",
+              "kind": "candles",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        },
+        {
+          "serviceId": "current_live_time_verifier",
+          "runtime": "node",
+          "dependencies": [
+            "mt5_readonly_bridge"
+          ],
+          "expectedPorts": [
+            7345
+          ],
+          "scriptPath": "scripts/gotrader-current-live-time-verifier.mjs",
+          "healthProbes": [
+            {
+              "probeId": "time_verifier_health",
+              "kind": "health",
+              "restartRelevant": true
+            },
+            {
+              "probeId": "time_verifier_status",
+              "kind": "transport",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        },
+        {
+          "serviceId": "market_data_feed",
+          "runtime": "node",
+          "dependencies": [
+            "current_live_time_verifier"
+          ],
+          "expectedPorts": [
+            7343
+          ],
+          "scriptPath": "scripts/gotrader-continuous-feed.mjs",
+          "healthProbes": [
+            {
+              "probeId": "feed_health",
+              "kind": "health",
+              "restartRelevant": true
+            },
+            {
+              "probeId": "feed_transport",
+              "kind": "transport",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        },
+        {
+          "serviceId": "autonomous_cycle_scheduler",
+          "runtime": "node",
+          "dependencies": [
+            "market_data_feed"
+          ],
+          "expectedPorts": [
+            7344
+          ],
+          "scriptPath": "scripts/gotrader-autonomous-scheduler.mjs",
+          "healthProbes": [
+            {
+              "probeId": "scheduler_health",
+              "kind": "health",
+              "restartRelevant": true
+            },
+            {
+              "probeId": "scheduler_transport",
+              "kind": "transport",
+              "restartRelevant": false
+            }
+          ],
+          "authority": {
+            "executionAuthority": "none",
+            "brokerAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          }
+        }
+      ],
+      "validation": {
+        "valid": true,
+        "errors": []
+      },
+      "authority": {
+        "executionAuthority": "none",
+        "brokerAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      }
+    },
+    "fileHashes": [
+      {
+        "path": "scripts/gotrader-runtime-core.mjs",
+        "contentHash": "sha256:46fb592866b564067b98cfb3ee48a700b874b86023715574a77504096bea78bb",
+        "byteLength": 30512
+      },
+      {
+        "path": "scripts/gotrader-runtime-io.mjs",
+        "contentHash": "sha256:0a799b21e221300dc4a086a8fece879607a2a8a54b7639b63f881c71c6bbb6a1",
+        "byteLength": 16799
+      },
+      {
+        "path": "scripts/gotrader-runtime-supervisor.mjs",
+        "contentHash": "sha256:7004ea03ec215798b80c14e9f6bcfcbff276330f8c5924a2baf3823ba5987b0d",
+        "byteLength": 14879
+      },
+      {
+        "path": "scripts/gotrader-current-live-time-verification-core.mjs",
+        "contentHash": "sha256:dd7bad12234ca3d05b9423d54d69ffe85aa11ca940628216498c794330d37d02",
+        "byteLength": 12573
+      },
+      {
+        "path": "scripts/gotrader-current-live-time-verifier.mjs",
+        "contentHash": "sha256:b590b4d1d2c7450de3fec24eb9c6a0658d8713808cd675096a8c0d0ae08a65b6",
+        "byteLength": 7526
+      },
+      {
+        "path": "scripts/gotrader-continuous-feed-core.mjs",
+        "contentHash": "sha256:40879aa7a3a4d54f761fdf1345e3e4ef4c49cb7d5e7a3d3fccf613f565f4e43f",
+        "byteLength": 50435
+      },
+      {
+        "path": "scripts/gotrader-continuous-feed.mjs",
+        "contentHash": "sha256:bee03130c794d8b2e901353f3601803898686e37ca8d5ab061c547bedd954063",
+        "byteLength": 18787
+      },
+      {
+        "path": "scripts/gotrader-autonomous-scheduler-core.mjs",
+        "contentHash": "sha256:55a6846457c74694787185268e95b31c1ba5da2a761d224d9ec5b1e01d7fa2ed",
+        "byteLength": 13119
+      },
+      {
+        "path": "scripts/gotrader-autonomous-scheduler.mjs",
+        "contentHash": "sha256:4b2d6ff1497a3a72adb1fd7c66ae047e336b05636bdb78e08617780219bb4e36",
+        "byteLength": 12530
+      },
+      {
+        "path": "scripts/gotrader-shadow-context-core.mjs",
+        "contentHash": "sha256:18522b2101f64615c1a826b15139b3877cf9eaf9006b367981e0e5bd37880ef2",
+        "byteLength": 15804
+      },
+      {
+        "path": "scripts/gotrader-historical-context-hydrator-core.mjs",
+        "contentHash": "sha256:05e38579bd4f8ddd3cc001b90817b48b2f83ff5eebdd7ff01ce7d38f3e8ac458",
+        "byteLength": 5476
+      },
+      {
+        "path": "scripts/gotrader-a3-acceptance-core.mjs",
+        "contentHash": "sha256:9c3ae1802a35cd60835046d793ea4f7859ae06e0dafb83ac2062c69d40e5cee1",
+        "byteLength": 7630
+      },
+      {
+        "path": "scripts/gotrader-observe-a3-acceptance.mjs",
+        "contentHash": "sha256:8985288ae70d6e5f3d256611357f974a55cbc73241cda01223f62b261d64fd4e",
+        "byteLength": 19902
+      },
+      {
+        "path": "scripts/mt5-readonly-upstream.py",
+        "contentHash": "sha256:f014fbae4557697d82e354bbced4cd8868fe08e896d08f81bdd464b315fda774",
+        "byteLength": 43574
+      },
+      {
+        "path": "scripts/start-mt5-readonly-bridge.mjs",
+        "contentHash": "sha256:97b7b73ed56b432f25ed02a2b2518e7004c2a0d561f299962ceb2c322ef8cd91",
+        "byteLength": 41507
+      },
+      {
+        "path": "docs/gotrader-runtime/track-a3-2-operational-report.md",
+        "contentHash": "sha256:266581b03730da4b73ad902de1669959d1d66a4a1c3c362214a7e2b7ab9b3dc3",
+        "byteLength": 15797
+      },
+      {
+        "path": "docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.json",
+        "contentHash": "sha256:627e5808e18e2b45d7a3edbaeed8f2bc6fc58ac038f2eb323b2021be8469c0da",
+        "byteLength": 2629
+      },
+      {
+        "path": "docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.md",
+        "contentHash": "sha256:b84170e87befc2eb5ed87129bf9cd4a25c7747799c16675896d7093082cfcac4",
+        "byteLength": 4221
+      }
+    ],
+    "operationalReport": {
+      "path": "docs/gotrader-runtime/track-a3-2-operational-report.md",
+      "contentHash": "sha256:266581b03730da4b73ad902de1669959d1d66a4a1c3c362214a7e2b7ab9b3dc3",
+      "byteLength": 15797,
+      "status": "accepted_with_limitations"
+    },
+    "observerEvidence": {
+      "present": true,
+      "integrityValid": true,
+      "status": "observation_incomplete",
+      "observationId": "a3_2_acceptance_1785784305179",
+      "startedAt": "2026-08-03T19:11:45.179Z",
+      "elapsedSeconds": 14400,
+      "verifiedM5CloseCount": 35,
+      "completedContextCycleCount": 32,
+      "marketHourSpan": 3.917,
+      "activeMarketSamples": 2010,
+      "freshActiveMarketProofSamples": 2010,
+      "proofUptimePercentage": 100,
+      "marketClosedPauseSamples": 716,
+      "unsafeMarketClosedSamples": 1,
+      "freshProofAfterMarketClose": true,
+      "verificationFailureCount": 0,
+      "transportFailures": 0,
+      "observerTransportWarnings": 0,
+      "hydrationNotReadySamples": 0,
+      "managedRestartDelta": 0,
+      "duplicateCloseCount": 0,
+      "duplicateContextCount": 0,
+      "payloadConflictCount": 0,
+      "ledgerGapCount": 0,
+      "blockedInsufficientContextCount": 0,
+      "authorityViolationSamples": 0,
+      "historicalVerificationViolationSamples": 0,
+      "maximumQueueDepth": 0,
+      "blockers": [],
+      "integrityHash": "sha256:9004fdac2e7190526c85b84923842be4dea6c3181690ac518d565e325a20bffc",
+      "acceptanceChecks": {
+        "observationDurationPassed": true,
+        "marketHourSpanPassed": true,
+        "verifiedM5CloseCountPassed": true,
+        "completedContextCycleCountPassed": true,
+        "noInsufficientContextWindows": true,
+        "noDuplicateCloses": true,
+        "noDuplicateContextArtifacts": true,
+        "noPayloadConflicts": true,
+        "noLedgerGaps": true,
+        "proofFreshnessMaintained": true,
+        "marketBreakHandledSafely": false,
+        "freshProofResumedAfterMarketBreak": true,
+        "noVerificationFailures": true,
+        "noObserverTransportFailures": true,
+        "noManagedRestarts": true,
+        "hydrationStayedReady": true,
+        "historicalVerificationStayedFalse": true,
+        "authorityStayedNone": true,
+        "finalRuntimeHealthy": true,
+        "finalHydrationReady": true,
+        "finalRuntimeBlockersClear": true
+      },
+      "failedAcceptanceChecks": [
+        "marketBreakHandledSafely"
+      ],
+      "acceptanceChecksAllPassed": false,
+      "safetyBoundaryValid": true,
+      "authority": {
+        "executionAuthority": "none",
+        "brokerAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "file": {
+        "path": ".gotrader/runtime/always_on_shadow_context_operational/observations/a3_2_acceptance_1785784305179.json",
+        "contentHash": "sha256:1dffed8a5ca959d1d210e66f83690441606d7af431ebafb48521d12414c7f0b5",
+        "byteLength": 9020
+      }
+    },
+    "operatorDecision": {
+      "present": true,
+      "integrityValid": true,
+      "integrityHash": "sha256:d9d558ba1a1b7f8a853afbd09922f4231c8f89f3cb8256b4c4fc610f55e71f4b",
+      "version": "gotrader-a3-2-operator-acceptance-decision-v1",
+      "changeId": "A3.2-ACCEPTANCE-2026-08-03",
+      "decision": "accepted_with_limitations",
+      "statusTransition": {
+        "from": "blocked",
+        "to": "accepted_with_limitations"
+      },
+      "runtimeObservedCommit": "841cf965172b04d4dfd5dcfc797d12d907bd56b6",
+      "acceptedRuntimeCandidateCommit": "e91baa633ad52be67ab07d040562824e83dcb994",
+      "observerEvidence": {
+        "observationId": "a3_2_acceptance_1785784305179",
+        "relativePath": ".gotrader/runtime/always_on_shadow_context_operational/observations/a3_2_acceptance_1785784305179.json",
+        "integrityHash": "sha256:9004fdac2e7190526c85b84923842be4dea6c3181690ac518d565e325a20bffc",
+        "status": "observation_incomplete",
+        "onlyFailedAcceptanceCheck": "marketBreakHandledSafely",
+        "unsafeMarketClosedSamples": 1
+      },
+      "acceptanceBasis": {
+        "elapsedSeconds": 14400,
+        "marketHourSpan": 3.917,
+        "activeMarketSamples": 2010,
+        "freshActiveMarketProofSamples": 2010,
+        "proofUptimePercentage": 100,
+        "verifiedM5CloseCount": 35,
+        "completedContextCycleCount": 32,
+        "marketClosedPauseSamples": 716,
+        "freshProofAfterMarketClose": true,
+        "verificationFailureCount": 0,
+        "transportFailures": 0,
+        "observerTransportWarnings": 0,
+        "hydrationNotReadySamples": 0,
+        "managedRestartDelta": 0,
+        "duplicateCloseCount": 0,
+        "duplicateContextCount": 0,
+        "payloadConflictCount": 0,
+        "ledgerGapCount": 0,
+        "maximumQueueDepth": 0,
+        "finalBlockers": []
+      },
+      "limitations": [
+        "The integrity-valid observer artifact remains observation_incomplete.",
+        "One market-break transition sample was captured before distributed status artifacts converged.",
+        "A repeat observation through a scheduled break remains recommended post-freeze monitoring."
+      ],
+      "authorityValid": true,
+      "gateBoundaryValid": true,
+      "capabilityBoundaryValid": true,
+      "boundaryValid": true,
+      "acceptedRuntimeCandidateAncestorOfHead": true,
+      "file": {
+        "path": "docs/gotrader-runtime/track-a3-2-operator-acceptance-decision.json",
+        "contentHash": "sha256:627e5808e18e2b45d7a3edbaeed8f2bc6fc58ac038f2eb323b2021be8469c0da",
+        "byteLength": 2629
+      }
+    },
+    "acceptanceMode": "accepted_with_limitations"
+  },
+  "preparation": {
+    "repositoryRoot": "C:/Users/andre/OneDrive/Documents/gotrader-runtime-track-b1-0",
+    "branch": "codex/gotrader-runtime-freeze-baseline",
+    "headCommit": "908c3abf6573f2c5902f39c0a3689bc6ba85aa0c",
+    "clean": true,
+    "requiredCommits": [
+      {
+        "shortHash": "b583b31",
+        "fullHash": "b583b319168654f3e3d6edb89a9d5b900a2582d7",
+        "subject": "Add canonical research contracts and identity",
+        "present": true,
+        "ancestorOfHead": true
+      },
+      {
+        "shortHash": "c096163",
+        "fullHash": "c096163576f0c4e12c17870b92844e9fda022f2c",
+        "subject": "Add local canonical research engine",
+        "present": true,
+        "ancestorOfHead": true
+      },
+      {
+        "shortHash": "e9ee07f",
+        "fullHash": "e9ee07f23e1f6656de53b6aeb105daeab992bcfb",
+        "subject": "Prepare B1 shadow context canary",
+        "present": true,
+        "ancestorOfHead": true
+      },
+      {
+        "shortHash": "d642887",
+        "fullHash": "d6428873250493c2bfed8c2064c426390831461d",
+        "subject": "Prepare B1 shadow canary operations",
+        "present": true,
+        "ancestorOfHead": true
+      }
+    ],
+    "requiredCommitOrderValid": true,
+    "fileHashes": [
+      {
+        "path": "docs/gotrader-runtime/architecture-index.md",
+        "contentHash": "sha256:ef9f171be38c8491150cc727a98153626ee65d1bd5633480f8aa8d3d79136abc",
+        "byteLength": 28699
+      },
+      {
+        "path": "docs/gotrader-runtime/architecture-roadmap.md",
+        "contentHash": "sha256:e04c46d12bfe90eeb4b40b7d479c84902f3c123dacb40b97753e138c8bd5ef69",
+        "byteLength": 8116
+      },
+      {
+        "path": "docs/gotrader-runtime/architecture-change-control.md",
+        "contentHash": "sha256:53f2ea6c2fab5cd0a73a9983f3057a1e55be745d2d21aeb19ed315f9fe069354",
+        "byteLength": 8123
+      },
+      {
+        "path": "docs/gotrader-runtime/track-b1-implementation-readiness-package.md",
+        "contentHash": "sha256:37218fb3dc09ab748f41f1a567c67313cefc7f9d0a019e6ea745dcd6594d2338",
+        "byteLength": 17464
+      },
+      {
+        "path": "docs/gotrader-runtime/track-b1-authority-matrix.md",
+        "contentHash": "sha256:65431f95d5b1f2d10dd10e67b90051d591925f268d638f672478b3cbcfca9cac",
+        "byteLength": 8733
+      },
+      {
+        "path": "docs/gotrader-runtime/track-b1-autonomous-research-pipeline-specification.md",
+        "contentHash": "sha256:f083d2fd39e41df2146fdea976cb8fd62587ecef9f3857d80ee162005ee84a7b",
+        "byteLength": 29190
+      },
+      {
+        "path": "docs/gotrader-runtime/track-b1-canonical-lineage-graph-specification.md",
+        "contentHash": "sha256:2d3e7ea22d4d19d4990638c713661367e65186709ec712be1dfd890c95c9966f",
+        "byteLength": 26038
+      },
+      {
+        "path": "docs/gotrader-runtime/track-b1-contract-fixture-spec.md",
+        "contentHash": "sha256:be3cf55b4cf0656f9db7f3ca390e0f41c258c07c5194f1f1e3bb8a41d9468ab6",
+        "byteLength": 8183
+      }
+    ]
+  },
+  "authority": {
+    "executionAuthority": "none",
+    "brokerAuthority": "none",
+    "readinessOverrideAuthority": "none"
+  },
+  "capabilities": {
+    "writesTargetRepository": false,
+    "startsRuntimeServices": false,
+    "stopsRuntimeServices": false,
+    "mutatesRuntimeLedgers": false,
+    "enablesStrategy": false,
+    "createsEvidence": false,
+    "changesReadiness": false,
+    "enablesPaperDemo": false,
+    "enablesBroker": false,
+    "enablesExecution": false
+  },
+  "manifestHash": "sha256:0816171508957702fad690406200da3e5486f5bb916ceafde125609ffc59d094"
+}

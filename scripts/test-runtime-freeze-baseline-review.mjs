@@ -379,9 +379,49 @@ assert.doesNotMatch(helperSource + collectorSource, /writeFile|appendFile|mkdir|
 assert.doesNotMatch(helperSource + collectorSource, /spawn\(|gotrader:runtime:start|gotrader:runtime:stop/);
 assert.doesNotMatch(helperSource + collectorSource, /placeOrder|buyMarket|sellMarket|enableLiveTrading/);
 
+const frozenManifest = JSON.parse(
+  await fs.readFile(
+    "docs/gotrader-runtime/runtime-freeze-preparation-manifest.json",
+    "utf8"
+  )
+);
+const { manifestHash: frozenManifestHash, ...frozenManifestCore } = frozenManifest;
+assert.equal(
+  frozenManifestHash,
+  runtimeFreezeCanonicalHash(frozenManifestCore)
+);
+assert.equal(frozenManifest.status, "ready_for_baseline_review");
+assert.deepEqual(frozenManifest.blockers, []);
+assert.equal(frozenManifest.runtime.acceptanceMode, "accepted_with_limitations");
+assert.deepEqual(frozenManifest.authority, authority);
+
+const frozenRecord = JSON.parse(
+  await fs.readFile(
+    "docs/gotrader-runtime/runtime-freeze-baseline-record.json",
+    "utf8"
+  )
+);
+const { integrityHash: frozenRecordHash, ...frozenRecordCore } = frozenRecord;
+assert.equal(frozenRecordHash, runtimeFreezeCanonicalHash(frozenRecordCore));
+assert.equal(frozenRecord.status, "runtime_frozen_baseline_accepted");
+assert.equal(frozenRecord.runtimeFrozen, true);
+assert.equal(frozenRecord.baselineAccepted, true);
+assert.equal(
+  frozenRecord.preparationManifest.manifestHash,
+  frozenManifestHash
+);
+assert.equal(frozenRecord.a3Acceptance.safetyBoundaryValid, true);
+assert.equal(frozenRecord.nextGate.runtimeImplementationAuthorized, false);
+assert.deepEqual(frozenRecord.authority, authority);
+assert.equal(frozenRecord.capabilities.executionEnabled, false);
+assert.equal(frozenRecord.capabilities.brokerEnabled, false);
+assert.equal(frozenRecord.capabilities.productionAdoptionAllowed, false);
+
 console.log("Runtime Freeze and Baseline Review preparation harness tests passed.");
 console.log(`- ready fixture: ${ready.status}`);
 console.log(`- accepted-with-limitations fixture: ${readyWithLimitations.status}`);
 console.log(`- current incomplete evidence behavior: ${pending.status}`);
 console.log("- target repository access is read-only; no service or ledger mutation exists");
 console.log("- runtimeFrozen=false; baselineAccepted=false; authority none/none/none");
+console.log(`- frozen record: ${frozenRecord.status}`);
+console.log(`- frozen record integrity: ${frozenRecordHash}`);
