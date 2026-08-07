@@ -42,12 +42,23 @@ if (
   Date.parse(preflight.expiresAtUtc) < Date.now()
 ) throw new Error("BT1.5 requires a current safe live preflight for this bundle.");
 
+const requestAudit = [];
 const provider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
   baseUrl: bundle.provider.baseUrl,
   providerVersion: bundle.provider.providerDescription.providerVersion,
   providerTimeBasis: bundle.provider.providerTimeBasis,
   sourceIdentityFingerprint: bundle.provider.sourceIdentityFingerprint,
-  maximumPageCandles: bundle.provider.providerDescription.maximumPageCandles
+  maximumPageCandles: bundle.provider.providerDescription.maximumPageCandles,
+  onRequest(request) {
+    const url = new URL(request.url);
+    requestAudit.push(Object.freeze({
+      method: request.method,
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || "80",
+      pathname: url.pathname
+    }));
+  }
 });
 const providerDescription = await provider.describe();
 if (await modules.canonical.canonicalHash(providerDescription) !== await modules.canonical.canonicalHash(bundle.provider.providerDescription)) {
@@ -214,6 +225,37 @@ const reportCore = Object.freeze(compactJson({
 }));
 const report = Object.freeze({ ...reportCore, reportId: await modules.canonical.canonicalHash(reportCore) });
 writeJsonAtomic(reportPath, report);
+const allowedLoopbackHosts = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const forbiddenRequests = requestAudit.filter((request) =>
+  request.method !== "GET" ||
+  request.protocol !== "http:" ||
+  !allowedLoopbackHosts.has(request.hostname) ||
+  request.pathname !== "/candles/range"
+);
+const safetyCore = Object.freeze({
+  schemaVersion: "gotrader-bt1-6-read-only-safety-v1",
+  qualificationReportId: report.reportId,
+  verifiedAtUtc: new Date().toISOString(),
+  verifierVersion: "bt1-6-read-only-request-audit-v1",
+  loopbackOnly: requestAudit.every((request) =>
+    request.protocol === "http:" && allowedLoopbackHosts.has(request.hostname)),
+  getOnly: requestAudit.every((request) => request.method === "GET"),
+  endpointCallCount: requestAudit.length,
+  observedMethods: Object.freeze([...new Set(requestAudit.map((request) => request.method))].sort()),
+  observedPaths: Object.freeze([...new Set(requestAudit.map((request) => request.pathname))].sort()),
+  forbiddenEndpointCallCount: forbiddenRequests.length,
+  status: requestAudit.length > 0 && forbiddenRequests.length === 0 ? "passed" : "blocked",
+  blockers: Object.freeze([
+    ...(requestAudit.length ? [] : ["historical_read_only_request_audit_empty"]),
+    ...(forbiddenRequests.length ? ["historical_forbidden_request_observed"] : [])
+  ]),
+  authority: authorityNone
+});
+const safetyReport = Object.freeze({
+  ...safetyCore,
+  safetyReportId: await modules.canonical.canonicalHash(safetyCore)
+});
+const safetyReportPath = writeJsonAtomic(path.join(runRoot, "read-only-safety-report.json"), safetyReport);
 console.log(JSON.stringify({
   status: controlledInterruption ? "controlled_interruption" : blockers.length ? "blocked" : "passed",
   reportId: report.reportId,
@@ -223,6 +265,8 @@ console.log(JSON.stringify({
   elapsedMs,
   peakRssBytes,
   storageBytes: storageUsage.bytes,
+  safetyReportId: safetyReport.safetyReportId,
+  safetyReportPath,
   blockers,
   reportPath,
   authority: report.authority

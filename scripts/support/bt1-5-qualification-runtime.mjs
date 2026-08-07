@@ -75,6 +75,7 @@ export async function loadBt15Modules(label = "runtime") {
   const load = (name) => import(pathToFileURL(path.join(outRoot, `${name}.mjs`)).href);
   return Object.freeze({
     contracts: await load("historicalDatasetContracts"),
+    certificate: await load("historicalDatasetCertificate"),
     qualification: await load("historicalQualificationContracts"),
     repository: await load("historicalDatasetRepository"),
     lineage: await load("historicalDatasetLineage"),

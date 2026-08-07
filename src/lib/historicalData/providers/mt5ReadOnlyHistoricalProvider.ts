@@ -37,6 +37,7 @@ export interface Mt5ReadOnlyHistoricalProviderOptions {
   readonly maximumPageCandles?: number;
   readonly closedBarSafetyLagMs?: number;
   readonly now?: () => string;
+  readonly onRequest?: (request: Readonly<{ method: "GET"; url: string }>) => void;
 }
 
 const hashPattern = /^sha256:[0-9a-f]{64}$/;
@@ -124,6 +125,7 @@ export function createMt5ReadOnlyHistoricalProvider(
   const maximumPageCandles = Math.min(5000, options.maximumPageCandles ?? 5000);
   const closedBarSafetyLagMs = options.closedBarSafetyLagMs ?? 1_000;
   const now = options.now ?? (() => new Date().toISOString());
+  const onRequest = options.onRequest;
   if (!options.providerVersion || options.providerTimeBasis === "unknown") {
     throw new Error("BT1 MT5 historical provider requires explicit version and time basis.");
   }
@@ -188,6 +190,7 @@ export function createMt5ReadOnlyHistoricalProvider(
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
+      onRequest?.(Object.freeze({ method: "GET", url: url.toString() }));
       const response = await fetchImpl(url, Object.freeze({ method: "GET", signal: controller.signal }));
       if (!response.ok) throw new Error(`BT1 MT5 historical provider returned HTTP ${response.status}.`);
       const payload = recordOrEmpty(await response.json());

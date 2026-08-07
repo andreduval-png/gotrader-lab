@@ -1,4 +1,5 @@
 export * from "./historicalDatasetAuthority";
+export * from "./historicalDatasetCertificate";
 export * from "./historicalDatasetContracts";
 export * from "./historicalDatasetIdentity";
 export * from "./historicalDatasetIntegrity";

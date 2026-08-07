@@ -14,6 +14,7 @@ export async function loadBt1Modules({ outRoot }) {
   const load = (name) => import(pathToFileURL(path.join(outRoot, `${name}.mjs`)).href);
   return Object.freeze({
     contracts: await load("historicalDatasetContracts"),
+    certificate: await load("historicalDatasetCertificate"),
     identity: await load("historicalDatasetIdentity"),
     integrity: await load("historicalDatasetIntegrity"),
     lineage: await load("historicalDatasetLineage"),
