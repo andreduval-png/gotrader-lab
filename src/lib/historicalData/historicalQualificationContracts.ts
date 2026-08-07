@@ -34,6 +34,9 @@ const PERIODS: readonly HistoricalTimeEvidencePeriod[] = Object.freeze([
 const DERIVABLE_WITH_FIXED_UTC: readonly HistoricalTimeframe[] = Object.freeze([
   "5m", "15m", "1h", "4h"
 ]);
+const HISTORICAL_TIMEFRAMES: readonly HistoricalTimeframe[] = Object.freeze([
+  "1m", "5m", "15m", "1h", "4h", "1d", "1w"
+]);
 
 const unique = (values: readonly string[]) =>
   Object.freeze([...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right)));
@@ -356,7 +359,7 @@ export async function validateHistoricalTimeframeAlignmentPolicy(
 }
 
 export async function buildHistoricalDatasetCapacityPlan(input: {
-  readonly sourceTimeframe: HistoricalTimeframe;
+  readonly sourceTimeframes: readonly HistoricalTimeframe[];
   readonly pilotStartUtc: string;
   readonly pilotEndUtc: string;
   readonly targetStartUtc: string;
@@ -371,6 +374,11 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
   readonly maximumPeakMemoryBytes: number;
   readonly safetyMultiplier?: number;
 }): Promise<Readonly<HistoricalDatasetCapacityPlan>> {
+  const sourceTimeframes = Object.freeze(unique(input.sourceTimeframes) as readonly HistoricalTimeframe[]);
+  if (!sourceTimeframes.length) throw new Error("Historical capacity requires at least one source timeframe.");
+  if (sourceTimeframes.some((timeframe) => !HISTORICAL_TIMEFRAMES.includes(timeframe))) {
+    throw new Error("Historical capacity contains an unsupported source timeframe.");
+  }
   const pilotStartUtc = iso(input.pilotStartUtc, "capacity.pilotStartUtc");
   const pilotEndUtc = iso(input.pilotEndUtc, "capacity.pilotEndUtc");
   const targetStartUtc = iso(input.targetStartUtc, "capacity.targetStartUtc");
@@ -408,7 +416,7 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
   ]);
   const core = Object.freeze({
     schemaVersion: HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION as typeof HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION,
-    sourceTimeframe: input.sourceTimeframe,
+    sourceTimeframes,
     pilotStartUtc,
     pilotEndUtc,
     targetStartUtc,

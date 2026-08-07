@@ -32,6 +32,7 @@ import {
   HISTORICAL_STORAGE_ENVELOPE_SCHEMA_VERSION,
   type HistoricalCheckpointTimeframeState,
   type HistoricalDatasetCreationResult,
+  type HistoricalDatasetProgressEvent,
   type HistoricalDatasetManifest,
   type HistoricalDatasetProvider,
   type HistoricalDatasetRepositoryOptions,
@@ -115,8 +116,9 @@ export class HistoricalDatasetRepositoryError extends Error {
 
 export class HistoricalDatasetRepository {
   readonly #options: Required<Pick<HistoricalDatasetRepositoryOptions,
-    "maximumPagesPerTimeframe" | "atomicWriteRetries" | "now"
-  >> & Pick<HistoricalDatasetRepositoryOptions, "storage">;
+    "maximumPagesPerTimeframe" | "maximumPartitions" |
+    "maximumAcceptedCandles" | "atomicWriteRetries" | "now"
+  >> & Pick<HistoricalDatasetRepositoryOptions, "storage" | "onProgress">;
 
   constructor(options: Readonly<HistoricalDatasetRepositoryOptions>) {
     if (!options?.storage) throw new HistoricalDatasetRepositoryError(["historical_storage_missing"]);
@@ -124,11 +126,22 @@ export class HistoricalDatasetRepository {
       storage: options.storage,
       now: options.now ?? (() => new Date().toISOString()),
       maximumPagesPerTimeframe: options.maximumPagesPerTimeframe ?? 20_000,
-      atomicWriteRetries: options.atomicWriteRetries ?? 4
+      maximumPartitions: options.maximumPartitions ?? 20_000,
+      maximumAcceptedCandles: options.maximumAcceptedCandles ?? 2_000_000,
+      atomicWriteRetries: options.atomicWriteRetries ?? 4,
+      onProgress: options.onProgress
     });
     if (!Number.isInteger(this.#options.maximumPagesPerTimeframe) || this.#options.maximumPagesPerTimeframe <= 0) {
       throw new HistoricalDatasetRepositoryError(["historical_page_bound_invalid"]);
     }
+    if (
+      !Number.isInteger(this.#options.maximumPartitions) ||
+      this.#options.maximumPartitions <= 0
+    ) throw new HistoricalDatasetRepositoryError(["historical_partition_bound_invalid"]);
+    if (
+      !Number.isInteger(this.#options.maximumAcceptedCandles) ||
+      this.#options.maximumAcceptedCandles <= 0
+    ) throw new HistoricalDatasetRepositoryError(["historical_candle_bound_invalid"]);
   }
 
   async createDataset(
@@ -154,19 +167,29 @@ export class HistoricalDatasetRepository {
       pathFor("checkpoint", identity.requestId),
       "checkpoint"
     );
-    if (existing?.payload.requestHash !== undefined && existing.payload.requestHash !== identity.requestHash) {
+    const existingCheckpoint = existing ? await this.#upgradeCheckpoint(existing.payload) : undefined;
+    if (existingCheckpoint?.requestHash !== undefined && existingCheckpoint.requestHash !== identity.requestHash) {
       throw new HistoricalDatasetRepositoryError(["historical_checkpoint_request_mismatch"]);
     }
-    if (existing?.payload.phase === "complete" && existing.payload.completedDatasetId) {
-      const manifest = await this.readManifest(existing.payload.completedDatasetId);
+    if (existingCheckpoint?.phase === "complete" && existingCheckpoint.completedDatasetId) {
+      const manifest = await this.readManifest(existingCheckpoint.completedDatasetId);
+      await this.#emitProgress({
+        eventType: "dataset_coalesced",
+        requestId: identity.requestId,
+        pagesCompleted: existingCheckpoint.timeframes.reduce((sum, state) => sum + state.pageCount, 0),
+        partitionCount: manifest.timeframes.reduce((sum, state) => sum + state.partitionIds.length, 0),
+        barsAccepted: existingCheckpoint.timeframes.reduce((sum, state) => sum + state.acceptedCandleCount, 0),
+        barsRejected: existingCheckpoint.timeframes.reduce((sum, state) => sum + state.rejectedEventCount, 0),
+        datasetId: manifest.datasetId
+      });
       return Object.freeze({
         action: "coalesced",
         manifest,
         verification: await this.verifyDataset(manifest.datasetId)
       });
     }
-    const action = existing ? "resumed" as const : "created" as const;
-    let checkpoint = existing?.payload ?? Object.freeze({
+    const action = existingCheckpoint ? "resumed" as const : "created" as const;
+    let checkpoint = existingCheckpoint ?? Object.freeze({
       schemaId: HISTORICAL_CHECKPOINT_SCHEMA_ID as typeof HISTORICAL_CHECKPOINT_SCHEMA_ID,
       version: HISTORICAL_CHECKPOINT_SCHEMA_VERSION as typeof HISTORICAL_CHECKPOINT_SCHEMA_VERSION,
       requestId: identity.requestId,
@@ -176,6 +199,8 @@ export class HistoricalDatasetRepository {
         timeframe,
         phase: "pending" as const,
         pageCount: 0,
+        acceptedCandleCount: 0,
+        rejectedEventCount: 0,
         partitionIds: Object.freeze([])
       }))),
       blockers: Object.freeze([]),
@@ -190,6 +215,12 @@ export class HistoricalDatasetRepository {
       while (state.phase !== "complete") {
         if (state.pageCount >= this.#options.maximumPagesPerTimeframe) {
           throw new HistoricalDatasetRepositoryError(["historical_page_bound_exceeded"]);
+        }
+        if (
+          checkpoint.timeframes.reduce((sum, item) => sum + item.partitionIds.length, 0) >=
+          this.#options.maximumPartitions
+        ) {
+          throw new HistoricalDatasetRepositoryError(["historical_partition_bound_exceeded"]);
         }
         const cursor = state.pageCount ? state.nextCursor : undefined;
         const page = await provider.fetchPage(Object.freeze({
@@ -248,6 +279,10 @@ export class HistoricalDatasetRepository {
           warnings: unique(page.warnings),
           authority: HISTORICAL_DATASET_AUTHORITY_NONE
         };
+        if (
+          checkpoint.timeframes.reduce((sum, item) => sum + item.acceptedCandleCount, 0) +
+          normalized.candles.length > this.#options.maximumAcceptedCandles
+        ) throw new HistoricalDatasetRepositoryError(["historical_candle_bound_exceeded"]);
         const partition: Readonly<HistoricalPartitionPayload> = Object.freeze({
           ...partitionWithoutId,
           partitionId: await canonicalHash(partitionWithoutId)
@@ -258,6 +293,8 @@ export class HistoricalDatasetRepository {
           phase: page.nextCursor ? "fetching" as const : "complete" as const,
           ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
           pageCount: state.pageCount + 1,
+          acceptedCandleCount: state.acceptedCandleCount + normalized.candles.length,
+          rejectedEventCount: state.rejectedEventCount + normalized.events.length,
           partitionIds: Object.freeze([...state.partitionIds, partition.partitionId])
         });
         checkpoint = Object.freeze({
@@ -266,11 +303,28 @@ export class HistoricalDatasetRepository {
           timeframes: replaceState(checkpoint.timeframes, state)
         });
         await this.#writeCheckpoint(checkpoint);
+        await this.#emitProgress({
+          eventType: "page_committed",
+          requestId: identity.requestId,
+          timeframe,
+          pagesCompleted: checkpoint.timeframes.reduce((sum, item) => sum + item.pageCount, 0),
+          partitionCount: checkpoint.timeframes.reduce((sum, item) => sum + item.partitionIds.length, 0),
+          barsAccepted: checkpoint.timeframes.reduce((sum, item) => sum + item.acceptedCandleCount, 0),
+          barsRejected: checkpoint.timeframes.reduce((sum, item) => sum + item.rejectedEventCount, 0)
+        });
       }
     }
 
     checkpoint = Object.freeze({ ...checkpoint, phase: "sealing" as const });
     await this.#writeCheckpoint(checkpoint);
+    await this.#emitProgress({
+      eventType: "sealing_started",
+      requestId: identity.requestId,
+      pagesCompleted: checkpoint.timeframes.reduce((sum, state) => sum + state.pageCount, 0),
+      partitionCount: checkpoint.timeframes.reduce((sum, state) => sum + state.partitionIds.length, 0),
+      barsAccepted: checkpoint.timeframes.reduce((sum, state) => sum + state.acceptedCandleCount, 0),
+      barsRejected: checkpoint.timeframes.reduce((sum, state) => sum + state.rejectedEventCount, 0)
+    });
     const seals: HistoricalTimeframeSealInput[] = [];
     const available = new Map<HistoricalTimeframe, HistoricalTimeframeSealInput>();
     for (const timeframe of request.sourceTimeframes) {
@@ -293,7 +347,14 @@ export class HistoricalDatasetRepository {
       seals.push(seal);
       available.set(timeframe, seal);
     }
+    let totalPartitionCount = checkpoint.timeframes.reduce(
+      (sum, state) => sum + state.partitionIds.length,
+      0
+    );
     for (const timeframe of request.derivedTimeframes ?? []) {
+      if (totalPartitionCount >= this.#options.maximumPartitions) {
+        throw new HistoricalDatasetRepositoryError(["historical_partition_bound_exceeded"]);
+      }
       const parentTimeframe = selectHistoricalParentTimeframe([...available.keys()], timeframe);
       if (!parentTimeframe) {
         throw new HistoricalDatasetRepositoryError([`historical_${timeframe}_parent_timeframe_missing`]);
@@ -351,6 +412,7 @@ export class HistoricalDatasetRepository {
       });
       seals.push(seal);
       available.set(timeframe, seal);
+      totalPartitionCount += 1;
     }
     const manifest = await buildHistoricalDatasetManifest({
       requestId: identity.requestId,
@@ -373,7 +435,48 @@ export class HistoricalDatasetRepository {
       blockers: manifest.blockers
     });
     await this.#writeCheckpoint(checkpoint);
+    await this.#emitProgress({
+      eventType: "dataset_complete",
+      requestId: identity.requestId,
+      pagesCompleted: checkpoint.timeframes.reduce((sum, state) => sum + state.pageCount, 0),
+      partitionCount: manifest.timeframes.reduce((sum, state) => sum + state.partitionIds.length, 0),
+      barsAccepted: checkpoint.timeframes.reduce((sum, state) => sum + state.acceptedCandleCount, 0),
+      barsRejected: checkpoint.timeframes.reduce((sum, state) => sum + state.rejectedEventCount, 0),
+      datasetId: manifest.datasetId
+    });
     return Object.freeze({ action, manifest, verification: await this.verifyDataset(manifest.datasetId) });
+  }
+
+  async #emitProgress(event: HistoricalDatasetProgressEvent) {
+    await this.#options.onProgress?.(Object.freeze(event));
+  }
+
+  async #upgradeCheckpoint(
+    checkpoint: Readonly<HistoricalIngestionCheckpoint>
+  ): Promise<Readonly<HistoricalIngestionCheckpoint>> {
+    const version = String((checkpoint as { version?: unknown }).version ?? "");
+    const countersValid = checkpoint.timeframes.every((state) =>
+      Number.isInteger(state.acceptedCandleCount) && state.acceptedCandleCount >= 0 &&
+      Number.isInteger(state.rejectedEventCount) && state.rejectedEventCount >= 0);
+    if (version === HISTORICAL_CHECKPOINT_SCHEMA_VERSION && countersValid) return checkpoint;
+    if (version !== "bt1-v1" && version !== HISTORICAL_CHECKPOINT_SCHEMA_VERSION) {
+      throw new HistoricalDatasetRepositoryError(["historical_checkpoint_schema_unsupported"]);
+    }
+    const timeframes = await Promise.all(checkpoint.timeframes.map(async (state) => {
+      const partitions = await Promise.all(state.partitionIds.map((partitionId) => this.#readPartition(partitionId)));
+      return Object.freeze({
+        ...state,
+        acceptedCandleCount: partitions.reduce((sum, partition) => sum + partition.candles.length, 0),
+        rejectedEventCount: partitions.reduce((sum, partition) => sum + partition.rejectedEvents.length, 0)
+      });
+    }));
+    const upgraded = Object.freeze({
+      ...checkpoint,
+      version: HISTORICAL_CHECKPOINT_SCHEMA_VERSION as typeof HISTORICAL_CHECKPOINT_SCHEMA_VERSION,
+      timeframes: Object.freeze(timeframes)
+    });
+    await this.#writeCheckpoint(upgraded);
+    return upgraded;
   }
 
   async readManifest(datasetId: string): Promise<Readonly<HistoricalDatasetManifest>> {

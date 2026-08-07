@@ -10,7 +10,7 @@ export const HISTORICAL_DATASET_SCHEMA_VERSION = "bt1-v1";
 export const HISTORICAL_PARTITION_SCHEMA_ID = "gotrader-historical-candle-partition";
 export const HISTORICAL_PARTITION_SCHEMA_VERSION = "bt1-v1";
 export const HISTORICAL_CHECKPOINT_SCHEMA_ID = "gotrader-historical-ingestion-checkpoint";
-export const HISTORICAL_CHECKPOINT_SCHEMA_VERSION = "bt1-v1";
+export const HISTORICAL_CHECKPOINT_SCHEMA_VERSION = "bt1-v2";
 export const HISTORICAL_INTEGRITY_SCHEMA_ID = "gotrader-historical-integrity-ledger";
 export const HISTORICAL_INTEGRITY_SCHEMA_VERSION = "bt1-v1";
 export const HISTORICAL_NORMALIZATION_VERSION = "closed-ohlcv-utc-bt1-v1";
@@ -268,7 +268,7 @@ export interface HistoricalTimeframeAlignmentPolicy {
 export interface HistoricalDatasetCapacityPlan {
   readonly schemaVersion: typeof HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION;
   readonly capacityPlanId: string;
-  readonly sourceTimeframe: HistoricalTimeframe;
+  readonly sourceTimeframes: readonly HistoricalTimeframe[];
   readonly pilotStartUtc: string;
   readonly pilotEndUtc: string;
   readonly targetStartUtc: string;
@@ -393,6 +393,8 @@ export interface HistoricalCheckpointTimeframeState {
   readonly phase: "pending" | "fetching" | "complete";
   readonly nextCursor?: string;
   readonly pageCount: number;
+  readonly acceptedCandleCount: number;
+  readonly rejectedEventCount: number;
   readonly partitionIds: readonly string[];
 }
 
@@ -505,7 +507,21 @@ export interface HistoricalDatasetRepositoryOptions {
   readonly storage: HistoricalDatasetStorageAdapter;
   readonly now?: () => string;
   readonly maximumPagesPerTimeframe?: number;
+  readonly maximumPartitions?: number;
+  readonly maximumAcceptedCandles?: number;
   readonly atomicWriteRetries?: number;
+  readonly onProgress?: (event: Readonly<HistoricalDatasetProgressEvent>) => void | Promise<void>;
+}
+
+export interface HistoricalDatasetProgressEvent {
+  readonly eventType: "page_committed" | "sealing_started" | "dataset_complete" | "dataset_coalesced";
+  readonly requestId: string;
+  readonly timeframe?: HistoricalTimeframe;
+  readonly pagesCompleted: number;
+  readonly partitionCount: number;
+  readonly barsAccepted: number;
+  readonly barsRejected: number;
+  readonly datasetId?: string;
 }
 
 export interface HistoricalDatasetCreationResult {

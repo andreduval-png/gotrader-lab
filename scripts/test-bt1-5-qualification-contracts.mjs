@@ -79,7 +79,7 @@ await assert.rejects(
 );
 
 const withinBounds = await modules.qualification.buildHistoricalDatasetCapacityPlan({
-  sourceTimeframe: "1m",
+  sourceTimeframes: Object.freeze(["1m", "1d", "1w"]),
   pilotStartUtc: "2024-01-01T00:00:00.000Z",
   pilotEndUtc: "2024-01-08T00:00:00.000Z",
   targetStartUtc: "2024-01-01T00:00:00.000Z",
@@ -97,7 +97,7 @@ assert.equal(withinBounds.status, "within_bounds");
 assert.match(withinBounds.capacityPlanId, /^sha256:[0-9a-f]{64}$/);
 
 const blockedCapacity = await modules.qualification.buildHistoricalDatasetCapacityPlan({
-  sourceTimeframe: "1m",
+  sourceTimeframes: Object.freeze(["1m", "1d", "1w"]),
   pilotStartUtc: "2024-01-01T00:00:00.000Z",
   pilotEndUtc: "2024-01-08T00:00:00.000Z",
   targetStartUtc: "2024-01-01T00:00:00.000Z",
@@ -116,6 +116,13 @@ assert.ok(blockedCapacity.blockers.includes("historical_capacity_source_bar_boun
 assert.ok(blockedCapacity.blockers.includes("historical_capacity_partition_bound_exceeded"));
 assert.ok(blockedCapacity.blockers.includes("historical_capacity_storage_bound_exceeded"));
 assert.ok(blockedCapacity.blockers.includes("historical_capacity_memory_bound_exceeded"));
+await assert.rejects(
+  () => modules.qualification.buildHistoricalDatasetCapacityPlan({
+    ...blockedCapacity,
+    sourceTimeframes: Object.freeze(["2m"])
+  }),
+  /unsupported source timeframe/i
+);
 
 const adapterA = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
   baseUrl: "http://127.0.0.1:7341",
