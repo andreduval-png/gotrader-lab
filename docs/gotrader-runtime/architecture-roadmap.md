@@ -30,6 +30,8 @@ B1.2 OPERATIONAL ACCEPTANCE PENDING
 
 BT1 DATASET FOUNDATION COMPLETE WITH HISTORICAL TIME LIMITATIONS
 
+BT1.5 QUALIFICATION TOOLING COMPLETE - OPERATIONAL GATES BLOCKED
+
 BT2 BLOCKED
 ```
 
@@ -47,6 +49,9 @@ The independent BT1 historical dataset foundation is complete at
 `feac1841efd0203c75d723de9f1ff64705b2e20c`, with accepted reports at
 `b80338bb9d0e7a86e275c8bd3b0ff22662380275`. Actual MT5 broker-historical
 time/DST and a two-year dataset remain unverified, so BT2 is blocked.
+BT1.5 tooling is implemented at
+`be8d96b340622519578f8f3a102800a002594aee`, with the pending operational
+report set at `1b669c735f707b8c10d947d05803a0965574742d`.
 
 ## 2. Milestone Namespace Rules
 
@@ -57,7 +62,8 @@ Milestone labels are immutable identifiers.
 - `G1-G3` govern GBrain research-memory integration.
 - `B1.0-B1.6` govern future canonical autonomous research implementation.
 - `B1-L1` is a lineage planning subtrack, not a replacement for `B1.2`.
-- `BT0-BT2` govern the separate canonical historical backtesting track.
+- `BT0-BT2` govern the separate canonical historical backtesting track;
+  BT1.5 is the operational qualification gate between BT1 and BT2.
 - `B2-B4` are reserved names only.
 
 A new document may refine a milestone but may not silently reuse its number for
@@ -81,9 +87,11 @@ flowchart LR
   B11["B1.1<br/>accepted"]
   B12["B1.2<br/>implemented, ops pending"]
   BT1["BT1<br/>dataset foundation complete<br/>time limitations"]
+  BT15["BT1.5<br/>tooling complete<br/>ops blocked"]
   P0 --> P1 --> P2 --> P3
   A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10 --> B11 --> B12
   P1 --> BT1
+  BT1 --> BT15
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -109,7 +117,8 @@ grant production, evidence, readiness, broker, or execution authority.
 | B1.6 | B1.5, GBrain baseline review | memory projection design | not_started | blocked |
 | BT0 | Architecture audit | forensic audit and architecture recommendation | complete | passed with documented limitations |
 | BT1 | BT0, ACC-BT-B1.4 | canonical historical dataset foundation | complete | passed with documented historical time limitations |
-| BT2 | BT1 historical time and dataset acceptance | separate simulation architecture | not_started | blocked |
+| BT1.5 | BT1 | MT5 historical time and two-year dataset qualification | complete | blocked pending live qualification |
+| BT2 | BT1.5 acceptance | separate simulation architecture | not_started | blocked |
 | B2 | New accepted specification | reserved | not_started | unspecified / blocked |
 | B3 | New accepted specification | reserved | not_started | unspecified / blocked |
 | B4 | New accepted specification | reserved | not_started | unspecified / blocked |
@@ -178,6 +187,16 @@ lineage. Fixture validation passed. The broker-history time basis, DST behavior,
 and an actual two-year MT5 manifest remain unverified. Operational historical
 data qualification may proceed under a new isolated concurrency preflight;
 BT2 may not.
+
+### 5.8 BT1.5 historical operational qualification - implementation complete, blocked
+
+BT1.5 provides canonical evidence, calendar, alignment, symbol, capacity,
+request, preflight, dataset, and reproduction identities. It also provides a
+GET-only diagnostic collector and a bounded repository runner. Deterministic
+validation passed, but no actual MT5 historical evidence package, capacity
+pilot, two-year dataset, live interruption/resume, or independent live
+reproduction has passed. Historical time/DST remain false and BT2 remains
+blocked.
 
 ## 6. B1 Implementation Sequence
 

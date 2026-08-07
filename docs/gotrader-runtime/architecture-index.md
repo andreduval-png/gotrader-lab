@@ -2,7 +2,7 @@
 
 Status: frozen accepted-architecture index
 
-Index revision basis: `2cc5a2afccdc0f3043e2d471f9261b18d6f657ca`
+Index revision basis: `1b669c735f707b8c10d947d05803a0965574742d`
 
 Planning branch: `codex/gotrader-runtime-freeze-baseline`
 
@@ -88,6 +88,7 @@ implementation is not permission to adopt it in production.
 | B1.2 | Live context-lineage canary implemented and authorized in an isolated shadow profile; operational acceptance pending. |
 | B1.3-B1.6 | Unauthorized until each separate prerequisite and gate passes. |
 | BT1 | Canonical historical dataset foundation complete in isolation with documented MT5 historical time/DST limitations. |
+| BT1.5 | Qualification tooling complete in isolation; live MT5 time evidence, capacity pilot, two-year dataset, restart, and reproduction remain operationally blocked. |
 | BT2 | Blocked pending accepted historical time/DST authority, a verified two-year dataset, and separate authorization. |
 | B2-B4 | Reserved names only; unspecified and unauthorized. |
 | Future execution | Unimplemented and blocked. |
@@ -153,6 +154,8 @@ The short labels below are used in the master tables.
 | `BT1-AUTHORIZATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `02e7393d842475747ac7d1f36f44c45d1bf58902` |
 | `BT1-IMPLEMENTATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `feac1841efd0203c75d723de9f1ff64705b2e20c` |
 | `BT1-REPORTS` | `codex/gotrader-backtest-bt1-dataset-foundation` | `b80338bb9d0e7a86e275c8bd3b0ff22662380275` |
+| `BT1.5-TOOLING` | `codex/gotrader-backtest-bt1-5-historical-qualification` | `be8d96b340622519578f8f3a102800a002594aee` |
+| `BT1.5-PENDING-REPORTS` | `codex/gotrader-backtest-bt1-5-historical-qualification` | `1b669c735f707b8c10d947d05803a0965574742d` |
 
 ## 5. Master Document Index
 
@@ -317,6 +320,19 @@ runtime milestone `B1.2`.
 | `docs/gotrader-backtest/bt1-symbol-normalization.md` | accepted | complete | not_run | BT1-REPORTS | `a7611160114a9caebc9b8f2c24c99c226f80e224` | Symbol Contract |
 | `docs/gotrader-backtest/bt1-storage-and-lineage.md` | accepted | complete | not_run | BT1-REPORTS | `6295e3e6b59748b37d6da2c8d12e619efa500b05` | Storage And Lineage |
 
+### 5.10 BT1.5 MT5 historical operational qualification
+
+| Specification | Doc | Impl | Ops | Commit | Blob | Domain |
+| --- | --- | --- | --- | --- | --- | --- |
+| `docs/gotrader-backtest/bt1-5-concurrency-preflight.md` | accepted | not_applicable | blocked | BT1.5-PENDING-REPORTS | `44f97f0c2e9c681451789309d77af5a2083dee41` | Governance |
+| `docs/gotrader-backtest/bt1-5-mt5-historical-time-evidence.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `f982d6fc4c0cb37111a7f48529b92ab366cf7f3d` | Historical Time |
+| `docs/gotrader-backtest/bt1-5-time-authority-decision.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `b1ae619dcca573b33338c82ba221e2ab44f06fea` | Historical Time |
+| `docs/gotrader-backtest/bt1-5-symbol-specification-qualification.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `f64b39f3513d2fcdcc0b64d3952cbc714079b3b6` | Symbol Specification |
+| `docs/gotrader-backtest/bt1-5-two-year-dataset-qualification.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `44b7ebd2aa955b2141870505c1ecff1744255580` | Historical Data |
+| `docs/gotrader-backtest/bt1-5-restart-and-reproduction-report.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `a95a57d1fc0628b9e1c576ecfb449a0cf26003fc` | Reproduction |
+| `docs/gotrader-backtest/bt1-5-performance-and-storage-report.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `b7547ff296aa1badb16e76ecafde14178e2d2fbd` | Capacity |
+| `docs/gotrader-backtest/bt1-5-final-qualification-report.md` | blocked | complete | blocked | BT1.5-PENDING-REPORTS | `603f2a8ff380400ca483a72f357cab0f751e63f1` | Acceptance |
+
 ## 6. Acceptance Evidence
 
 | Milestone | Evidence | Honest conclusion |
@@ -336,6 +352,7 @@ runtime milestone `B1.2`.
 | B1.1 | Signed authorization record, exact 10-file implementation allowlist, recovery/lease/conflict safety tests, and full regression/build validation. | Accepted local engine-and-repository milestone; zero production consumers and no live runtime adoption. |
 | B1.2 | Signed authorization record, exact 14-file implementation allowlist, deterministic identity/restart/lookahead/profile tests, runtime regressions, and an integrity-hashed observer. | Implementation complete in the isolated shadow profile; four-hour operational acceptance has not yet run. |
 | BT1 | Approved architecture boundary, deterministic paging/identity/restart/time/integrity fixtures, stable cross-root checksums, and B1-L1 external-authoritative lineage. | Dataset foundation passed with MT5 broker-historical time/DST and the actual two-year dataset still unverified. |
+| BT1.5 | Canonical qualification identities, bounded GET-only diagnostics, fresh live preflight, capacity-gated ingestion, progress, v1 checkpoint migration, and reproduction comparison. | Implementation complete; all actual MT5 historical evidence and two-year operational gates remain blocked. |
 
 ## 7. Governance Map
 

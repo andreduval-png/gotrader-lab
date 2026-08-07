@@ -289,6 +289,8 @@ B1.2 Live Canary Implemented - Operational Acceptance Pending
 
 BT1 Dataset Foundation Complete - Historical Time Limitations Preserved
 
+BT1.5 Qualification Tooling Complete - Operational Qualification Blocked
+
 BT2 Blocked
 
 B1.3 Not Authorized
@@ -354,3 +356,36 @@ evidence, readiness, calibration, and trade-intent capabilities remain false.
 Acceptance is limited to the BT1 foundation and deterministic fixture evidence.
 MT5 broker-historical time/DST and an actual two-year dataset remain blocked.
 BT2 is not authorized.
+
+## 17. Pending BT1.5 Operational Qualification Change
+
+Change ID: `ACC-BT1.5-2026-08-07`
+
+Decision: `IMPLEMENTATION_ACCEPTED_OPERATIONAL_BLOCKED`
+
+Implementation records:
+
+```text
+identity hardening: 40838521267361b0c1882a718609a70d4743b317
+qualification tooling: be8d96b340622519578f8f3a102800a002594aee
+pending report set: 1b669c735f707b8c10d947d05803a0965574742d
+final report blob: 603f2a8ff380400ca483a72f357cab0f751e63f1
+```
+
+The change adds canonical BT1.5 qualification identities, allowlisted GET-only
+diagnostics, a fresh exact-candidate live preflight, capacity-gated historical
+ingestion, compact progress, checkpoint compatibility, controlled restart, and
+separate deterministic-rematerialization/provider-requery comparison. It does
+not add BT2 simulation, strategy behavior, parameter search, statistics, risk,
+production adoption, broker mutation, or execution.
+
+Operational acceptance is blocked. Actual MT5 broker-history winter, summer,
+spring/fall DST, and maintenance evidence have not been sealed; the symbol
+snapshot, capacity pilot, two-year dataset, live restart, and independent
+reproduction remain pending. `historicalTimeVerified` and
+`historicalDstVerified` remain false. BT2 is not authorized.
+
+Compatibility is additive and isolated below `.gotrader/bt1-5`. Authority
+before and after remains `none / none / none`; production, evidence, readiness,
+calibration, and trade-intent capabilities remain false. Rollback is to remove
+BT1.5 callers and retain any sealed historical roots read-only.
