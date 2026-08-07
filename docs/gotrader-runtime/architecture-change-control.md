@@ -287,6 +287,10 @@ B1.1 Local Engine And Repository Accepted
 
 B1.2 Live Canary Implemented - Operational Acceptance Pending
 
+BT1 Dataset Foundation Complete - Historical Time Limitations Preserved
+
+BT2 Blocked
+
 B1.3 Not Authorized
 ```
 
@@ -307,3 +311,46 @@ current-live context-lineage canary implementation at
 Operational acceptance remains pending. B1.3 is not authorized, and B1.2 grants
 no strategy, production, evidence, readiness, memory, broker, execution, or
 calibration authority.
+
+## 16. Accepted BT1 Architecture Change
+
+Change ID: `ACC-BT-B1.4`
+
+Decision: `APPROVED`
+
+Authorization record:
+
+```text
+path: docs/gotrader-backtest/bt1-architecture-and-concurrency-authorization.md
+source commit: 02e7393d842475747ac7d1f36f44c45d1bf58902
+blob: 89833057dbf88954a1595cdf2fa0b6c847d1f2b2
+```
+
+Implementation and report records:
+
+```text
+implementation commit: 3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa
+report commit: 9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f
+foundation report blob: 42ee544089a1fde39ec86c198ac2a430912bc068
+```
+
+The accepted change creates a new isolated canonical historical dataset
+subsystem rather than extending incompatible legacy backtest stores. It owns
+historical provider adapters, normalization, immutable partitions, integrity,
+identity, manifests, checkpoints, verification, symbol/time snapshots,
+derived timeframe lineage, and historical-OHLC storage.
+
+Compatibility is additive and library-only. Existing runtime, B1, Phase 2A,
+Phase 3, GBrain, Native Evidence, strategy hashes, broker paths, and production
+behavior are unchanged. B1-L1 receives compact external-authoritative
+references; raw candles remain in BT1 storage.
+
+Rollback is to remove all BT1 consumers and leave sealed dataset roots
+read-only. No existing subsystem depends on BT1.
+
+Authority before and after remains `none / none / none`; all production,
+evidence, readiness, calibration, and trade-intent capabilities remain false.
+
+Acceptance is limited to the BT1 foundation and deterministic fixture evidence.
+MT5 broker-historical time/DST and an actual two-year dataset remain blocked.
+BT2 is not authorized.

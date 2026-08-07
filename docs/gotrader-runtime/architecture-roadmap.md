@@ -27,6 +27,10 @@ B1.1 LOCAL ENGINE AND REPOSITORY ACCEPTED
 B1.2 LIVE CONTEXT-LINEAGE CANARY IMPLEMENTED
 
 B1.2 OPERATIONAL ACCEPTANCE PENDING
+
+BT1 DATASET FOUNDATION COMPLETE WITH HISTORICAL TIME LIMITATIONS
+
+BT2 BLOCKED
 ```
 
 The exact runtime baseline is frozen at
@@ -39,6 +43,11 @@ accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. B1.0 is accepted at
 `89ba4b276fdfdc5dd5396959636fb0e86bdba436`. Its four-hour live operational
 observation remains pending; no later milestone is authorized.
 
+The independent BT1 historical dataset foundation is complete at
+`3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa`, with accepted reports at
+`9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f`. Actual MT5 broker-historical
+time/DST and a two-year dataset remain unverified, so BT2 is blocked.
+
 ## 2. Milestone Namespace Rules
 
 Milestone labels are immutable identifiers.
@@ -48,6 +57,7 @@ Milestone labels are immutable identifiers.
 - `G1-G3` govern GBrain research-memory integration.
 - `B1.0-B1.6` govern future canonical autonomous research implementation.
 - `B1-L1` is a lineage planning subtrack, not a replacement for `B1.2`.
+- `BT0-BT2` govern the separate canonical historical backtesting track.
 - `B2-B4` are reserved names only.
 
 A new document may refine a milestone but may not silently reuse its number for
@@ -70,8 +80,10 @@ flowchart LR
   B10["B1.0<br/>accepted"]
   B11["B1.1<br/>accepted"]
   B12["B1.2<br/>implemented, ops pending"]
+  BT1["BT1<br/>dataset foundation complete<br/>time limitations"]
   P0 --> P1 --> P2 --> P3
   A1 --> A2 --> A31 --> A32 --> RF --> BR --> B10 --> B11 --> B12
+  P1 --> BT1
 ```
 
 These tracks established compatibility and operational evidence. They did not
@@ -95,6 +107,9 @@ grant production, evidence, readiness, broker, or execution authority.
 | B1.4 | B1.3, historical time authority | historical job design | not_started | blocked |
 | B1.5 | B1.4 | compatibility projection design | not_started | blocked |
 | B1.6 | B1.5, GBrain baseline review | memory projection design | not_started | blocked |
+| BT0 | Architecture audit | forensic audit and architecture recommendation | complete | passed with documented limitations |
+| BT1 | BT0, ACC-BT-B1.4 | canonical historical dataset foundation | complete | passed with documented historical time limitations |
+| BT2 | BT1 historical time and dataset acceptance | separate simulation architecture | not_started | blocked |
 | B2 | New accepted specification | reserved | not_started | unspecified / blocked |
 | B3 | New accepted specification | reserved | not_started | unspecified / blocked |
 | B4 | New accepted specification | reserved | not_started | unspecified / blocked |
@@ -154,6 +169,16 @@ its isolated profile. The next action is one integrity-hashed four-hour
 observation spanning the maintenance break. B1.3 remains blocked until every
 B1.2 acceptance check passes.
 
+### 5.7 BT1 historical dataset foundation - complete with limitations
+
+BT1 now provides immutable identity, bounded paging, atomic checkpoints,
+restart/resume, integrity ledgers, stable checksums, deterministic derived
+timeframes, symbol snapshots, explicit time authority, and B1-L1 external
+lineage. Fixture validation passed. The broker-history time basis, DST behavior,
+and an actual two-year MT5 manifest remain unverified. Operational historical
+data qualification may proceed under a new isolated concurrency preflight;
+BT2 may not.
+
 ## 6. B1 Implementation Sequence
 
 ### B1.0 - contracts and identity
@@ -207,6 +232,8 @@ Native deterministic evidence remains authoritative.
 - verification of the B1.2 integrity-hashed final report;
 - optional corrected-observer follow-up monitoring that does not alter the
   frozen evidence.
+- isolated BT1 broker-history time/DST evidence collection and two-year dataset qualification;
+- BT1 manifest, checksum, integrity, storage, and lineage verification.
 
 ### Blocked now
 
@@ -214,6 +241,7 @@ Native deterministic evidence remains authoritative.
 - B1.3 strategy adapter implementation or authorization;
 - GBrain production-baseline merge;
 - historical B1 jobs;
+- BT2 simulation, strategy migration, parameter search, optimization, statistics, Monte Carlo, risk, or portfolio work;
 - B2-B4 design or implementation without new specifications;
 - strategy production adoption;
 - evidence or readiness promotion;
@@ -234,9 +262,13 @@ flowchart TD
   B14["B1.4 historical jobs"]
   B15["B1.5 compatibility"]
   B16["B1.6 memory"]
+  BT1["BT1 dataset foundation<br/>complete with time limitations"]
+  BT2["BT2 simulation<br/>blocked"]
   FUT["B2-B4<br/>reserved, new specs required"]
   A32 --> RF --> BR --> B10 --> B11 --> B12 --> B13
   HT --> B14
+  BT1 --> HT
+  BT1 --> BT2
   B13 --> B14 --> B15 --> B16 --> FUT
 ```
 
@@ -261,6 +293,10 @@ B1.0 Contracts And Identity Accepted
 B1.1 Local Engine And Repository Accepted
 
 B1.2 Implementation Complete - Operational Acceptance Pending
+
+BT1 Dataset Foundation Complete - Historical Time Limitations Preserved
+
+BT2 Blocked
 
 B1.3 Not Authorized
 ```

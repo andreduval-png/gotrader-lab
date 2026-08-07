@@ -87,6 +87,8 @@ implementation is not permission to adopt it in production.
 | B1.1 | Local deterministic engine and compact repository are accepted in isolation with zero production consumers. |
 | B1.2 | Live context-lineage canary implemented and authorized in an isolated shadow profile; operational acceptance pending. |
 | B1.3-B1.6 | Unauthorized until each separate prerequisite and gate passes. |
+| BT1 | Canonical historical dataset foundation complete in isolation with documented MT5 historical time/DST limitations. |
+| BT2 | Blocked pending accepted historical time/DST authority, a verified two-year dataset, and separate authorization. |
 | B2-B4 | Reserved names only; unspecified and unauthorized. |
 | Future execution | Unimplemented and blocked. |
 
@@ -148,6 +150,9 @@ The short labels below are used in the master tables.
 | `B1.1-ACCEPTANCE` | `codex/gotrader-b1-1-authorized` | `92da83b7b550eac31d3114acffc4e8748d880cfe` |
 | `B1.2-IMPLEMENTATION` | `codex/gotrader-b1-2-authorized` | `820a6278fcdadf061c354c4e30c89af034d20780` |
 | `B1.2-AUTHORIZATION` | `codex/gotrader-b1-2-authorized` | `89ba4b276fdfdc5dd5396959636fb0e86bdba436` |
+| `BT1-AUTHORIZATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `02e7393d842475747ac7d1f36f44c45d1bf58902` |
+| `BT1-IMPLEMENTATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa` |
+| `BT1-REPORTS` | `codex/gotrader-backtest-bt1-dataset-foundation` | `9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f` |
 
 ## 5. Master Document Index
 
@@ -301,6 +306,17 @@ runtime milestone `B1.2`.
 | `docs/gotrader-runtime/runtime-freeze-baseline-record.json` | accepted | not_applicable | accepted | RUNTIME-FREEZE | `ec8ab01548eb043ed394f1fa12aed75e488389c5` | Baseline |
 | `docs/gotrader-runtime/runtime-freeze-baseline-review.md` | accepted | not_applicable | accepted | RUNTIME-FREEZE | `b84e7feba0aa1bdb8e5967c956bb0db0deaea6d8` | Governance |
 
+### 5.9 BT1 canonical historical dataset foundation
+
+| Specification | Doc | Impl | Ops | Commit | Blob | Domain |
+| --- | --- | --- | --- | --- | --- | --- |
+| `docs/gotrader-backtest/bt1-architecture-and-concurrency-authorization.md` | accepted | not_applicable | not_run | BT1-AUTHORIZATION | `89833057dbf88954a1595cdf2fa0b6c847d1f2b2` | Governance |
+| `docs/gotrader-backtest/bt1-dataset-foundation-report.md` | accepted | complete | accepted_with_limitations | BT1-REPORTS | `42ee544089a1fde39ec86c198ac2a430912bc068` | Historical Data |
+| `docs/gotrader-backtest/bt1-dataset-identity-specification.md` | accepted | complete | not_run | BT1-REPORTS | `6efdc0ea196d5e1f0e78c722bfe9c70177944017` | Identity |
+| `docs/gotrader-backtest/bt1-historical-time-authority.md` | accepted | complete | blocked | BT1-REPORTS | `a4c3cab159368e89a3b4aff7c1f53f3b11889d3d` | Historical Time |
+| `docs/gotrader-backtest/bt1-symbol-normalization.md` | accepted | complete | not_run | BT1-REPORTS | `a7611160114a9caebc9b8f2c24c99c226f80e224` | Symbol Contract |
+| `docs/gotrader-backtest/bt1-storage-and-lineage.md` | accepted | complete | not_run | BT1-REPORTS | `6295e3e6b59748b37d6da2c8d12e619efa500b05` | Storage And Lineage |
+
 ## 6. Acceptance Evidence
 
 | Milestone | Evidence | Honest conclusion |
@@ -319,6 +335,7 @@ runtime milestone `B1.2`.
 | B1.0 | Signed authorization record, exact 20-file implementation allowlist, fixture parity, negative safety checks, and full regression/build validation. | Accepted contracts-and-identity milestone; zero production consumers and no runtime adoption. |
 | B1.1 | Signed authorization record, exact 10-file implementation allowlist, recovery/lease/conflict safety tests, and full regression/build validation. | Accepted local engine-and-repository milestone; zero production consumers and no live runtime adoption. |
 | B1.2 | Signed authorization record, exact 14-file implementation allowlist, deterministic identity/restart/lookahead/profile tests, runtime regressions, and an integrity-hashed observer. | Implementation complete in the isolated shadow profile; four-hour operational acceptance has not yet run. |
+| BT1 | Approved architecture boundary, deterministic paging/identity/restart/time/integrity fixtures, stable cross-root checksums, and B1-L1 external-authoritative lineage. | Dataset foundation passed with MT5 broker-historical time/DST and the actual two-year dataset still unverified. |
 
 ## 7. Governance Map
 
@@ -350,6 +367,7 @@ flowchart LR
   P2["Phase 2A canonical context"]
   P3["Phase 3 IFVG shadow canary"]
   B1["B1 canonical research jobs"]
+  BT1["BT1 historical datasets"]
   L1["B1-L1 lineage"]
   G["GBrain derived memory"]
   EV["Evidence/readiness"]
@@ -359,6 +377,7 @@ flowchart LR
   A32 --> B1
   P2 --> B1
   P3 --> B1
+  BT1 --> L1
   B1 --> L1
   L1 --> G
   L1 --> EV
@@ -416,6 +435,12 @@ following:
 7. explicit authorization and deterministic implementation of B1.2 - complete
    at `89ba4b276fdfdc5dd5396959636fb0e86bdba436`.
 
+The independent BT1 historical dataset foundation is complete at
+`3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa` with reports at
+`9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f`. It grants no runtime or strategy
+authority. BT2 remains blocked until MT5 broker-historical time/DST and an
+actual two-year dataset are accepted under a separate gate.
+
 The active gate is the B1.2 four-hour operational observation. B1.2 remains
 isolated and shadow-only; its implementation does not authorize B1.3 or any
 production, strategy, evidence, readiness, memory, broker, or execution path.
@@ -428,12 +453,15 @@ Permitted now:
 - B1.0 and B1.1 acceptance and frozen-hash verification;
 - B1.2 operational preflight and four-hour isolated observation;
 - verification and preservation of its integrity-hashed report.
+- fixture-only BT1 dataset verification and architecture review;
+- isolated operational qualification of historical time and one two-year dataset under a new concurrency preflight.
 
 Blocked now:
 
 - B1.2 production adoption outside its isolated shadow profile;
 - B1.3 implementation or authorization;
 - B2-B4 implementation;
+- BT2 simulation, strategy migration, search, statistics, Monte Carlo, risk, or portfolio implementation;
 - GBrain baseline merge;
 - evidence or readiness authority;
 - production adoption;
@@ -450,6 +478,8 @@ Blocked now:
 | B1.0 contracts and identity | accepted | Preserve the signed 20-file scope and zero-production-consumer boundary. |
 | B1.1 engine and repository | accepted | Preserve the signed 10-file scope, bounded repository, and zero-production-consumer boundary. |
 | B1.2 live shadow context-lineage canary | implementation complete / operationally blocked | Run and preserve the required four-hour maintenance-break observation. |
+| BT1 historical dataset foundation | complete with documented time limitations | Verify broker-historical time/DST and seal one accepted two-year dataset. |
+| BT2 historical simulation | blocked | Requires accepted historical time/DST, a verified two-year dataset, and separate architecture authorization. |
 | B2 strategy expansion | reserved / unspecified | New accepted specification required. |
 | B3 consensus | reserved / unspecified | New accepted specification required. |
 | B4 AI supervision | reserved / unspecified | New accepted specification required. |
@@ -473,6 +503,10 @@ B1.0 Contracts And Identity Accepted
 B1.1 Local Engine And Repository Accepted
 
 B1.2 Implementation Complete - Operational Acceptance Pending
+
+BT1 Dataset Foundation Complete - Historical Time Limitations Preserved
+
+BT2 Blocked
 
 B1.3 Not Authorized
 ```
