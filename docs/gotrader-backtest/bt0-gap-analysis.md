@@ -34,6 +34,27 @@ Scale: 0 absent, 1 severely inadequate, 2 partial, 3 functional, 4 strong, 5 pro
 
 Total: 48 / 135 (35.6%). Safety is strong; research validity and operating lifecycle are not.
 
+## Addendum Gap Scores
+
+The original 27-domain score remains intact for comparability. Large-scale discovery adds these separately scored domains:
+
+| Addendum domain | Score | Evidence |
+|---|---:|---|
+| Strategy parameter schema | 1 | Generic config exists, but most strategy constants lack typed range/frozen/causal/sweep metadata |
+| Large-scale search orchestration | 1 | A 2,560 post-filter grid exists; browser evaluates 50 by default; no durable scheduler/resume |
+| Experiment-family identity | 0 | No immutable population/family ID retaining every attempted configuration |
+| Sequential validation funnel | 2 | Auto Research/IFVG/OOS gates exist, but no family-wide stage counts and rejection ledger |
+| Multiple-comparisons correction | 0 | No BH-FDR, Holm, Bonferroni, reality check, Deflated Sharpe, or PBO |
+| Null-hypothesis testing | 0 | No random-entry, direction-shuffle, permutation, or matched null engine |
+| Controlled ablation | 1 | IFVG named variants exist; no canonical feature dependency/paired experiment model |
+| Cold-instrument governance | 0 | Multiple symbols exist, but discovery and untouched validation instruments are not sealed |
+| Holdout governance | 1 | Frozen cutoff/profile exists; no one-way sealed/unlocked/consumed state |
+| Survivor-distribution reporting | 1 | Top candidates are retained; complete funnel distributions are not first-class |
+| Complexity/neighborhood robustness | 0 | No complexity score, tuned-dimension count, or local stability engine |
+| Canonical Sharpe | 0 | UI has `sharpeLike`; no versioned net daily-return Sharpe contract |
+
+Addendum total: 7 / 60 (11.7%). These gaps confirm that current optimization is a bounded diagnostic, not statistically governed discovery.
+
 ## Critical Blockers
 
 1. Historical time and DST are not accepted.
@@ -43,12 +64,15 @@ Total: 48 / 135 (35.6%). Safety is strong; research validity and operating lifec
 5. No restartable two-year job lifecycle exists.
 6. No immutable canonical trade ledger or portfolio simulator exists.
 7. Strategy adapters do not cover the full manifest.
+8. No immutable experiment-family/all-trial ledger or governed large-scale search lifecycle exists.
+9. No formal multiple-testing correction, no-edge null engine, or canonical Sharpe contract exists.
+10. Cold instruments and holdouts cannot be sealed, unlocked, and consumed through one-way governance.
 
 ## Preserve / Replace
 
-Preserve Phase 3F hashing/time gates, B1 identities and authority, strategy manifest, canonical candles/context, causal fixtures, conservative ambiguity, frozen IFVG controls, detector-profile holdout, deterministic bootstrap, and safety suite.
+Preserve Phase 3F hashing/time gates, B1 identities and authority, strategy manifest, canonical candles/context, causal fixtures, conservative ambiguity, frozen IFVG controls, detector-profile cutoff/holdout evidence, deterministic bootstrap, and safety suite.
 
-Replace authoritative browser persistence, futures-only symbol assumptions, generic tick fallback, random run identities, duplicated outcome schemas, MFE-as-realized-R, and monolithic UI-driven run lifecycle after shadow parity is proven.
+Replace authoritative browser persistence, top-only optimizer retention, futures-only symbol assumptions, generic tick fallback, random run identities, duplicated outcome schemas, MFE-as-realized-R, resettable/implicit holdout handling, and monolithic UI-driven run lifecycle after shadow parity is proven.
 
 ## Classification
 

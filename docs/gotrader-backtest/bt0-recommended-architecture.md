@@ -19,8 +19,13 @@ flowchart TB
   G --> H["Immutable trade ledger"]
   H --> I["Strategy analytics"]
   H --> J["Risk and portfolio simulator"]
-  I --> K["Comparison/report artifacts"]
+  I --> S["Statistical validation and null engine"]
+  S --> K["Comparison/report artifacts"]
   J --> K
+  P["Parameter schema and search planner"] --> Q["Immutable experiment-family trial ledger"]
+  Q --> L
+  S --> R["One-way holdout controller"]
+  R --> K
   L["Experiment coordinator and checkpoints"] --> B
   L --> E
   L --> G
@@ -39,6 +44,9 @@ flowchart TB
 | Strategy adapter | Frozen detector/profile and native opportunity geometry | Costs, sizing, readiness |
 | Trade simulator | Fill, intrabar, gap, exit, costs, immutable trade ledger | Parameter selection or portfolio sizing |
 | Strategy analytics | Gross/net trade metrics and validation tables | Account risk rules |
+| Parameter/search service | Typed family schemas, deterministic plans, budgets, seeds, trial identities | Mutating frozen profiles or discarding weak trials |
+| Statistical validation | Funnel, corrected significance, nulls, ablations, complexity, neighborhoods, era/cold analysis | Choosing parameters from holdout or granting authority |
+| Holdout controller | Sealed/unlocked/consumed state and immutable authorization/result seals | Retuning, reset, or result deletion |
 | Risk/portfolio simulator | Sizing, contention, equity, exposure/correlation | Detector mutation |
 | Experiment coordinator | Identity, dependency DAG, checkpoints, retries, sealing | Trading or evidence authority |
 | B1.4 | Authorized job request, lineage, scheduling, policy, compact result consumption | Internal engine semantics |
@@ -54,7 +62,11 @@ flowchart TB
 6. `ValidationPlan`: train/validation/OOS windows, warmup, trial selection, minimum samples.
 7. `AnalyticsReport`: versioned formulas and parent seals.
 8. `RiskPortfolioExperiment`: independent risk policy and parent trade-ledger seal.
-9. `JobCheckpoint`: stage/partition cursors and dependency hashes.
+9. `ParameterSchema`: typed dimensions, distributions/resolutions, frozen/causal/sweep status, and namespace.
+10. `ExperimentFamilyLedger`: hierarchy, search plan/budget/seed, every trial disposition, and stage counts.
+11. `StatisticalValidationReport`: formulas, canonical Sharpe, corrections, nulls, ablations, neighborhoods, eras, cold-instrument state, and full survivor distributions.
+12. `HoldoutSeal`: dataset/freeze/family identity plus one-way sealed/unlocked/consumed timestamps and result seal.
+13. `JobCheckpoint`: stage/partition cursors and dependency hashes.
 
 Every artifact is content-addressed or canonically hashed, finalized atomically, and immutable after seal.
 
@@ -86,13 +98,17 @@ Migration protections:
 
 Use filesystem-backed or embedded-database authoritative storage in an isolated research root, with compact columnar partitions and JSON manifests/reports. IndexedDB/localStorage may cache views only. Run a headless coordinator with bounded workers. Partition by dataset/symbol/time slice for ingestion and by sealed dataset/strategy for detection; preserve deterministic ordering before sealing.
 
+Large searches separate detector-rerun dimensions from cheap post-detection filters. Causal fact/opportunity caches are content-addressed parents and may be reused only when every upstream identity matches. Staged elimination retains all trial rows and reasons. Adaptive search cannot escape its original experiment family. Search, null, ablation, era, cold-instrument, and holdout runs are deterministic child jobs with independent checkpoints and bounded expansion budgets.
+
 ## B1.4 Change Control
 
 The frozen roadmap currently describes B1.4 historical replay/walk-forward after time authority. The recommended responsibility split is a material clarification. Before implementation, create an Architecture Change Control record titled approximately:
 
 `ACC-BT-B1.4: Canonical Backtest Subsystem Boundary And B1.4 Orchestration Contract`
 
-It should record scope, parent baseline, interfaces, migration controls, authority matrix, storage ownership, historical-time gate, compatibility tests, rollback/read-only behavior, and the exact roadmap/index wording. Do not silently edit the Architecture Index.
+It should record scope, parent baseline, interfaces, migration controls, authority matrix, storage ownership, historical-time gate, parameter/search ownership, experiment-family lineage, statistical/null services, holdout lifecycle, compatibility tests, rollback/read-only behavior, and the exact roadmap/index wording. Do not silently edit the Architecture Index.
+
+BT0's proposed, explicitly unadopted record is `bt0-draft-change-control-record.md`.
 
 ## Safety
 

@@ -60,6 +60,12 @@ All authority is `none/none/none`. Diagnostic recognition and context primitives
 - Placeholder/distributed Grinch entries: `UNVERIFIED` for canonical historical execution.
 - Session-sensitive strategies: additionally `BLOCKED` for accepted historical conclusions until historical provider time/DST is verified.
 
+## Parameter-Search Readiness
+
+No executable family is ready for unrestricted large-scale search. Generic profile controls are typed but mix detector, geometry, engine, and cost concerns; most family-specific detector thresholds are hardcoded; Session Raid v2 exposes nine floats without canonical allowed ranges; and the ICT 2,560-candidate grid re-filters existing outcomes rather than rerunning detector semantics. IFVG's 26 named variants are useful ablation evidence but are not a complete search schema.
+
+BT3A must publish a versioned parameter schema for each executable family before BT8A search operations. Frozen positive/negative controls remain immutable. Controlled ablations use overlays or new profile versions. Full details are in `bt0-parameter-search-and-anti-overfitting-addendum.md`.
+
 ## Coverage Conclusion
 
 `FULLY_BACKTESTABLE`: 0

@@ -47,6 +47,49 @@ Controls that help: frozen profile hashes, IFVG v2 negative control, IFVG v3 pos
 
 Verdict: optimization is `LOOKAHEAD/SELECTION_RISK` unless a specific frozen workflow proves otherwise.
 
+The largest implemented candidate population is the ICT approved-profile grid: 2,560 deterministic post-detection filter combinations, of which the browser evaluates 50 by default. Generic Auto Research authors at most 25 candidates, and the IFVG audit compares 26 hand-written variants. None of these paths has an immutable experiment-family ledger, durable large-scale scheduler, complete survivor funnel, formal multiple-comparisons correction, or one-way holdout lifecycle. See `bt0-parameter-search-and-anti-overfitting-addendum.md` for the parameter-by-parameter inventory.
+
+## Canonical Sharpe Definition
+
+The UI's current `sharpeLike` fields are not canonical Sharpe ratios. BT4A must define canonical Sharpe from **net daily equity returns** produced by an identified fixed-risk policy:
+
+- include every eligible trading day, including zero-return days;
+- identify the trading calendar, annualization factor, risk-free assumption, currency, cost model, and return convention;
+- define minimum day count, finite/null behavior, and zero-variance behavior;
+- keep gross and net variants separate, with net canonical for acceptance;
+- never substitute trade-level observations for daily returns.
+
+Trade-level mean R divided by trade-level R standard deviation may be reported as `tradeReturnQuality`, with its own versioned formula and effective-sample-size warning. It must not be labeled or compared as Sharpe.
+
+## Sequential Validation Funnel
+
+Every experiment family must retain every attempted configuration and publish stage counts, rejection reasons, and survivor distributions for:
+
+1. population and schema validity;
+2. sample sufficiency;
+3. positive net performance;
+4. risk-adjusted and concentration limits;
+5. multiple-comparisons correction;
+6. chronological OOS and era stability;
+7. cold-instrument validation when generalization is claimed;
+8. sealed holdout.
+
+Sample sufficiency is a versioned policy over completed trades, independent dates, effective sample size, concentration, and independent windows. BT0 does not adopt a universal trade-count threshold. An adaptive or Bayesian search remains part of the same family and must retain rejected, canceled, and failed trials.
+
+## Multiple Comparisons
+
+No formal implementation was found. BT4B must preregister the family, primary statistic, null, alpha/FDR target, and correction before evaluation. The result contract retains raw p-value, family size, rank, critical value, adjusted p/q-value, correction version, dependency assumption, and decision.
+
+Benjamini-Hochberg FDR is required for discovery reporting but is not sufficient by itself because nearby configurations share trades and are highly dependent. Holm or Bonferroni must be available for family-wise control, and dependent-selection diagnostics should include an accepted bootstrap reality-check method plus Deflated Sharpe Ratio and Probability of Backtest Overfitting where their assumptions are met. A method whose assumptions are not met reports `NOT_APPLICABLE`; it is never silently replaced with an easier pass.
+
+## Null Models And Ablation
+
+No random-entry, direction-shuffle, return-permutation, block-bootstrap null, session-matched null, or strategy-label permutation engine exists. Current Monte Carlo resamples observed strategy outcomes and therefore does not test a no-edge null.
+
+BT4B must freeze null constraints, run count, seed, costs, eligible population, and statistic. Nulls should preserve trade count, eligible sessions, direction/risk/holding distributions, and serial structure where applicable. Reports retain the null distribution, percentile, p-value, effect size, and parent experiment family.
+
+Controlled ablations must be paired child experiments using overlays or new profile versions, never mutations of frozen profiles. The adapter declares base, optional, dependent, and inseparable conditions. The report includes deltas in trade count, net expectancy, canonical Sharpe, PF, drawdown, and OOS stability, plus active-filter and tuned-dimension complexity. Predeclared parameter neighborhoods must reveal whether a survivor is a stable region or an isolated peak.
+
 ## Monte Carlo
 
 `ictMonteCarlo.ts` is an actual implementation, not a placeholder:
@@ -81,3 +124,7 @@ Overall run reproducibility is weak despite strong reusable contracts.
 ## Required Statistical Contract
 
 BT4 should implement one formula registry with versioned definitions, sample inclusion rules, gross/net variants, finite/undefined behavior, and test fixtures. Reports should separate trade-level, daily, monthly, and portfolio samples and must show counts alongside every rate/interval.
+
+The canonical result must additionally retain `researchProgramId`, `strategyFamilyId`, `experimentFamilyId`, `configurationId`, instrument/era/run IDs, search method and seed, trial disposition, complete funnel stage, raw and adjusted significance, correction/null identities, complexity/neighborhood results, cold-instrument state, and sealed-holdout state. Reporting only top candidates is invalid because selection accounting depends on the full attempted population.
+
+For every funnel stage, the report should retain minimum, p5, p25, median, p75, p95, and maximum for trade count, net expectancy, canonical Sharpe, PF, drawdown, and win rate. Operational distributions should also include setups/trades per year, best/worst day/week/month, losing/winning streaks, profitable-day/week/month percentages, median monthly R, monthly dispersion, time in market, and holding time when defined. Robust selection policies may choose a low-complexity Pareto representative, cluster medoid, median robust survivor, low-drawdown survivor, or cross-instrument stable survivor; the absolute historical maximum is not the default.

@@ -10,6 +10,8 @@ Future work class: `NEW_CANONICAL_BACKTEST_SUBSYSTEM`
 
 This is an audit result, not historical acceptance. Existing profitability numbers remain unchanged and cannot create evidence, readiness, calibration, trade intent, broker, production, or execution authority.
 
+The accepted large-scale search addendum is integrated in `bt0-parameter-search-and-anti-overfitting-addendum.md`. It extends the audit through questions 36-64 and adds parameter-schema, complete trial-lineage, multiple-testing, null, ablation, cold-instrument, and sealed-holdout requirements without changing the BT0 status or authority.
+
 ## Trust Boundary
 
 The source tree can be reliably characterized. Historical session time cannot yet be declared trustworthy because historical provider time and DST policy are explicitly unverified. Existing performance reports are useful forensic claims but generally lack the complete dataset checksum, source fingerprint, engine version, code commit, cost identity, and seed needed for reproducible profitability. They are `NOT_TRUSTWORTHY` for promotion decisions, not necessarily false.
@@ -51,6 +53,37 @@ The source tree can be reliably characterized. Historical session time cannot ye
 33. **Refactor or new subsystem?** `NEW_CANONICAL_BACKTEST_SUBSYSTEM`. Existing pieces become adapters and references; they do not share enough identity, storage, units, lifecycle, or semantics for a safe in-place refactor.
 34. **How should it interact with B1.4?** B1.4 should orchestrate and consume the reusable subsystem through B1 contracts, not contain the engine. B1.4 owns job authorization, lineage, scheduling, and policy; the subsystem owns datasets, simulation, analytics, and resumable execution. This needs an Architecture Change Control record before the frozen roadmap/index changes.
 35. **What phases follow BT0?** BT1 dataset/time foundation; BT2 canonical opportunity/trade simulation; BT3 adapter migration and parity; BT4 R:R/cost/statistics; BT5 walk-forward/OOS; BT6 Monte Carlo; BT7 risk/portfolio; BT8 comparison/reporting; BT9 two-year acceptance.
+36. **Can current strategies expose a sufficiently rich parameter space without altering frozen production profiles?** No. Generic config and selected profiles expose some dimensions; most detector semantics are hardcoded. Safe expansion requires research overlays/new profile versions.
+37. **Which families support configuration generation?** Generic/Auto Research, the ICT approved-profile post-filter optimizer, IFVG named variants, and Session Raid v2 threshold overrides. Others have no family generator.
+38. **How large are realistic spaces?** The ICT post-filter grid has exactly 2,560 combinations; IFVG has 26 named variants; Auto Research evaluates at most 25 authored candidates. Other spaces are undefined until parameter schemas/ranges exist.
+39. **Is random sampling supported?** No. Current generation is deterministic authored selection or Cartesian enumeration.
+40. **Can thousands of experiments run reproducibly?** No. One optimizer can enumerate thousands in memory, but dataset/run/family identity, durable jobs, seeds, full trial retention, and resume are absent.
+41. **Is there a sequential validation funnel?** Partial fragments exist in Auto Research, IFVG gates, cost stress, and holdout validation, but no immutable family-wide stage ledger exists.
+42. **Is any multiple-comparisons correction implemented?** No.
+43. **Is BH-FDR implemented?** No.
+44. **Can meaningful null distributions be generated?** No canonical null engine exists. Monte Carlo resamples observed outcomes and is not a null test.
+45. **Can performance be compared with random entries?** No.
+46. **Can direction-shuffle tests run?** No.
+47. **Can feature ablation run?** Only manual named filter variants; no canonical controlled ablation framework.
+48. **Are features modular enough?** Partially. Some filters are separable, but many detector conditions and geometry rules are hardcoded or dependent.
+49. **Can discovery and cold-instrument validation be separated?** Data mappings permit multiple instruments, but no governance freezes an untouched cold instrument.
+50. **Can experiment instruments be frozen before testing?** Not with immutable experiment-family state.
+51. **Can era-split stability be analyzed?** Partially through chronological/rolling windows; canonical era metrics and decay reporting are absent.
+52. **Do CFDs require special event treatment?** Yes: broker holidays, early closes, maintenance, abnormal spread periods, and news shocks. Futures roll logic must not be assumed.
+53. **How conservative is execution modeling?** Same-bar exits are generally stop-first, but entries and costs are not sufficiently realistic.
+54. **Does passive touch count as fill?** Yes in the generic touch-entry path; other paths may assume the entry is active immediately.
+55. **How are ambiguous bars handled?** Generally conservative stop/invalidation-first, without first-class ambiguity identity or lower-timeframe reconstruction.
+56. **Can costs be stress-tested?** Partially through fixed-R/tick scenarios; not through accepted broker-normalized cost policies.
+57. **Can a holdout be sealed and consumed once?** No.
+58. **Can retuning after holdout be prevented?** Frozen profiles discourage mutation, but no one-way holdout state prevents a new selection after results are viewed.
+59. **Can survivor distributions be reported?** Not completely. Optimizers compact to top candidates and no full funnel distribution contract exists.
+60. **Does UI encourage cherry-picking?** Yes, because recommendation/top-candidate surfaces dominate while omitted/rejected population distributions are not first-class.
+61. **Are trades/year and profitable day/week/month metrics available?** Not canonically; most are unavailable.
+62. **Can neighborhood robustness be measured?** No canonical local sensitivity engine exists.
+63. **Is configuration complexity tracked?** No; active filters, tuned dimensions, and sensitivity are not a canonical complexity score.
+64. **What additional architecture is needed?** Parameter schemas/feature DAGs, immutable experiment families/configuration IDs, durable search jobs/trial ledgers, statistical correction and null services, ablation/neighborhood analysis, cold-instrument and one-use holdout state machines, and full survivor-distribution reporting.
+
+Detailed evidence and parameter tables are in `bt0-parameter-search-and-anti-overfitting-addendum.md`.
 
 ## Existing Performance Claims
 
