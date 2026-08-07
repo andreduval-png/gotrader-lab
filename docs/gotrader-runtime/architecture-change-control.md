@@ -389,3 +389,30 @@ Compatibility is additive and isolated below `.gotrader/bt1-5`. Authority
 before and after remains `none / none / none`; production, evidence, readiness,
 calibration, and trade-intent capabilities remain false. Rollback is to remove
 BT1.5 callers and retain any sealed historical roots read-only.
+
+## 18. BT1.6 Dataset Certification Implementation
+
+Change ID: `ACC-BT1.6-2026-08-07`
+
+Decision: `IMPLEMENTATION_CANDIDATE_OPERATIONAL_BLOCKED`
+
+Candidate branch: `codex/gotrader-backtest-bt1-6-live-qualification`
+
+Parent BT1.5: `471657a920fa863773f14e84d5151b3e55c6a759`
+
+Implementation candidate: `37f6c0bba654cdfca3ad8fc926a3be61b42b36b7`
+
+BT1.6 operationalizes the accepted BT1.5 tooling by adding an immutable
+machine-readable dataset certificate, compact registry, strict separation of
+deterministic reproduction and provider requery, provider-drift quarantine,
+and observed GET-only request auditing. It does not alter BT1 dataset identity,
+normalization, calendar, alignment, or integrity thresholds.
+
+Live work remains blocked pending a fresh resource/concurrency preflight and
+actual MT5 evidence. BT2 remains unauthorized. Authority before and after is
+`none / none / none`; all production, evidence, readiness, calibration, and
+trade-intent capabilities remain false.
+
+Compatibility is additive. Rollback is to remove BT1.6 certificate consumers,
+retain BT1/BT1.5 data and failed evidence read-only, and leave the certificate
+registry unreferenced. No runtime or strategy consumer depends on BT1.6.
