@@ -34,6 +34,12 @@ Normalized output is always UTC. The policy identity includes discovery
 method, DST policy, source timezone or fixed offset, clock-skew limit, and
 closure tolerance.
 
+BT1 owns this normalization contract inside `src/lib/historicalData`; it does
+not import the V2 production facade. Test-only parity checks compare BT1 with
+the governed V2 implementation for winter, summer, both DST transitions,
+epoch UTC, explicit UTC, and explicit-offset inputs. This keeps compatibility
+explicit while preserving the BT1 subsystem boundary.
+
 ## Required Evidence Checks
 
 Historical time is verified only when winter, summer, and maintenance-boundary

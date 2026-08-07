@@ -10,7 +10,8 @@ Implementation commits:
 
 - `8732594` canonical historical dataset repository;
 - `d310aa0` dataset identity and manifest verification;
-- `3f6b3d8` historical time and restart verification.
+- `3f6b3d8` historical time and restart verification;
+- `feac184` BT1-owned authority/time contracts and V2 compatibility verification.
 
 ## Final Status
 
@@ -33,7 +34,7 @@ The new library-only subsystem in `src/lib/historicalData` provides:
 - bounded, resumable provider paging;
 - immutable request, partition, integrity, manifest, and lineage artifacts;
 - one deterministic mutable checkpoint per request;
-- UTC normalization through the existing V2 time contract;
+- UTC normalization through a BT1-owned contract with explicit governed V2 parity tests;
 - explicit time, DST, symbol, calendar, and alignment snapshots;
 - duplicate coalescing and conflicting-duplicate blocking;
 - future, partial, invalid OHLC, invalid volume, invalid spread, range, and gap checks;
@@ -65,6 +66,10 @@ ignored `.gotrader` test directory.
 
 `npm.cmd run test:bt1` passed all three suites.
 
+`npm.cmd run test:source-integrity` also passed with zero BT1 production
+consumers of the V2 facade. Compatibility is verified in test code rather than
+created through a production dependency.
+
 Dataset foundation evidence:
 
 - 15 paged M1 candles normalized from two pages;
@@ -93,6 +98,8 @@ Historical-time evidence:
 - summer 09:30 normalized to 13:30 UTC;
 - nonexistent spring wall-clock time blocked;
 - ambiguous fall wall-clock time blocked;
+- winter, summer, spring, fall, epoch UTC, explicit UTC, and explicit-offset
+  results matched the governed V2 normalization semantics exactly;
 - unverified winter, summer, transition, and maintenance evidence kept both verification flags false;
 - verified maintenance closure converted a gap to an accepted warning;
 - the same gap under an unverified calendar blocked;
