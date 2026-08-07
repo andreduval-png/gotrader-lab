@@ -64,6 +64,7 @@
     "test:bt1-dataset-restart": "node scripts/test-bt1-dataset-restart.mjs",
     "test:bt1-historical-time": "node scripts/test-bt1-historical-time.mjs",
     "test:bt1": "npm run test:bt1-dataset && npm run test:bt1-dataset-restart && npm run test:bt1-historical-time",
+    "test:bt1-5-contracts": "node scripts/test-bt1-5-qualification-contracts.mjs",
     "test:runtime-freeze-baseline-review": "node scripts/test-runtime-freeze-baseline-review.mjs",
     "audit:runtime-freeze-baseline-review": "node scripts/prepare-runtime-freeze-baseline-review.mjs",
     "test:gotrader-supervisor": "node scripts/test-gotrader-supervisor.mjs",

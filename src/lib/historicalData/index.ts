@@ -5,6 +5,7 @@ export * from "./historicalDatasetIntegrity";
 export * from "./historicalDatasetLineage";
 export * from "./historicalDatasetRepository";
 export * from "./historicalDatasetTypes";
+export * from "./historicalQualificationContracts";
 export * from "./historicalTimeframeBuilder";
 export * from "./historicalTimeNormalization";
 export * from "./providers/mt5ReadOnlyHistoricalProvider";

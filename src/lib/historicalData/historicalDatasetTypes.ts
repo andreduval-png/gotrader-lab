@@ -15,7 +15,11 @@ export const HISTORICAL_INTEGRITY_SCHEMA_ID = "gotrader-historical-integrity-led
 export const HISTORICAL_INTEGRITY_SCHEMA_VERSION = "bt1-v1";
 export const HISTORICAL_NORMALIZATION_VERSION = "closed-ohlcv-utc-bt1-v1";
 export const HISTORICAL_SYMBOL_SPEC_SCHEMA_VERSION = "gotrader-mt5-symbol-spec-bt1-v1";
-export const HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION = "gotrader-historical-time-authority-bt1-v1";
+export const HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION = "gotrader-historical-time-authority-bt1-v2";
+export const HISTORICAL_TIME_EVIDENCE_PACKAGE_SCHEMA_VERSION = "gotrader-historical-time-evidence-bt1-5-v1";
+export const HISTORICAL_MARKET_CALENDAR_SCHEMA_VERSION = "gotrader-historical-market-calendar-bt1-5-v1";
+export const HISTORICAL_TIMEFRAME_ALIGNMENT_SCHEMA_VERSION = "gotrader-historical-timeframe-alignment-bt1-5-v1";
+export const HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION = "gotrader-historical-capacity-plan-bt1-5-v1";
 export const HISTORICAL_TIMEFRAME_LINEAGE_SCHEMA_VERSION = "gotrader-derived-timeframe-lineage-bt1-v1";
 export const HISTORICAL_STORAGE_ENVELOPE_SCHEMA_VERSION = "gotrader-historical-storage-envelope-bt1-v1";
 
@@ -101,6 +105,64 @@ export interface HistoricalTimeEvidenceCheck {
   readonly blockers: readonly string[];
 }
 
+export type HistoricalTimeEvidencePeriod =
+  | "winter"
+  | "summer"
+  | "spring_transition"
+  | "fall_transition"
+  | "maintenance_boundary";
+
+export type HistoricalQualificationStatus = "verified" | "not_applicable" | "blocked";
+
+export interface HistoricalTimeEvidenceRecord {
+  readonly schemaVersion: typeof HISTORICAL_TIME_EVIDENCE_PACKAGE_SCHEMA_VERSION;
+  readonly evidenceId: string;
+  readonly period: HistoricalTimeEvidencePeriod;
+  readonly providerId: string;
+  readonly providerVersion: string;
+  readonly terminalIdentityFingerprint: string;
+  readonly requestedSymbol: string;
+  readonly brokerSymbol: string;
+  readonly timeframe: HistoricalTimeframe;
+  readonly rawProviderTime: string | number;
+  readonly normalizedTimeUtc: string;
+  readonly expectedSessionInterpretation: string;
+  readonly observedOffsetMinutes?: number;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly sourceFingerprint: string;
+  readonly normalizationPolicyId: string;
+  readonly normalizationPolicyVersion: string;
+  readonly timestampStatus: HistoricalQualificationStatus;
+  readonly sessionStatus: HistoricalQualificationStatus;
+  readonly blockers: readonly string[];
+  readonly warnings: readonly string[];
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
+}
+
+export interface HistoricalTimeEvidencePackage {
+  readonly schemaVersion: typeof HISTORICAL_TIME_EVIDENCE_PACKAGE_SCHEMA_VERSION;
+  readonly evidencePackageId: string;
+  readonly providerId: string;
+  readonly providerVersion: string;
+  readonly terminalIdentityFingerprint: string;
+  readonly requestedSymbol: string;
+  readonly brokerSymbol: string;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly timestampDstPolicy: HistoricalDstPolicy;
+  readonly sessionTimezone: string;
+  readonly sourceFingerprint: string;
+  readonly normalizationPolicyId: string;
+  readonly normalizationPolicyVersion: string;
+  readonly verificationVersion: string;
+  readonly records: readonly Readonly<HistoricalTimeEvidenceRecord>[];
+  readonly historicalTimestampVerified: boolean;
+  readonly historicalSessionVerified: boolean;
+  readonly historicalSessionDstVerified: boolean;
+  readonly blockers: readonly string[];
+  readonly warnings: readonly string[];
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
+}
+
 export interface HistoricalTimeAuthority {
   readonly schemaVersion: typeof HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION;
   readonly authorityId: string;
@@ -108,8 +170,19 @@ export interface HistoricalTimeAuthority {
   readonly providerVersion: string;
   readonly providerTimeBasis: HistoricalProviderTimeBasis;
   readonly dstPolicy: HistoricalDstPolicy;
+  readonly sourceTimezone?: string;
+  readonly sourceUtcOffsetMinutes?: number;
+  readonly normalizationPolicyId: string;
+  readonly normalizationPolicyVersion: string;
+  readonly normalizationPolicyHash: string;
+  readonly evidencePackageId: string;
+  readonly calendarId: string;
+  readonly calendarVersion: string;
+  readonly verificationVersion: string;
   readonly historicalTimeVerified: boolean;
   readonly historicalDstVerified: boolean;
+  readonly historicalSessionVerified: boolean;
+  readonly historicalSessionDstVerified: boolean;
   readonly checks: {
     readonly winter: Readonly<HistoricalTimeEvidenceCheck>;
     readonly summer: Readonly<HistoricalTimeEvidenceCheck>;
@@ -163,22 +236,59 @@ export interface HistoricalClosedInterval {
 }
 
 export interface HistoricalMarketCalendarSnapshot {
+  readonly schemaVersion: typeof HISTORICAL_MARKET_CALENDAR_SCHEMA_VERSION;
   readonly calendarId: string;
   readonly version: string;
   readonly providerId: string;
   readonly brokerSymbol: string;
   readonly timezone: string;
+  readonly dstPolicy: HistoricalDstPolicy;
+  readonly evidencePackageId: string;
+  readonly verificationVersion: string;
+  readonly verificationEvidenceId?: string;
   readonly verificationStatus: "verified" | "configured_unverified";
   readonly closedIntervals: readonly Readonly<HistoricalClosedInterval>[];
   readonly sourceFingerprint: string;
 }
 
 export interface HistoricalTimeframeAlignmentPolicy {
+  readonly schemaVersion: typeof HISTORICAL_TIMEFRAME_ALIGNMENT_SCHEMA_VERSION;
   readonly policyId: string;
   readonly version: string;
+  readonly mode: "fixed_utc_anchor";
   readonly anchorOffsetMinutes: number;
   readonly weekStartsOn: "monday";
+  readonly calendarId: string;
+  readonly evidencePackageId: string;
+  readonly verificationVersion: string;
+  readonly supportedDerivedTimeframes: readonly HistoricalTimeframe[];
   readonly verificationStatus: "verified" | "configured_unverified";
+}
+
+export interface HistoricalDatasetCapacityPlan {
+  readonly schemaVersion: typeof HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION;
+  readonly capacityPlanId: string;
+  readonly sourceTimeframe: HistoricalTimeframe;
+  readonly pilotStartUtc: string;
+  readonly pilotEndUtc: string;
+  readonly targetStartUtc: string;
+  readonly targetEndUtc: string;
+  readonly observedSourceBars: number;
+  readonly observedPartitionCount: number;
+  readonly observedStorageBytes: number;
+  readonly observedPeakMemoryBytes: number;
+  readonly projectedSourceBars: number;
+  readonly projectedPartitionCount: number;
+  readonly projectedStorageBytes: number;
+  readonly projectedPeakMemoryBytes: number;
+  readonly maximumSourceBars: number;
+  readonly maximumPartitionCount: number;
+  readonly maximumStorageBytes: number;
+  readonly maximumPeakMemoryBytes: number;
+  readonly status: "within_bounds" | "blocked";
+  readonly blockers: readonly string[];
+  readonly warnings: readonly string[];
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalDatasetRequest {

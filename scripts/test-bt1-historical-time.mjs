@@ -62,23 +62,77 @@ assert.ok(springGap.blockers.includes("nonexistent_local_time"));
 assert.equal(fallOverlap.status, "blocked");
 assert.ok(fallOverlap.blockers.includes("ambiguous_local_time"));
 
-const blockedCheck = (checkId, blocker) => Object.freeze({
-  checkId,
-  status: "blocked",
-  blockers: Object.freeze([blocker])
+const blockedProviderId = "mt5_read_only_historical";
+const blockedProviderVersion = "unverified-history";
+const blockedSourceFingerprint = await modules.canonical.canonicalHash({
+  provider: blockedProviderId,
+  version: blockedProviderVersion
+});
+const blockedTerminalFingerprint = await modules.canonical.canonicalHash({ terminal: "unverified" });
+const blockedRecords = [];
+for (const [period, blocker] of [
+  ["winter", "winter_evidence_missing"],
+  ["summer", "summer_evidence_missing"],
+  ["spring_transition", "spring_evidence_missing"],
+  ["fall_transition", "fall_evidence_missing"],
+  ["maintenance_boundary", "maintenance_evidence_missing"]
+]) {
+  blockedRecords.push(await modules.qualification.buildHistoricalTimeEvidenceRecord({
+    period,
+    providerId: blockedProviderId,
+    providerVersion: blockedProviderVersion,
+    terminalIdentityFingerprint: blockedTerminalFingerprint,
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "1m",
+    rawProviderTime: "2024-01-01T00:00:00",
+    normalizedTimeUtc: "2024-01-01T00:00:00.000Z",
+    expectedSessionInterpretation: "unverified",
+    providerTimeBasis: "mt5_server_wall_clock",
+    sourceFingerprint: blockedSourceFingerprint,
+    normalizationPolicyId: wallClockPolicy.policyId,
+    normalizationPolicyVersion: wallClockPolicy.version,
+    timestampStatus: "blocked",
+    sessionStatus: "blocked",
+    blockers: Object.freeze([blocker])
+  }));
+}
+const blockedEvidencePackage = await modules.qualification.buildHistoricalTimeEvidencePackage({
+  providerId: blockedProviderId,
+  providerVersion: blockedProviderVersion,
+  terminalIdentityFingerprint: blockedTerminalFingerprint,
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  providerTimeBasis: "mt5_server_wall_clock",
+  timestampDstPolicy: "iana_timezone_rules",
+  sessionTimezone: "America/New_York",
+  sourceFingerprint: blockedSourceFingerprint,
+  normalizationPolicyId: wallClockPolicy.policyId,
+  normalizationPolicyVersion: wallClockPolicy.version,
+  verificationVersion: "blocked-v1",
+  records: Object.freeze(blockedRecords)
+});
+const blockedCalendar = await modules.qualification.buildHistoricalMarketCalendarSnapshot({
+  version: "blocked-v1",
+  providerId: blockedProviderId,
+  brokerSymbol: "USTECH",
+  timezone: "America/New_York",
+  dstPolicy: "iana_timezone_rules",
+  evidencePackageId: blockedEvidencePackage.evidencePackageId,
+  verificationVersion: "blocked-v1",
+  verificationStatus: "configured_unverified",
+  closedIntervals: Object.freeze([]),
+  sourceFingerprint: blockedSourceFingerprint
 });
 const blockedAuthority = await modules.contracts.buildHistoricalTimeAuthority({
-  providerId: "mt5_read_only_historical",
-  providerVersion: "unverified-history",
+  providerId: blockedProviderId,
+  providerVersion: blockedProviderVersion,
   providerTimeBasis: "mt5_server_wall_clock",
   dstPolicy: "iana_timezone_rules",
-  checks: {
-    winter: blockedCheck("winter", "winter_evidence_missing"),
-    summer: blockedCheck("summer", "summer_evidence_missing"),
-    springTransition: blockedCheck("spring", "spring_evidence_missing"),
-    fallTransition: blockedCheck("fall", "fall_evidence_missing"),
-    maintenanceBoundary: blockedCheck("maintenance", "maintenance_evidence_missing")
-  }
+  timeNormalizationPolicy: wallClockPolicy,
+  evidencePackage: blockedEvidencePackage,
+  calendar: blockedCalendar,
+  verificationVersion: "blocked-v1"
 });
 assert.equal(blockedAuthority.historicalTimeVerified, false);
 assert.equal(blockedAuthority.historicalDstVerified, false);

@@ -6,16 +6,24 @@ import {
 import {
   createHistoricalTimeNormalizationPolicy,
   type HistoricalDstPolicy,
-  type HistoricalProviderTimeBasis
+  type HistoricalProviderTimeBasis,
+  type HistoricalTimeNormalizationPolicy
 } from "./historicalTimeNormalization";
+import {
+  validateHistoricalMarketCalendarSnapshot,
+  validateHistoricalTimeEvidencePackage,
+  validateHistoricalTimeframeAlignmentPolicy
+} from "./historicalQualificationContracts";
 import {
   HISTORICAL_SYMBOL_SPEC_SCHEMA_VERSION,
   HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION,
   type HistoricalDatasetCapabilities,
   type HistoricalDatasetRequest,
+  type HistoricalMarketCalendarSnapshot,
   type HistoricalSymbolSpecSnapshot,
   type HistoricalTimeAuthority,
   type HistoricalTimeEvidenceCheck,
+  type HistoricalTimeEvidencePackage,
   type HistoricalTimeframe
 } from "./historicalDatasetTypes";
 
@@ -94,32 +102,74 @@ export async function buildHistoricalTimeAuthority(input: {
   readonly providerVersion: string;
   readonly providerTimeBasis: HistoricalProviderTimeBasis;
   readonly dstPolicy: HistoricalDstPolicy;
-  readonly checks: HistoricalTimeAuthority["checks"];
+  readonly timeNormalizationPolicy: Readonly<HistoricalTimeNormalizationPolicy>;
+  readonly evidencePackage: Readonly<HistoricalTimeEvidencePackage>;
+  readonly calendar: Readonly<HistoricalMarketCalendarSnapshot>;
+  readonly verificationVersion: string;
   readonly warnings?: readonly string[];
 }): Promise<Readonly<HistoricalTimeAuthority>> {
+  const policy = createHistoricalTimeNormalizationPolicy(input.timeNormalizationPolicy);
+  const packageBlockers = await validateHistoricalTimeEvidencePackage(input.evidencePackage);
+  const calendarBlockers = await validateHistoricalMarketCalendarSnapshot(input.calendar);
+  const recordFor = (period: HistoricalTimeEvidencePackage["records"][number]["period"]) =>
+    input.evidencePackage.records.find((record) => record.period === period);
+  const checkFor = (
+    period: HistoricalTimeEvidencePackage["records"][number]["period"],
+    name: string
+  ): Readonly<HistoricalTimeEvidenceCheck> => {
+    const record = recordFor(period);
+    const blockers = unique([
+      ...(record?.blockers ?? []),
+      !record ? `historical_${period}_evidence_missing` : "",
+      record && record.timestampStatus === "blocked" ? `historical_${period}_timestamp_blocked` : "",
+      record && record.sessionStatus !== "verified" ? `historical_${period}_session_not_verified` : ""
+    ]);
+    return normalizeCheck(Object.freeze({
+      checkId: `${input.evidencePackage.evidencePackageId}:${name}`,
+      status: blockers.length ? "blocked" as const : "verified" as const,
+      ...(record ? { evidenceId: record.evidenceId } : {}),
+      blockers
+    }), name);
+  };
   const checks = Object.freeze({
-    winter: normalizeCheck(input.checks.winter, "winter"),
-    summer: normalizeCheck(input.checks.summer, "summer"),
-    springTransition: normalizeCheck(input.checks.springTransition, "springTransition"),
-    fallTransition: normalizeCheck(input.checks.fallTransition, "fallTransition"),
-    maintenanceBoundary: normalizeCheck(input.checks.maintenanceBoundary, "maintenanceBoundary")
+    winter: checkFor("winter", "winter"),
+    summer: checkFor("summer", "summer"),
+    springTransition: checkFor("spring_transition", "springTransition"),
+    fallTransition: checkFor("fall_transition", "fallTransition"),
+    maintenanceBoundary: checkFor("maintenance_boundary", "maintenanceBoundary")
   });
   const blockers = unique([
+    ...packageBlockers,
+    ...calendarBlockers,
     ...Object.values(checks).flatMap((check) => check.blockers),
     input.providerTimeBasis === "unknown" ? "historical_provider_time_basis_unknown" : "",
+    input.evidencePackage.providerId !== input.providerId ? "historical_evidence_provider_mismatch" : "",
+    input.evidencePackage.providerVersion !== input.providerVersion ? "historical_evidence_version_mismatch" : "",
+    input.evidencePackage.providerTimeBasis !== input.providerTimeBasis ? "historical_evidence_time_basis_mismatch" : "",
+    input.evidencePackage.timestampDstPolicy !== input.dstPolicy ? "historical_evidence_dst_policy_mismatch" : "",
+    input.evidencePackage.normalizationPolicyId !== policy.policyId ? "historical_evidence_policy_id_mismatch" : "",
+    input.evidencePackage.normalizationPolicyVersion !== policy.version ? "historical_evidence_policy_version_mismatch" : "",
+    input.calendar.evidencePackageId !== input.evidencePackage.evidencePackageId
+      ? "historical_calendar_evidence_package_mismatch"
+      : "",
     !checkVerified(checks.winter) ? "historical_winter_time_not_verified" : "",
     !checkVerified(checks.summer) ? "historical_summer_time_not_verified" : "",
     !checkVerified(checks.maintenanceBoundary) ? "historical_maintenance_boundary_not_verified" : "",
     !checkAccepted(checks.springTransition) ? "historical_spring_dst_transition_not_verified" : "",
     !checkAccepted(checks.fallTransition) ? "historical_fall_dst_transition_not_verified" : ""
   ]);
+  const normalizationPolicyHash = await canonicalHash(policy);
   const historicalTimeVerified =
+    blockers.length === 0 &&
     input.providerTimeBasis !== "unknown" &&
+    input.evidencePackage.historicalTimestampVerified &&
+    input.evidencePackage.historicalSessionVerified &&
     checkVerified(checks.winter) &&
     checkVerified(checks.summer) &&
     checkVerified(checks.maintenanceBoundary);
   const historicalDstVerified =
     historicalTimeVerified &&
+    input.evidencePackage.historicalSessionDstVerified &&
     checkAccepted(checks.springTransition) &&
     checkAccepted(checks.fallTransition) &&
     (input.dstPolicy === "not_applicable" ||
@@ -131,8 +181,21 @@ export async function buildHistoricalTimeAuthority(input: {
     providerVersion: required(input.providerVersion, "timeAuthority.providerVersion"),
     providerTimeBasis: input.providerTimeBasis,
     dstPolicy: input.dstPolicy,
+    ...(policy.sourceTimezone ? { sourceTimezone: policy.sourceTimezone } : {}),
+    ...(policy.sourceUtcOffsetMinutes === undefined
+      ? {}
+      : { sourceUtcOffsetMinutes: policy.sourceUtcOffsetMinutes }),
+    normalizationPolicyId: policy.policyId,
+    normalizationPolicyVersion: policy.version,
+    normalizationPolicyHash,
+    evidencePackageId: input.evidencePackage.evidencePackageId,
+    calendarId: input.calendar.calendarId,
+    calendarVersion: input.calendar.version,
+    verificationVersion: required(input.verificationVersion, "timeAuthority.verificationVersion"),
     historicalTimeVerified,
     historicalDstVerified,
+    historicalSessionVerified: input.evidencePackage.historicalSessionVerified,
+    historicalSessionDstVerified: input.evidencePackage.historicalSessionDstVerified,
     checks,
     blockers,
     warnings: unique(input.warnings ?? []),
@@ -225,6 +288,7 @@ export async function deriveHistoricalDatasetRequestIdentity(
   assertHistoricalDatasetAuthority(input.timeAuthority.authority);
   assertHistoricalDatasetAuthority(input.symbolSpec.authority);
   const policy = createHistoricalTimeNormalizationPolicy(input.timeNormalizationPolicy);
+  const policyHash = await canonicalHash(policy);
   const sourceTimeframes = normalizeTimeframes(input.sourceTimeframes, "sourceTimeframes");
   const derivedTimeframes = unique(input.derivedTimeframes ?? [])
     .filter((value) => !sourceTimeframes.includes(value as HistoricalTimeframe)) as readonly HistoricalTimeframe[];
@@ -255,11 +319,33 @@ export async function deriveHistoricalDatasetRequestIdentity(
     input.timeAuthority.dstPolicy !== policy.dstPolicy
   ) throw new Error("Historical time authority does not match the provider normalization policy.");
   if (
+    input.timeAuthority.normalizationPolicyId !== policy.policyId ||
+    input.timeAuthority.normalizationPolicyVersion !== policy.version ||
+    input.timeAuthority.normalizationPolicyHash !== policyHash ||
+    input.timeAuthority.calendarId !== input.calendar.calendarId ||
+    input.timeAuthority.calendarVersion !== input.calendar.version ||
+    input.timeAuthority.evidencePackageId !== input.calendar.evidencePackageId
+  ) throw new Error("Historical time authority does not bind the request policy and calendar identities.");
+  if (
     input.calendar.providerId !== provider.providerId ||
     input.calendar.brokerSymbol !== brokerSymbol
   ) throw new Error("Historical market calendar does not match the provider request.");
   if (!Number.isInteger(input.timeframeAlignment.anchorOffsetMinutes)) {
     throw new Error("Historical timeframe alignment anchor must be an integer minute offset.");
+  }
+  if (input.timeframeAlignment.calendarId !== input.calendar.calendarId) {
+    throw new Error("Historical timeframe alignment does not match the request calendar.");
+  }
+  if (input.timeframeAlignment.evidencePackageId !== input.timeAuthority.evidencePackageId) {
+    throw new Error("Historical timeframe alignment does not match the time evidence package.");
+  }
+  const calendarBlockers = await validateHistoricalMarketCalendarSnapshot(input.calendar);
+  const alignmentBlockers = await validateHistoricalTimeframeAlignmentPolicy(
+    input.timeframeAlignment,
+    derivedTimeframes
+  );
+  if (calendarBlockers.length || alignmentBlockers.length) {
+    throw new Error([...calendarBlockers, ...alignmentBlockers].join(", "));
   }
   const normalizedRequest = Object.freeze({
     ...input,

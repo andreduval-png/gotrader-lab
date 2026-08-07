@@ -68,6 +68,11 @@ export async function deriveHistoricalTimeframe(input: {
   if (input.alignment.weekStartsOn !== "monday") {
     throw new Error("BT1 supports Monday-aligned weekly candles only.");
   }
+  if (!input.alignment.supportedDerivedTimeframes.includes(input.targetTimeframe)) {
+    throw new Error(
+      `Historical alignment policy does not qualify derived ${input.targetTimeframe}; use a verified native source timeframe.`
+    );
+  }
   const groups = new Map<number, HistoricalNormalizedCandle[]>();
   for (const candle of [...input.candles].sort(
     (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)

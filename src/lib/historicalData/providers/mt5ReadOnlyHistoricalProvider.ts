@@ -31,10 +31,15 @@ export interface Mt5ReadOnlyHistoricalProviderOptions {
   readonly baseUrl: string;
   readonly providerVersion: string;
   readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly sourceIdentityFingerprint: string;
   readonly fetchImpl?: FetchLike;
   readonly requestTimeoutMs?: number;
   readonly maximumPageCandles?: number;
+  readonly closedBarSafetyLagMs?: number;
+  readonly now?: () => string;
 }
+
+const hashPattern = /^sha256:[0-9a-f]{64}$/;
 
 const numberOrUndefined = (value: unknown) => {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -74,7 +79,8 @@ const providerTime = (item: Record<string, unknown>, basis: HistoricalProviderTi
 const sourceCandle = (
   value: unknown,
   basis: HistoricalProviderTimeBasis,
-  timeframeMs: number
+  timeframeMs: number,
+  closedCutoffMs: number
 ): HistoricalSourceCandle => {
   const item = recordOrEmpty(value);
   const openTime = providerTime(item, basis);
@@ -105,7 +111,7 @@ const sourceCandle = (
     ...(numberOrUndefined(item.spread ?? item.spread_points) === undefined
       ? {}
       : { spreadPoints: numberOrUndefined(item.spread ?? item.spread_points)! }),
-    isClosed: true
+    isClosed: Number.isFinite(normalizedOpenMs) && normalizedOpenMs + timeframeMs <= closedCutoffMs
   });
 };
 
@@ -116,6 +122,8 @@ export function createMt5ReadOnlyHistoricalProvider(
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
   const maximumPageCandles = Math.min(5000, options.maximumPageCandles ?? 5000);
+  const closedBarSafetyLagMs = options.closedBarSafetyLagMs ?? 1_000;
+  const now = options.now ?? (() => new Date().toISOString());
   if (!options.providerVersion || options.providerTimeBasis === "unknown") {
     throw new Error("BT1 MT5 historical provider requires explicit version and time basis.");
   }
@@ -124,6 +132,12 @@ export function createMt5ReadOnlyHistoricalProvider(
   }
   if (!Number.isInteger(maximumPageCandles) || maximumPageCandles <= 0) {
     throw new Error("BT1 MT5 historical provider page bound must be a positive integer.");
+  }
+  if (!hashPattern.test(options.sourceIdentityFingerprint)) {
+    throw new Error("BT1 MT5 historical provider requires a canonical sourceIdentityFingerprint.");
+  }
+  if (!Number.isInteger(closedBarSafetyLagMs) || closedBarSafetyLagMs < 0) {
+    throw new Error("BT1 MT5 historical provider closedBarSafetyLagMs must be a non-negative integer.");
   }
   let description: Promise<Readonly<HistoricalProviderDescription>> | undefined;
 
@@ -135,6 +149,7 @@ export function createMt5ReadOnlyHistoricalProvider(
       baseUrl,
       endpoint: "/candles/range",
       providerTimeBasis: options.providerTimeBasis,
+      sourceIdentityFingerprint: options.sourceIdentityFingerprint,
       supportedTimeframes,
       maximumPageCandles
     }),
@@ -177,9 +192,17 @@ export function createMt5ReadOnlyHistoricalProvider(
       if (!response.ok) throw new Error(`BT1 MT5 historical provider returned HTTP ${response.status}.`);
       const payload = recordOrEmpty(await response.json());
       assertAuthorityNone(payload);
+      const sourceMethod = String(payload.sourceMethod ?? "");
+      if (sourceMethod.includes("contract_stub") || sourceMethod.includes("disconnected")) {
+        throw new Error("BT1 MT5 historical provider rejected a non-live historical source response.");
+      }
       const rawCandles = Array.isArray(payload.candles) ? payload.candles : [];
+      const closedCutoffMs = Date.parse(now()) - closedBarSafetyLagMs;
+      if (!Number.isFinite(closedCutoffMs)) {
+        throw new Error("BT1 MT5 historical provider reference clock is invalid.");
+      }
       const candles = Object.freeze(rawCandles.map((item) =>
-        sourceCandle(item, options.providerTimeBasis, intervalMs)));
+        sourceCandle(item, options.providerTimeBasis, intervalMs, closedCutoffMs)));
       const provider = await describe();
       const warnings = Object.freeze([
         ...(Array.isArray(payload.warnings) ? payload.warnings.map(String) : []),

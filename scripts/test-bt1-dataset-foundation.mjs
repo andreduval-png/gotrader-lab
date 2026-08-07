@@ -83,6 +83,8 @@ const adapter = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
   baseUrl: "http://127.0.0.1:7341",
   providerVersion: "fixture-wrapper-v1",
   providerTimeBasis: "utc_iso",
+  sourceIdentityFingerprint: fixture.terminalIdentityFingerprint,
+  now: () => "2024-01-03T00:00:00.000Z",
   fetchImpl: async (url, init) => {
     requestedUrl = String(url);
     requestedMethod = init?.method;
@@ -91,6 +93,7 @@ const adapter = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
         { timestamp: "2024-01-02T00:00:00.000Z", open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, spread: 2 },
         { timestamp: "2024-01-02T00:01:00.000Z", open: 1.5, high: 2.5, low: 1, close: 2, volume: 11, spread: 2 }
       ],
+      sourceMethod: "upstream_http:/candles/range",
       warnings: [],
       executionAuthority: "none",
       brokerAuthority: "none",
@@ -114,7 +117,8 @@ assert.throws(
   () => modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
     baseUrl: "https://example.com",
     providerVersion: "invalid",
-    providerTimeBasis: "utc_iso"
+    providerTimeBasis: "utc_iso",
+    sourceIdentityFingerprint: fixture.terminalIdentityFingerprint
   }),
   /loopback-only/i
 );
