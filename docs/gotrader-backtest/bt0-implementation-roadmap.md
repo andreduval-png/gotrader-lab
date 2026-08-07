@@ -18,7 +18,11 @@ Build read-only paged MT5/import adapters, partitioned immutable storage, Phase 
 
 Acceptance: deterministic checksum on rerun; winter/summer/DST transition and maintenance-boundary time probes; two-year completeness for representative symbols/timeframes; point/pip metadata; restart/resume; bounded storage; no strategy execution.
 
-BT1 is the recommended next phase, after `ACC-BT-B1.4` approves the subsystem boundary and after live-probe concurrency is safe.
+BT1 is complete with documented historical-time limitations. BT1.5 now owns
+the operational broker-history time, capacity, two-year dataset, restart, and
+reproduction qualification gate. Its tooling is implemented in isolation, but
+live evidence and dataset acceptance remain blocked. BT2 may begin architecture
+or implementation review only after every BT1.5 blocking gate passes.
 
 ## BT2 - Canonical Opportunity And Trade Simulation
 

@@ -6,6 +6,12 @@ Branch: `codex/gotrader-backtest-bt1-5-historical-qualification`
 
 Parent BT1 commit: `edd2d8d508db6b876303d42f56aedc2fb90e1cf6`
 
+Qualification tooling commits:
+
+- `40838521267361b0c1882a718609a70d4743b317` - canonical BT1.5 qualification identities;
+- `be8d96b340622519578f8f3a102800a002594aee` - bounded diagnostics,
+  preflight, ingestion, progress, restart, and reproduction tooling.
+
 ## Decision
 
 ```text
@@ -103,3 +109,10 @@ Live qualification remains deferred until a fresh preflight proves:
 
 Until then, BT1.5 may produce only offline tooling and deterministic evidence.
 BT2 remains blocked.
+
+The implemented live runner now requires an integrity-hashed preflight no more
+than fifteen minutes old. It verifies exact branch and HEAD, clean worktree,
+B1.2 priority-window exclusion, no observer/runtime/historical/heavy-job
+overlap, one MT5 Desktop process, coherent read-only bridge/upstream listeners,
+healthy authority-none endpoints, and configured disk/memory/CPU/I/O bounds.
+The runner rejects a missing, stale, blocked, mismatched, or tampered preflight.
