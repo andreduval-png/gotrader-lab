@@ -1,5 +1,8 @@
 import { canonicalHash, canonicalSerialize } from "../canonical/canonicalValueSerialization";
-import { V2_AUTHORITY_NONE, assertV2Authority } from "../v2/authority/v2Authority";
+import {
+  HISTORICAL_DATASET_AUTHORITY_NONE,
+  assertHistoricalDatasetAuthority
+} from "./historicalDatasetAuthority";
 import {
   deriveHistoricalDatasetRequestIdentity,
   historicalTimeframeMilliseconds
@@ -145,7 +148,7 @@ export class HistoricalDatasetRepository {
       requestHash: identity.requestHash,
       requestCore: identity.requestCore,
       provider: providerDescription,
-      authority: V2_AUTHORITY_NONE
+      authority: HISTORICAL_DATASET_AUTHORITY_NONE
     }));
     const existing = await this.#readEnvelope<HistoricalIngestionCheckpoint>(
       pathFor("checkpoint", identity.requestId),
@@ -176,7 +179,7 @@ export class HistoricalDatasetRepository {
         partitionIds: Object.freeze([])
       }))),
       blockers: Object.freeze([]),
-      authority: V2_AUTHORITY_NONE
+      authority: HISTORICAL_DATASET_AUTHORITY_NONE
     });
     await this.#writeCheckpoint(checkpoint);
 
@@ -212,7 +215,7 @@ export class HistoricalDatasetRepository {
           ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
           candles: page.candles.map(compactSourceCandle),
           warnings: unique(page.warnings),
-          authority: V2_AUTHORITY_NONE
+          authority: HISTORICAL_DATASET_AUTHORITY_NONE
         };
         const sourcePageFingerprint = await canonicalHash(sourcePageCore);
         if (page.sourcePageFingerprint && page.sourcePageFingerprint !== sourcePageFingerprint) {
@@ -243,7 +246,7 @@ export class HistoricalDatasetRepository {
           candles: normalized.candles,
           rejectedEvents: normalized.events,
           warnings: unique(page.warnings),
-          authority: V2_AUTHORITY_NONE
+          authority: HISTORICAL_DATASET_AUTHORITY_NONE
         };
         const partition: Readonly<HistoricalPartitionPayload> = Object.freeze({
           ...partitionWithoutId,
@@ -323,7 +326,7 @@ export class HistoricalDatasetRepository {
         rejectedEvents: Object.freeze([]),
         warnings: derived.lineage.warnings,
         derivedFrom: derived.lineage,
-        authority: V2_AUTHORITY_NONE
+        authority: HISTORICAL_DATASET_AUTHORITY_NONE
       };
       const derivedPartition = Object.freeze({
         ...derivedPartitionWithoutId,
@@ -478,7 +481,7 @@ export class HistoricalDatasetRepository {
   }
 
   #validateProvider(provider: Readonly<HistoricalProviderDescription>) {
-    assertV2Authority(provider.authority);
+    assertHistoricalDatasetAuthority(provider.authority);
     if (!provider.providerId || !provider.providerVersion || !hashPattern.test(provider.sourceFingerprint)) {
       throw new HistoricalDatasetRepositoryError(["historical_provider_identity_invalid"]);
     }
@@ -497,7 +500,7 @@ export class HistoricalDatasetRepository {
     timeframe: HistoricalTimeframe,
     cursor?: string
   ) {
-    assertV2Authority(page.authority);
+    assertHistoricalDatasetAuthority(page.authority);
     if (
       page.providerId !== provider.providerId ||
       page.providerVersion !== provider.providerVersion ||
@@ -547,7 +550,7 @@ export class HistoricalDatasetRepository {
   }
 
   async #writeCheckpoint(checkpoint: Readonly<HistoricalIngestionCheckpoint>) {
-    assertV2Authority(checkpoint.authority);
+    assertHistoricalDatasetAuthority(checkpoint.authority);
     await this.#writeEnvelope(pathFor("checkpoint", checkpoint.requestId), "checkpoint", checkpoint, false);
   }
 

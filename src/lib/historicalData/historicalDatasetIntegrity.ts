@@ -1,7 +1,9 @@
 import { canonicalHash, canonicalSerialize } from "../canonical/canonicalValueSerialization";
-import { V2_AUTHORITY_NONE } from "../v2/authority/v2Authority";
-import { normalizeMt5ProviderTime } from "../v2/time/v2TimeNormalization";
-import type { V2TimeNormalizationPolicy } from "../v2/time/v2TimeNormalizationTypes";
+import { HISTORICAL_DATASET_AUTHORITY_NONE } from "./historicalDatasetAuthority";
+import {
+  normalizeHistoricalProviderTime,
+  type HistoricalTimeNormalizationPolicy
+} from "./historicalTimeNormalization";
 import { historicalTimeframeMilliseconds } from "./historicalDatasetContracts";
 import {
   HISTORICAL_INTEGRITY_SCHEMA_ID,
@@ -28,7 +30,7 @@ const finitePositive = (value: number) => Number.isFinite(value) && value > 0;
 export async function normalizeHistoricalSourceCandles(input: {
   readonly candles: readonly HistoricalSourceCandle[];
   readonly timeframe: HistoricalTimeframe;
-  readonly timePolicy: Readonly<V2TimeNormalizationPolicy>;
+  readonly timePolicy: Readonly<HistoricalTimeNormalizationPolicy>;
   readonly startUtc: string;
   readonly endUtc: string;
   readonly nowUtc: string;
@@ -43,10 +45,10 @@ export async function normalizeHistoricalSourceCandles(input: {
   const endMs = Date.parse(input.endUtc);
   const nowMs = Date.parse(input.nowUtc);
   for (const source of input.candles) {
-    const normalizedOpen = normalizeMt5ProviderTime(source.providerOpenTime, input.timePolicy);
+    const normalizedOpen = normalizeHistoricalProviderTime(source.providerOpenTime, input.timePolicy);
     const normalizedClose = source.providerCloseTime === undefined
       ? undefined
-      : normalizeMt5ProviderTime(source.providerCloseTime, input.timePolicy);
+      : normalizeHistoricalProviderTime(source.providerCloseTime, input.timePolicy);
     if (
       normalizedOpen.status !== "normalized" ||
       !normalizedOpen.normalizedTimeUtc ||
@@ -302,7 +304,7 @@ export async function buildHistoricalIntegrityLedger(input: {
     requestId: input.requestId,
     events: orderedEvents,
     summary,
-    authority: V2_AUTHORITY_NONE
+    authority: HISTORICAL_DATASET_AUTHORITY_NONE
   };
   const ledger = Object.freeze({ ...core, ledgerId: await canonicalHash(core) });
   return Object.freeze({ candles: Object.freeze(canonical), ledger });

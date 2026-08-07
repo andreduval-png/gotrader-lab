@@ -1,7 +1,13 @@
 import { canonicalHash } from "../canonical/canonicalValueSerialization";
-import { V2_AUTHORITY_NONE, assertV2Authority } from "../v2/authority/v2Authority";
-import { createV2TimeNormalizationPolicy } from "../v2/time/v2TimeNormalization";
-import type { V2DstPolicy, V2ProviderTimeBasis } from "../v2/time/v2TimeNormalizationTypes";
+import {
+  HISTORICAL_DATASET_AUTHORITY_NONE,
+  assertHistoricalDatasetAuthority
+} from "./historicalDatasetAuthority";
+import {
+  createHistoricalTimeNormalizationPolicy,
+  type HistoricalDstPolicy,
+  type HistoricalProviderTimeBasis
+} from "./historicalTimeNormalization";
 import {
   HISTORICAL_SYMBOL_SPEC_SCHEMA_VERSION,
   HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION,
@@ -86,8 +92,8 @@ const normalizeCheck = (
 export async function buildHistoricalTimeAuthority(input: {
   readonly providerId: string;
   readonly providerVersion: string;
-  readonly providerTimeBasis: V2ProviderTimeBasis;
-  readonly dstPolicy: V2DstPolicy;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly dstPolicy: HistoricalDstPolicy;
   readonly checks: HistoricalTimeAuthority["checks"];
   readonly warnings?: readonly string[];
 }): Promise<Readonly<HistoricalTimeAuthority>> {
@@ -130,7 +136,7 @@ export async function buildHistoricalTimeAuthority(input: {
     checks,
     blockers,
     warnings: unique(input.warnings ?? []),
-    authority: V2_AUTHORITY_NONE
+    authority: HISTORICAL_DATASET_AUTHORITY_NONE
   };
   return Object.freeze({ ...core, authorityId: await canonicalHash(core) });
 }
@@ -199,7 +205,7 @@ export async function buildHistoricalSymbolSpecSnapshot(input: Omit<
     sourceFingerprint: required(input.sourceFingerprint, "symbolSpec.sourceFingerprint"),
     blockers: unique(blockers),
     warnings: unique(input.warnings ?? []),
-    authority: V2_AUTHORITY_NONE
+    authority: HISTORICAL_DATASET_AUTHORITY_NONE
   };
   return Object.freeze({ ...core, symbolSpecId: await canonicalHash(core) });
 }
@@ -215,10 +221,10 @@ export async function deriveHistoricalDatasetRequestIdentity(
     readonly authority: unknown;
   }
 ) {
-  assertV2Authority(provider.authority);
-  assertV2Authority(input.timeAuthority.authority);
-  assertV2Authority(input.symbolSpec.authority);
-  const policy = createV2TimeNormalizationPolicy(input.timeNormalizationPolicy);
+  assertHistoricalDatasetAuthority(provider.authority);
+  assertHistoricalDatasetAuthority(input.timeAuthority.authority);
+  assertHistoricalDatasetAuthority(input.symbolSpec.authority);
+  const policy = createHistoricalTimeNormalizationPolicy(input.timeNormalizationPolicy);
   const sourceTimeframes = normalizeTimeframes(input.sourceTimeframes, "sourceTimeframes");
   const derivedTimeframes = unique(input.derivedTimeframes ?? [])
     .filter((value) => !sourceTimeframes.includes(value as HistoricalTimeframe)) as readonly HistoricalTimeframe[];

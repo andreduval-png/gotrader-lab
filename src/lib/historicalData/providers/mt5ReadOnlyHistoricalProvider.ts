@@ -1,6 +1,6 @@
 import { canonicalHash } from "../../canonical/canonicalValueSerialization";
-import { V2_AUTHORITY_NONE } from "../../v2/authority/v2Authority";
-import type { V2ProviderTimeBasis } from "../../v2/time/v2TimeNormalizationTypes";
+import { HISTORICAL_DATASET_AUTHORITY_NONE } from "../historicalDatasetAuthority";
+import type { HistoricalProviderTimeBasis } from "../historicalTimeNormalization";
 import { historicalTimeframeMilliseconds } from "../historicalDatasetContracts";
 import type {
   HistoricalDatasetProvider,
@@ -30,7 +30,7 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 export interface Mt5ReadOnlyHistoricalProviderOptions {
   readonly baseUrl: string;
   readonly providerVersion: string;
-  readonly providerTimeBasis: V2ProviderTimeBasis;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
   readonly fetchImpl?: FetchLike;
   readonly requestTimeoutMs?: number;
   readonly maximumPageCandles?: number;
@@ -64,7 +64,7 @@ const assertAuthorityNone = (payload: Record<string, unknown>) => {
   }
 };
 
-const providerTime = (item: Record<string, unknown>, basis: V2ProviderTimeBasis) => {
+const providerTime = (item: Record<string, unknown>, basis: HistoricalProviderTimeBasis) => {
   const rawTime = numberOrUndefined(item.rawTime ?? item.raw_time ?? item.time);
   const timestamp = item.timestamp ?? item.datetime ?? item.date;
   if (basis === "utc_iso" || basis === "iso_with_offset") return String(timestamp ?? "");
@@ -73,7 +73,7 @@ const providerTime = (item: Record<string, unknown>, basis: V2ProviderTimeBasis)
 
 const sourceCandle = (
   value: unknown,
-  basis: V2ProviderTimeBasis,
+  basis: HistoricalProviderTimeBasis,
   timeframeMs: number
 ): HistoricalSourceCandle => {
   const item = recordOrEmpty(value);
@@ -142,7 +142,7 @@ export function createMt5ReadOnlyHistoricalProvider(
     marketDataOnly: true,
     supportedTimeframes,
     maximumPageCandles,
-    authority: V2_AUTHORITY_NONE
+    authority: HISTORICAL_DATASET_AUTHORITY_NONE
   }))();
 
   const fetchPage = async (
@@ -195,7 +195,7 @@ export function createMt5ReadOnlyHistoricalProvider(
         ...(nextStartMs < endMs ? { nextCursor: new Date(nextStartMs).toISOString() } : {}),
         candles,
         warnings,
-        authority: V2_AUTHORITY_NONE
+        authority: HISTORICAL_DATASET_AUTHORITY_NONE
       });
     } finally {
       globalThis.clearTimeout(timeout);

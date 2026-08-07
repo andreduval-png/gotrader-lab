@@ -6,7 +6,8 @@ export async function loadBt1Modules({ outRoot }) {
   const workspace = process.cwd();
   compileTypescriptModules({
     files: [
-      "src/lib/historicalData/index.ts"
+      "src/lib/historicalData/index.ts",
+      "src/lib/v2/time/v2TimeNormalization.ts"
     ].map((file) => path.join(workspace, file)),
     outRoot
   });
@@ -18,7 +19,8 @@ export async function loadBt1Modules({ outRoot }) {
     lineage: await load("historicalDatasetLineage"),
     repository: await load("historicalDatasetRepository"),
     timeframe: await load("historicalTimeframeBuilder"),
-    timeNormalization: await load("v2TimeNormalization"),
+    timeNormalization: await load("historicalTimeNormalization"),
+    v2TimeNormalization: await load("v2TimeNormalization"),
     mt5Provider: await load("mt5ReadOnlyHistoricalProvider"),
     canonical: await load("canonicalValueSerialization")
   });

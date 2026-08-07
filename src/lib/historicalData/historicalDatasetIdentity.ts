@@ -1,5 +1,8 @@
 import { canonicalHash } from "../canonical/canonicalValueSerialization";
-import { V2_AUTHORITY_NONE, assertV2Authority } from "../v2/authority/v2Authority";
+import {
+  HISTORICAL_DATASET_AUTHORITY_NONE,
+  assertHistoricalDatasetAuthority
+} from "./historicalDatasetAuthority";
 import { HISTORICAL_DATASET_CAPABILITIES_DISABLED } from "./historicalDatasetContracts";
 import {
   HISTORICAL_DATASET_SCHEMA_ID,
@@ -75,7 +78,7 @@ export async function buildHistoricalDatasetManifest(input: {
   readonly provider: Readonly<HistoricalProviderDescription>;
   readonly timeframes: readonly Readonly<HistoricalTimeframeSealInput>[];
 }): Promise<Readonly<HistoricalDatasetManifest>> {
-  assertV2Authority(input.provider.authority);
+  assertHistoricalDatasetAuthority(input.provider.authority);
   const entries: HistoricalDatasetTimeframeManifest[] = [];
   const blockers: string[] = [
     ...input.request.timeAuthority.blockers,
@@ -169,7 +172,7 @@ export async function buildHistoricalDatasetManifest(input: {
     researchOnly: true as const,
     blockers: normalizedBlockers,
     warnings: normalizedWarnings,
-    authority: V2_AUTHORITY_NONE,
+    authority: HISTORICAL_DATASET_AUTHORITY_NONE,
     capabilities: HISTORICAL_DATASET_CAPABILITIES_DISABLED
   };
   return Object.freeze({ ...core, datasetId: await canonicalHash(core) });
@@ -185,7 +188,7 @@ export async function validateHistoricalDatasetManifest(
     return Object.freeze({ status: "blocked", blockers: Object.freeze(["historical_manifest_missing"]), warnings: Object.freeze([]) });
   }
   try {
-    assertV2Authority(manifest.authority);
+    assertHistoricalDatasetAuthority(manifest.authority);
   } catch {
     blockers.push("historical_manifest_authority_invalid");
   }

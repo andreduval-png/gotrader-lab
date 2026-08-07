@@ -1,9 +1,9 @@
-import type { V2Authority } from "../v2/authority/v2Authority";
 import type {
-  V2DstPolicy,
-  V2ProviderTimeBasis,
-  V2TimeNormalizationPolicy
-} from "../v2/time/v2TimeNormalizationTypes";
+  HistoricalDstPolicy,
+  HistoricalProviderTimeBasis,
+  HistoricalTimeNormalizationPolicy
+} from "./historicalTimeNormalization";
+import type { HistoricalDatasetAuthority } from "./historicalDatasetAuthority";
 
 export const HISTORICAL_DATASET_SCHEMA_ID = "gotrader-historical-dataset-manifest";
 export const HISTORICAL_DATASET_SCHEMA_VERSION = "bt1-v1";
@@ -60,7 +60,7 @@ export interface HistoricalProviderDescription {
   readonly marketDataOnly: true;
   readonly supportedTimeframes: readonly HistoricalTimeframe[];
   readonly maximumPageCandles: number;
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalSourcePageRequest {
@@ -84,7 +84,7 @@ export interface HistoricalSourcePage {
   readonly candles: readonly HistoricalSourceCandle[];
   readonly sourcePageFingerprint?: string;
   readonly warnings: readonly string[];
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalDatasetProvider {
@@ -106,8 +106,8 @@ export interface HistoricalTimeAuthority {
   readonly authorityId: string;
   readonly providerId: string;
   readonly providerVersion: string;
-  readonly providerTimeBasis: V2ProviderTimeBasis;
-  readonly dstPolicy: V2DstPolicy;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly dstPolicy: HistoricalDstPolicy;
   readonly historicalTimeVerified: boolean;
   readonly historicalDstVerified: boolean;
   readonly checks: {
@@ -119,7 +119,7 @@ export interface HistoricalTimeAuthority {
   };
   readonly blockers: readonly string[];
   readonly warnings: readonly string[];
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalSymbolSpecSnapshot {
@@ -145,7 +145,7 @@ export interface HistoricalSymbolSpecSnapshot {
   readonly sourceFingerprint: string;
   readonly blockers: readonly string[];
   readonly warnings: readonly string[];
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export type HistoricalClosureReason =
@@ -190,7 +190,7 @@ export interface HistoricalDatasetRequest {
   readonly startUtc: string;
   readonly endUtc: string;
   readonly pageSize: number;
-  readonly timeNormalizationPolicy: Readonly<V2TimeNormalizationPolicy>;
+  readonly timeNormalizationPolicy: Readonly<HistoricalTimeNormalizationPolicy>;
   readonly timeAuthority: Readonly<HistoricalTimeAuthority>;
   readonly symbolSpec: Readonly<HistoricalSymbolSpecSnapshot>;
   readonly calendar: Readonly<HistoricalMarketCalendarSnapshot>;
@@ -253,7 +253,7 @@ export interface HistoricalIntegrityLedger {
   readonly requestId: string;
   readonly events: readonly Readonly<HistoricalIntegrityEvent>[];
   readonly summary: Readonly<HistoricalIntegritySummary>;
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalPartitionPayload {
@@ -275,7 +275,7 @@ export interface HistoricalPartitionPayload {
   readonly rejectedEvents: readonly Readonly<HistoricalIntegrityEvent>[];
   readonly warnings: readonly string[];
   readonly derivedFrom?: Readonly<HistoricalDerivedTimeframeLineage>;
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalCheckpointTimeframeState {
@@ -295,7 +295,7 @@ export interface HistoricalIngestionCheckpoint {
   readonly timeframes: readonly Readonly<HistoricalCheckpointTimeframeState>[];
   readonly completedDatasetId?: string;
   readonly blockers: readonly string[];
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
 }
 
 export interface HistoricalDerivedTimeframeLineage {
@@ -339,8 +339,8 @@ export interface HistoricalDatasetManifest {
   readonly endUtc: string;
   readonly timeNormalizationPolicyId: string;
   readonly timeNormalizationPolicyVersion: string;
-  readonly providerTimeBasis: V2ProviderTimeBasis;
-  readonly dstPolicy: V2DstPolicy;
+  readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly dstPolicy: HistoricalDstPolicy;
   readonly timeAuthorityId: string;
   readonly historicalTimeVerified: boolean;
   readonly historicalDstVerified: boolean;
@@ -359,7 +359,7 @@ export interface HistoricalDatasetManifest {
   readonly researchOnly: true;
   readonly blockers: readonly string[];
   readonly warnings: readonly string[];
-  readonly authority: Readonly<V2Authority>;
+  readonly authority: Readonly<HistoricalDatasetAuthority>;
   readonly capabilities: Readonly<HistoricalDatasetCapabilities>;
 }
 

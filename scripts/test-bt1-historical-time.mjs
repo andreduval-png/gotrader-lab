@@ -24,10 +24,33 @@ const wallClockPolicy = Object.freeze({
   maximumClockSkewMs: 1000,
   closureToleranceMs: 0
 });
-const winter = modules.timeNormalization.normalizeMt5ProviderTime("2024-01-15T09:30:00", wallClockPolicy);
-const summer = modules.timeNormalization.normalizeMt5ProviderTime("2024-07-15T09:30:00", wallClockPolicy);
-const springGap = modules.timeNormalization.normalizeMt5ProviderTime("2024-03-10T02:30:00", wallClockPolicy);
-const fallOverlap = modules.timeNormalization.normalizeMt5ProviderTime("2024-11-03T01:30:00", wallClockPolicy);
+const winter = modules.timeNormalization.normalizeHistoricalProviderTime("2024-01-15T09:30:00", wallClockPolicy);
+const summer = modules.timeNormalization.normalizeHistoricalProviderTime("2024-07-15T09:30:00", wallClockPolicy);
+const springGap = modules.timeNormalization.normalizeHistoricalProviderTime("2024-03-10T02:30:00", wallClockPolicy);
+const fallOverlap = modules.timeNormalization.normalizeHistoricalProviderTime("2024-11-03T01:30:00", wallClockPolicy);
+const compactTimeResult = (value) => ({
+  status: value.status,
+  normalizedTimeUtc: value.normalizedTimeUtc,
+  providerTimeBasis: value.providerTimeBasis,
+  offsetAppliedMinutes: value.offsetAppliedMinutes,
+  dstState: value.dstState,
+  blockers: value.blockers
+});
+for (const [rawTime, policy] of [
+  ["2024-01-15T09:30:00", wallClockPolicy],
+  ["2024-07-15T09:30:00", wallClockPolicy],
+  ["2024-03-10T02:30:00", wallClockPolicy],
+  ["2024-11-03T01:30:00", wallClockPolicy],
+  [1705329000, { ...wallClockPolicy, basis: "epoch_utc", sourceTimezone: undefined, dstPolicy: "not_applicable" }],
+  ["2024-01-15T14:30:00.000Z", { ...wallClockPolicy, basis: "utc_iso", sourceTimezone: undefined, dstPolicy: "not_applicable" }],
+  ["2024-01-15T09:30:00-05:00", { ...wallClockPolicy, basis: "iso_with_offset", sourceTimezone: undefined, dstPolicy: "explicit_offset" }]
+]) {
+  assert.deepEqual(
+    compactTimeResult(modules.timeNormalization.normalizeHistoricalProviderTime(rawTime, policy)),
+    compactTimeResult(modules.v2TimeNormalization.normalizeMt5ProviderTime(rawTime, policy)),
+    `BT1 historical time semantics must match the governed V2 result for ${String(rawTime)}.`
+  );
+}
 assert.equal(winter.status, "normalized");
 assert.equal(winter.normalizedTimeUtc, "2024-01-15T14:30:00.000Z");
 assert.equal(winter.dstState, "standard");
