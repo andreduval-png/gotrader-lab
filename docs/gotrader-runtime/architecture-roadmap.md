@@ -44,8 +44,8 @@ accepted under change record `A3.2-ACCEPTANCE-2026-08-03`. B1.0 is accepted at
 observation remains pending; no later milestone is authorized.
 
 The independent BT1 historical dataset foundation is complete at
-`3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa`, with accepted reports at
-`9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f`. Actual MT5 broker-historical
+`feac1841efd0203c75d723de9f1ff64705b2e20c`, with accepted reports at
+`b80338bb9d0e7a86e275c8bd3b0ff22662380275`. Actual MT5 broker-historical
 time/DST and a two-year dataset remain unverified, so BT2 is blocked.
 
 ## 2. Milestone Namespace Rules

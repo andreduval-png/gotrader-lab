@@ -151,8 +151,8 @@ The short labels below are used in the master tables.
 | `B1.2-IMPLEMENTATION` | `codex/gotrader-b1-2-authorized` | `820a6278fcdadf061c354c4e30c89af034d20780` |
 | `B1.2-AUTHORIZATION` | `codex/gotrader-b1-2-authorized` | `89ba4b276fdfdc5dd5396959636fb0e86bdba436` |
 | `BT1-AUTHORIZATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `02e7393d842475747ac7d1f36f44c45d1bf58902` |
-| `BT1-IMPLEMENTATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa` |
-| `BT1-REPORTS` | `codex/gotrader-backtest-bt1-dataset-foundation` | `9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f` |
+| `BT1-IMPLEMENTATION` | `codex/gotrader-backtest-bt1-dataset-foundation` | `feac1841efd0203c75d723de9f1ff64705b2e20c` |
+| `BT1-REPORTS` | `codex/gotrader-backtest-bt1-dataset-foundation` | `b80338bb9d0e7a86e275c8bd3b0ff22662380275` |
 
 ## 5. Master Document Index
 
@@ -311,9 +311,9 @@ runtime milestone `B1.2`.
 | Specification | Doc | Impl | Ops | Commit | Blob | Domain |
 | --- | --- | --- | --- | --- | --- | --- |
 | `docs/gotrader-backtest/bt1-architecture-and-concurrency-authorization.md` | accepted | not_applicable | not_run | BT1-AUTHORIZATION | `89833057dbf88954a1595cdf2fa0b6c847d1f2b2` | Governance |
-| `docs/gotrader-backtest/bt1-dataset-foundation-report.md` | accepted | complete | accepted_with_limitations | BT1-REPORTS | `42ee544089a1fde39ec86c198ac2a430912bc068` | Historical Data |
+| `docs/gotrader-backtest/bt1-dataset-foundation-report.md` | accepted | complete | accepted_with_limitations | BT1-REPORTS | `c6b38dd931c9825f61707ddcf58470c4ff9b2996` | Historical Data |
 | `docs/gotrader-backtest/bt1-dataset-identity-specification.md` | accepted | complete | not_run | BT1-REPORTS | `6efdc0ea196d5e1f0e78c722bfe9c70177944017` | Identity |
-| `docs/gotrader-backtest/bt1-historical-time-authority.md` | accepted | complete | blocked | BT1-REPORTS | `a4c3cab159368e89a3b4aff7c1f53f3b11889d3d` | Historical Time |
+| `docs/gotrader-backtest/bt1-historical-time-authority.md` | accepted | complete | blocked | BT1-REPORTS | `9ad9e2935a45709f26eb784edb50e9da58812c33` | Historical Time |
 | `docs/gotrader-backtest/bt1-symbol-normalization.md` | accepted | complete | not_run | BT1-REPORTS | `a7611160114a9caebc9b8f2c24c99c226f80e224` | Symbol Contract |
 | `docs/gotrader-backtest/bt1-storage-and-lineage.md` | accepted | complete | not_run | BT1-REPORTS | `6295e3e6b59748b37d6da2c8d12e619efa500b05` | Storage And Lineage |
 
@@ -436,8 +436,8 @@ following:
    at `89ba4b276fdfdc5dd5396959636fb0e86bdba436`.
 
 The independent BT1 historical dataset foundation is complete at
-`3f6b3d87ff4d23b17908c5fa01fd95d7092e60aa` with reports at
-`9ea4a4356cb3c8c1b7e8a069c7ba8df87135106f`. It grants no runtime or strategy
+`feac1841efd0203c75d723de9f1ff64705b2e20c` with reports at
+`b80338bb9d0e7a86e275c8bd3b0ff22662380275`. It grants no runtime or strategy
 authority. BT2 remains blocked until MT5 broker-historical time/DST and an
 actual two-year dataset are accepted under a separate gate.
 
