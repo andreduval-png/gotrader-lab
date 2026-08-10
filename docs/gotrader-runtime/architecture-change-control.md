@@ -285,7 +285,7 @@ B1.0 Contracts And Identity Accepted
 
 B1.1 Local Engine And Repository Accepted
 
-B1.2 Live Canary Implemented - Operational Acceptance Pending
+B1.2 Live Canary Operationally Accepted
 
 B1.3 Not Authorized
 ```
@@ -302,8 +302,12 @@ deterministic engine and compact repository scope at commit
 
 Change record `B1.2-AUTHORIZATION-2026-08-03` authorizes only the isolated
 current-live context-lineage canary implementation at
-`820a6278fcdadf061c354c4e30c89af034d20780`. Its canonical record hash is
-`sha256:f1d9e2706bf434e2cec42166037d8541862acb13ea8484399dd1ed5d2efee928`.
-Operational acceptance remains pending. B1.3 is not authorized, and B1.2 grants
-no strategy, production, evidence, readiness, memory, broker, execution, or
-calibration authority.
+`820a6278fcdadf061c354c4e30c89af034d20780`. Operational candidate
+`441188ac9890c99493b8737691b5e8af4b32f97a` was accepted by commit
+`c8029fc5186f33d1ebf8cd497ce5e38a97eb6644` after the four-hour observation
+`b1_2_shadow_canary_1786386781524` passed with report integrity hash
+`sha256:efb780914f688ac0bda16b802d0708e2511de94941a146a9ff4316a1820c22dd`.
+The accepted authorization record hash is
+`sha256:0e816ca3d91a27b4de1d737fa114ee04971619b4d7572774ea94a914470a4d94`.
+B1.3 remains not authorized, and B1.2 grants no strategy, production, evidence,
+readiness, memory, broker, execution, or calibration authority.
