@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { compileTypescriptModules } from "../v2-baseline/compile-typescript-modules.mjs";
 
 const FORBIDDEN_KEYS = new Set([
   "account",
@@ -68,10 +68,10 @@ export async function loadBt15Modules(label = "runtime") {
     path.join(bt15RuntimeRoot(), "compiled", `${label}-${process.pid}-${Date.now()}`),
     "compiled module path"
   );
-  compileTypescriptModules({
-    files: [path.join(workspaceRoot(), "src", "lib", "historicalData", "index.ts")],
+  execFileSync(process.execPath, [
+    path.join(workspaceRoot(), "scripts", "support", "compile-bt1-5-runtime-modules.mjs"),
     outRoot
-  });
+  ], { stdio: "pipe" });
   const load = (name) => import(pathToFileURL(path.join(outRoot, `${name}.mjs`)).href);
   return Object.freeze({
     contracts: await load("historicalDatasetContracts"),
