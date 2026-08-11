@@ -19,6 +19,9 @@ const request = async (path, init = {}) => {
 const health = await request("/health");
 const symbolInfo = await request("/symbol-info?symbol=USTECH");
 const candles = await request("/api/v1/market/candles/latest?symbol_name=USTECH&timeframe=M5&count=3");
+const unavailableHistoricalRange = await request(
+  "/candles/range?symbol=USTECH&timeframe=M1&from=2000-01-03T00%3A00%3A00Z&to=2000-01-03T01%3A00%3A00Z&limit=100"
+);
 const blockedGetPaths = ["/account", "/orders", "/positions", "/deals", "/trade/history"];
 const blockedGetResults = await Promise.all(blockedGetPaths.map((path) => request(path)));
 const blockedMutationResults = await Promise.all(
@@ -48,6 +51,11 @@ const symbolInfoValid =
   Number(symbolInfo.payload?.point) > 0 &&
   symbolInfo.payload?.readOnly === true &&
   Object.entries(authority).every(([key, value]) => symbolInfo.payload?.[key] === value);
+const unavailableRangeIsBounded =
+  unavailableHistoricalRange.response.ok &&
+  unavailableHistoricalRange.payload?.returnedCount === 0 &&
+  Array.isArray(unavailableHistoricalRange.payload?.candles) &&
+  unavailableHistoricalRange.payload.candles.length === 0;
 const blockedGet = blockedGetResults.every(({ response, payload }) => response.status === 403 && payload?.executionAuthority === "none");
 const blockedMutation = blockedMutationResults.every(
   ({ response, payload }) => response.status === 403 && payload?.executionAuthority === "none"
@@ -64,6 +72,7 @@ const result = {
     healthIsNonBlocking &&
     healthAuthority &&
     symbolInfoValid &&
+    unavailableRangeIsBounded &&
     candles.response.ok &&
     candlesValid &&
     blockedGet &&
@@ -76,6 +85,7 @@ const result = {
     healthAuthority,
     healthIsNonBlocking,
     symbolInfoValid,
+    unavailableRangeIsBounded,
     candlesValid,
     blockedGet,
     blockedMutation,

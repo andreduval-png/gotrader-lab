@@ -86,13 +86,30 @@ const rawTime = (value) => {
   return firstDefined(item, ["rawTime", "raw_time", "timestamp", "datetime", "date", "time"]);
 };
 
+const timestampMilliseconds = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.abs(value) < 1_000_000_000_000 ? value * 1000 : value;
+  }
+  const parsed = Date.parse(String(value ?? ""));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
 const compactWindow = (payload, window) => {
   const candles = Array.isArray(payload.candles) ? payload.candles : [];
+  const requestedFrom = new Date(window.fromUtc).toISOString();
+  const requestedTo = new Date(window.toUtc).toISOString();
+  const requestedFromMs = Date.parse(requestedFrom);
+  const requestedToMs = Date.parse(requestedTo);
+  const outOfRangeCandleCount = candles.filter((candle) => {
+    const observed = timestampMilliseconds(rawTime(candle));
+    return !Number.isFinite(observed) || observed < requestedFromMs || observed >= requestedToMs;
+  }).length;
   return Object.freeze({
     period: window.period,
-    requestedFromUtc: new Date(window.fromUtc).toISOString(),
-    requestedToUtc: new Date(window.toUtc).toISOString(),
+    requestedFromUtc: requestedFrom,
+    requestedToUtc: requestedTo,
     candleCount: candles.length,
+    outOfRangeCandleCount,
     firstRawProviderTime: candles.length ? rawTime(candles[0]) ?? null : null,
     lastRawProviderTime: candles.length ? rawTime(candles.at(-1)) ?? null : null,
     sourceMethod: String(firstDefined(payload, ["sourceMethod", "source"]) ?? "unknown"),

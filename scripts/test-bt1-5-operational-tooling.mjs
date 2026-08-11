@@ -130,7 +130,13 @@ const fakeFetch = async (url, init) => {
     sourceMethod: "upstream_http:/candles/range",
     candles: [
       { timestamp: parsed.searchParams.get("from"), open: 1, high: 2, low: 0, close: 1 },
-      { timestamp: parsed.searchParams.get("to"), open: 1, high: 2, low: 0, close: 1 }
+      {
+        timestamp: new Date(Date.parse(parsed.searchParams.get("to")) - 60_000).toISOString(),
+        open: 1,
+        high: 2,
+        low: 0,
+        close: 1
+      }
     ]
   };
   return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
@@ -151,6 +157,7 @@ const diagnostics = await collectBt15Diagnostics({
 });
 assert.equal(diagnostics.evidence.length, 5);
 assert.equal(diagnostics.evidence.every((item) => item.candleCount === 2), true);
+assert.equal(diagnostics.evidence.every((item) => item.outOfRangeCandleCount === 0), true);
 assert.equal(diagnostics.symbol.found, true);
 assert.equal(diagnostics.symbol.volumeMinLots, null);
 assert.equal(JSON.stringify(diagnostics).includes("undefined"), false);

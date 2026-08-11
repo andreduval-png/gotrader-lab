@@ -24,7 +24,10 @@ const core = Object.freeze({
   blockers: Object.freeze([
     ...(observed.timeContract.providerTimeBasis === "unknown" ? ["historical_provider_time_basis_unknown"] : []),
     ...(!observed.symbol.found ? ["historical_broker_symbol_not_found"] : []),
-    ...observed.evidence.flatMap((item) => item.candleCount ? [] : [`historical_${item.period}_evidence_missing`])
+    ...observed.evidence.flatMap((item) => [
+      ...(item.candleCount ? [] : [`historical_${item.period}_evidence_missing`]),
+      ...(item.outOfRangeCandleCount ? [`historical_${item.period}_evidence_out_of_range`] : [])
+    ])
   ].sort()),
   authority: authorityNone
 });

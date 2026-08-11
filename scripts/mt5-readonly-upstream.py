@@ -956,7 +956,13 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
             error = mt5.last_error()
         if rates is None:
             raise RuntimeError(f"MT5 range candles unavailable for {symbol} {timeframe_name}: {error}")
-        candles = sorted((compact_candle(row) for row in rates), key=lambda item: item["timestamp"])[-count:]
+        range_start = int(date_from.timestamp())
+        range_end = int(date_to.timestamp())
+        candles = [
+            candle
+            for candle in sorted((compact_candle(row) for row in rates), key=lambda item: item["rawTime"])
+            if range_start <= candle["rawTime"] < range_end
+        ][-count:]
         self.send_json(
             200,
             {
