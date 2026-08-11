@@ -30,10 +30,38 @@ const manifestCore = (manifest: Readonly<HistoricalDatasetManifest>) => {
 
 export interface HistoricalTimeframeSealInput {
   readonly timeframe: HistoricalTimeframe;
+  readonly candles?: readonly Readonly<HistoricalNormalizedCandle>[];
+  readonly candleCount?: number;
+  readonly firstCandleTimeUtc?: string;
+  readonly lastCandleTimeUtc?: string;
+  readonly timeframeChecksum?: string;
+  readonly partitionIds: readonly string[];
+  readonly integrityLedger: Readonly<HistoricalIntegrityLedger>;
+  readonly derivedLineage?: Readonly<HistoricalDerivedTimeframeLineage>;
+}
+
+export async function summarizeHistoricalTimeframeSeal(input: {
+  readonly timeframe: HistoricalTimeframe;
   readonly candles: readonly Readonly<HistoricalNormalizedCandle>[];
   readonly partitionIds: readonly string[];
   readonly integrityLedger: Readonly<HistoricalIntegrityLedger>;
   readonly derivedLineage?: Readonly<HistoricalDerivedTimeframeLineage>;
+}): Promise<Readonly<HistoricalTimeframeSealInput>> {
+  const timeframeChecksum = await canonicalHash({
+    normalizationVersion: HISTORICAL_NORMALIZATION_VERSION,
+    timeframe: input.timeframe,
+    candles: input.candles
+  });
+  return Object.freeze({
+    timeframe: input.timeframe,
+    candleCount: input.candles.length,
+    firstCandleTimeUtc: input.candles[0]?.openTimeUtc,
+    lastCandleTimeUtc: input.candles.at(-1)?.closeTimeUtc,
+    timeframeChecksum,
+    partitionIds: input.partitionIds,
+    integrityLedger: input.integrityLedger,
+    ...(input.derivedLineage ? { derivedLineage: input.derivedLineage } : {})
+  });
 }
 
 export async function buildHistoricalDatasetManifest(input: {
@@ -99,23 +127,32 @@ export async function buildHistoricalDatasetManifest(input: {
     input.request.timeframeAlignment.verificationStatus !== "verified"
   ) blockers.push("historical_timeframe_alignment_unverified");
   for (const value of [...input.timeframes].sort((left, right) => left.timeframe.localeCompare(right.timeframe))) {
-    if (!value.candles.length) blockers.push(`historical_${value.timeframe}_contains_no_candles`);
+    const candleCount = value.candles?.length ?? value.candleCount;
+    if (!Number.isSafeInteger(candleCount) || Number(candleCount) < 0) {
+      throw new Error(`Historical ${value.timeframe} seal has an invalid candle count.`);
+    }
+    const firstCandleTimeUtc = value.candles?.[0]?.openTimeUtc ?? value.firstCandleTimeUtc;
+    const lastCandleTimeUtc = value.candles?.at(-1)?.closeTimeUtc ?? value.lastCandleTimeUtc;
+    if (!candleCount) blockers.push(`historical_${value.timeframe}_contains_no_candles`);
     blockers.push(...value.integrityLedger.summary.blockers);
     warnings.push(...value.integrityLedger.summary.warnings);
     if (value.derivedLineage) {
       blockers.push(...value.derivedLineage.blockers);
       warnings.push(...value.derivedLineage.warnings);
     }
-    const timeframeChecksum = await canonicalHash({
+    const timeframeChecksum = value.timeframeChecksum ?? await canonicalHash({
       normalizationVersion: HISTORICAL_NORMALIZATION_VERSION,
       timeframe: value.timeframe,
-      candles: value.candles
+      candles: value.candles ?? []
     });
+    if (!hashPattern.test(timeframeChecksum)) {
+      throw new Error(`Historical ${value.timeframe} seal has an invalid checksum.`);
+    }
     entries.push(Object.freeze({
       timeframe: value.timeframe,
-      candleCount: value.candles.length,
-      firstCandleTimeUtc: value.candles[0]?.openTimeUtc ?? input.request.startUtc,
-      lastCandleTimeUtc: value.candles.at(-1)?.closeTimeUtc ?? input.request.startUtc,
+      candleCount: Number(candleCount),
+      firstCandleTimeUtc: firstCandleTimeUtc ?? input.request.startUtc,
+      lastCandleTimeUtc: lastCandleTimeUtc ?? input.request.startUtc,
       partitionIds: Object.freeze([...value.partitionIds].sort()),
       timeframeChecksum,
       integrityLedgerId: value.integrityLedger.ledgerId,

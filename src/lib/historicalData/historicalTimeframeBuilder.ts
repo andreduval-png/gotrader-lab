@@ -73,26 +73,18 @@ export async function deriveHistoricalTimeframe(input: {
       `Historical alignment policy does not qualify derived ${input.targetTimeframe}; use a verified native source timeframe.`
     );
   }
-  const groups = new Map<number, HistoricalNormalizedCandle[]>();
-  for (const candle of [...input.candles].sort(
-    (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
-  )) {
-    const start = bucketStartFor(Date.parse(candle.openTimeUtc), input.targetTimeframe, input.alignment);
-    const group = groups.get(start) ?? [];
-    group.push(candle);
-    groups.set(start, group);
-  }
   const rangeStart = Date.parse(input.rangeStartUtc);
   const rangeEnd = Date.parse(input.rangeEndUtc);
   const derived: HistoricalNormalizedCandle[] = [];
   const blockers: string[] = [];
   const warnings: string[] = [];
   let calendarAdjusted = false;
-  for (const [bucketStart, candles] of [...groups.entries()].sort((left, right) => left[0] - right[0])) {
+
+  const finalizeBucket = (bucketStart: number, candles: readonly HistoricalNormalizedCandle[]) => {
     const bucketEnd = bucketStart + targetMs;
     if (bucketStart < rangeStart || bucketEnd > rangeEnd) {
       warnings.push("derived_boundary_bucket_excluded");
-      continue;
+      return;
     }
     const byOpen = new Map(candles.map((candle) => [Date.parse(candle.openTimeUtc), candle]));
     const missing: number[] = [];
@@ -102,7 +94,7 @@ export async function deriveHistoricalTimeframe(input: {
     const unexpected = missing.filter((timestamp) => !intervalCovered(timestamp, timestamp + parentMs, input.calendar));
     if (unexpected.length) {
       blockers.push(`derived_${input.targetTimeframe}_incomplete_bucket`);
-      continue;
+      return;
     }
     if (missing.length) {
       calendarAdjusted = true;
@@ -111,7 +103,7 @@ export async function deriveHistoricalTimeframe(input: {
     const ordered = [...byOpen.values()].sort(
       (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
     );
-    if (!ordered.length) continue;
+    if (!ordered.length) return;
     const volumeValues = ordered.map((candle) => candle.volume).filter((value): value is number => value !== undefined);
     const spreadValues = ordered.map((candle) => candle.spreadPoints).filter((value): value is number => value !== undefined);
     derived.push(Object.freeze({
@@ -124,7 +116,27 @@ export async function deriveHistoricalTimeframe(input: {
       ...(volumeValues.length ? { volume: volumeValues.reduce((sum, value) => sum + value, 0) } : {}),
       ...(spreadValues.length ? { spreadPoints: Math.max(...spreadValues) } : {})
     }));
+  };
+
+  let currentBucketStart: number | undefined;
+  let currentBucket: HistoricalNormalizedCandle[] = [];
+  const alreadyOrdered = input.candles.every((candle, index) =>
+    index === 0 || Date.parse(input.candles[index - 1].openTimeUtc) <= Date.parse(candle.openTimeUtc));
+  const orderedInput = alreadyOrdered
+    ? input.candles
+    : [...input.candles].sort(
+      (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
+    );
+  for (const candle of orderedInput) {
+    const bucketStart = bucketStartFor(Date.parse(candle.openTimeUtc), input.targetTimeframe, input.alignment);
+    if (currentBucketStart !== undefined && bucketStart !== currentBucketStart) {
+      finalizeBucket(currentBucketStart, currentBucket);
+      currentBucket = [];
+    }
+    currentBucketStart = bucketStart;
+    currentBucket.push(candle);
   }
+  if (currentBucketStart !== undefined) finalizeBucket(currentBucketStart, currentBucket);
   const normalizedBlockers = unique(blockers);
   const normalizedWarnings = unique(warnings);
   const lineageCore = {

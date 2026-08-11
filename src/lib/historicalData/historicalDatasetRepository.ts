@@ -9,6 +9,7 @@ import {
 } from "./historicalDatasetContracts";
 import {
   buildHistoricalDatasetManifest,
+  summarizeHistoricalTimeframeSeal,
   validateHistoricalDatasetManifest,
   type HistoricalTimeframeSealInput
 } from "./historicalDatasetIdentity";
@@ -326,15 +327,23 @@ export class HistoricalDatasetRepository {
       barsRejected: checkpoint.timeframes.reduce((sum, state) => sum + state.rejectedEventCount, 0)
     });
     const seals: HistoricalTimeframeSealInput[] = [];
-    const available = new Map<HistoricalTimeframe, HistoricalTimeframeSealInput>();
+    const available = new Map<HistoricalTimeframe, HistoricalTimeframeSealInput & {
+      readonly candles: readonly Readonly<HistoricalNormalizedCandle>[];
+    }>();
     for (const timeframe of request.sourceTimeframes) {
       const state = checkpoint.timeframes.find((value) => value.timeframe === timeframe)!;
-      const partitions = await Promise.all(state.partitionIds.map((partitionId) => this.#readPartition(partitionId)));
+      const candles: HistoricalNormalizedCandle[] = [];
+      const sourceEvents: HistoricalIntegrityLedger["events"][number][] = [];
+      for (const partitionId of state.partitionIds) {
+        const partition = await this.#readPartition(partitionId);
+        candles.push(...partition.candles);
+        sourceEvents.push(...partition.rejectedEvents);
+      }
       const integrity = await buildHistoricalIntegrityLedger({
         requestId: identity.requestId,
         timeframe,
-        candles: partitions.flatMap((partition) => partition.candles),
-        sourceEvents: partitions.flatMap((partition) => partition.rejectedEvents),
+        candles,
+        sourceEvents,
         calendar: request.calendar
       });
       await this.#writeImmutable("integrity", integrity.ledger.ledgerId, integrity.ledger);
@@ -344,7 +353,7 @@ export class HistoricalDatasetRepository {
         partitionIds: state.partitionIds,
         integrityLedger: integrity.ledger
       });
-      seals.push(seal);
+      seals.push(await summarizeHistoricalTimeframeSeal(seal));
       available.set(timeframe, seal);
     }
     let totalPartitionCount = checkpoint.timeframes.reduce(
@@ -410,10 +419,10 @@ export class HistoricalDatasetRepository {
         integrityLedger: integrity.ledger,
         derivedLineage: derived.lineage
       });
-      seals.push(seal);
-      available.set(timeframe, seal);
+      seals.push(await summarizeHistoricalTimeframeSeal(seal));
       totalPartitionCount += 1;
     }
+    available.clear();
     const manifest = await buildHistoricalDatasetManifest({
       requestId: identity.requestId,
       request,
@@ -543,17 +552,18 @@ export class HistoricalDatasetRepository {
     }
     const checksumEntries: Array<{ timeframe: HistoricalTimeframe; timeframeChecksum: string; candleCount: number }> = [];
     for (const entry of manifest.timeframes) {
-      const partitions: HistoricalPartitionPayload[] = [];
+      const partitionCandles: HistoricalNormalizedCandle[] = [];
       for (const partitionId of entry.partitionIds) {
         try {
-          partitions.push(await this.#readPartition(partitionId));
+          const partition = await this.#readPartition(partitionId);
+          partitionCandles.push(...partition.candles);
         } catch (error) {
           blockers.push(...(error instanceof HistoricalDatasetRepositoryError
             ? error.blockers
             : ["historical_partition_read_failed"]));
         }
       }
-      const candles = this.#canonicalCandles(partitions.flatMap((partition) => partition.candles), blockers);
+      const candles = this.#canonicalCandles(partitionCandles, blockers);
       const timeframeChecksum = await canonicalHash({
         normalizationVersion: manifest.normalizationVersion,
         timeframe: entry.timeframe,
@@ -637,19 +647,20 @@ export class HistoricalDatasetRepository {
     candles: readonly Readonly<HistoricalNormalizedCandle>[],
     blockers?: string[]
   ) {
-    const byOpen = new Map<string, HistoricalNormalizedCandle>();
+    const canonical: HistoricalNormalizedCandle[] = [];
     for (const candle of [...candles].sort(
       (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
     )) {
-      const previous = byOpen.get(candle.openTimeUtc);
-      if (previous && canonicalSerialize(previous) !== canonicalSerialize(candle)) {
+      const previous = canonical.at(-1);
+      const duplicate = previous?.openTimeUtc === candle.openTimeUtc;
+      if (duplicate && canonicalSerialize(previous) !== canonicalSerialize(candle)) {
         blockers?.push("historical_partition_cross_conflict");
         if (!blockers) throw new HistoricalDatasetRepositoryError(["historical_partition_cross_conflict"]);
         continue;
       }
-      if (!previous) byOpen.set(candle.openTimeUtc, candle);
+      if (!duplicate) canonical.push(candle);
     }
-    return Object.freeze([...byOpen.values()]);
+    return Object.freeze(canonical);
   }
 
   async #writeCheckpoint(checkpoint: Readonly<HistoricalIngestionCheckpoint>) {

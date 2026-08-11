@@ -213,14 +213,17 @@ export async function buildHistoricalIntegrityLedger(input: {
   readonly ledger: Readonly<HistoricalIntegrityLedger>;
 }> {
   const events: HistoricalIntegrityEvent[] = [...input.sourceEvents];
-  const sorted = [...input.candles].sort(
-    (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
-  );
+  const alreadyOrdered = input.candles.every((candle, index) =>
+    index === 0 || Date.parse(input.candles[index - 1].openTimeUtc) <= Date.parse(candle.openTimeUtc));
+  const sorted = alreadyOrdered
+    ? input.candles
+    : [...input.candles].sort(
+      (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
+    );
   const canonical: HistoricalNormalizedCandle[] = [];
-  const byOpen = new Map<string, HistoricalNormalizedCandle>();
   for (const candle of sorted) {
-    const previous = byOpen.get(candle.openTimeUtc);
-    if (previous) {
+    const previous = canonical.at(-1);
+    if (previous?.openTimeUtc === candle.openTimeUtc) {
       const same = canonicalSerialize(previous) === canonicalSerialize(candle);
       events.push(await event({
         kind: same ? "duplicate" : "conflicting_duplicate",
@@ -234,7 +237,6 @@ export async function buildHistoricalIntegrityLedger(input: {
       }));
       continue;
     }
-    byOpen.set(candle.openTimeUtc, candle);
     canonical.push(candle);
   }
   const intervalMs = historicalTimeframeMilliseconds(input.timeframe);

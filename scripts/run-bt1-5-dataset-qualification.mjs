@@ -139,6 +139,7 @@ const repository = new modules.repository.HistoricalDatasetRepository({
   maximumAcceptedCandles: bundle.bounds.maximumSourceBars,
   onProgress(event) {
     latestProgress = event;
+    globalThis.gc();
     peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
     const compact = Object.freeze({ ...event, recordedAtUtc: new Date().toISOString() });
     progressEvents.push(compact);
