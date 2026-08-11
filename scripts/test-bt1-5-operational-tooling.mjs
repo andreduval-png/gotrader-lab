@@ -14,6 +14,14 @@ import {
 } from "./support/bt1-dataset-fixtures.mjs";
 
 const workspace = process.cwd();
+const packageJson = JSON.parse(fs.readFileSync(path.join(workspace, "package.json"), "utf8"));
+const liveRunnerSource = fs.readFileSync(
+  path.join(workspace, "scripts", "run-bt1-5-dataset-qualification.mjs"),
+  "utf8"
+);
+assert.match(packageJson.scripts["bt1-5:run"], /--expose-gc/);
+assert.match(liveRunnerSource, /bounded page handoffs/);
+assert.match(liveRunnerSource, /historical_runtime_peak_memory_bound_exceeded/);
 const testRoot = path.join(workspace, ".gotrader", "bt1-5", "operational-test");
 fs.rmSync(testRoot, { recursive: true, force: true });
 fs.mkdirSync(testRoot, { recursive: true });

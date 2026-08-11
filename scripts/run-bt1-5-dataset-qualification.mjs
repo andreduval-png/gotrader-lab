@@ -41,9 +41,12 @@ if (
   preflight.bundleId !== bundleId ||
   Date.parse(preflight.expiresAtUtc) < Date.now()
 ) throw new Error("BT1.5 requires a current safe live preflight for this bundle.");
+if (typeof globalThis.gc !== "function") {
+  throw new Error("BT1.5 live ingestion requires Node --expose-gc for bounded page handoffs.");
+}
 
 const requestAudit = [];
-const provider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
+const sourceProvider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
   baseUrl: bundle.provider.baseUrl,
   providerVersion: bundle.provider.providerDescription.providerVersion,
   providerTimeBasis: bundle.provider.providerTimeBasis,
@@ -60,6 +63,13 @@ const provider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
       port: url.port || "80",
       pathname: url.pathname
     }));
+  }
+});
+const provider = Object.freeze({
+  describe: sourceProvider.describe,
+  async fetchPage(request) {
+    globalThis.gc();
+    return sourceProvider.fetchPage(request);
   }
 });
 const providerDescription = await provider.describe();
@@ -129,10 +139,14 @@ const repository = new modules.repository.HistoricalDatasetRepository({
   maximumAcceptedCandles: bundle.bounds.maximumSourceBars,
   onProgress(event) {
     latestProgress = event;
+    peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
     const compact = Object.freeze({ ...event, recordedAtUtc: new Date().toISOString() });
     progressEvents.push(compact);
     fs.appendFileSync(progressPath, `${JSON.stringify(compact)}\n`, "utf8");
     console.log(JSON.stringify(compact));
+    if (peakRssBytes > bundle.bounds.maximumPeakMemoryBytes) {
+      throw new Error("historical_runtime_peak_memory_bound_exceeded");
+    }
     if (interruptAfterPages !== undefined && event.eventType === "page_committed" && event.pagesCompleted >= interruptAfterPages) {
       const error = new Error("BT1.5 controlled interruption after committed checkpoint.");
       error.code = "BT15_CONTROLLED_INTERRUPTION";
