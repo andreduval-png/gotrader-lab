@@ -112,7 +112,18 @@ const fakeFetch = async (url, init) => {
   };
   else if (parsed.pathname === "/symbols") payload = {
     ...common,
-    symbols: [{ symbol: "USTECH", digits: 2, point: 0.01, trade_tick_size: 0.01, trade_tick_value: 0.1 }]
+    symbols: ["USTECH"]
+  };
+  else if (parsed.pathname === "/symbol-info") payload = {
+    ...common,
+    symbol: "USTECH",
+    symbolInfo: {
+      symbol: "USTECH",
+      digits: 2,
+      point: 0.01,
+      trade_tick_size: 0.01,
+      trade_tick_value: 0.1
+    }
   };
   else payload = {
     ...common,
@@ -140,6 +151,9 @@ const diagnostics = await collectBt15Diagnostics({
 });
 assert.equal(diagnostics.evidence.length, 5);
 assert.equal(diagnostics.evidence.every((item) => item.candleCount === 2), true);
+assert.equal(diagnostics.symbol.found, true);
+assert.equal(diagnostics.symbol.volumeMinLots, null);
+assert.equal(JSON.stringify(diagnostics).includes("undefined"), false);
 assert.equal(requests.every((request) => request.method === "GET"), true);
 assert.doesNotMatch(JSON.stringify(diagnostics), /not-persisted|account/i);
 

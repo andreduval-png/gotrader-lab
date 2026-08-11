@@ -42,8 +42,8 @@ const compactService = (payload) => Object.freeze({
 
 const compactTimeContract = (payload) => Object.freeze({
   providerTimeBasis: String(firstDefined(payload, ["providerTimeBasis", "basis", "historicalTimeBasis"]) ?? "unknown"),
-  timezone: firstDefined(payload, ["timezone", "providerTimezone", "sourceTimezone"]),
-  fixedOffsetMinutes: firstDefined(payload, ["fixedOffsetMinutes", "observedOffsetMinutes"]),
+  timezone: firstDefined(payload, ["timezone", "providerTimezone", "sourceTimezone"]) ?? null,
+  fixedOffsetMinutes: firstDefined(payload, ["fixedOffsetMinutes", "observedOffsetMinutes"]) ?? null,
   historicalTimeVerified: firstDefined(payload, ["historicalTimeVerified"]) === true,
   historicalDstVerified: firstDefined(payload, ["historicalDstVerified"]) === true,
   verificationVersion: String(firstDefined(payload, ["verificationVersion", "contractVersion", "version"]) ?? "unknown"),
@@ -55,21 +55,29 @@ const symbolList = (payload) => Array.isArray(payload)
   ? payload
   : Array.isArray(payload.symbols) ? payload.symbols : [];
 
-const compactSymbol = (payload, brokerSymbol) => {
-  const item = record(symbolList(payload).find((candidate) =>
-    String(record(candidate).symbol ?? record(candidate).name ?? "") === brokerSymbol));
+const compactSymbol = (symbolsPayload, symbolInfoPayload, brokerSymbol) => {
+  const listedItem = symbolList(symbolsPayload).find((candidate) =>
+    String(record(candidate).symbol ?? record(candidate).name ?? candidate) === brokerSymbol);
+  const listed = listedItem !== undefined;
+  const listedMetadata = record(listedItem);
+  const observedMetadata = record(record(symbolInfoPayload).symbolInfo);
+  const item = Object.keys(observedMetadata).length ? observedMetadata : listedMetadata;
+  const digits = firstDefined(item, ["digits"]);
+  const pointSize = firstDefined(item, ["point", "pointSize"]);
   return Object.freeze({
-    found: Object.keys(item).length > 0,
+    found: listed && Object.keys(item).length > 0 && digits !== undefined && pointSize !== undefined,
     brokerSymbol,
-    digits: firstDefined(item, ["digits"]),
-    pointSize: firstDefined(item, ["point", "pointSize"]),
-    tickSize: firstDefined(item, ["trade_tick_size", "tickSize"]),
-    tickValue: firstDefined(item, ["trade_tick_value", "tickValue"]),
-    tradeContractSize: firstDefined(item, ["trade_contract_size", "tradeContractSize"]),
-    volumeMinLots: firstDefined(item, ["volume_min", "volumeMin"]),
-    volumeMaxLots: firstDefined(item, ["volume_max", "volumeMax"]),
-    volumeStepLots: firstDefined(item, ["volume_step", "volumeStep"]),
-    authority: compactAuthority(payload)
+    digits: digits ?? null,
+    pointSize: pointSize ?? null,
+    tickSize: firstDefined(item, ["trade_tick_size", "tickSize"]) ?? null,
+    tickValue: firstDefined(item, ["trade_tick_value", "tickValue"]) ?? null,
+    tradeContractSize: firstDefined(item, ["trade_contract_size", "tradeContractSize"]) ?? null,
+    volumeMinLots: firstDefined(item, ["volume_min", "volumeMin"]) ?? null,
+    volumeMaxLots: firstDefined(item, ["volume_max", "volumeMax"]) ?? null,
+    volumeStepLots: firstDefined(item, ["volume_step", "volumeStep"]) ?? null,
+    spreadPoints: firstDefined(item, ["spread", "spreadPoints"]) ?? null,
+    spreadFloat: firstDefined(item, ["spread_float", "spreadFloat"]) ?? null,
+    authority: compactAuthority(symbolInfoPayload)
   });
 };
 
@@ -85,8 +93,8 @@ const compactWindow = (payload, window) => {
     requestedFromUtc: new Date(window.fromUtc).toISOString(),
     requestedToUtc: new Date(window.toUtc).toISOString(),
     candleCount: candles.length,
-    firstRawProviderTime: candles.length ? rawTime(candles[0]) : undefined,
-    lastRawProviderTime: candles.length ? rawTime(candles.at(-1)) : undefined,
+    firstRawProviderTime: candles.length ? rawTime(candles[0]) ?? null : null,
+    lastRawProviderTime: candles.length ? rawTime(candles.at(-1)) ?? null : null,
     sourceMethod: String(firstDefined(payload, ["sourceMethod", "source"]) ?? "unknown"),
     warnings: Object.freeze(Array.isArray(payload.warnings) ? payload.warnings.map(String).sort() : []),
     missingEvidence: Object.freeze(Array.isArray(payload.missingEvidence) ? payload.missingEvidence.map(String).sort() : []),
@@ -115,6 +123,9 @@ export async function collectBt15Diagnostics({
   const statusPayload = await fetchJson(fetchImpl, `${root}/status`, timeoutMs);
   const timePayload = await fetchJson(fetchImpl, `${root}/time-contract`, timeoutMs);
   const symbolsPayload = await fetchJson(fetchImpl, `${root}/symbols`, timeoutMs);
+  const symbolInfoUrl = new URL(`${root}/symbol-info`);
+  symbolInfoUrl.searchParams.set("symbol", brokerSymbol);
+  const symbolInfoPayload = await fetchJson(fetchImpl, symbolInfoUrl, timeoutMs);
   const evidence = [];
   for (const window of windows) {
     const url = new URL(`${root}/candles/range`);
@@ -130,7 +141,7 @@ export async function collectBt15Diagnostics({
     health: compactService(healthPayload),
     status: compactService(statusPayload),
     timeContract: compactTimeContract(timePayload),
-    symbol: compactSymbol(symbolsPayload, brokerSymbol),
+    symbol: compactSymbol(symbolsPayload, symbolInfoPayload, brokerSymbol),
     evidence: Object.freeze(evidence),
     requestedSymbol,
     brokerSymbol,

@@ -17,6 +17,7 @@ const request = async (path, init = {}) => {
 };
 
 const health = await request("/health");
+const symbolInfo = await request("/symbol-info?symbol=USTECH");
 const candles = await request("/api/v1/market/candles/latest?symbol_name=USTECH&timeframe=M5&count=3");
 const blockedGetPaths = ["/account", "/orders", "/positions", "/deals", "/trade/history"];
 const blockedGetResults = await Promise.all(blockedGetPaths.map((path) => request(path)));
@@ -40,6 +41,13 @@ const candlesValid =
       Number.isFinite(Number(candle.low)) &&
       Number.isFinite(Number(candle.close))
   );
+const symbolInfoValid =
+  symbolInfo.response.ok &&
+  symbolInfo.payload?.symbol === "USTECH" &&
+  Number.isInteger(symbolInfo.payload?.digits) &&
+  Number(symbolInfo.payload?.point) > 0 &&
+  symbolInfo.payload?.readOnly === true &&
+  Object.entries(authority).every(([key, value]) => symbolInfo.payload?.[key] === value);
 const blockedGet = blockedGetResults.every(({ response, payload }) => response.status === 403 && payload?.executionAuthority === "none");
 const blockedMutation = blockedMutationResults.every(
   ({ response, payload }) => response.status === 403 && payload?.executionAuthority === "none"
@@ -55,6 +63,7 @@ const result = {
     health.payload?.marketDataOnly === true &&
     healthIsNonBlocking &&
     healthAuthority &&
+    symbolInfoValid &&
     candles.response.ok &&
     candlesValid &&
     blockedGet &&
@@ -66,6 +75,7 @@ const result = {
   checks: {
     healthAuthority,
     healthIsNonBlocking,
+    symbolInfoValid,
     candlesValid,
     blockedGet,
     blockedMutation,

@@ -125,6 +125,32 @@ def compact_candle(row: Any) -> dict[str, Any]:
     return candle
 
 
+def compact_symbol_info(item: Any) -> dict[str, Any]:
+    return {
+        "symbol": str(item.name),
+        "name": str(item.name),
+        "description": str(item.description),
+        "path": str(item.path),
+        "digits": int(item.digits),
+        "point": float(item.point),
+        "trade_tick_size": float(item.trade_tick_size),
+        "trade_tick_value": float(item.trade_tick_value),
+        "trade_tick_value_profit": float(item.trade_tick_value_profit),
+        "trade_tick_value_loss": float(item.trade_tick_value_loss),
+        "trade_contract_size": float(item.trade_contract_size),
+        "volume_min": float(item.volume_min),
+        "volume_max": float(item.volume_max),
+        "volume_step": float(item.volume_step),
+        "spread": int(item.spread),
+        "spread_float": bool(item.spread_float),
+        "currency_base": str(item.currency_base),
+        "currency_profit": str(item.currency_profit),
+        "source": "mt5_symbol_info",
+        "readOnly": True,
+        **AUTHORITY,
+    }
+
+
 def _optional_int(value: Any) -> int | None:
     if value is None or str(value).strip() == "":
         return None
@@ -802,6 +828,14 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
             if path in {"/symbols", "/api/v1/market/symbols"}:
                 self.handle_symbols()
                 return
+            if path in {"/symbol-info", "/symbol_info", "/api/v1/market/symbol/info"} or path.startswith(
+                "/api/v1/market/symbol/info/"
+            ):
+                symbol = self.query_value(query, "symbol_name", "symbol")
+                if not symbol and path.startswith("/api/v1/market/symbol/info/"):
+                    symbol = unquote(path.rsplit("/", 1)[-1])
+                self.handle_symbol_info(symbol)
+                return
             if path in {"/time-contract", "/api/v1/market/time-contract"}:
                 symbol = self.query_value(query, "symbol_name", "symbol", default="USTECH") or "USTECH"
                 self.send_json(200, self.state.time_contract(symbol=symbol))
@@ -853,6 +887,16 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
         if symbols is None:
             raise RuntimeError(f"MT5 symbols_get failed: {error}")
         self.send_json(200, [item.name for item in symbols])
+
+    def handle_symbol_info(self, symbol: str | None) -> None:
+        if not symbol:
+            raise ValueError("symbol_name is required")
+        with MT5_LOCK:
+            item = mt5.symbol_info(symbol)
+            error = mt5.last_error()
+        if item is None:
+            raise RuntimeError(f"MT5 symbol info unavailable for {symbol}: {error}")
+        self.send_json(200, compact_symbol_info(item))
 
     def handle_quote(self, symbol: str | None) -> None:
         if not symbol:
