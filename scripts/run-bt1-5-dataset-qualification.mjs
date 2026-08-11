@@ -6,6 +6,7 @@ import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset
 import {
   authorityNone,
   bt15RuntimeRoot,
+  canonicalHashStreaming,
   compactJson,
   directorySize,
   loadBt15Modules,
@@ -134,6 +135,7 @@ const cpuStarted = process.cpuUsage();
 const progressEvents = [];
 const repository = new modules.repository.HistoricalDatasetRepository({
   storage: storage.adapter,
+  canonicalHash: canonicalHashStreaming,
   maximumPagesPerTimeframe: bundle.bounds.maximumPartitionCount,
   maximumPartitions: bundle.bounds.maximumPartitionCount,
   maximumAcceptedCandles: bundle.bounds.maximumSourceBars,

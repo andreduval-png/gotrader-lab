@@ -6,7 +6,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset-node-storage.mjs";
 import { collectBt15Diagnostics } from "./support/bt1-5-diagnostics-core.mjs";
-import { authorityNone } from "./support/bt1-5-qualification-runtime.mjs";
+import {
+  authorityNone,
+  canonicalHashStreaming
+} from "./support/bt1-5-qualification-runtime.mjs";
 import {
   buildFixtureRequest,
   createFixtureProvider,
@@ -21,14 +24,73 @@ const liveRunnerSource = fs.readFileSync(
 );
 assert.match(packageJson.scripts["bt1-5:run"], /--expose-gc/);
 assert.match(packageJson.scripts["bt1-5:run"], /--max-old-space-size=512/);
+assert.match(packageJson.scripts["bt1-6:prepare-gap-evidence"], /prepare-bt1-6-provider-gap-evidence-input/);
 assert.match(liveRunnerSource, /onProgress\(event\) \{\s+latestProgress = event;\s+globalThis\.gc\(\);/);
+assert.match(liveRunnerSource, /canonicalHash: canonicalHashStreaming/);
 assert.match(liveRunnerSource, /bounded page handoffs/);
 assert.match(liveRunnerSource, /historical_runtime_peak_memory_bound_exceeded/);
 const testRoot = path.join(workspace, ".gotrader", "bt1-5", "operational-test");
 fs.rmSync(testRoot, { recursive: true, force: true });
 fs.mkdirSync(testRoot, { recursive: true });
 const modules = await loadBt1Modules({ outRoot: path.join(testRoot, "compiled") });
+const canonicalSamples = [
+  null,
+  true,
+  -0,
+  "line one\r\nline two",
+  { z: 2, a: ["value", { workspace: "C:\\repo\\dataset" }] }
+];
+for (const sample of canonicalSamples) {
+  assert.equal(await canonicalHashStreaming(sample), await modules.canonical.canonicalHash(sample));
+}
 const fixture = await buildFixtureRequest(modules);
+
+const gapQualificationPath = path.join(testRoot, "gap-qualification.json");
+const gapLedgerPath = path.join(testRoot, "gap-ledger.json");
+const gapInputPath = path.join(testRoot, "gap-input.json");
+fs.writeFileSync(gapQualificationPath, JSON.stringify({
+  baseUrl: "http://127.0.0.1:7341",
+  providerVersion: "fixture-provider-v1",
+  sourceIdentityFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timeNormalizationPolicy: { sourceTimezone: "Europe/Helsinki" }
+}), "utf8");
+fs.writeFileSync(gapLedgerPath, JSON.stringify({
+  payload: {
+    authority: authorityNone,
+    events: [
+      {
+        eventId: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        kind: "unclassified_gap",
+        timeframe: "1m",
+        openTimeUtc: "2025-07-17T14:50:00.000Z",
+        endTimeUtc: "2025-07-17T14:51:00.000Z",
+        blocking: true
+      },
+      {
+        eventId: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        kind: "unclassified_gap",
+        timeframe: "1m",
+        openTimeUtc: "2025-01-17T14:50:00.000Z",
+        endTimeUtc: "2025-01-17T14:52:00.000Z",
+        blocking: true
+      }
+    ]
+  }
+}), "utf8");
+const gapPrepared = spawnSync(process.execPath, [
+  "scripts/prepare-bt1-6-provider-gap-evidence-input.mjs",
+  "--qualification", gapQualificationPath,
+  "--ledger", gapLedgerPath,
+  "--output", gapInputPath
+], { cwd: workspace, encoding: "utf8" });
+assert.equal(gapPrepared.status, 0, gapPrepared.stderr || gapPrepared.stdout);
+const gapInput = JSON.parse(fs.readFileSync(gapInputPath, "utf8"));
+assert.equal(gapInput.windows.length, 2);
+assert.equal(gapInput.windows[0].expectedMissingProviderRange.start, "2025-07-17T17:50:00.000Z");
+assert.equal(gapInput.windows[1].expectedMissingProviderRange.start, "2025-01-17T16:50:00.000Z");
+assert.equal(gapInput.windows[1].expectedMissingProviderRange.expectedCount, 2);
 
 const progress = [];
 const firstSource = createFixtureProvider(fixture.description);
@@ -334,6 +396,8 @@ assert.equal(JSON.parse(fs.readFileSync(comparisonPath, "utf8")).status, "passed
 console.log(JSON.stringify({
   status: "passed",
   progressEvents: progress.length,
+  streamingCanonicalHashSamples: canonicalSamples.length,
+  preparedGapWindows: gapInput.windows.length,
   candleBoundBlocked: true,
   resumeAction: resumed.action,
   legacyCheckpointUpgraded: true,

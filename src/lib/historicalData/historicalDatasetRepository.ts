@@ -118,7 +118,7 @@ export class HistoricalDatasetRepositoryError extends Error {
 export class HistoricalDatasetRepository {
   readonly #options: Required<Pick<HistoricalDatasetRepositoryOptions,
     "maximumPagesPerTimeframe" | "maximumPartitions" |
-    "maximumAcceptedCandles" | "atomicWriteRetries" | "now"
+    "maximumAcceptedCandles" | "atomicWriteRetries" | "now" | "canonicalHash"
   >> & Pick<HistoricalDatasetRepositoryOptions, "storage" | "onProgress">;
 
   constructor(options: Readonly<HistoricalDatasetRepositoryOptions>) {
@@ -130,6 +130,7 @@ export class HistoricalDatasetRepository {
       maximumPartitions: options.maximumPartitions ?? 20_000,
       maximumAcceptedCandles: options.maximumAcceptedCandles ?? 2_000_000,
       atomicWriteRetries: options.atomicWriteRetries ?? 4,
+      canonicalHash: options.canonicalHash ?? canonicalHash,
       onProgress: options.onProgress
     });
     if (!Number.isInteger(this.#options.maximumPagesPerTimeframe) || this.#options.maximumPagesPerTimeframe <= 0) {
@@ -249,7 +250,7 @@ export class HistoricalDatasetRepository {
           warnings: unique(page.warnings),
           authority: HISTORICAL_DATASET_AUTHORITY_NONE
         };
-        const sourcePageFingerprint = await canonicalHash(sourcePageCore);
+        const sourcePageFingerprint = await this.#options.canonicalHash(sourcePageCore);
         if (page.sourcePageFingerprint && page.sourcePageFingerprint !== sourcePageFingerprint) {
           throw new HistoricalDatasetRepositoryError(["historical_source_page_fingerprint_mismatch"]);
         }
@@ -286,7 +287,7 @@ export class HistoricalDatasetRepository {
         ) throw new HistoricalDatasetRepositoryError(["historical_candle_bound_exceeded"]);
         const partition: Readonly<HistoricalPartitionPayload> = Object.freeze({
           ...partitionWithoutId,
-          partitionId: await canonicalHash(partitionWithoutId)
+          partitionId: await this.#options.canonicalHash(partitionWithoutId)
         });
         await this.#writeImmutable("partition", partition.partitionId, partition);
         state = Object.freeze({
@@ -400,7 +401,7 @@ export class HistoricalDatasetRepository {
       };
       const derivedPartition = Object.freeze({
         ...derivedPartitionWithoutId,
-        partitionId: await canonicalHash(derivedPartitionWithoutId)
+        partitionId: await this.#options.canonicalHash(derivedPartitionWithoutId)
       });
       await this.#writeImmutable("partition", derivedPartition.partitionId, derivedPartition);
       await this.#writeImmutable("lineage", derived.lineage.lineageId, derived.lineage);
@@ -556,15 +557,15 @@ export class HistoricalDatasetRepository {
       for (const partitionId of entry.partitionIds) {
         try {
           const partition = await this.#readPartition(partitionId);
-          partitionCandles.push(...partition.candles);
+          for (const candle of partition.candles) partitionCandles.push(candle);
         } catch (error) {
           blockers.push(...(error instanceof HistoricalDatasetRepositoryError
             ? error.blockers
             : ["historical_partition_read_failed"]));
         }
       }
-      const candles = this.#canonicalCandles(partitionCandles, blockers);
-      const timeframeChecksum = await canonicalHash({
+      const candles = this.#canonicalCandles(partitionCandles, blockers, true);
+      const timeframeChecksum = await this.#options.canonicalHash({
         normalizationVersion: manifest.normalizationVersion,
         timeframe: entry.timeframe,
         candles
@@ -580,7 +581,7 @@ export class HistoricalDatasetRepository {
       }
       checksumEntries.push({ timeframe: entry.timeframe, timeframeChecksum, candleCount: candles.length });
     }
-    const datasetChecksum = await canonicalHash({
+    const datasetChecksum = await this.#options.canonicalHash({
       normalizationVersion: manifest.normalizationVersion,
       timeframes: checksumEntries
     });
@@ -636,7 +637,7 @@ export class HistoricalDatasetRepository {
     if (stored.payload.partitionId !== partitionId) {
       throw new HistoricalDatasetRepositoryError(["historical_partition_storage_identity_mismatch"]);
     }
-    const expectedId = await canonicalHash(partitionCore(stored.payload));
+    const expectedId = await this.#options.canonicalHash(partitionCore(stored.payload));
     if (expectedId !== partitionId) {
       throw new HistoricalDatasetRepositoryError(["historical_partition_identity_mismatch"]);
     }
@@ -645,12 +646,17 @@ export class HistoricalDatasetRepository {
 
   #canonicalCandles(
     candles: readonly Readonly<HistoricalNormalizedCandle>[],
-    blockers?: string[]
+    blockers?: string[],
+    sortInPlace = false
   ) {
     const canonical: HistoricalNormalizedCandle[] = [];
-    for (const candle of [...candles].sort(
+    const ordered = sortInPlace
+      ? candles as Readonly<HistoricalNormalizedCandle>[]
+      : [...candles];
+    ordered.sort(
       (left, right) => Date.parse(left.openTimeUtc) - Date.parse(right.openTimeUtc)
-    )) {
+    );
+    for (const candle of ordered) {
       const previous = canonical.at(-1);
       const duplicate = previous?.openTimeUtc === candle.openTimeUtc;
       if (duplicate && canonicalSerialize(previous) !== canonicalSerialize(candle)) {
@@ -682,7 +688,7 @@ export class HistoricalDatasetRepository {
       schemaVersion:
         HISTORICAL_STORAGE_ENVELOPE_SCHEMA_VERSION as typeof HISTORICAL_STORAGE_ENVELOPE_SCHEMA_VERSION,
       artifactKind: kind,
-      integrityHash: await canonicalHash(payload),
+      integrityHash: await this.#options.canonicalHash(payload),
       payload
     });
     const serialized = canonicalSerialize(envelope);
@@ -730,7 +736,7 @@ export class HistoricalDatasetRepository {
       parsed.artifactKind !== expectedKind ||
       !hashPattern.test(parsed.integrityHash)
     ) throw new HistoricalDatasetRepositoryError(["historical_storage_envelope_invalid"]);
-    const expectedHash = await canonicalHash(parsed.payload);
+    const expectedHash = await this.#options.canonicalHash(parsed.payload);
     if (expectedHash !== parsed.integrityHash) {
       throw new HistoricalDatasetRepositoryError(["historical_storage_integrity_mismatch"]);
     }

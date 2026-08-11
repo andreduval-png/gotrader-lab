@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -20,6 +20,81 @@ export const authorityNone = Object.freeze({
   brokerAuthority: "none",
   readinessOverrideAuthority: "none"
 });
+
+const CANONICAL_HASH_VERSION = "gotrader-v2-sha256-v1";
+const canonicalPathKeyPattern = /(?:path|directory|workspace|file)$/i;
+
+const canonicalString = (value, key) => {
+  const lineNormalized = value.replace(/\r\n?/g, "\n");
+  return key && canonicalPathKeyPattern.test(key)
+    ? lineNormalized.replace(/\\/g, "/")
+    : lineNormalized;
+};
+
+const updateCanonicalHash = (hash, value, seen, key) => {
+  if (value === null || typeof value === "boolean" || typeof value === "string") {
+    hash.update(JSON.stringify(typeof value === "string" ? canonicalString(value, key) : value));
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Canonical serialization rejects non-finite numbers.");
+    hash.update(JSON.stringify(Object.is(value, -0) ? 0 : value));
+    return;
+  }
+  if (
+    value === undefined ||
+    typeof value === "function" ||
+    typeof value === "symbol" ||
+    typeof value === "bigint"
+  ) throw new TypeError(`Canonical serialization rejects ${typeof value} values.`);
+  if (typeof value !== "object") throw new TypeError("Canonical serialization received an unsupported value.");
+  if (seen.has(value)) throw new TypeError("Canonical serialization rejects cyclic references.");
+  if (value instanceof Date) {
+    throw new TypeError("Canonical serialization requires explicit ISO timestamp strings, not Date objects.");
+  }
+  if (Object.getOwnPropertySymbols(value).length) {
+    throw new TypeError("Canonical serialization rejects symbol-keyed properties.");
+  }
+
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      hash.update("[");
+      value.forEach((item, index) => {
+        if (index) hash.update(",");
+        updateCanonicalHash(hash, item, seen);
+      });
+      hash.update("]");
+      return;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Canonical serialization accepts only plain objects and arrays.");
+    }
+    hash.update("{");
+    Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .forEach((nestedKey, index) => {
+        if (index) hash.update(",");
+        hash.update(JSON.stringify(nestedKey));
+        hash.update(":");
+        updateCanonicalHash(hash, value[nestedKey], seen, nestedKey);
+      });
+    hash.update("}");
+  } finally {
+    seen.delete(value);
+  }
+};
+
+export async function canonicalHashStreaming(value, version = CANONICAL_HASH_VERSION) {
+  if (version !== CANONICAL_HASH_VERSION) {
+    throw new Error(`Unsupported V2 canonical hash version: ${version}`);
+  }
+  const hash = createHash("sha256");
+  hash.update(`${version}\n`);
+  updateCanonicalHash(hash, value, new WeakSet());
+  return `sha256:${hash.digest("hex")}`;
+}
 
 export const workspaceRoot = () => process.cwd();
 

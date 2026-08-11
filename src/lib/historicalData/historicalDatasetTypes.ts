@@ -514,6 +514,7 @@ export interface HistoricalDatasetRepositoryOptions {
   readonly maximumPartitions?: number;
   readonly maximumAcceptedCandles?: number;
   readonly atomicWriteRetries?: number;
+  readonly canonicalHash?: (value: unknown) => Promise<string>;
   readonly onProgress?: (event: Readonly<HistoricalDatasetProgressEvent>) => void | Promise<void>;
 }
 

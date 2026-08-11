@@ -39,8 +39,22 @@ const observations = [];
 for (const window of input.windows) {
   const requestedFrom = new Date(Date.parse(window.requestedFrom)).toISOString();
   const requestedTo = new Date(Date.parse(window.requestedTo)).toISOString();
-  const expectedMissingProviderTimes = window.expectedMissingProviderTimes.map((value) =>
+  const expectedMissingProviderTimes = (window.expectedMissingProviderTimes ?? []).map((value) =>
     new Date(Date.parse(value)).toISOString());
+  const expectedMissingProviderRange = window.expectedMissingProviderRange
+    ? Object.freeze({
+        start: new Date(Date.parse(window.expectedMissingProviderRange.start)).toISOString(),
+        end: new Date(Date.parse(window.expectedMissingProviderRange.end)).toISOString(),
+        expectedCount: Number(window.expectedMissingProviderRange.expectedCount)
+      })
+    : undefined;
+  if (
+    !expectedMissingProviderTimes.length &&
+    (!expectedMissingProviderRange ||
+      Date.parse(expectedMissingProviderRange.end) <= Date.parse(expectedMissingProviderRange.start) ||
+      !Number.isInteger(expectedMissingProviderRange.expectedCount) ||
+      expectedMissingProviderRange.expectedCount <= 0)
+  ) throw new Error(`BT1.6 ${window.windowId} requires a valid missing-time list or range.`);
   const expectedBoundaryProviderTimes = window.expectedBoundaryProviderTimes.map((value) =>
     new Date(Date.parse(value)).toISOString());
   const rounds = [];
@@ -76,6 +90,10 @@ for (const window of input.windows) {
     if (expectedMissingProviderTimes.some((value) => returned.has(value))) {
       blockers.push(`${window.windowId}_expected_gap_not_stable`);
     }
+    if (expectedMissingProviderRange && returnedProviderOpenTimes.some((value) => (
+      Date.parse(value) >= Date.parse(expectedMissingProviderRange.start) &&
+      Date.parse(value) < Date.parse(expectedMissingProviderRange.end)
+    ))) blockers.push(`${window.windowId}_expected_gap_not_stable`);
     if (expectedBoundaryProviderTimes.some((value) => !returned.has(value))) {
       blockers.push(`${window.windowId}_boundary_evidence_missing`);
     }
@@ -108,6 +126,7 @@ for (const window of input.windows) {
     requestedFrom,
     requestedTo,
     expectedMissingProviderTimes,
+    ...(expectedMissingProviderRange ? { expectedMissingProviderRange } : {}),
     expectedBoundaryProviderTimes,
     normalizedOutageStartUtc: new Date(Date.parse(window.normalizedOutageStartUtc)).toISOString(),
     normalizedOutageEndUtc: new Date(Date.parse(window.normalizedOutageEndUtc)).toISOString(),
@@ -117,7 +136,7 @@ for (const window of input.windows) {
 
 const normalizedBlockers = Object.freeze([...new Set(blockers)].sort());
 const core = Object.freeze({
-  schemaVersion: "gotrader-bt1-6-provider-gap-evidence-v1",
+  schemaVersion: "gotrader-bt1-6-provider-gap-evidence-v2",
   observedAtUtc: new Date().toISOString(),
   providerVersion: input.providerVersion,
   sourceIdentityFingerprint: input.sourceIdentityFingerprint,
