@@ -366,6 +366,8 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
   readonly targetEndUtc: string;
   readonly observedSourceBars: number;
   readonly observedPartitionCount: number;
+  readonly observedSourcePartitionCount: number;
+  readonly observedDerivedPartitionCount: number;
   readonly observedStorageBytes: number;
   readonly observedPeakMemoryBytes: number;
   readonly maximumSourceBars: number;
@@ -389,6 +391,8 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
   const values = {
     observedSourceBars: input.observedSourceBars,
     observedPartitionCount: input.observedPartitionCount,
+    observedSourcePartitionCount: input.observedSourcePartitionCount,
+    observedDerivedPartitionCount: input.observedDerivedPartitionCount,
     observedStorageBytes: input.observedStorageBytes,
     observedPeakMemoryBytes: input.observedPeakMemoryBytes,
     maximumSourceBars: input.maximumSourceBars,
@@ -397,17 +401,26 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
     maximumPeakMemoryBytes: input.maximumPeakMemoryBytes
   };
   for (const [name, value] of Object.entries(values)) {
-    if (!Number.isInteger(value) || value <= 0) throw new Error(`Historical capacity ${name} must be a positive integer.`);
+    const allowsZero = name === "observedDerivedPartitionCount";
+    if (!Number.isInteger(value) || value < (allowsZero ? 0 : 1)) {
+      throw new Error(`Historical capacity ${name} must be ${allowsZero ? "a non-negative" : "a positive"} integer.`);
+    }
+  }
+  if (input.observedPartitionCount !== input.observedSourcePartitionCount + input.observedDerivedPartitionCount) {
+    throw new Error("Historical capacity partition counts must reconcile.");
   }
   const safetyMultiplier = input.safetyMultiplier ?? 1.25;
   if (!Number.isFinite(safetyMultiplier) || safetyMultiplier < 1) {
     throw new Error("Historical capacity safetyMultiplier must be at least one.");
   }
-  const scale = targetDuration / pilotDuration * safetyMultiplier;
-  const projectedSourceBars = Math.ceil(input.observedSourceBars * scale);
-  const projectedPartitionCount = Math.ceil(input.observedPartitionCount * scale);
-  const projectedStorageBytes = Math.ceil(input.observedStorageBytes * scale);
-  const projectedPeakMemoryBytes = Math.ceil(input.observedPeakMemoryBytes * scale);
+  const rangeScale = targetDuration / pilotDuration;
+  const linearScale = rangeScale * safetyMultiplier;
+  const projectedSourceBars = Math.ceil(input.observedSourceBars * linearScale);
+  const projectedSourcePartitionCount = Math.ceil(input.observedSourcePartitionCount * linearScale);
+  const projectedDerivedPartitionCount = input.observedDerivedPartitionCount;
+  const projectedPartitionCount = projectedSourcePartitionCount + projectedDerivedPartitionCount;
+  const projectedStorageBytes = Math.ceil(input.observedStorageBytes * linearScale);
+  const projectedPeakMemoryBytes = Math.ceil(input.observedPeakMemoryBytes * safetyMultiplier);
   const blockers = unique([
     projectedSourceBars > input.maximumSourceBars ? "historical_capacity_source_bar_bound_exceeded" : "",
     projectedPartitionCount > input.maximumPartitionCount ? "historical_capacity_partition_bound_exceeded" : "",
@@ -423,10 +436,14 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
     targetEndUtc,
     observedSourceBars: input.observedSourceBars,
     observedPartitionCount: input.observedPartitionCount,
+    observedSourcePartitionCount: input.observedSourcePartitionCount,
+    observedDerivedPartitionCount: input.observedDerivedPartitionCount,
     observedStorageBytes: input.observedStorageBytes,
     observedPeakMemoryBytes: input.observedPeakMemoryBytes,
     projectedSourceBars,
     projectedPartitionCount,
+    projectedSourcePartitionCount,
+    projectedDerivedPartitionCount,
     projectedStorageBytes,
     projectedPeakMemoryBytes,
     maximumSourceBars: input.maximumSourceBars,
@@ -435,7 +452,7 @@ export async function buildHistoricalDatasetCapacityPlan(input: {
     maximumPeakMemoryBytes: input.maximumPeakMemoryBytes,
     status: blockers.length ? "blocked" as const : "within_bounds" as const,
     blockers,
-    warnings: Object.freeze([]),
+    warnings: Object.freeze(["bounded_peak_memory_projection_does_not_scale_with_range_duration"]),
     authority: HISTORICAL_DATASET_AUTHORITY_NONE
   });
   return Object.freeze({ ...core, capacityPlanId: await canonicalHash(core) });

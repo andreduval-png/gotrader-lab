@@ -19,7 +19,7 @@ export const HISTORICAL_TIME_AUTHORITY_SCHEMA_VERSION = "gotrader-historical-tim
 export const HISTORICAL_TIME_EVIDENCE_PACKAGE_SCHEMA_VERSION = "gotrader-historical-time-evidence-bt1-5-v1";
 export const HISTORICAL_MARKET_CALENDAR_SCHEMA_VERSION = "gotrader-historical-market-calendar-bt1-5-v1";
 export const HISTORICAL_TIMEFRAME_ALIGNMENT_SCHEMA_VERSION = "gotrader-historical-timeframe-alignment-bt1-5-v1";
-export const HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION = "gotrader-historical-capacity-plan-bt1-5-v1";
+export const HISTORICAL_CAPACITY_PLAN_SCHEMA_VERSION = "gotrader-historical-capacity-plan-bt1-5-v2";
 export const HISTORICAL_TIMEFRAME_LINEAGE_SCHEMA_VERSION = "gotrader-derived-timeframe-lineage-bt1-v1";
 export const HISTORICAL_STORAGE_ENVELOPE_SCHEMA_VERSION = "gotrader-historical-storage-envelope-bt1-v1";
 
@@ -275,10 +275,14 @@ export interface HistoricalDatasetCapacityPlan {
   readonly targetEndUtc: string;
   readonly observedSourceBars: number;
   readonly observedPartitionCount: number;
+  readonly observedSourcePartitionCount: number;
+  readonly observedDerivedPartitionCount: number;
   readonly observedStorageBytes: number;
   readonly observedPeakMemoryBytes: number;
   readonly projectedSourceBars: number;
   readonly projectedPartitionCount: number;
+  readonly projectedSourcePartitionCount: number;
+  readonly projectedDerivedPartitionCount: number;
   readonly projectedStorageBytes: number;
   readonly projectedPeakMemoryBytes: number;
   readonly maximumSourceBars: number;

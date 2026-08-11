@@ -151,6 +151,9 @@ try {
   clearInterval(memoryTimer);
   peakRssBytes = Math.max(peakRssBytes, process.memoryUsage().rss);
 }
+if (peakRssBytes > bundle.bounds.maximumPeakMemoryBytes) {
+  failure ??= new Error("historical_runtime_peak_memory_bound_exceeded");
+}
 const elapsedMs = Math.round(performance.now() - started);
 const cpu = process.cpuUsage(cpuStarted);
 const storageUsage = directorySize(storageRoot);
@@ -180,6 +183,13 @@ if (identitySummary && /strategyId|profileId|parameterFingerprint|riskModel|rrMo
 
 let generatedCapacityPlan;
 if (args.mode === "pilot" && result && latestProgress) {
+  const sourceTimeframes = new Set(request.sourceTimeframes);
+  const observedSourcePartitionCount = result.manifest.timeframes
+    .filter((item) => sourceTimeframes.has(item.timeframe))
+    .reduce((sum, item) => sum + item.partitionIds.length, 0);
+  const observedDerivedPartitionCount = result.manifest.timeframes
+    .filter((item) => !sourceTimeframes.has(item.timeframe))
+    .reduce((sum, item) => sum + item.partitionIds.length, 0);
   generatedCapacityPlan = await modules.qualification.buildHistoricalDatasetCapacityPlan({
     sourceTimeframes: request.sourceTimeframes,
     pilotStartUtc: request.startUtc,
@@ -187,7 +197,9 @@ if (args.mode === "pilot" && result && latestProgress) {
     targetStartUtc: bundle.request.startUtc,
     targetEndUtc: bundle.request.endUtc,
     observedSourceBars: Math.max(1, latestProgress.barsAccepted),
-    observedPartitionCount: Math.max(1, latestProgress.partitionCount),
+    observedPartitionCount: observedSourcePartitionCount + observedDerivedPartitionCount,
+    observedSourcePartitionCount,
+    observedDerivedPartitionCount,
     observedStorageBytes: Math.max(1, storageUsage.bytes),
     observedPeakMemoryBytes: Math.max(1, peakRssBytes),
     ...bundle.bounds

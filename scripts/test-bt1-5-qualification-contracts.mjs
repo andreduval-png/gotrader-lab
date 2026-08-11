@@ -85,7 +85,9 @@ const withinBounds = await modules.qualification.buildHistoricalDatasetCapacityP
   targetStartUtc: "2024-01-01T00:00:00.000Z",
   targetEndUtc: "2025-12-31T00:00:00.000Z",
   observedSourceBars: 7_000,
-  observedPartitionCount: 2,
+  observedPartitionCount: 6,
+  observedSourcePartitionCount: 2,
+  observedDerivedPartitionCount: 4,
   observedStorageBytes: 2_000_000,
   observedPeakMemoryBytes: 10_000_000,
   maximumSourceBars: 1_000_000,
@@ -94,6 +96,11 @@ const withinBounds = await modules.qualification.buildHistoricalDatasetCapacityP
   maximumPeakMemoryBytes: 1_500_000_000
 });
 assert.equal(withinBounds.status, "within_bounds");
+assert.equal(withinBounds.projectedDerivedPartitionCount, 4);
+assert.equal(
+  withinBounds.projectedPartitionCount,
+  withinBounds.projectedSourcePartitionCount + withinBounds.projectedDerivedPartitionCount
+);
 assert.match(withinBounds.capacityPlanId, /^sha256:[0-9a-f]{64}$/);
 
 const blockedCapacity = await modules.qualification.buildHistoricalDatasetCapacityPlan({
@@ -103,9 +110,11 @@ const blockedCapacity = await modules.qualification.buildHistoricalDatasetCapaci
   targetStartUtc: "2024-01-01T00:00:00.000Z",
   targetEndUtc: "2025-12-31T00:00:00.000Z",
   observedSourceBars: 7_000,
-  observedPartitionCount: 2,
+  observedPartitionCount: 6,
+  observedSourcePartitionCount: 2,
+  observedDerivedPartitionCount: 4,
   observedStorageBytes: 2_000_000,
-  observedPeakMemoryBytes: 20_000_000,
+  observedPeakMemoryBytes: 900_000_000,
   maximumSourceBars: 500_000,
   maximumPartitionCount: 100,
   maximumStorageBytes: 100_000_000,
@@ -122,6 +131,13 @@ await assert.rejects(
     sourceTimeframes: Object.freeze(["2m"])
   }),
   /unsupported source timeframe/i
+);
+await assert.rejects(
+  () => modules.qualification.buildHistoricalDatasetCapacityPlan({
+    ...withinBounds,
+    observedPartitionCount: 5
+  }),
+  /partition counts must reconcile/i
 );
 
 const adapterA = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
