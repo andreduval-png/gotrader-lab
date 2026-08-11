@@ -23,6 +23,7 @@ const upstreamSource = explicitUpstreamBaseUrl
     : "disabled";
 const upstreamTransport = process.env.MT5_READONLY_UPSTREAM_TRANSPORT || "rest";
 const upstreamTimeoutMs = Number(process.env.MT5_READONLY_UPSTREAM_TIMEOUT_MS || 2500);
+const upstreamRangeTimeoutMs = Number(process.env.MT5_READONLY_UPSTREAM_RANGE_TIMEOUT_MS || 180000);
 const defaultRequestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
 const defaultBrokerSymbol =
   process.env.MT5_READONLY_BROKER_SYMBOL ||
@@ -53,10 +54,8 @@ const upstreamPathCandidates = {
     configuredUpstreamPaths.candleRange,
     "/api/v1/market/candles/range",
     "/api/v1/market/candles/by-date",
-    "/api/v1/market/candles",
     "/candles/range",
-    "/candles/by-date",
-    "/candles"
+    "/candles/by-date"
   ].filter(Boolean),
   symbols: [configuredUpstreamPaths.symbols, "/symbols", "/api/v1/market/symbols"].filter(Boolean),
   symbolInfo: [
@@ -84,7 +83,7 @@ const authority = {
 };
 const TIME_CONTRACT_ID = "gotrader-mt5-readonly-time-contract";
 const WRAPPER_TIME_CONTRACT_VERSION = "gotrader-mt5-readonly-wrapper-time-contract-v1";
-const WRAPPER_SERVICE_VERSION = "gotrader-mt5-readonly-wrapper-v1.1";
+const WRAPPER_SERVICE_VERSION = "gotrader-mt5-readonly-wrapper-v1.2";
 
 const json = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -298,14 +297,14 @@ const upstreamRequestFor = (path, params = {}) => {
 
   return { path, params };
 };
-const fetchUpstreamPath = async (path, params) => {
+const fetchUpstreamPath = async (path, params, timeoutMs = upstreamTimeoutMs) => {
   if (!upstreamBaseUrl) {
     throw new Error("MT5_READONLY_UPSTREAM_BASE_URL is not configured.");
   }
   const request = upstreamRequestFor(path, params);
   const requestUrl = upstreamUrl(request.path, request.params);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(requestUrl, {
       cache: "no-store",
@@ -318,7 +317,7 @@ const fetchUpstreamPath = async (path, params) => {
     return await response.json();
   } catch (error) {
     const message = error?.name === "AbortError"
-      ? `timeout after ${upstreamTimeoutMs}ms`
+      ? `timeout after ${timeoutMs}ms`
       : error instanceof Error
         ? error.message
         : String(error);
@@ -333,9 +332,10 @@ const fetchUpstreamJson = async (kind, params, validator = () => true) => {
     ...(upstreamPathCandidates[kind] ?? [])
   ].filter(Boolean);
   const errors = [];
+  const timeoutMs = kind === "candleRange" ? upstreamRangeTimeoutMs : upstreamTimeoutMs;
   for (const candidate of [...new Set(candidates)]) {
     try {
-      const payload = await fetchUpstreamPath(candidate, params);
+      const payload = await fetchUpstreamPath(candidate, params, timeoutMs);
       if (validator(payload)) {
         discoveredUpstreamPaths[kind] = candidate;
         return { payload, path: candidate };
@@ -521,6 +521,17 @@ const candleLikePayload = (payload) =>
     toNumber(firstDefined(item.low, item.l)) !== undefined &&
     toNumber(firstDefined(item.close, item.c)) !== undefined
   );
+const sameInstant = (left, right) => {
+  const leftMs = Date.parse(String(left ?? ""));
+  const rightMs = Date.parse(String(right ?? ""));
+  return Number.isFinite(leftMs) && Number.isFinite(rightMs) && leftMs === rightMs;
+};
+const rangeCandlePayload = (payload, from, to) => {
+  const payloadFrom = firstDefined(payload?.date_from, payload?.requestedFrom, payload?.from, payload?.start);
+  const payloadTo = firstDefined(payload?.date_to, payload?.requestedTo, payload?.to, payload?.end);
+  const hasCandleArray = Array.isArray(payload?.candles) || candleLikePayload(payload);
+  return hasCandleArray && sameInstant(payloadFrom, from) && sameInstant(payloadTo, to);
+};
 const timeContractLikePayload = (payload) =>
   payload &&
   typeof payload === "object" &&
@@ -720,7 +731,7 @@ const upstreamCandleRange = async ({ requestedSymbol, brokerSymbol, timeframe, l
     utc_to: to,
     count: limit,
     limit
-  }, candleLikePayload);
+  }, (payload) => rangeCandlePayload(payload, from, to));
   const candles = normalizeCandles({ payload, brokerSymbol, timeframe, limit });
   return {
     provider: "mt5_read_only",

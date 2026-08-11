@@ -165,6 +165,19 @@ assert.notEqual(
   (await adapterB.describe()).sourceFingerprint,
   "The provider identity must change with terminal/source identity."
 );
+const timeoutBoundProvider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
+  baseUrl: "http://127.0.0.1:7341",
+  providerVersion: "fixture-wrapper-v1",
+  providerTimeBasis: "utc_iso",
+  sourceIdentityFingerprint: fixture.terminalIdentityFingerprint,
+  requestTimeoutMs: 120_000,
+  fetchImpl: async () => new Response("{}", { status: 500 })
+});
+assert.notEqual(
+  (await adapterA.describe()).sourceFingerprint,
+  (await timeoutBoundProvider.describe()).sourceFingerprint,
+  "The provider identity must bind the historical request timeout."
+);
 
 console.log(JSON.stringify({
   status: "passed",

@@ -155,7 +155,7 @@ export function createMt5ReadOnlyHistoricalProvider(
 ): Readonly<HistoricalDatasetProvider> {
   const baseUrl = assertLoopback(options.baseUrl);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 180_000;
   const maximumPageCandles = Math.min(5000, options.maximumPageCandles ?? 5000);
   const closedBarSafetyLagMs = options.closedBarSafetyLagMs ?? 1_000;
   const now = options.now ?? (() => new Date().toISOString());
@@ -193,7 +193,7 @@ export function createMt5ReadOnlyHistoricalProvider(
     providerId: "mt5_read_only_historical",
     providerVersion: options.providerVersion,
     sourceFingerprint: await canonicalHash({
-      adapter: "gotrader-bt1-mt5-read-only-provider-v3",
+      adapter: "gotrader-bt1-mt5-read-only-provider-v4",
       baseUrl,
       endpoint: "/candles/range",
       providerTimeBasis: options.providerTimeBasis,
@@ -201,7 +201,8 @@ export function createMt5ReadOnlyHistoricalProvider(
       sourceUtcOffsetMinutes: options.sourceUtcOffsetMinutes ?? null,
       sourceIdentityFingerprint: options.sourceIdentityFingerprint,
       supportedTimeframes,
-      maximumPageCandles
+      maximumPageCandles,
+      requestTimeoutMs
     }),
     readOnly: true,
     marketDataOnly: true,
