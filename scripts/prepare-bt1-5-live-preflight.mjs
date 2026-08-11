@@ -75,8 +75,15 @@ const fetchCompact = async (endpoint) => {
   const nested = payload?.authority ?? {};
   const result = Object.freeze({
     ok: true,
-    status: String(payload?.status ?? payload?.state ?? payload?.connectionState ?? "unknown"),
-    connected: payload?.connected === true || payload?.terminalConnected === true || payload?.terminalConnectionState === "connected",
+    status: String(
+      payload?.status ?? payload?.state ?? payload?.connectionStatus ?? payload?.connectionState ?? "unknown"
+    ),
+    connected:
+      payload?.connected === true ||
+      payload?.terminalConnected === true ||
+      payload?.terminalConnectionState === "connected" ||
+      payload?.connectionStatus === "connected" ||
+      payload?.connectionState === "connected",
     sourceMethod: String(payload?.sourceMethod ?? payload?.source ?? "unknown"),
     authority: Object.freeze({
       executionAuthority: payload?.executionAuthority ?? nested.executionAuthority,
