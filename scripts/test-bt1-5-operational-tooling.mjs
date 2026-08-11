@@ -20,6 +20,7 @@ const liveRunnerSource = fs.readFileSync(
   "utf8"
 );
 assert.match(packageJson.scripts["bt1-5:run"], /--expose-gc/);
+assert.match(packageJson.scripts["bt1-5:run"], /--max-old-space-size=512/);
 assert.match(liveRunnerSource, /bounded page handoffs/);
 assert.match(liveRunnerSource, /historical_runtime_peak_memory_bound_exceeded/);
 const testRoot = path.join(workspace, ".gotrader", "bt1-5", "operational-test");
