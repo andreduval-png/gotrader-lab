@@ -147,7 +147,7 @@ export function createMt5ReadOnlyHistoricalProvider(
     providerId: "mt5_read_only_historical",
     providerVersion: options.providerVersion,
     sourceFingerprint: await canonicalHash({
-      adapter: "gotrader-bt1-mt5-read-only-provider-v1",
+      adapter: "gotrader-bt1-mt5-read-only-provider-v2",
       baseUrl,
       endpoint: "/candles/range",
       providerTimeBasis: options.providerTimeBasis,
@@ -177,15 +177,14 @@ export function createMt5ReadOnlyHistoricalProvider(
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
       throw new Error("BT1 MT5 historical page range is invalid.");
     }
-    const lastEligibleOpenMs = endMs - intervalMs;
-    const windowLastOpenMs = Math.min(lastEligibleOpenMs, startMs + (request.limit - 1) * intervalMs);
+    const windowEndMs = Math.min(endMs, startMs + request.limit * intervalMs);
     const nextStartMs = startMs + request.limit * intervalMs;
     const url = new URL(`${baseUrl}/candles/range`);
     url.searchParams.set("requestedSymbol", request.requestedSymbol);
     url.searchParams.set("symbol", request.brokerSymbol);
     url.searchParams.set("timeframe", mt5Timeframe[request.timeframe]);
     url.searchParams.set("from", new Date(startMs).toISOString());
-    url.searchParams.set("to", new Date(Math.max(startMs, windowLastOpenMs)).toISOString());
+    url.searchParams.set("to", new Date(windowEndMs).toISOString());
     url.searchParams.set("limit", String(request.limit));
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);

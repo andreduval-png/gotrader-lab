@@ -39,6 +39,9 @@ assert.equal(auditedRequests.length, 1);
 assert.equal(auditedRequests[0].method, "GET");
 assert.equal(new URL(auditedRequests[0].url).hostname, "127.0.0.1");
 assert.equal(new URL(auditedRequests[0].url).pathname, "/candles/range");
+assert.equal(new URL(auditedRequests[0].url).searchParams.get("from"), "2024-01-02T00:00:00.000Z");
+assert.equal(new URL(auditedRequests[0].url).searchParams.get("to"), "2024-01-02T00:01:00.000Z");
+assert.equal(new URL(auditedRequests[0].url).searchParams.get("limit"), "1");
 const timeframes = ["1m", "5m", "15m", "1h", "4h", "1d", "1w"];
 const timeframeEntries = [];
 for (const [index, timeframe] of timeframes.entries()) {
