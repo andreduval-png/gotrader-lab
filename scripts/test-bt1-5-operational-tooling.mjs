@@ -105,8 +105,9 @@ const fakeFetch = async (url, init) => {
   else if (parsed.pathname === "/time-contract") payload = {
     ...common,
     providerTimeBasis: "utc_iso",
-    historicalTimeVerified: true,
-    historicalDstVerified: true,
+    verificationStatus: "verified",
+    timeVerificationScope: "historical",
+    historicalDstPolicyVerified: true,
     verificationVersion: "test-v1",
     sourceMethod: "verified_terminal_metadata"
   };
@@ -159,6 +160,9 @@ assert.equal(diagnostics.evidence.length, 5);
 assert.equal(diagnostics.evidence.every((item) => item.candleCount === 2), true);
 assert.equal(diagnostics.evidence.every((item) => item.outOfRangeCandleCount === 0), true);
 assert.equal(diagnostics.symbol.found, true);
+assert.equal(diagnostics.health.connected, true);
+assert.equal(diagnostics.timeContract.historicalTimeVerified, true);
+assert.equal(diagnostics.timeContract.historicalDstVerified, true);
 assert.equal(diagnostics.symbol.volumeMinLots, null);
 assert.equal(JSON.stringify(diagnostics).includes("undefined"), false);
 assert.equal(requests.every((request) => request.method === "GET"), true);

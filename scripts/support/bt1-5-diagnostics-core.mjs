@@ -32,24 +32,40 @@ async function fetchJson(fetchImpl, url, timeoutMs) {
   }
 }
 
-const compactService = (payload) => Object.freeze({
-  status: String(firstDefined(payload, ["status", "state", "connectionState"]) ?? "unknown"),
-  connected: firstDefined(payload, ["connected", "terminalConnected"]) === true,
-  terminalConnectionState: String(firstDefined(payload, ["terminalConnectionState", "connectionState"]) ?? "unknown"),
-  sourceMethod: String(firstDefined(payload, ["sourceMethod", "source"]) ?? "unknown"),
-  authority: compactAuthority(payload)
-});
+const compactService = (payload) => {
+  const connectionState = String(firstDefined(payload, [
+    "terminalConnectionState",
+    "connectionState",
+    "connectionStatus"
+  ]) ?? "unknown");
+  return Object.freeze({
+    status: String(firstDefined(payload, ["status", "state", "processHealth", "connectionStatus"]) ?? "unknown"),
+    connected: firstDefined(payload, ["connected", "terminalConnected"]) === true || connectionState === "connected",
+    terminalConnectionState: connectionState,
+    sourceMethod: String(firstDefined(payload, ["sourceMethod", "source", "upstreamSource"]) ?? "unknown"),
+    authority: compactAuthority(payload)
+  });
+};
 
-const compactTimeContract = (payload) => Object.freeze({
-  providerTimeBasis: String(firstDefined(payload, ["providerTimeBasis", "basis", "historicalTimeBasis"]) ?? "unknown"),
-  timezone: firstDefined(payload, ["timezone", "providerTimezone", "sourceTimezone"]) ?? null,
-  fixedOffsetMinutes: firstDefined(payload, ["fixedOffsetMinutes", "observedOffsetMinutes"]) ?? null,
-  historicalTimeVerified: firstDefined(payload, ["historicalTimeVerified"]) === true,
-  historicalDstVerified: firstDefined(payload, ["historicalDstVerified"]) === true,
-  verificationVersion: String(firstDefined(payload, ["verificationVersion", "contractVersion", "version"]) ?? "unknown"),
-  sourceMethod: String(firstDefined(payload, ["sourceMethod", "source"]) ?? "unknown"),
-  authority: compactAuthority(payload)
-});
+const compactTimeContract = (payload) => {
+  const verificationStatus = String(firstDefined(payload, ["verificationStatus"]) ?? "unknown");
+  const verificationScope = String(firstDefined(payload, ["timeVerificationScope", "verificationScope"]) ?? "none");
+  const historicalDstVerified = firstDefined(payload, [
+    "historicalDstVerified",
+    "historicalDstPolicyVerified"
+  ]) === true;
+  return Object.freeze({
+    providerTimeBasis: String(firstDefined(payload, ["providerTimeBasis", "basis", "historicalTimeBasis"]) ?? "unknown"),
+    timezone: firstDefined(payload, ["timezone", "providerTimezone", "sourceTimezone"]) ?? null,
+    fixedOffsetMinutes: firstDefined(payload, ["fixedOffsetMinutes", "observedOffsetMinutes"]) ?? null,
+    historicalTimeVerified: firstDefined(payload, ["historicalTimeVerified"]) === true ||
+      (verificationStatus === "verified" && verificationScope === "historical"),
+    historicalDstVerified,
+    verificationVersion: String(firstDefined(payload, ["verificationVersion", "contractVersion", "version"]) ?? "unknown"),
+    sourceMethod: String(firstDefined(payload, ["sourceMethod", "source"]) ?? "unknown"),
+    authority: compactAuthority(payload)
+  });
+};
 
 const symbolList = (payload) => Array.isArray(payload)
   ? payload
