@@ -75,6 +75,7 @@
     "bt1-5:compare": "node scripts/compare-bt1-5-dataset-reproduction.mjs",
     "bt1-6:prepare-gap-evidence": "node scripts/prepare-bt1-6-provider-gap-evidence-input.mjs",
     "bt1-6:capture-gap-evidence": "node scripts/capture-bt1-6-provider-gap-evidence.mjs",
+    "bt1-6:review-calendar": "node scripts/prepare-bt1-6-reviewed-calendar-input.mjs",
     "bt1-6:certify": "node scripts/prepare-bt1-6-dataset-certificate.mjs",
     "bt1-6:register": "node scripts/update-bt1-6-dataset-registry.mjs",
     "test:runtime-freeze-baseline-review": "node scripts/test-runtime-freeze-baseline-review.mjs",

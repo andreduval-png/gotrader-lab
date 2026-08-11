@@ -25,6 +25,7 @@ const liveRunnerSource = fs.readFileSync(
 assert.match(packageJson.scripts["bt1-5:run"], /--expose-gc/);
 assert.match(packageJson.scripts["bt1-5:run"], /--max-old-space-size=512/);
 assert.match(packageJson.scripts["bt1-6:prepare-gap-evidence"], /prepare-bt1-6-provider-gap-evidence-input/);
+assert.match(packageJson.scripts["bt1-6:review-calendar"], /prepare-bt1-6-reviewed-calendar-input/);
 assert.match(liveRunnerSource, /onProgress\(event\) \{\s+latestProgress = event;\s+globalThis\.gc\(\);/);
 assert.match(liveRunnerSource, /canonicalHash: canonicalHashStreaming/);
 assert.match(liveRunnerSource, /bounded page handoffs/);
@@ -91,6 +92,101 @@ assert.equal(gapInput.windows.length, 2);
 assert.equal(gapInput.windows[0].expectedMissingProviderRange.start, "2025-07-17T17:50:00.000Z");
 assert.equal(gapInput.windows[1].expectedMissingProviderRange.start, "2025-01-17T16:50:00.000Z");
 assert.equal(gapInput.windows[1].expectedMissingProviderRange.expectedCount, 2);
+
+const reviewedQualificationPath = path.join(testRoot, "reviewed-qualification.json");
+const reviewedEvidencePath = path.join(testRoot, "reviewed-evidence.json");
+const reviewedOutputPath = path.join(testRoot, "reviewed-output.json");
+const existingEvidenceId = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+fs.writeFileSync(reviewedQualificationPath, JSON.stringify({
+  baseUrl: "http://127.0.0.1:7341",
+  providerVersion: "fixture-provider-v1",
+  sourceIdentityFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timeframe: "M1",
+  verificationVersion: "fixture-v1",
+  calendar: {
+    version: "fixture-calendar-v1",
+    verificationStatus: "verified",
+    closedIntervals: [{
+      startUtc: "2025-07-17T14:51:00.000Z",
+      endUtc: "2025-07-17T14:52:00.000Z",
+      reason: "maintenance",
+      evidenceId: existingEvidenceId
+    }]
+  }
+}), "utf8");
+const reviewedEvidenceCore = {
+  schemaVersion: "gotrader-bt1-6-provider-gap-evidence-v2",
+  observedAtUtc: "2025-07-18T00:00:00.000Z",
+  providerVersion: "fixture-provider-v1",
+  sourceIdentityFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  requestedSymbol: "MNQ",
+  brokerSymbol: "USTECH",
+  timeframe: "M1",
+  method: "GET",
+  endpoint: "/candles/range",
+  loopbackOnly: true,
+  rawOhlcPersisted: false,
+  observations: [{
+    windowId: "fixture-gap",
+    requestedFrom: "2025-07-17T17:45:00.000Z",
+    requestedTo: "2025-07-17T17:57:00.000Z",
+    expectedMissingProviderTimes: [],
+    expectedMissingProviderRange: {
+      start: "2025-07-17T17:50:00.000Z",
+      end: "2025-07-17T17:52:00.000Z",
+      expectedCount: 2
+    },
+    expectedBoundaryProviderTimes: [
+      "2025-07-17T17:49:00.000Z",
+      "2025-07-17T17:52:00.000Z"
+    ],
+    normalizedOutageStartUtc: "2025-07-17T14:50:00.000Z",
+    normalizedOutageEndUtc: "2025-07-17T14:52:00.000Z",
+    rounds: [1, 2].map((round) => ({
+      round,
+      returnedProviderOpenTimes: [
+        "2025-07-17T17:49:00.000Z",
+        "2025-07-17T17:52:00.000Z"
+      ],
+      responseFingerprint: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }))
+  }],
+  providerDriftDetected: false,
+  status: "verified_stable_provider_outage",
+  blockers: [],
+  authority: authorityNone
+};
+const reviewedEvidenceId = await canonicalHashStreaming(reviewedEvidenceCore);
+fs.writeFileSync(reviewedEvidencePath, JSON.stringify({
+  ...reviewedEvidenceCore,
+  evidenceId: reviewedEvidenceId
+}), "utf8");
+const calendarReviewed = spawnSync(process.execPath, [
+  "scripts/prepare-bt1-6-reviewed-calendar-input.mjs",
+  "--qualification", reviewedQualificationPath,
+  "--evidence", reviewedEvidencePath,
+  "--output", reviewedOutputPath,
+  "--version", "fixture-calendar-v2",
+  "--verification-version", "fixture-v2"
+], { cwd: workspace, encoding: "utf8" });
+assert.equal(calendarReviewed.status, 0, calendarReviewed.stderr || calendarReviewed.stdout);
+const reviewedOutput = JSON.parse(fs.readFileSync(reviewedOutputPath, "utf8"));
+assert.deepEqual(reviewedOutput.calendar.closedIntervals, [
+  {
+    startUtc: "2025-07-17T14:50:00.000Z",
+    endUtc: "2025-07-17T14:51:00.000Z",
+    reason: "provider_outage",
+    evidenceId: reviewedEvidenceId
+  },
+  {
+    startUtc: "2025-07-17T14:51:00.000Z",
+    endUtc: "2025-07-17T14:52:00.000Z",
+    reason: "maintenance",
+    evidenceId: existingEvidenceId
+  }
+]);
 
 const progress = [];
 const firstSource = createFixtureProvider(fixture.description);
@@ -398,6 +494,7 @@ console.log(JSON.stringify({
   progressEvents: progress.length,
   streamingCanonicalHashSamples: canonicalSamples.length,
   preparedGapWindows: gapInput.windows.length,
+  reviewedCalendarIntervals: reviewedOutput.calendar.closedIntervals.length,
   candleBoundBlocked: true,
   resumeAction: resumed.action,
   legacyCheckpointUpgraded: true,
