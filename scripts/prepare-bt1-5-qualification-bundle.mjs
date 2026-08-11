@@ -22,6 +22,8 @@ const provider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
   baseUrl: input.baseUrl,
   providerVersion: input.providerVersion,
   providerTimeBasis: input.providerTimeBasis,
+  sourceTimezone: input.timeNormalizationPolicy.sourceTimezone,
+  sourceUtcOffsetMinutes: input.timeNormalizationPolicy.sourceUtcOffsetMinutes,
   sourceIdentityFingerprint: input.sourceIdentityFingerprint,
   maximumPageCandles: input.maximumPageCandles ?? 5000
 });

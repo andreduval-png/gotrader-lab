@@ -31,6 +31,8 @@ export interface Mt5ReadOnlyHistoricalProviderOptions {
   readonly baseUrl: string;
   readonly providerVersion: string;
   readonly providerTimeBasis: HistoricalProviderTimeBasis;
+  readonly sourceTimezone?: string;
+  readonly sourceUtcOffsetMinutes?: number;
   readonly sourceIdentityFingerprint: string;
   readonly fetchImpl?: FetchLike;
   readonly requestTimeoutMs?: number;
@@ -68,6 +70,38 @@ const assertAuthorityNone = (payload: Record<string, unknown>) => {
   if (execution !== "none" || broker !== "none" || readiness !== "none") {
     throw new Error("BT1 MT5 historical response did not prove authority none/none/none.");
   }
+};
+
+const wallClockFormatter = (timeZone: string) => new Intl.DateTimeFormat("en-CA", {
+  timeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23"
+});
+
+const providerQueryTime = (
+  timestamp: number,
+  basis: HistoricalProviderTimeBasis,
+  sourceTimezone?: string,
+  sourceUtcOffsetMinutes?: number
+) => {
+  if (basis !== "mt5_server_wall_clock") return new Date(timestamp).toISOString();
+  if (sourceTimezone) {
+    const values = Object.fromEntries(
+      wallClockFormatter(sourceTimezone).formatToParts(new Date(timestamp))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value])
+    );
+    return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}:${values.second}.000Z`;
+  }
+  if (sourceUtcOffsetMinutes !== undefined) {
+    return new Date(timestamp + sourceUtcOffsetMinutes * 60_000).toISOString();
+  }
+  throw new Error("BT1 MT5 wall-clock provider requires a source timezone or fixed UTC offset.");
 };
 
 const providerTime = (item: Record<string, unknown>, basis: HistoricalProviderTimeBasis) => {
@@ -141,16 +175,30 @@ export function createMt5ReadOnlyHistoricalProvider(
   if (!Number.isInteger(closedBarSafetyLagMs) || closedBarSafetyLagMs < 0) {
     throw new Error("BT1 MT5 historical provider closedBarSafetyLagMs must be a non-negative integer.");
   }
+  if (options.sourceTimezone && options.sourceUtcOffsetMinutes !== undefined) {
+    throw new Error("BT1 MT5 wall-clock provider accepts either a source timezone or fixed UTC offset, not both.");
+  }
+  if (options.providerTimeBasis === "mt5_server_wall_clock") {
+    if (!options.sourceTimezone && options.sourceUtcOffsetMinutes === undefined) {
+      throw new Error("BT1 MT5 wall-clock provider requires a source timezone or fixed UTC offset.");
+    }
+    if (options.sourceTimezone) wallClockFormatter(options.sourceTimezone).format(new Date(0));
+    if (options.sourceUtcOffsetMinutes !== undefined && (
+      !Number.isInteger(options.sourceUtcOffsetMinutes) || Math.abs(options.sourceUtcOffsetMinutes) > 14 * 60
+    )) throw new Error("BT1 MT5 sourceUtcOffsetMinutes must be an integer between -840 and 840.");
+  }
   let description: Promise<Readonly<HistoricalProviderDescription>> | undefined;
 
   const describe = () => description ??= (async () => Object.freeze({
     providerId: "mt5_read_only_historical",
     providerVersion: options.providerVersion,
     sourceFingerprint: await canonicalHash({
-      adapter: "gotrader-bt1-mt5-read-only-provider-v2",
+      adapter: "gotrader-bt1-mt5-read-only-provider-v3",
       baseUrl,
       endpoint: "/candles/range",
       providerTimeBasis: options.providerTimeBasis,
+      sourceTimezone: options.sourceTimezone ?? null,
+      sourceUtcOffsetMinutes: options.sourceUtcOffsetMinutes ?? null,
       sourceIdentityFingerprint: options.sourceIdentityFingerprint,
       supportedTimeframes,
       maximumPageCandles
@@ -183,8 +231,18 @@ export function createMt5ReadOnlyHistoricalProvider(
     url.searchParams.set("requestedSymbol", request.requestedSymbol);
     url.searchParams.set("symbol", request.brokerSymbol);
     url.searchParams.set("timeframe", mt5Timeframe[request.timeframe]);
-    url.searchParams.set("from", new Date(startMs).toISOString());
-    url.searchParams.set("to", new Date(windowEndMs).toISOString());
+    url.searchParams.set("from", providerQueryTime(
+      startMs,
+      options.providerTimeBasis,
+      options.sourceTimezone,
+      options.sourceUtcOffsetMinutes
+    ));
+    url.searchParams.set("to", providerQueryTime(
+      windowEndMs,
+      options.providerTimeBasis,
+      options.sourceTimezone,
+      options.sourceUtcOffsetMinutes
+    ));
     url.searchParams.set("limit", String(request.limit));
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), requestTimeoutMs);

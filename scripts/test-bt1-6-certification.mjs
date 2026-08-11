@@ -42,6 +42,39 @@ assert.equal(new URL(auditedRequests[0].url).pathname, "/candles/range");
 assert.equal(new URL(auditedRequests[0].url).searchParams.get("from"), "2024-01-02T00:00:00.000Z");
 assert.equal(new URL(auditedRequests[0].url).searchParams.get("to"), "2024-01-02T00:01:00.000Z");
 assert.equal(new URL(auditedRequests[0].url).searchParams.get("limit"), "1");
+const wallClockRequests = [];
+const wallClockProvider = modules.mt5Provider.createMt5ReadOnlyHistoricalProvider({
+  baseUrl: "http://127.0.0.1:7341",
+  providerVersion: "bt1-6-wall-clock-audit-v1",
+  providerTimeBasis: "mt5_server_wall_clock",
+  sourceTimezone: "Europe/Helsinki",
+  sourceIdentityFingerprint: fixture.terminalIdentityFingerprint,
+  onRequest: (request) => wallClockRequests.push(request),
+  fetchImpl: async () => new Response(JSON.stringify({
+    candles: [],
+    sourceMethod: "upstream_http:/candles/range",
+    executionAuthority: "none",
+    brokerAuthority: "none",
+    readinessOverrideAuthority: "none"
+  }), { status: 200 })
+});
+for (const range of [
+  ["2025-01-15T14:30:00.000Z", "2025-01-15T14:31:00.000Z"],
+  ["2025-07-15T13:30:00.000Z", "2025-07-15T13:31:00.000Z"]
+]) {
+  await wallClockProvider.fetchPage({
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    timeframe: "1m",
+    startUtc: range[0],
+    endUtc: range[1],
+    limit: 1
+  });
+}
+assert.equal(new URL(wallClockRequests[0].url).searchParams.get("from"), "2025-01-15T16:30:00.000Z");
+assert.equal(new URL(wallClockRequests[0].url).searchParams.get("to"), "2025-01-15T16:31:00.000Z");
+assert.equal(new URL(wallClockRequests[1].url).searchParams.get("from"), "2025-07-15T16:30:00.000Z");
+assert.equal(new URL(wallClockRequests[1].url).searchParams.get("to"), "2025-07-15T16:31:00.000Z");
 const timeframes = ["1m", "5m", "15m", "1h", "4h", "1d", "1w"];
 const timeframeEntries = [];
 for (const [index, timeframe] of timeframes.entries()) {
