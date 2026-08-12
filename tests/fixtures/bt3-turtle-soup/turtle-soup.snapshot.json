@@ -1,0 +1,184 @@
+{
+  "payload": [
+    {
+      "auditedHistoricalCandidateCount": 0,
+      "auditedRobustness": "needs_more_data",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 102.5,
+        "rr": 2.8947368421052633,
+        "side": "short",
+        "stop": 112,
+        "target": 75
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "diagnostic_control",
+        "entryTimeframe": "5m",
+        "fixtureId": "turtle_soup_v1_short_valid",
+        "generatedAt": "2026-06-12T13:50:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T13:45:00.000Z",
+        "parameterFingerprint": "turtle_soup_v1|setup_15m|entry_5m|sweep|rejection_1_3|mss|retest|min_rr_2.5|diagnostic_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "setupTimeframe": "15m",
+        "sourceCommit": "941b76820e705c9f500c12381e729d48bec3c5ba",
+        "sourceFingerprint": "mt5|MNQ|USTECH|15m|5m|bt3_turtle_soup",
+        "strategyId": "turtle_soup_v1"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "turtle_soup_session",
+        "clear_setup_range",
+        "range_liquidity_sweep",
+        "range_extreme_location",
+        "immediate_rejection",
+        "market_structure_shift",
+        "target_invalidation_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-turtle-soup-fixture-v1",
+      "sessionId": "new_york_open",
+      "warnings": []
+    },
+    {
+      "auditedHistoricalCandidateCount": 0,
+      "auditedRobustness": "needs_more_data",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 103.5,
+        "rr": 3,
+        "side": "long",
+        "stop": 93,
+        "target": 135
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "diagnostic_control",
+        "entryTimeframe": "5m",
+        "fixtureId": "turtle_soup_v1_long_valid",
+        "generatedAt": "2026-06-12T13:50:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T13:45:00.000Z",
+        "parameterFingerprint": "turtle_soup_v1|setup_15m|entry_5m|sweep|rejection_1_3|mss|retest|min_rr_2.5|diagnostic_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "setupTimeframe": "15m",
+        "sourceCommit": "941b76820e705c9f500c12381e729d48bec3c5ba",
+        "sourceFingerprint": "mt5|MNQ|USTECH|15m|5m|bt3_turtle_soup",
+        "strategyId": "turtle_soup_v1"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "turtle_soup_session",
+        "clear_setup_range",
+        "range_liquidity_sweep",
+        "range_extreme_location",
+        "immediate_rejection",
+        "market_structure_shift",
+        "target_invalidation_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-turtle-soup-fixture-v1",
+      "sessionId": "new_york_open",
+      "warnings": []
+    },
+    {
+      "auditedHistoricalCandidateCount": 0,
+      "auditedRobustness": "needs_more_data",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "No fresh sweep of the setup range high/low."
+      ],
+      "detectionState": "no_trade",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "diagnostic_control",
+        "entryTimeframe": "5m",
+        "fixtureId": "turtle_soup_v1_no_sweep_blocked",
+        "generatedAt": "2026-06-12T13:50:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T13:45:00.000Z",
+        "parameterFingerprint": "turtle_soup_v1|setup_15m|entry_5m|sweep|rejection_1_3|mss|retest|min_rr_2.5|diagnostic_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "setupTimeframe": "15m",
+        "sourceCommit": "941b76820e705c9f500c12381e729d48bec3c5ba",
+        "sourceFingerprint": "mt5|MNQ|USTECH|15m|5m|bt3_turtle_soup",
+        "strategyId": "turtle_soup_v1"
+      },
+      "missingConditions": [
+        "range_liquidity_sweep"
+      ],
+      "presentConditions": [
+        "turtle_soup_session",
+        "clear_setup_range"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-turtle-soup-fixture-v1",
+      "sessionId": "new_york_open",
+      "warnings": []
+    },
+    {
+      "auditedHistoricalCandidateCount": 0,
+      "auditedRobustness": "needs_more_data",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "No 5m market structure shift confirming Turtle Soup reversal."
+      ],
+      "detectionState": "blocked_no_mss",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "diagnostic_control",
+        "entryTimeframe": "5m",
+        "fixtureId": "turtle_soup_v1_no_mss_blocked",
+        "generatedAt": "2026-06-12T13:50:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T13:45:00.000Z",
+        "parameterFingerprint": "turtle_soup_v1|setup_15m|entry_5m|sweep|rejection_1_3|mss|retest|min_rr_2.5|diagnostic_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "setupTimeframe": "15m",
+        "sourceCommit": "941b76820e705c9f500c12381e729d48bec3c5ba",
+        "sourceFingerprint": "mt5|MNQ|USTECH|15m|5m|bt3_turtle_soup",
+        "strategyId": "turtle_soup_v1"
+      },
+      "missingConditions": [
+        "market_structure_shift"
+      ],
+      "presentConditions": [
+        "turtle_soup_session",
+        "clear_setup_range",
+        "range_liquidity_sweep",
+        "range_extreme_location",
+        "immediate_rejection"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-turtle-soup-fixture-v1",
+      "sessionId": "new_york_open",
+      "warnings": []
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-turtle-soup-snapshot-v1"
+}
