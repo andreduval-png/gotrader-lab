@@ -60,3 +60,10 @@ Verdict: `BT3_STAGE_2_SAFE_WITH_RESTRICTIONS`.
    from compact parity evidence.
 8. IFVG detector tests, Stage 1 parity, BT2 regressions, typecheck, build, syntax,
    and frozen-hash checks must pass.
+
+## Completion Record
+
+Stage 2 passed under implementation commit
+`3f31744bd8eae5516220952732967123bbe53798` and parity report
+`sha256:c7d6974cfc7c32a1c28a1c447a40fdd7dd48d9acc934394eac1fc10739b84282`.
+No later adapter or historical simulation is authorized by this completion.
