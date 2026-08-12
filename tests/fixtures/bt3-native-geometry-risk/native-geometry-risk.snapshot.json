@@ -1,0 +1,163 @@
+{
+  "payload": {
+    "displaced_non_monotonic_targets": {
+      "assessmentId": "sha256:6d29188d6fca21b6cf55a284f4c08a23b2f7f41389c80bb5b66b0528692f7976",
+      "assessmentVersion": "bt3-instrument-neutral-structural-risk-v1",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveGeometryAuthoritative": true,
+      "direction": "long",
+      "entryPrice": 100,
+      "geometryMode": "native_strategy_geometry",
+      "instrumentSpecificationRequiredForUnitConversion": true,
+      "measureSpace": "price_distance_and_dimensionless_r",
+      "nativeGeometryMutationAllowed": false,
+      "opportunityId": "sha256:fa17e962661bed99cac577e14cbe4c871646020ef9a47899e99fb7457dac83e1",
+      "positionSizingAllowed": false,
+      "requestedSymbol": "MNQ",
+      "riskPriceDistance": 5,
+      "schemaVersion": "gotrader-bt3-native-geometry-assessment-v1",
+      "signalEntryPriceDistance": 1,
+      "signalEntryState": "displaced",
+      "signalPrice": 99,
+      "standardizedRrExperimentAllowed": false,
+      "stopPrice": 95,
+      "strategyId": "turtle_soup_v1",
+      "targetMeasures": [
+        {
+          "ordinal": 1,
+          "rewardPriceDistance": 7.5,
+          "rewardRiskMultiple": 1.5,
+          "targetPrice": 107.5
+        },
+        {
+          "ordinal": 2,
+          "rewardPriceDistance": 6,
+          "rewardRiskMultiple": 1.2,
+          "targetPrice": 106
+        }
+      ],
+      "targetPrices": [
+        107.5,
+        106
+      ],
+      "targetSequenceState": "non_monotonic"
+    },
+    "long_multiple_targets": {
+      "assessmentId": "sha256:9c4f2b8580a82a47ff6a09391580b4b4f9ced320fe1da23f7feed5d2a5864255",
+      "assessmentVersion": "bt3-instrument-neutral-structural-risk-v1",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveGeometryAuthoritative": true,
+      "direction": "long",
+      "entryPrice": 100,
+      "geometryMode": "native_strategy_geometry",
+      "instrumentSpecificationRequiredForUnitConversion": true,
+      "measureSpace": "price_distance_and_dimensionless_r",
+      "nativeGeometryMutationAllowed": false,
+      "opportunityId": "sha256:024138ba25a6970ed87e9374e31957c7c3b9d5b352128f7a972861af9db2a5a3",
+      "positionSizingAllowed": false,
+      "requestedSymbol": "MNQ",
+      "riskPriceDistance": 5,
+      "schemaVersion": "gotrader-bt3-native-geometry-assessment-v1",
+      "signalEntryPriceDistance": 0,
+      "signalEntryState": "aligned",
+      "signalPrice": 100,
+      "standardizedRrExperimentAllowed": false,
+      "stopPrice": 95,
+      "strategyId": "ifvg_fresh_retest_v3_research",
+      "targetMeasures": [
+        {
+          "ordinal": 1,
+          "rewardPriceDistance": 10,
+          "rewardRiskMultiple": 2,
+          "targetPrice": 110
+        },
+        {
+          "ordinal": 2,
+          "rewardPriceDistance": 15,
+          "rewardRiskMultiple": 3,
+          "targetPrice": 115
+        }
+      ],
+      "targetPrices": [
+        110,
+        115
+      ],
+      "targetSequenceState": "monotonic_outward"
+    },
+    "short_single_target": {
+      "assessmentId": "sha256:08e8c29d21361c4d429c33fba1b927a827b4128cbcdb9a078fdd67cf634deefc",
+      "assessmentVersion": "bt3-instrument-neutral-structural-risk-v1",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveGeometryAuthoritative": true,
+      "direction": "short",
+      "entryPrice": 100,
+      "geometryMode": "native_strategy_geometry",
+      "instrumentSpecificationRequiredForUnitConversion": true,
+      "measureSpace": "price_distance_and_dimensionless_r",
+      "nativeGeometryMutationAllowed": false,
+      "opportunityId": "sha256:3ce42003a0f6f4837bc37d5e13b0d3b7f8e0fd32757bcf092d3efd96b6281aba",
+      "positionSizingAllowed": false,
+      "requestedSymbol": "MNQ",
+      "riskPriceDistance": 4,
+      "schemaVersion": "gotrader-bt3-native-geometry-assessment-v1",
+      "signalEntryPriceDistance": 0,
+      "signalEntryState": "aligned",
+      "signalPrice": 100,
+      "standardizedRrExperimentAllowed": false,
+      "stopPrice": 104,
+      "strategyId": "nasdaq_london_raid_ny_reversal_v1",
+      "targetMeasures": [
+        {
+          "ordinal": 1,
+          "rewardPriceDistance": 8,
+          "rewardRiskMultiple": 2,
+          "targetPrice": 92
+        }
+      ],
+      "targetPrices": [
+        92
+      ],
+      "targetSequenceState": "single"
+    }
+  },
+  "schemaVersion": "gotrader-bt3-native-geometry-snapshot-v1"
+}
