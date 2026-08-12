@@ -6,33 +6,12 @@ import {
   type ForwardEvidenceArtifactManifest
 } from "./forwardEvidenceArtifactContract";
 import type { ForwardEvidenceEntry } from "./forwardEvidenceTypes";
+import { EVIDENCE_ARTIFACT_DB_NAME, EVIDENCE_ARTIFACT_DB_VERSION, FORWARD_ARTIFACT_STORE as ARTIFACT_STORE,
+  FORWARD_MANIFEST_STORE as MANIFEST_STORE, idbResult as requestResult, idbTransactionDone as transactionDone,
+  openEvidenceArtifactDb as openDb } from "../evidenceArtifacts/evidenceArtifactIndexedDb";
 
-export const FORWARD_EVIDENCE_ARTIFACT_DB_NAME = "gotrader-v2-evidence-artifacts";
-export const FORWARD_EVIDENCE_ARTIFACT_DB_VERSION = 1;
-const ARTIFACT_STORE = "forward_evidence_artifacts";
-const MANIFEST_STORE = "forward_evidence_manifests";
-
-const hasIndexedDb = () => typeof indexedDB !== "undefined";
-const requestResult = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("Forward-evidence artifact request failed."));
-});
-const transactionDone = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
-  transaction.oncomplete = () => resolve();
-  transaction.onerror = () => reject(transaction.error ?? new Error("Forward-evidence artifact transaction failed."));
-  transaction.onabort = () => reject(transaction.error ?? new Error("Forward-evidence artifact transaction aborted."));
-});
-const openDb = () => new Promise<IDBDatabase>((resolve, reject) => {
-  if (!hasIndexedDb()) return reject(new Error("IndexedDB is unavailable for forward-evidence artifacts."));
-  const request = indexedDB.open(FORWARD_EVIDENCE_ARTIFACT_DB_NAME, FORWARD_EVIDENCE_ARTIFACT_DB_VERSION);
-  request.onupgradeneeded = () => {
-    const db = request.result;
-    if (!db.objectStoreNames.contains(ARTIFACT_STORE)) db.createObjectStore(ARTIFACT_STORE, { keyPath: "artifactId" });
-    if (!db.objectStoreNames.contains(MANIFEST_STORE)) db.createObjectStore(MANIFEST_STORE, { keyPath: "manifestId" });
-  };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error ?? new Error("Unable to open forward-evidence artifact database."));
-});
+export const FORWARD_EVIDENCE_ARTIFACT_DB_NAME = EVIDENCE_ARTIFACT_DB_NAME;
+export const FORWARD_EVIDENCE_ARTIFACT_DB_VERSION = EVIDENCE_ARTIFACT_DB_VERSION;
 
 const exact = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 

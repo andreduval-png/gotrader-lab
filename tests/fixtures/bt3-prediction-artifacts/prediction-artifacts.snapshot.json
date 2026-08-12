@@ -1,0 +1,463 @@
+{
+  "payload": {
+    "artifacts": [
+      {
+        "artifactId": "sha256:2c8b5c607b9b4c81ee9a687e33ba56f833758ddfc9673bcef561c7de013465a2",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "direction:bullish",
+          "lifecycle:armed",
+          "resolution:pending"
+        ],
+        "derivation": {
+          "kind": "prediction_from_legacy_prediction_ledger",
+          "legacyPredictionId": "prediction_pending"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "modelVersion": "fixture:v1",
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_pending",
+          "scenarioMapId": "map_prediction_pending"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "predictionId": "prediction_pending",
+          "storageKey": "gotrader.prediction-ledger.v1"
+        },
+        "legacyProjection": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 0,
+          "blockerSummary": "",
+          "brokerSymbol": "USTECH",
+          "calibrationSampleSize": 0,
+          "direction": "bullish",
+          "entryZone": {
+            "lower": 100,
+            "upper": 101
+          },
+          "expectedR": 4.5,
+          "expectedSequence": [
+            "Confirm",
+            "Target"
+          ],
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "invalidationConditions": [
+            "Stop"
+          ],
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "lifecycleState": "armed",
+          "liquidityDraw": "External liquidity",
+          "maxBarsToResolve": 48,
+          "modelVersion": "fixture:v1",
+          "predictionId": "prediction_pending",
+          "probabilityBand": "moderate",
+          "probabilityEstimate": 0.54,
+          "probabilitySource": "heuristic_uncalibrated",
+          "requestedSymbol": "MNQ",
+          "requiredConfirmations": [
+            "Closed candle"
+          ],
+          "resolution": "pending",
+          "safety": {
+            "autoPromotionAllowed": false,
+            "executionIntentCreated": false,
+            "rawCandlesExcluded": true,
+            "rawSnapshotsExcluded": true,
+            "researchOnly": true
+          },
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_pending",
+          "scenarioMapId": "map_prediction_pending",
+          "sourceFingerprint": "fingerprint_prediction_pending",
+          "sourceProvider": "mt5_read_only",
+          "stopReference": 99,
+          "targetReferences": [
+            {
+              "label": "Target",
+              "price": 105
+            }
+          ],
+          "thesis": "Fixture thesis",
+          "timeframe": "5m"
+        },
+        "migrationMode": "shadow_compare",
+        "probabilityProvenance": {
+          "estimate": 0.54,
+          "sampleSize": 0,
+          "source": "heuristic_uncalibrated"
+        },
+        "schemaVersion": "gotrader-v2-prediction-artifact-v1",
+        "sourceLineage": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "brokerSymbol": "USTECH",
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "requestedSymbol": "MNQ",
+          "sourceFingerprint": "fingerprint_prediction_pending",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      },
+      {
+        "artifactId": "sha256:f36b3fd6e9be1c00971c555cef0082cf7f829c8334bfe89dddcdf6e6dbdd0c7f",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "direction:bullish",
+          "lifecycle:resolved",
+          "resolution:target_first"
+        ],
+        "derivation": {
+          "kind": "prediction_from_legacy_prediction_ledger",
+          "legacyPredictionId": "prediction_resolved"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "modelVersion": "fixture:v1",
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_resolved",
+          "scenarioMapId": "map_prediction_resolved"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "predictionId": "prediction_resolved",
+          "storageKey": "gotrader.prediction-ledger.v1"
+        },
+        "legacyProjection": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 12,
+          "blockerSummary": "",
+          "brokerSymbol": "USTECH",
+          "calibrationSampleSize": 0,
+          "direction": "bullish",
+          "entryZone": {
+            "lower": 100,
+            "upper": 101
+          },
+          "expectedR": 4.5,
+          "expectedSequence": [
+            "Confirm",
+            "Target"
+          ],
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "invalidationConditions": [
+            "Stop"
+          ],
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "lifecycleState": "resolved",
+          "liquidityDraw": "External liquidity",
+          "maxBarsToResolve": 48,
+          "modelVersion": "fixture:v1",
+          "predictionId": "prediction_resolved",
+          "probabilityBand": "moderate",
+          "probabilityEstimate": 0.54,
+          "probabilitySource": "heuristic_uncalibrated",
+          "realizedR": 4.5,
+          "requestedSymbol": "MNQ",
+          "requiredConfirmations": [
+            "Closed candle"
+          ],
+          "resolution": "target_first",
+          "resolvedAt": "2026-07-21T15:00:00.000Z",
+          "safety": {
+            "autoPromotionAllowed": false,
+            "executionIntentCreated": false,
+            "rawCandlesExcluded": true,
+            "rawSnapshotsExcluded": true,
+            "researchOnly": true
+          },
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_resolved",
+          "scenarioMapId": "map_prediction_resolved",
+          "sourceFingerprint": "fingerprint_prediction_resolved",
+          "sourceProvider": "mt5_read_only",
+          "stopReference": 99,
+          "targetReferences": [
+            {
+              "label": "Target",
+              "price": 105
+            }
+          ],
+          "thesis": "Fixture thesis",
+          "timeframe": "5m"
+        },
+        "migrationMode": "shadow_compare",
+        "probabilityProvenance": {
+          "estimate": 0.54,
+          "sampleSize": 0,
+          "source": "heuristic_uncalibrated"
+        },
+        "schemaVersion": "gotrader-v2-prediction-artifact-v1",
+        "sourceLineage": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "brokerSymbol": "USTECH",
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "requestedSymbol": "MNQ",
+          "sourceFingerprint": "fingerprint_prediction_resolved",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      },
+      {
+        "artifactId": "sha256:19044b99e57a96671b07f4b184fc907cff87191fe0dfaaebbb78111b2e3ef300",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "direction:bullish",
+          "lifecycle:invalidated",
+          "resolution:invalidation_first"
+        ],
+        "derivation": {
+          "kind": "prediction_from_legacy_prediction_ledger",
+          "legacyPredictionId": "prediction_invalidated"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "modelVersion": "fixture:v1",
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_invalidated",
+          "scenarioMapId": "map_prediction_invalidated"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "predictionId": "prediction_invalidated",
+          "storageKey": "gotrader.prediction-ledger.v1"
+        },
+        "legacyProjection": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 6,
+          "blockerSummary": "",
+          "brokerSymbol": "USTECH",
+          "calibrationSampleSize": 0,
+          "direction": "bullish",
+          "entryZone": {
+            "lower": 100,
+            "upper": 101
+          },
+          "expectedR": 4.5,
+          "expectedSequence": [
+            "Confirm",
+            "Target"
+          ],
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "invalidationConditions": [
+            "Stop"
+          ],
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "lifecycleState": "invalidated",
+          "liquidityDraw": "External liquidity",
+          "maxBarsToResolve": 48,
+          "modelVersion": "fixture:v1",
+          "predictionId": "prediction_invalidated",
+          "probabilityBand": "moderate",
+          "probabilityEstimate": 0.54,
+          "probabilitySource": "heuristic_uncalibrated",
+          "realizedR": -1,
+          "requestedSymbol": "MNQ",
+          "requiredConfirmations": [
+            "Closed candle"
+          ],
+          "resolution": "invalidation_first",
+          "resolvedAt": "2026-07-21T14:30:00.000Z",
+          "safety": {
+            "autoPromotionAllowed": false,
+            "executionIntentCreated": false,
+            "rawCandlesExcluded": true,
+            "rawSnapshotsExcluded": true,
+            "researchOnly": true
+          },
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_invalidated",
+          "scenarioMapId": "map_prediction_invalidated",
+          "sourceFingerprint": "fingerprint_prediction_invalidated",
+          "sourceProvider": "mt5_read_only",
+          "stopReference": 99,
+          "targetReferences": [
+            {
+              "label": "Target",
+              "price": 105
+            }
+          ],
+          "thesis": "Fixture thesis",
+          "timeframe": "5m"
+        },
+        "migrationMode": "shadow_compare",
+        "probabilityProvenance": {
+          "estimate": 0.54,
+          "sampleSize": 0,
+          "source": "heuristic_uncalibrated"
+        },
+        "schemaVersion": "gotrader-v2-prediction-artifact-v1",
+        "sourceLineage": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "brokerSymbol": "USTECH",
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "requestedSymbol": "MNQ",
+          "sourceFingerprint": "fingerprint_prediction_invalidated",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      },
+      {
+        "artifactId": "sha256:4f63d09b2a769786f7776196953b36f21b988ce150ca1fa1fc3812a15b42c1e0",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "direction:neutral",
+          "lifecycle:observed_context",
+          "resolution:not_actionable"
+        ],
+        "derivation": {
+          "kind": "prediction_from_legacy_prediction_ledger",
+          "legacyPredictionId": "prediction_context"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "modelVersion": "fixture:v1",
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_context",
+          "scenarioMapId": "map_prediction_context"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "predictionId": "prediction_context",
+          "storageKey": "gotrader.prediction-ledger.v1"
+        },
+        "legacyProjection": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 0,
+          "blockerSummary": "Context only.",
+          "brokerSymbol": "USTECH",
+          "calibrationSampleSize": 0,
+          "direction": "neutral",
+          "expectedSequence": [
+            "Confirm",
+            "Target"
+          ],
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "invalidationConditions": [
+            "Stop"
+          ],
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "lifecycleState": "observed_context",
+          "liquidityDraw": "External liquidity",
+          "maxBarsToResolve": 48,
+          "modelVersion": "fixture:v1",
+          "predictionId": "prediction_context",
+          "probabilityBand": "moderate",
+          "probabilityEstimate": 0.54,
+          "probabilitySource": "heuristic_uncalibrated",
+          "requestedSymbol": "MNQ",
+          "requiredConfirmations": [
+            "Closed candle"
+          ],
+          "resolution": "not_actionable",
+          "safety": {
+            "autoPromotionAllowed": false,
+            "executionIntentCreated": false,
+            "rawCandlesExcluded": true,
+            "rawSnapshotsExcluded": true,
+            "researchOnly": true
+          },
+          "scenarioFamily": "fixture_family",
+          "scenarioId": "scenario_prediction_context",
+          "scenarioMapId": "map_prediction_context",
+          "sourceFingerprint": "fingerprint_prediction_context",
+          "sourceProvider": "mt5_read_only",
+          "targetReferences": [],
+          "thesis": "Fixture thesis",
+          "timeframe": "5m"
+        },
+        "migrationMode": "shadow_compare",
+        "probabilityProvenance": {
+          "estimate": 0.54,
+          "sampleSize": 0,
+          "source": "heuristic_uncalibrated"
+        },
+        "schemaVersion": "gotrader-v2-prediction-artifact-v1",
+        "sourceLineage": {
+          "asOfTimestamp": "2026-07-21T14:00:00.000Z",
+          "brokerSymbol": "USTECH",
+          "expiresAt": "2026-07-21T18:00:00.000Z",
+          "independentDate": "2026-07-21",
+          "issuedAt": "2026-07-21T14:00:00.000Z",
+          "requestedSymbol": "MNQ",
+          "sourceFingerprint": "fingerprint_prediction_context",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      }
+    ],
+    "manifest": {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "automaticMirroringAllowed": false,
+      "hashVersion": "gotrader-v2-sha256-v1",
+      "legacyAuthoritative": true,
+      "legacyStateHash": "sha256:a04c623f703970259c21aaad1eb22433e6909202818e517901dfb97b63825bdd",
+      "legacyStorageKey": "gotrader.prediction-ledger.v1",
+      "legacyUpdatedAt": "2026-07-21T15:01:00.000Z",
+      "manifestId": "sha256:57ae736979edeb177b5119eb49bc5181744b09ba61db3d93ef65ed9b12f37752",
+      "manifestVersion": "v1",
+      "migrationMode": "shadow_compare",
+      "orderedArtifactIds": [
+        "sha256:2c8b5c607b9b4c81ee9a687e33ba56f833758ddfc9673bcef561c7de013465a2",
+        "sha256:f36b3fd6e9be1c00971c555cef0082cf7f829c8334bfe89dddcdf6e6dbdd0c7f",
+        "sha256:19044b99e57a96671b07f4b184fc907cff87191fe0dfaaebbb78111b2e3ef300",
+        "sha256:4f63d09b2a769786f7776196953b36f21b988ce150ca1fa1fc3812a15b42c1e0"
+      ],
+      "schemaVersion": "gotrader-v2-prediction-manifest-v1"
+    }
+  },
+  "schemaVersion": "gotrader-bt3-prediction-artifact-snapshot-v1"
+}
