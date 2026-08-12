@@ -1,0 +1,124 @@
+{
+  "payload": [
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "trade_plan_constructed",
+      "geometry": {
+        "entry": 95,
+        "rr": 3.279,
+        "side": "long",
+        "stop": 93.9021,
+        "target": 98.6
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "behavioral_fixture",
+        "fixtureId": "ifvg_v1_valid",
+        "lastClosedCandle": "2026-06-12T15:45:00.000Z",
+        "parameterFingerprint": "ifvg_v1|frozen_defaults",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "2d53d9f5ddd5952768c9eb73fab675b55e7bdb6c",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_ifvg_v1_v4",
+        "strategyId": "ifvg_v1",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-ifvg-v1-v4-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "Price did not retest and respect the inverted FVG zone.",
+        "No next draw-on-liquidity target in IFVG direction.",
+        "entry_missing",
+        "target_missing",
+        "invalidation_missing",
+        "rr_unavailable"
+      ],
+      "detectionState": "blocked",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "behavioral_fixture",
+        "fixtureId": "ifvg_v1_no_retest",
+        "lastClosedCandle": "2026-06-12T15:30:00.000Z",
+        "parameterFingerprint": "ifvg_v1|frozen_defaults",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "2d53d9f5ddd5952768c9eb73fab675b55e7bdb6c",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_ifvg_v1_v4",
+        "strategyId": "ifvg_v1",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-ifvg-v1-v4-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "trade_plan_constructed",
+      "geometry": {
+        "entry": 95,
+        "rr": 3.3012,
+        "side": "long",
+        "stop": 93.9095,
+        "target": 98.6
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "experimental",
+        "fixtureId": "ifvg_v4_shallow_valid",
+        "lastClosedCandle": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "ifvg_v4|max_retest_penetration_0.66",
+        "profileVersion": "v4",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "2d53d9f5ddd5952768c9eb73fab675b55e7bdb6c",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_ifvg_v1_v4",
+        "strategyId": "ifvg_fresh_retest_v4_candidate",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-ifvg-v1-v4-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "shallow_retest_depth_required"
+      ],
+      "detectionState": "blocked",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "experimental",
+        "fixtureId": "ifvg_v4_deep_blocked",
+        "lastClosedCandle": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "ifvg_v4|max_retest_penetration_0.66",
+        "profileVersion": "v4",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "2d53d9f5ddd5952768c9eb73fab675b55e7bdb6c",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_ifvg_v1_v4",
+        "strategyId": "ifvg_fresh_retest_v4_candidate",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-ifvg-v1-v4-fixture-v1"
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-ifvg-v1-v4-snapshot-v1"
+}
