@@ -1,0 +1,89 @@
+{
+  "payload": [
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "canonical_cmd_v1_detector_ownership_missing",
+        "independent_date_validation_required"
+      ],
+      "detectionState": "policy_only",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "behavioral_fixture",
+        "fixtureId": "cmd_v1_policy_only",
+        "lastClosedCandle": "2026-06-12T14:35:00.000Z",
+        "parameterFingerprint": "cmd_v1|policy_only|independent_date_gate_3",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "ee7b6be68a0ac03073b3aaeb1738695617c356eb",
+        "sourceFingerprint": "fixture|MNQ|USTECH|policy_only|bt3_cmd",
+        "strategyId": "ict_cmd_short_paper_watchlist_v1",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cmd-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "trade_plan_constructed",
+      "geometry": {
+        "entry": 100,
+        "rr": 3,
+        "side": "short",
+        "stop": 102,
+        "target": 94
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "experimental",
+        "fixtureId": "cmd_v2_valid",
+        "lastClosedCandle": "2026-06-12T14:35:00.000Z",
+        "parameterFingerprint": "cmd_v2|displacement_1.25|age_2|fvg_age_6|min_rr_2|max_rr_20",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "ee7b6be68a0ac03073b3aaeb1738695617c356eb",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_cmd",
+        "strategyId": "cmd_high_displacement_v2_research",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cmd-fixture-v1"
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "Displacement signal is stale; a fresh signal within two bars is required."
+      ],
+      "detectionState": "blocked_stale_signal",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "experimental",
+        "fixtureId": "cmd_v2_stale_blocked",
+        "lastClosedCandle": "2026-06-12T14:35:00.000Z",
+        "parameterFingerprint": "cmd_v2|displacement_1.25|age_2|fvg_age_6|min_rr_2|max_rr_20",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "ee7b6be68a0ac03073b3aaeb1738695617c356eb",
+        "sourceFingerprint": "fixture|MNQ|USTECH|5m|bt3_cmd",
+        "strategyId": "cmd_high_displacement_v2_research",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cmd-fixture-v1"
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-cmd-snapshot-v1"
+}
