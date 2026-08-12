@@ -3,3 +3,4 @@ export * from "./shadowOrchestrationEngine";
 export * from "./shadowOrchestrationIndexedDb";
 export * from "./researchCycleShadowAdapter";
 export * from "./researchCycleTerminalShadowMirror";
+export * from "./researchCycleCheckpointRecovery";

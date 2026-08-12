@@ -33,6 +33,7 @@ import {
 } from "@/lib/researchEvidenceLedger";
 import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
 import { mirrorTerminalResearchCycleRun } from "@/lib/shadowOrchestration/researchCycleTerminalShadowMirror";
+import { queueResearchCycleCheckpointObservation } from "@/lib/shadowOrchestration/researchCycleCheckpointRecovery";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -888,11 +889,17 @@ export async function runResearchCycle({
   const passStep = (
     stepId: ResearchCycleStepId,
     patch: Partial<ResearchCycleStepResult> & Pick<ResearchCycleStepResult, "summary">
-  ) => setStep(stepId, { status: "passed", completedAt: now(), ...patch });
+  ) => {
+    setStep(stepId, { status: "passed", completedAt: now(), ...patch });
+    void queueResearchCycleCheckpointObservation(compactResearchCycleRun(snapshot()));
+  };
   const warnStep = (
     stepId: ResearchCycleStepId,
     patch: Partial<ResearchCycleStepResult> & Pick<ResearchCycleStepResult, "summary" | "warning">
-  ) => setStep(stepId, { status: "warning", completedAt: now(), ...patch });
+  ) => {
+    setStep(stepId, { status: "warning", completedAt: now(), ...patch });
+    void queueResearchCycleCheckpointObservation(compactResearchCycleRun(snapshot()));
+  };
   const failStep = (stepId: ResearchCycleStepId, message: string) => {
     setStep(stepId, {
       status: "failed",
