@@ -59,3 +59,10 @@ currentLiveGeometryAuthoritative: true
 ```
 
 No later phase is authorized by this decision.
+
+## Completion Record
+
+Phase 6 passed under implementation commit
+`bd59f70c3bf221a03343f7f76cf0f6c7d602ce25` and report
+`sha256:c4106d5cc597263f10974a74606b2a0293bd98a644c4ba523c6907853db142cd`.
+Phase 7 remains separately gated and unauthorized.
