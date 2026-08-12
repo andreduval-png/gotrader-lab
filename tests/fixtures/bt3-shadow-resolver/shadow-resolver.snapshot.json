@@ -1,0 +1,287 @@
+{
+  "payload": {
+    "cross_family_conflict": {
+      "activeDirections": [
+        "long",
+        "short"
+      ],
+      "activeOpportunityIds": [
+        "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6",
+        "sha256:d5d0bf78c140e5dc3edd227f73fee90503afb568f5185cfc49f79e8f6a6e81a9"
+      ],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "conflicted",
+      "familyGroups": [
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "imbalance",
+          "opportunityIds": [
+            "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+          ]
+        },
+        {
+          "directions": [
+            "short"
+          ],
+          "evidenceFamily": "session_model",
+          "opportunityIds": [
+            "sha256:d5d0bf78c140e5dc3edd227f73fee90503afb568f5185cfc49f79e8f6a6e81a9"
+          ]
+        }
+      ],
+      "inactiveOpportunityIds": [],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:2de5a169827430c1e894aa096e6b4a5f7f7cbe4819c5d8458106f1f85c78596b",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "cross_family_conflict"
+    },
+    "cross_family_confluence": {
+      "activeDirections": [
+        "long"
+      ],
+      "activeOpportunityIds": [
+        "sha256:7bab90ccd9862bb759d8bb8c0d5408ef6b6027f2b63dbcbcf3827a2fe5a2fdd6",
+        "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+      ],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "aligned",
+      "familyGroups": [
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "imbalance",
+          "opportunityIds": [
+            "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+          ]
+        },
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "liquidity_reversal",
+          "opportunityIds": [
+            "sha256:7bab90ccd9862bb759d8bb8c0d5408ef6b6027f2b63dbcbcf3827a2fe5a2fdd6"
+          ]
+        }
+      ],
+      "inactiveOpportunityIds": [],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:643e4c9764a90d4c1faf4929883903c71ad1cfba01dad28b2d7018565e064269",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "cross_family_confluence"
+    },
+    "mixed": {
+      "activeDirections": [
+        "long",
+        "short"
+      ],
+      "activeOpportunityIds": [
+        "sha256:4789fa411e77297f211cabc75739e411f00128d8cd9c3b822b64235981a557ed",
+        "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6",
+        "sha256:d5d0bf78c140e5dc3edd227f73fee90503afb568f5185cfc49f79e8f6a6e81a9"
+      ],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "conflicted",
+      "familyGroups": [
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "imbalance",
+          "opportunityIds": [
+            "sha256:4789fa411e77297f211cabc75739e411f00128d8cd9c3b822b64235981a557ed",
+            "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+          ]
+        },
+        {
+          "directions": [
+            "short"
+          ],
+          "evidenceFamily": "session_model",
+          "opportunityIds": [
+            "sha256:d5d0bf78c140e5dc3edd227f73fee90503afb568f5185cfc49f79e8f6a6e81a9"
+          ]
+        }
+      ],
+      "inactiveOpportunityIds": [],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:554c68425acf427da3a90ed68542853fd0292b9d783a02c2d3d3790a95082e4b",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "mixed"
+    },
+    "no_active": {
+      "activeDirections": [],
+      "activeOpportunityIds": [],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "none",
+      "familyGroups": [],
+      "inactiveOpportunityIds": [
+        "sha256:ad170961c52321ff8ad64a77d440ce6925de014a0825f3c5aa23762a7ca13c8c"
+      ],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:b91e382db5b9620bd0180e6b92248b535723d8cc22eb239321dd85368a1485bd",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "no_active"
+    },
+    "same_family_overlap": {
+      "activeDirections": [
+        "long"
+      ],
+      "activeOpportunityIds": [
+        "sha256:4789fa411e77297f211cabc75739e411f00128d8cd9c3b822b64235981a557ed",
+        "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+      ],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "aligned",
+      "familyGroups": [
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "imbalance",
+          "opportunityIds": [
+            "sha256:4789fa411e77297f211cabc75739e411f00128d8cd9c3b822b64235981a557ed",
+            "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+          ]
+        }
+      ],
+      "inactiveOpportunityIds": [],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:c9dddb6fe283d976b8074061c730e2c7ee30656b062ec6ac68d1dadff2b7051c",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "same_family_overlap"
+    },
+    "single": {
+      "activeDirections": [
+        "long"
+      ],
+      "activeOpportunityIds": [
+        "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+      ],
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "brokerSymbol": "USTECH",
+      "capabilities": {
+        "canApplyCalibration": false,
+        "canApproveReadiness": false,
+        "canCreateEvidence": false,
+        "canCreateTradeIntent": false,
+        "canPlaceOrder": false,
+        "productionAdoptionAllowed": false
+      },
+      "currentLiveResolutionAuthoritative": true,
+      "directionalState": "single",
+      "familyGroups": [
+        {
+          "directions": [
+            "long"
+          ],
+          "evidenceFamily": "imbalance",
+          "opportunityIds": [
+            "sha256:b819bed45fb6aebca841c898b377d57beca823aae1cc4be82dca96da1f99fee6"
+          ]
+        }
+      ],
+      "inactiveOpportunityIds": [],
+      "observedAtUtc": "2026-06-12T14:30:00.000Z",
+      "requestedSymbol": "MNQ",
+      "resolutionId": "sha256:59cdeefb9a3fedec8a75745402044a9afed387434cff9202be55f37be0164277",
+      "resolverVersion": "bt3-evidence-family-shadow-resolver-v1",
+      "schemaVersion": "gotrader-bt3-shadow-opportunity-resolution-v1",
+      "shadowSelectionAllowed": false,
+      "state": "single"
+    }
+  },
+  "schemaVersion": "gotrader-bt3-shadow-resolver-snapshot-v1"
+}
