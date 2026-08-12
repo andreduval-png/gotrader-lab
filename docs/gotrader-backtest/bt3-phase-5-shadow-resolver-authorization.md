@@ -57,3 +57,10 @@ shadowSelectionAllowed: false
 ```
 
 No later phase is authorized by this decision.
+
+## Completion Record
+
+Phase 5 passed under implementation commit
+`98a5196bb587508f8b7d8d25945f24f7943db049` and report
+`sha256:0a4afca28b77c027d057148b4fd471e22642396732b25b038cd1598bc10eab36`.
+Phase 6 remains separately gated and unauthorized.
