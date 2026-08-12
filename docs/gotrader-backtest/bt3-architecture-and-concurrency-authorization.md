@@ -91,3 +91,10 @@ BT3 Stage 1 is authorized for IFVG fixture adapters, exact parity comparison,
 deterministic tests, and compact reports. Historical dataset-backed IFVG
 simulation and every additional strategy require a separate acceptance and
 fresh authorization decision.
+
+## Completion Record
+
+BT3 Stage 1 passed its acceptance matrix under implementation commit
+`e625a5228370228055542e38d862a05c153b1d53` and compact parity report
+`sha256:e7980a79a27341e33d245a5e2ef43150829f829361d6f5ac53a555c596927d1c`.
+No broader BT3 capability is authorized by this completion.
