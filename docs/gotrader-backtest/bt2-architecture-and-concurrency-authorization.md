@@ -84,3 +84,13 @@ machine, in-memory/filesystem fixture storage, and deterministic tests. Stage 2
 dataset-backed shadow simulation requires Stage 1 acceptance and a fresh
 concurrency/resource preflight. BT3 remains unauthorized until BT2 passes its
 full acceptance matrix.
+
+## Completion Record
+
+BT2 Stages 1 and 2 subsequently passed the full acceptance matrix. Stage 2 is
+sealed by implementation commit `831044a1d9c532df47d247e1eb435bd7d3302200`,
+experiment `sha256:3bbfa92a97255c25b04eaf9f00586bcee306aec9a680d2390fcd1f29c1771fd8`,
+and ledger `sha256:ad063ea4b036a19df95601a16ec5855be25333bea354e1b98ea6e7194760f52b`.
+
+This closes `ACC-BT2-CANONICAL-SIMULATION` as accepted. BT3 remains
+unauthorized pending a separate architecture and concurrency decision.
