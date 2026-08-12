@@ -1,0 +1,215 @@
+{
+  "payload": {
+    "artifacts": [
+      {
+        "artifactId": "sha256:0b1b6af620282789b136d9d08e5eec48044871f3e107b17fbe5ad603393e461a",
+        "artifactType": "forward_evidence_entry",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "causal_at_issue:true",
+          "forward_eligible:true",
+          "origin:live_closed_candle",
+          "outcome:pending"
+        ],
+        "derivation": {
+          "kind": "evidence_from_legacy_forward_ledger",
+          "legacyEntryId": "forward_artifact_001",
+          "legacyStorageKey": "gotrader.forward-evidence.v1"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "costModelVersion": "legacy_cost_model_unspecified",
+          "detectorVersion": "legacy_ifvg_forward_detector_unspecified",
+          "profileId": "ifvg_fresh_retest_v3_research",
+          "profileVersion": "v3",
+          "riskPolicyVersion": "legacy_frozen_profile_policy",
+          "sessionCalendarVersion": "legacy_session_calendar_unspecified",
+          "tradeConstructionPolicyVersion": "legacy_ifvg_forward_policy_v1"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "entryId": "forward_artifact_001",
+          "storageKey": "gotrader.forward-evidence.v1"
+        },
+        "legacyProjection": {
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 0,
+          "blockerSummary": "",
+          "brokerSymbol": "USTECH",
+          "causalAtIssue": true,
+          "direction": "long",
+          "entryId": "forward_artifact_001",
+          "entryZone": {
+            "lower": 100,
+            "upper": 102
+          },
+          "evidenceOrigin": "live_closed_candle",
+          "forwardEligible": true,
+          "forwardWindowId": "window-a",
+          "frozenAt": "2026-07-14T05:50:00.000Z",
+          "independentDate": "2026-07-21",
+          "missingEvidence": [],
+          "notes": "",
+          "outcome": "pending",
+          "profileId": "ifvg_fresh_retest_v3_research",
+          "profileVersion": "v3",
+          "requestedSymbol": "MNQ",
+          "scenarioFamily": "ifvg_fresh_retest_v3_research",
+          "setupTimestamp": "2026-07-21T14:00:00.000Z",
+          "sourceFingerprint": "mt5-forward-artifact-001",
+          "sourceProvider": "mt5_read_only",
+          "stopReference": 99,
+          "targetReferences": [
+            {
+              "label": "external liquidity",
+              "price": 106
+            }
+          ],
+          "timeframe": "5m",
+          "timestamp": "2026-07-21T14:01:00.000Z",
+          "triggerEvidence": [
+            "fresh clean retest"
+          ],
+          "validationCutoff": "2026-07-14T04:40:00.000Z"
+        },
+        "migrationMode": "shadow_compare",
+        "migrationVersion": "bt3-phase-7-forward-evidence-shadow-v1",
+        "schemaVersion": "gotrader-v2-forward-evidence-artifact-v1",
+        "sourceLineage": {
+          "brokerSymbol": "USTECH",
+          "forwardWindowId": "window-a",
+          "independentDate": "2026-07-21",
+          "requestedSymbol": "MNQ",
+          "setupTimestamp": "2026-07-21T14:00:00.000Z",
+          "sourceFingerprint": "mt5-forward-artifact-001",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      },
+      {
+        "artifactId": "sha256:6780b5b46fa2e9c3a6d653a3213dbaae396d3d86f095e19aa89a569a1d18a7ca",
+        "artifactType": "forward_evidence_entry",
+        "artifactVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "causalTags": [
+          "causal_at_issue:false",
+          "forward_eligible:false",
+          "origin:legacy_unverified",
+          "outcome:target_first"
+        ],
+        "derivation": {
+          "kind": "evidence_from_legacy_forward_ledger",
+          "legacyEntryId": "forward_artifact_002",
+          "legacyStorageKey": "gotrader.forward-evidence.v1"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "identity": {
+          "costModelVersion": "legacy_cost_model_unspecified",
+          "detectorVersion": "legacy_ifvg_forward_detector_unspecified",
+          "profileId": "ifvg_fresh_retest_v3_research",
+          "profileVersion": "v3",
+          "riskPolicyVersion": "legacy_frozen_profile_policy",
+          "sessionCalendarVersion": "legacy_session_calendar_unspecified",
+          "tradeConstructionPolicyVersion": "legacy_ifvg_forward_policy_v1"
+        },
+        "legacyAuthoritative": true,
+        "legacyOrigin": {
+          "entryId": "forward_artifact_002",
+          "storageKey": "gotrader.forward-evidence.v1"
+        },
+        "legacyProjection": {
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "barsObserved": 0,
+          "blockerSummary": "",
+          "brokerSymbol": "USTECH",
+          "causalAtIssue": false,
+          "direction": "short",
+          "entryId": "forward_artifact_002",
+          "entryZone": {
+            "lower": 200,
+            "upper": 202
+          },
+          "evidenceOrigin": "legacy_unverified",
+          "forwardEligible": false,
+          "forwardWindowId": "window-b",
+          "frozenAt": "2026-07-14T05:50:00.000Z",
+          "independentDate": "2026-07-22",
+          "missingEvidence": [],
+          "notes": "",
+          "outcome": "target_first",
+          "profileId": "ifvg_fresh_retest_v3_research",
+          "profileVersion": "v3",
+          "realizedR": 2,
+          "requestedSymbol": "MNQ",
+          "scenarioFamily": "ifvg_fresh_retest_v3_research",
+          "setupTimestamp": "2026-07-22T15:00:00.000Z",
+          "sourceFingerprint": "mt5-forward-artifact-002",
+          "sourceProvider": "mt5_read_only",
+          "stopReference": 204,
+          "targetReferences": [
+            {
+              "label": "sell-side liquidity",
+              "price": 194
+            }
+          ],
+          "timeframe": "5m",
+          "timestamp": "2026-07-22T15:01:00.000Z",
+          "triggerEvidence": [],
+          "validationCutoff": "2026-07-14T04:40:00.000Z"
+        },
+        "migrationMode": "shadow_compare",
+        "migrationVersion": "bt3-phase-7-forward-evidence-shadow-v1",
+        "schemaVersion": "gotrader-v2-forward-evidence-artifact-v1",
+        "sourceLineage": {
+          "brokerSymbol": "USTECH",
+          "forwardWindowId": "window-b",
+          "independentDate": "2026-07-22",
+          "requestedSymbol": "MNQ",
+          "setupTimestamp": "2026-07-22T15:00:00.000Z",
+          "sourceFingerprint": "mt5-forward-artifact-002",
+          "sourceProvider": "mt5_read_only",
+          "timeframe": "5m"
+        }
+      }
+    ],
+    "manifest": {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "automaticMirroringAllowed": false,
+      "hashVersion": "gotrader-v2-sha256-v1",
+      "legacyAuthoritative": true,
+      "legacyLedgerHash": "sha256:d8f6617563bb752008c092a223bac5dea55b8368c78b527663eca3802f4c19cf",
+      "legacyStorageKey": "gotrader.forward-evidence.v1",
+      "manifestId": "sha256:2c9242cf4f4f4bb1c8df32b8297705db00427852645f89212d6615068d980aef",
+      "manifestVersion": "v1",
+      "migrationMode": "shadow_compare",
+      "migrationVersion": "bt3-phase-7-forward-evidence-shadow-v1",
+      "orderedArtifactIds": [
+        "sha256:0b1b6af620282789b136d9d08e5eec48044871f3e107b17fbe5ad603393e461a",
+        "sha256:6780b5b46fa2e9c3a6d653a3213dbaae396d3d86f095e19aa89a569a1d18a7ca"
+      ],
+      "schemaVersion": "gotrader-v2-forward-evidence-manifest-v1"
+    }
+  },
+  "schemaVersion": "gotrader-bt3-forward-evidence-artifact-snapshot-v1"
+}

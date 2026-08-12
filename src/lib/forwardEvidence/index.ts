@@ -8,3 +8,5 @@ export * from "./ifvgForwardEvidenceRuntime";
 export * from "./forwardEvidenceCollectorStatus";
 export * from "./auditForwardEvidenceCycleSample";
 export * from "./buildForwardEvidenceGatewayReport";
+export * from "./forwardEvidenceArtifactContract";
+export * from "./forwardEvidenceArtifactRepository";
