@@ -1,0 +1,255 @@
+{
+  "payload": [
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 102.6,
+        "returnToFvgTimestamp": "2026-06-12T14:05:00.000Z",
+        "rr": 2.8461538461538547,
+        "side": "long",
+        "stop": 100,
+        "target": 110
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "fixtureId": "silver_bullet_v1_long_valid",
+        "generatedAt": "2026-06-12T14:07:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:06:00.000Z",
+        "parameterFingerprint": "silver_bullet_v1|native_sweep_fvg_return|min_rr_2|rejected_negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v1",
+        "strategyId": "silver_bullet_v1",
+        "timeframe": "1m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "silver_bullet_killzone",
+        "liquidity_sweep",
+        "directional_fvg",
+        "return_to_fvg",
+        "target_invalidation_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 107.5,
+        "returnToFvgTimestamp": "2026-06-12T14:05:00.000Z",
+        "rr": 3,
+        "side": "short",
+        "stop": 110,
+        "target": 100
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "fixtureId": "silver_bullet_v1_short_valid",
+        "generatedAt": "2026-06-12T14:07:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:06:00.000Z",
+        "parameterFingerprint": "silver_bullet_v1|native_sweep_fvg_return|min_rr_2|rejected_negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v1",
+        "strategyId": "silver_bullet_v1",
+        "timeframe": "1m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "silver_bullet_killzone",
+        "liquidity_sweep",
+        "directional_fvg",
+        "return_to_fvg",
+        "target_invalidation_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "No qualifying liquidity sweep found in the active Silver Bullet window."
+      ],
+      "detectionState": "no_trade",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "fixtureId": "silver_bullet_v1_no_sweep_blocked",
+        "generatedAt": "2026-06-12T14:07:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:06:00.000Z",
+        "parameterFingerprint": "silver_bullet_v1|native_sweep_fvg_return|min_rr_2|rejected_negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v1",
+        "strategyId": "silver_bullet_v1",
+        "timeframe": "1m"
+      },
+      "missingConditions": [
+        "liquidity_sweep"
+      ],
+      "presentConditions": [
+        "silver_bullet_killzone"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 106.5,
+        "returnToFvgTimestamp": "2026-06-12T14:03:00.000Z",
+        "rr": 2.6,
+        "side": "long",
+        "stop": 104,
+        "target": 113
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "silver_bullet_v2_long_valid",
+        "generatedAt": "2026-06-12T14:04:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:03:00.000Z",
+        "parameterFingerprint": "silver_bullet_v2|meaningful_sweep|context|displacement|return_10|min_rr_2|max_rr_15|strict_research",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v2",
+        "strategyId": "silver_bullet_v2_refined_research",
+        "timeframe": "1m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "silver_bullet_killzone",
+        "meaningful_liquidity_sweep",
+        "context_alignment",
+        "timely_displacement_fvg",
+        "timely_return_to_fvg",
+        "realistic_target_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 103.5,
+        "returnToFvgTimestamp": "2026-06-12T14:03:00.000Z",
+        "rr": 2.6,
+        "side": "short",
+        "stop": 106,
+        "target": 97
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "silver_bullet_v2_short_valid",
+        "generatedAt": "2026-06-12T14:04:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:03:00.000Z",
+        "parameterFingerprint": "silver_bullet_v2|meaningful_sweep|context|displacement|return_10|min_rr_2|max_rr_15|strict_research",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v2",
+        "strategyId": "silver_bullet_v2_refined_research",
+        "timeframe": "1m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "silver_bullet_killzone",
+        "meaningful_liquidity_sweep",
+        "context_alignment",
+        "timely_displacement_fvg",
+        "timely_return_to_fvg",
+        "realistic_target_rr"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    },
+    {
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "No meaningful prior swing/equal high-low sweep in the first half of the Silver Bullet window."
+      ],
+      "detectionState": "blocked_low_quality_sweep",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "silver_bullet_v2_weak_sweep_blocked",
+        "generatedAt": "2026-06-12T14:04:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:03:00.000Z",
+        "parameterFingerprint": "silver_bullet_v2|meaningful_sweep|context|displacement|return_10|min_rr_2|max_rr_15|strict_research",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-12T15:00:00.000Z",
+        "sourceCommit": "a31382a7b478841e37e6b5afc7f5b910f8c37c26",
+        "sourceFingerprint": "mt5|MNQ|USTECH|1m|bt3_silver_bullet|v2",
+        "strategyId": "silver_bullet_v2_refined_research",
+        "timeframe": "1m"
+      },
+      "missingConditions": [
+        "meaningful_liquidity_sweep"
+      ],
+      "presentConditions": [
+        "silver_bullet_killzone"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-silver-bullet-fixture-v1",
+      "sessionId": "new_york_am",
+      "warnings": []
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-silver-bullet-snapshot-v1"
+}
