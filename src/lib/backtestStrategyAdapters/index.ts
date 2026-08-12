@@ -4,3 +4,4 @@ export * from "./cmdCanonicalAdapter";
 export * from "./silverBulletCanonicalAdapter";
 export * from "./turtleSoupCanonicalAdapter";
 export * from "./cisdCanonicalAdapter";
+export * from "./sessionRaidCanonicalAdapter";

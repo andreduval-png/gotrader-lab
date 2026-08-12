@@ -1,0 +1,178 @@
+{
+  "payload": [
+    {
+      "audit": {
+        "candidateCount": 12,
+        "invalidationFirstCount": 9,
+        "profileVersion": "v1",
+        "targetFirstCount": 3,
+        "targetFirstRatePercent": 25,
+        "uniqueDateCount": 12,
+        "walkForwardVerdict": "blocked"
+      },
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "complete_bearish_reversal_candidate",
+      "failedFilters": [],
+      "geometry": {
+        "entry": 100.75,
+        "rr": 2.4502,
+        "side": "short",
+        "stop": 106.77,
+        "target": 86
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "session_raid_v1_short_valid",
+        "generatedAt": "2026-06-10T16:00:00.000Z",
+        "parameterFingerprint": "session_raid_v1|asia|london_expansion|ny_raid|bearish_mss|breaker|15m_fvg_retrace|min_rr_2|strict_research",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-10T20:00:00.000Z",
+        "sourceCommit": "27befe1cca7afcb095e865fc4ad1bccb22778c51",
+        "sourceFingerprint": "mt5|USTECH|MNQ|5m|session-raid-fixture",
+        "sourceSignalCandleOpen": "2026-06-10T14:15:00.000Z",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v1",
+        "timeframe": "15m"
+      },
+      "missingConditions": [],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-session-raid-fixture-v1"
+    },
+    {
+      "audit": {
+        "candidateCount": 12,
+        "invalidationFirstCount": 9,
+        "profileVersion": "v1",
+        "targetFirstCount": 3,
+        "targetFirstRatePercent": 25,
+        "uniqueDateCount": 12,
+        "walkForwardVerdict": "blocked"
+      },
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "forming",
+      "failedFilters": [],
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "session_raid_v1_no_raid_blocked",
+        "generatedAt": "2026-06-10T16:00:00.000Z",
+        "parameterFingerprint": "session_raid_v1|asia|london_expansion|ny_raid|bearish_mss|breaker|15m_fvg_retrace|min_rr_2|strict_research",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-10T20:00:00.000Z",
+        "sourceCommit": "27befe1cca7afcb095e865fc4ad1bccb22778c51",
+        "sourceFingerprint": "mt5|USTECH|MNQ|5m|session-raid-fixture",
+        "sourceSignalCandleOpen": "2026-06-10T14:45:00.000Z",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v1",
+        "timeframe": "15m"
+      },
+      "missingConditions": [
+        "ny_london_high_raid",
+        "bearish_mss",
+        "breaker_detected",
+        "fvg_detected",
+        "fvg_retrace",
+        "sell_side_delivery",
+        "invalidation_missing"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-session-raid-fixture-v1"
+    },
+    {
+      "audit": {
+        "candidateCount": 12,
+        "invalidationFirstCount": 9,
+        "profileVersion": "v1",
+        "targetFirstCount": 3,
+        "targetFirstRatePercent": 25,
+        "uniqueDateCount": 12,
+        "walkForwardVerdict": "blocked"
+      },
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "forming",
+      "failedFilters": [],
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "strict_research",
+        "fixtureId": "session_raid_v1_no_mss_blocked",
+        "generatedAt": "2026-06-10T16:00:00.000Z",
+        "parameterFingerprint": "session_raid_v1|asia|london_expansion|ny_raid|bearish_mss|breaker|15m_fvg_retrace|min_rr_2|strict_research",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-10T20:00:00.000Z",
+        "sourceCommit": "27befe1cca7afcb095e865fc4ad1bccb22778c51",
+        "sourceFingerprint": "mt5|USTECH|MNQ|5m|session-raid-fixture",
+        "sourceSignalCandleOpen": "2026-06-10T14:45:00.000Z",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v1",
+        "timeframe": "15m"
+      },
+      "missingConditions": [
+        "bearish_mss",
+        "breaker_detected",
+        "fvg_detected",
+        "fvg_retrace",
+        "sell_side_delivery",
+        "invalidation_missing"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-session-raid-fixture-v1"
+    },
+    {
+      "audit": {
+        "profileVersion": "v2",
+        "retainedCandidateCount": 1,
+        "sampleVerdict": "insufficient",
+        "scannerGeometryOwned": false,
+        "uniqueDateCount": 1
+      },
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "filtered_out",
+      "failedFilters": [
+        "weak_displacement_body",
+        "fvg_too_small"
+      ],
+      "filterPassed": false,
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "insufficient_sample_control",
+        "fixtureId": "session_raid_v2_default_filtered_policy",
+        "generatedAt": "2026-06-10T16:00:00.000Z",
+        "parameterFingerprint": "session_raid_v2|default_thresholds|filter_telemetry_only|{\"minDisplacementBodySize\":35.45,\"minFvgSize\":9.48,\"maxFvgSize\":92.2,\"maxRetraceDepthPercent\":0.75,\"maxRaidDistanceAboveLondonHigh\":81.3,\"maxStopDistance\":60,\"minTargetFeasibilityScore\":0.45,\"maxRrWithoutStrongFeasibility\":4,\"strongFeasibilityScore\":0.7}",
+        "profileVersion": "v2",
+        "requestedSymbol": "MNQ",
+        "sessionClosesAtUtc": "2026-06-10T20:00:00.000Z",
+        "sourceCommit": "27befe1cca7afcb095e865fc4ad1bccb22778c51",
+        "sourceFingerprint": "mt5|USTECH|MNQ|5m|session-raid-fixture",
+        "sourceSignalCandleOpen": "2026-06-10T14:15:00.000Z",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v2_filtered_research",
+        "timeframe": "15m"
+      },
+      "missingConditions": [],
+      "promotionAllowed": false,
+      "replayOutcome": "target_first",
+      "schemaVersion": "gotrader-bt3-session-raid-fixture-v1"
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-session-raid-snapshot-v1"
+}

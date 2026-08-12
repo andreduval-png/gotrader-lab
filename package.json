@@ -85,6 +85,8 @@
     "test:bt3-turtle-soup": "npm run test:bt3-turtle-soup-fixtures && node scripts/test-bt3-turtle-soup-parity.mjs",
     "test:bt3-cisd-fixtures": "node scripts/bt3/generate-cisd-fixtures.mjs",
     "test:bt3-cisd": "npm run test:bt3-cisd-fixtures && node scripts/test-bt3-cisd-parity.mjs",
+    "test:bt3-session-raid-fixtures": "node scripts/bt3/generate-session-raid-fixtures.mjs",
+    "test:bt3-session-raid": "npm run test:bt3-session-raid-fixtures && node scripts/test-bt3-session-raid-parity.mjs",
     "bt1-5:diagnose-mt5": "node scripts/diagnose-bt1-5-mt5-source.mjs",
     "bt1-5:prepare": "node scripts/prepare-bt1-5-qualification-bundle.mjs",
     "bt1-5:preflight": "node scripts/prepare-bt1-5-live-preflight.mjs",
