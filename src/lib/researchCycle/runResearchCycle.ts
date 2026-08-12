@@ -32,6 +32,7 @@ import {
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
 import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
+import { mirrorTerminalResearchCycleRun } from "@/lib/shadowOrchestration/researchCycleTerminalShadowMirror";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -870,6 +871,12 @@ export async function runResearchCycle({
   };
 
   const snapshot = () => ({ ...run, steps: steps.map((step) => ({ ...step })) });
+  const finalizeTerminalRun = async () => {
+    const terminalRun = snapshot();
+    saveResearchCycleRun(terminalRun);
+    await mirrorTerminalResearchCycleRun(compactResearchCycleRun(terminalRun));
+    return terminalRun;
+  };
   let cycleMarketAnalysisContext: IctMarketAnalysisContext | undefined;
   const notify = () => notifyResearchCycleObserver(onUpdate, snapshot());
   const setStep = (stepId: ResearchCycleStepId, patch: Partial<ResearchCycleStepResult>) => {
@@ -918,8 +925,7 @@ export async function runResearchCycle({
     run.completedAt = now();
     run.nextRecommendedAction = "Select and verify an eligible canonical research source, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
-    saveResearchCycleRun(snapshot());
-    return snapshot();
+    return finalizeTerminalRun();
   }
 
   if (importedExpectedButMissing) {
@@ -941,8 +947,7 @@ export async function runResearchCycle({
     run.completedAt = now();
     run.nextRecommendedAction = "Reactivate an imported dataset on Market Data, or re-import MNQ historical data, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
-    saveResearchCycleRun(snapshot());
-    return snapshot();
+    return finalizeTerminalRun();
   }
 
   if (hardLimitWarnings.length) {
@@ -965,8 +970,7 @@ export async function runResearchCycle({
     run.nextRecommendedAction =
       "Use the dashboard Safe preset or enable Advanced full research mode only when intentionally stress-testing large imported datasets.";
     run.resultSummary = resultSummaryFor(run);
-    saveResearchCycleRun(snapshot());
-    return snapshot();
+    return finalizeTerminalRun();
   }
 
   if (mockDataBlockedReason) {
@@ -987,8 +991,7 @@ export async function runResearchCycle({
     run.nextRecommendedAction =
       "Activate MT5 read-only research mode (Advisor > Activate Market) or import historical candles on Market Data, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
-    saveResearchCycleRun(snapshot());
-    return snapshot();
+    return finalizeTerminalRun();
   }
 
   try {
@@ -1114,8 +1117,7 @@ export async function runResearchCycle({
       run.completedAt = now();
       run.nextRecommendedAction = nextActionFor(run);
       run.resultSummary = resultSummaryFor(run);
-      saveResearchCycleRun(snapshot());
-      return snapshot();
+      return finalizeTerminalRun();
     }
 
     startStep("backtest");
@@ -1179,8 +1181,7 @@ export async function runResearchCycle({
       run.completedAt = now();
       run.nextRecommendedAction = nextActionFor(run);
       run.resultSummary = resultSummaryFor(run);
-      saveResearchCycleRun(snapshot());
-      return snapshot();
+      return finalizeTerminalRun();
     }
 
     // LLM advisory review now runs after validation/quality/readiness so the
@@ -2078,9 +2079,9 @@ export async function runResearchCycle({
         `Persistent research evidence failed safely: ${error instanceof Error ? error.message : "unknown error"}. Readiness and execution authority were not changed.`
       ]);
     }
-    saveResearchCycleRun(snapshot());
+    const terminalRun = await finalizeTerminalRun();
     notify();
-    return snapshot();
+    return terminalRun;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Research cycle failed.";
     const runningStep = steps.find((step) => step.status === "running")?.stepId ?? "communications_audit";
@@ -2110,7 +2111,6 @@ export async function runResearchCycle({
     } catch {
       // Keep the failed research-cycle result available even if audit logging storage is full.
     }
-    saveResearchCycleRun(snapshot());
-    return snapshot();
+    return finalizeTerminalRun();
   }
 }
