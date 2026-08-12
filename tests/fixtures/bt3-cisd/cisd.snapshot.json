@@ -1,0 +1,204 @@
+{
+  "payload": [
+    {
+      "auditedCandidateCount": 109,
+      "auditedInvalidationFirstRatePercent": 72.48,
+      "auditedOosVerdict": "degraded",
+      "auditedRobustness": "rejected",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 89.9,
+        "rr": 2.7283950617283916,
+        "side": "long",
+        "stop": 81.8,
+        "target": 112
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "expiresAtUtc": "2026-06-12T17:05:00.000Z",
+        "fixtureId": "cisd_v1_5m_long_valid",
+        "generatedAt": "2026-06-12T15:05:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T15:00:00.000Z",
+        "parameterFingerprint": "cisd_v1|delivery|opposite_body_close|body_quality|retest|min_rr_2|negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "34f97998c1aefb260c971587c0e60247f74a1dd4",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_cisd",
+        "strategyId": "cisd_v1",
+        "timeframe": "5m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "prior_delivery",
+        "opposite_body_close",
+        "cisd_candle",
+        "strong_cisd_candle",
+        "clean_delivery_shift",
+        "body_retest_entry",
+        "opposing_liquidity_target",
+        "minimum_2r"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cisd-fixture-v1",
+      "warnings": [
+        "CISD formed outside the highest-probability RTH open window."
+      ]
+    },
+    {
+      "auditedCandidateCount": 109,
+      "auditedInvalidationFirstRatePercent": 72.48,
+      "auditedOosVerdict": "degraded",
+      "auditedRobustness": "rejected",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [],
+      "detectionState": "replay_required",
+      "geometry": {
+        "entry": 110.15,
+        "rr": 2.6848484848484855,
+        "side": "short",
+        "stop": 118.4,
+        "target": 88
+      },
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "expiresAtUtc": "2026-06-12T17:15:00.000Z",
+        "fixtureId": "cisd_v1_15m_short_valid",
+        "generatedAt": "2026-06-12T15:15:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T15:00:00.000Z",
+        "parameterFingerprint": "cisd_v1|delivery|opposite_body_close|body_quality|retest|min_rr_2|negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "34f97998c1aefb260c971587c0e60247f74a1dd4",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_cisd",
+        "strategyId": "cisd_v1",
+        "timeframe": "15m"
+      },
+      "missingConditions": [],
+      "presentConditions": [
+        "prior_delivery",
+        "opposite_body_close",
+        "cisd_candle",
+        "strong_cisd_candle",
+        "clean_delivery_shift",
+        "body_retest_entry",
+        "opposing_liquidity_target",
+        "minimum_2r"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cisd-fixture-v1",
+      "warnings": [
+        "CISD formed outside the highest-probability RTH open window."
+      ]
+    },
+    {
+      "auditedCandidateCount": 109,
+      "auditedInvalidationFirstRatePercent": 72.48,
+      "auditedOosVerdict": "degraded",
+      "auditedRobustness": "rejected",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "weak CISD candle body/displacement",
+        "reward/risk below 2R"
+      ],
+      "detectionState": "blocked_weak_cisd_candle",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "expiresAtUtc": "2026-06-12T17:05:00.000Z",
+        "fixtureId": "cisd_v1_weak_blocked",
+        "generatedAt": "2026-06-12T15:05:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "cisd_v1|delivery|opposite_body_close|body_quality|retest|min_rr_2|negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "34f97998c1aefb260c971587c0e60247f74a1dd4",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_cisd",
+        "strategyId": "cisd_v1",
+        "timeframe": "5m"
+      },
+      "missingConditions": [
+        "strong_cisd_candle",
+        "minimum_2r"
+      ],
+      "presentConditions": [
+        "prior_delivery",
+        "opposite_body_close",
+        "cisd_candle",
+        "clean_delivery_shift",
+        "body_retest_entry",
+        "opposing_liquidity_target"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cisd-fixture-v1",
+      "warnings": [
+        "CISD formed outside the highest-probability RTH open window."
+      ]
+    },
+    {
+      "auditedCandidateCount": 109,
+      "auditedInvalidationFirstRatePercent": 72.48,
+      "auditedOosVerdict": "degraded",
+      "auditedRobustness": "rejected",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "no retest of CISD open-to-close body",
+        "no opposing liquidity target in new delivery direction",
+        "reward/risk below 2R"
+      ],
+      "detectionState": "blocked_no_retest",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "classification": "negative_control",
+        "expiresAtUtc": "2026-06-12T17:05:00.000Z",
+        "fixtureId": "cisd_v1_no_retest_blocked",
+        "generatedAt": "2026-06-12T15:05:00.000Z",
+        "lastClosedCandleOpen": "2026-06-12T14:55:00.000Z",
+        "parameterFingerprint": "cisd_v1|delivery|opposite_body_close|body_quality|retest|min_rr_2|negative_control",
+        "profileVersion": "v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "34f97998c1aefb260c971587c0e60247f74a1dd4",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_cisd",
+        "strategyId": "cisd_v1",
+        "timeframe": "5m"
+      },
+      "missingConditions": [
+        "body_retest_entry",
+        "opposing_liquidity_target",
+        "minimum_2r"
+      ],
+      "presentConditions": [
+        "prior_delivery",
+        "opposite_body_close",
+        "cisd_candle",
+        "strong_cisd_candle",
+        "clean_delivery_shift"
+      ],
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-cisd-fixture-v1",
+      "warnings": [
+        "CISD formed outside the highest-probability RTH open window."
+      ]
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-cisd-snapshot-v1"
+}
