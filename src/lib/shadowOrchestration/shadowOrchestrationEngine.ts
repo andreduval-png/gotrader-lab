@@ -55,6 +55,10 @@ function stageChainMatches(job: Readonly<ShadowResearchJob>, artifacts: readonly
   });
 }
 
+export async function validateShadowStageChain(job: Readonly<ShadowResearchJob>, artifacts: readonly Readonly<ShadowStageArtifact>[]) {
+  return await validateShadowResearchJob(job) && (await Promise.all(artifacts.map(validateShadowStageArtifact))).every(Boolean) && stageChainMatches(job, artifacts);
+}
+
 export async function validateShadowResearchJob(job: Readonly<ShadowResearchJob>) {
   try { compact(job.compactInput); } catch { return false; }
   return job.jobVersion === "v1" && job.shadowOnly === true && job.currentResearchCycleAuthoritative === true &&

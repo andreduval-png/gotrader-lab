@@ -98,7 +98,7 @@
     "test:bt3-experiment-policy-fixtures": "node scripts/bt3/generate-experiment-policy-fixtures.mjs",
     "test:bt3-experiment-policy": "npm run test:bt3-experiment-policy-fixtures && node scripts/test-bt3-experiment-policy.mjs",
     "test:bt3-shadow-orchestration-fixtures": "node scripts/bt3/generate-shadow-orchestration-fixtures.mjs",
-    "test:bt3-shadow-orchestration": "npm run test:bt3-shadow-orchestration-fixtures && node scripts/test-bt3-shadow-orchestration.mjs",
+    "test:bt3-shadow-orchestration": "npm run test:bt3-shadow-orchestration-fixtures && node scripts/test-bt3-shadow-orchestration.mjs && node scripts/test-bt3-shadow-orchestration-indexeddb.mjs",
     "bt1-5:diagnose-mt5": "node scripts/diagnose-bt1-5-mt5-source.mjs",
     "bt1-5:prepare": "node scripts/prepare-bt1-5-qualification-bundle.mjs",
     "bt1-5:preflight": "node scripts/prepare-bt1-5-live-preflight.mjs",
