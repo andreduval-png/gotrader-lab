@@ -60,3 +60,12 @@ runtimeAdoptionAllowed: false
 ```
 
 No later phase or additional ledger is authorized by this decision.
+
+## Completion Record
+
+This Phase 7 first-ledger slice passed under implementation commit
+`2c18ab38bc7212c5c6d8cc8cab3d57f32b19f9b7`, contract report
+`sha256:472ab05cdba4e6cb2aec4d8439b404667abd913d913918b1242e1a861f535b8f`,
+and browser IndexedDB report
+`sha256:94eee6c0f2bec51a854ff5a1a1407de02c22ddd1fb7ed7169aec71315420e276`.
+Additional Phase 7 ledgers and policies remain separately gated.
