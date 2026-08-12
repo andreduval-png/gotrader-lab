@@ -351,7 +351,7 @@ async function main() {
   const operatorCycleSource = fs.readFileSync(path.join(root, "src/lib/operatorConsole/operatorCycle.ts"), "utf8");
   assert.match(appSource, /subscribePredictionLedgerToMt5PushFeed/);
   assert.match(cycleSource, /recordForwardScenarioPrediction/);
-  assert.match(cycleSource, /sourceFingerprint:\s*activeResearchCandleSource\.identity\.dataFingerprint/);
+  assert.match(cycleSource, /sourceFingerprint:\s*activeResearchCandleSource\.canonicalFingerprint/);
   assert.match(operatorCycleSource, /recordForwardScenarioPrediction\(preparedScenario\.scenarioMap/);
   assert.match(operatorCycleSource, /operator_market_scenario:v1/);
 
