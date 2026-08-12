@@ -1,6 +1,6 @@
 # BT1.6 Final Acceptance Report
 
-Date: 2026-08-07
+Date: 2026-08-12
 
 Branch: `codex/gotrader-backtest-bt1-6-live-qualification`
 
@@ -35,39 +35,45 @@ Implementation validation passed:
 The build retained only existing non-failing Rollup circular-export and chunk
 size warnings.
 
-## Current Matrix
+## Operational Acceptance
 
 | Gate | Result |
 | --- | --- |
-| Concurrency safe | restricted; live work deferred |
-| Provider basis | pending |
-| Winter / summer | pending |
-| Spring / fall DST | pending |
-| Maintenance | pending |
-| Historical time / DST | false / false operationally |
-| Symbol specification | pending live metadata |
-| Capacity pilot | not run |
-| Two-year retrieval | not started |
-| Restart/resume | deterministic implementation only |
-| Integrity | pending live dataset |
-| Derived timeframes | fixture verified; live pending |
-| Reproduction | fixture verified; live pending |
-| Certificate | not issued |
-| Strategy neutral | implementation verified |
-| Read-only safety | implementation verified; live pending |
+| Concurrency safe | passed fresh preflights and bounded handoffs |
+| Provider basis | verified MT5 server wall clock |
+| Winter / summer | verified |
+| Spring / fall DST | verified |
+| Maintenance | verified |
+| Historical time / DST | true / true |
+| Symbol specification | verified USTECH CFD/proxy for MNQ research |
+| Capacity pilot | passed; 8,264 accepted, zero rejected |
+| Two-year retrieval | passed; 213 pages, 706,422 accepted |
+| Restart/resume | passed controlled exit-75 proof |
+| Integrity | accepted with warnings; zero blockers/rejections |
+| Derived timeframes | M5/M15/H1/H4 verified |
+| Reproduction | deterministic and provider requery matched |
+| Certificate | `sha256:7ffa32b773a0f3d347997d20dc9796f8bd27a48fbbfd4315cafec23d28bcb193` |
+| Registry | `sha256:ec877c21a370699094ed856d2419712f561dc8f3ef23350559c6985a9df4c9eb` |
+| Strategy neutral | verified |
+| Read-only safety | verified GET-only, zero forbidden calls |
 | Authority | none / none / none |
 
 ## Status
 
 ```text
-BT1.6 BLOCKED
-LIVE HISTORICAL DATASET QUALIFICATION INCOMPLETE
+BT1.6 ACCEPTED
+LIVE HISTORICAL DATASET QUALIFICATION COMPLETE
 ```
 
 ```text
-BT2 REMAINS BLOCKED
+BT2 REMAINS UNAUTHORIZED
 ```
 
-Fixture success is not operational acceptance. The next action is a fresh live
-preflight after resources and B1.2 priority permit it, followed by provider-time
-diagnostics and the bounded capacity pilot.
+The accepted candidate is `2f307ef09df3fa600fe20a57b78da72ebd4a808b` plus the
+certificate evidence-composition fix recorded by the acceptance commit. Raw
+candles remain outside Git. Preserved same-process memory-bound reports remain
+part of the audit trail; fresh low-memory coalesced verification passed without
+altering canonical dataset identities.
+
+BT2 is not implicitly authorized by this acceptance. Its canonical opportunity
+and trade-simulation architecture requires a separate explicit authorization.

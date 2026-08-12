@@ -164,6 +164,7 @@ const providerRequery = await comparison("provider_requery");
 const evidence = Object.freeze({
   qualificationReportId,
   qualificationReportAction: "resumed",
+  liveResumeVerified: true,
   qualificationVerificationStatus: "verified",
   qualificationBlockers: Object.freeze([]),
   bundleId: await hash({ bundle: "bt1-6" }),
@@ -239,7 +240,7 @@ await assert.rejects(
 assert.ok(
   modules.certificate.evaluateHistoricalDatasetCertification({
     ...input,
-    evidence: { ...evidence, qualificationReportAction: "created" }
+    evidence: { ...evidence, liveResumeVerified: false }
   }).includes("historical_certificate_live_resume_not_proven")
 );
 assert.ok(

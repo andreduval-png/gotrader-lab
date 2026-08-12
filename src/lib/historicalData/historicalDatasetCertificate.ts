@@ -62,6 +62,7 @@ export interface HistoricalReproductionComparisonEvidence {
 export interface HistoricalDatasetQualificationEvidence {
   readonly qualificationReportId: string;
   readonly qualificationReportAction: "created" | "resumed" | "coalesced";
+  readonly liveResumeVerified: boolean;
   readonly qualificationVerificationStatus: "verified" | "incomplete" | "blocked";
   readonly qualificationBlockers: readonly string[];
   readonly bundleId: string;
@@ -299,7 +300,7 @@ export function evaluateHistoricalDatasetCertification(
   })) {
     if (!validHash(value)) blockers.push(`historical_certificate_${label}_invalid`);
   }
-  if (evidence.qualificationReportAction !== "resumed") {
+  if (!evidence.liveResumeVerified) {
     blockers.push("historical_certificate_live_resume_not_proven");
   }
   if (evidence.qualificationVerificationStatus !== "verified" || evidence.qualificationBlockers.length) {

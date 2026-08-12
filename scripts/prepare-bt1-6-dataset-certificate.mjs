@@ -68,6 +68,14 @@ if (verification.status !== "verified" || !verification.manifest) {
 const manifest = verification.manifest;
 const manifestHash = await modules.canonical.canonicalHash(manifest);
 const lineage = await modules.lineage.buildHistoricalDatasetLineageNode(manifest);
+const interruptionPages = Number(interruption.finalProgress?.pagesCompleted ?? 0);
+const qualificationPages = Number(report.finalProgress?.pagesCompleted ?? 0);
+const liveResumeVerified = report.action === "resumed" || (
+  report.action === "coalesced" &&
+  interruption.action === "controlled_interruption" &&
+  interruptionPages > 0 &&
+  interruptionPages < qualificationPages
+);
 
 const bindingBlockers = [
   ...(bundle.bundleId !== report.bundleId ? ["historical_certificate_bundle_report_mismatch"] : []),
@@ -80,13 +88,16 @@ const bindingBlockers = [
   ...(report.identities.datasetChecksum !== manifest.datasetChecksum ? ["historical_certificate_manifest_checksum_mismatch"] : []),
   ...(interruption.action !== "controlled_interruption" ? ["historical_certificate_controlled_interruption_missing"] : []),
   ...(interruption.requestId !== report.requestId ? ["historical_certificate_interruption_request_mismatch"] : []),
-  ...(safety.qualificationReportId !== report.reportId ? ["historical_certificate_safety_report_mismatch"] : []),
+  ...(![report.reportId, interruption.reportId].includes(safety.qualificationReportId)
+    ? ["historical_certificate_safety_report_mismatch"]
+    : []),
   ...(safety.status !== "passed" ? ["historical_certificate_safety_report_blocked"] : [])
 ].sort();
 
 const evidence = Object.freeze({
   qualificationReportId: report.reportId,
   qualificationReportAction: report.action,
+  liveResumeVerified,
   qualificationVerificationStatus: report.verificationStatus,
   qualificationBlockers: Object.freeze([...(report.blockers ?? []), ...bindingBlockers].sort()),
   bundleId: bundle.bundleId,
