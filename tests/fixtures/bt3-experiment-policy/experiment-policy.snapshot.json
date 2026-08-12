@@ -1,0 +1,763 @@
+{
+  "payload": {
+    "all_reject": {
+      "assessment": {
+        "alpha": 0.05,
+        "assessmentId": "sha256:587d6de9522528c591d8171b02367931e2e5cd650c8f86ba0a451679a9fac454",
+        "assessmentVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidateCount": 3,
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyComplete": true,
+        "familyId": "sha256:9dab2043553714b93cac9ceecafc8648ba11c4abea4cc388e67ed3881735c614",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "researchOnly": true,
+        "results": [
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.003,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.003,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "candidateId": "all-reject-candidate-01",
+            "holm": {
+              "adjustedPValue": 0.003,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "rank": 1,
+            "rawPValue": 0.001
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.003,
+              "criticalThreshold": 0.033333333333,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.006,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "candidateId": "all-reject-candidate-02",
+            "holm": {
+              "adjustedPValue": 0.004,
+              "criticalThreshold": 0.025,
+              "rejected": true
+            },
+            "rank": 2,
+            "rawPValue": 0.002
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.003,
+              "criticalThreshold": 0.05,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.009,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "candidateId": "all-reject-candidate-03",
+            "holm": {
+              "adjustedPValue": 0.004,
+              "criticalThreshold": 0.05,
+              "rejected": true
+            },
+            "rank": 3,
+            "rawPValue": 0.003
+          }
+        ],
+        "schemaVersion": "gotrader-v2-multiple-comparison-assessment-v1"
+      },
+      "registration": {
+        "alpha": 0.05,
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidates": [
+          {
+            "candidateId": "all-reject-candidate-01",
+            "label": "Candidate 1"
+          },
+          {
+            "candidateId": "all-reject-candidate-02",
+            "label": "Candidate 2"
+          },
+          {
+            "candidateId": "all-reject-candidate-03",
+            "label": "Candidate 3"
+          }
+        ],
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyId": "sha256:9dab2043553714b93cac9ceecafc8648ba11c4abea4cc388e67ed3881735c614",
+        "familyKey": "all-reject",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "hypothesis": "At least one preregistered candidate has positive out-of-sample expectancy after family correction.",
+        "methods": [
+          "benjamini_hochberg",
+          "holm",
+          "bonferroni"
+        ],
+        "primaryStatistic": "one-sided studentized mean out-of-sample R multiple",
+        "registrationVersion": "v1",
+        "researchOnly": true,
+        "schemaVersion": "gotrader-v2-controlled-experiment-v1",
+        "tail": "right"
+      },
+      "trials": [
+        {
+          "candidateId": "all-reject-candidate-01",
+          "familyId": "sha256:9dab2043553714b93cac9ceecafc8648ba11c4abea4cc388e67ed3881735c614",
+          "rawPValue": 0.001
+        },
+        {
+          "candidateId": "all-reject-candidate-02",
+          "familyId": "sha256:9dab2043553714b93cac9ceecafc8648ba11c4abea4cc388e67ed3881735c614",
+          "rawPValue": 0.002
+        },
+        {
+          "candidateId": "all-reject-candidate-03",
+          "familyId": "sha256:9dab2043553714b93cac9ceecafc8648ba11c4abea4cc388e67ed3881735c614",
+          "rawPValue": 0.003
+        }
+      ]
+    },
+    "no_reject": {
+      "assessment": {
+        "alpha": 0.05,
+        "assessmentId": "sha256:0eb446473bb516f8a2dcc1145c42bb2a2846646254a16cd7726c4eabe69bc658",
+        "assessmentVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidateCount": 3,
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyComplete": true,
+        "familyId": "sha256:fce312d673fa19c223690ffe2aecf3351f32071ca754bbd3234d097cfddba8c7",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "researchOnly": true,
+        "results": [
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.3,
+              "criticalThreshold": 0.016666666667,
+              "rejected": false
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.3,
+              "criticalThreshold": 0.016666666667,
+              "rejected": false
+            },
+            "candidateId": "no-reject-candidate-01",
+            "holm": {
+              "adjustedPValue": 0.3,
+              "criticalThreshold": 0.016666666667,
+              "rejected": false
+            },
+            "rank": 1,
+            "rawPValue": 0.1
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.3,
+              "criticalThreshold": 0.033333333333,
+              "rejected": false
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.6,
+              "criticalThreshold": 0.016666666667,
+              "rejected": false
+            },
+            "candidateId": "no-reject-candidate-02",
+            "holm": {
+              "adjustedPValue": 0.4,
+              "criticalThreshold": 0.025,
+              "rejected": false
+            },
+            "rank": 2,
+            "rawPValue": 0.2
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.9,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "bonferroni": {
+              "adjustedPValue": 1,
+              "criticalThreshold": 0.016666666667,
+              "rejected": false
+            },
+            "candidateId": "no-reject-candidate-03",
+            "holm": {
+              "adjustedPValue": 0.9,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "rank": 3,
+            "rawPValue": 0.9
+          }
+        ],
+        "schemaVersion": "gotrader-v2-multiple-comparison-assessment-v1"
+      },
+      "registration": {
+        "alpha": 0.05,
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidates": [
+          {
+            "candidateId": "no-reject-candidate-01",
+            "label": "Candidate 1"
+          },
+          {
+            "candidateId": "no-reject-candidate-02",
+            "label": "Candidate 2"
+          },
+          {
+            "candidateId": "no-reject-candidate-03",
+            "label": "Candidate 3"
+          }
+        ],
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyId": "sha256:fce312d673fa19c223690ffe2aecf3351f32071ca754bbd3234d097cfddba8c7",
+        "familyKey": "no-reject",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "hypothesis": "At least one preregistered candidate has positive out-of-sample expectancy after family correction.",
+        "methods": [
+          "benjamini_hochberg",
+          "holm",
+          "bonferroni"
+        ],
+        "primaryStatistic": "one-sided studentized mean out-of-sample R multiple",
+        "registrationVersion": "v1",
+        "researchOnly": true,
+        "schemaVersion": "gotrader-v2-controlled-experiment-v1",
+        "tail": "right"
+      },
+      "trials": [
+        {
+          "candidateId": "no-reject-candidate-01",
+          "familyId": "sha256:fce312d673fa19c223690ffe2aecf3351f32071ca754bbd3234d097cfddba8c7",
+          "rawPValue": 0.1
+        },
+        {
+          "candidateId": "no-reject-candidate-02",
+          "familyId": "sha256:fce312d673fa19c223690ffe2aecf3351f32071ca754bbd3234d097cfddba8c7",
+          "rawPValue": 0.2
+        },
+        {
+          "candidateId": "no-reject-candidate-03",
+          "familyId": "sha256:fce312d673fa19c223690ffe2aecf3351f32071ca754bbd3234d097cfddba8c7",
+          "rawPValue": 0.9
+        }
+      ]
+    },
+    "partial_reject": {
+      "assessment": {
+        "alpha": 0.05,
+        "assessmentId": "sha256:392f60c905da156681d2f6bdb52a566b8f1cd8a7650898b3abcffdd865d8ac4e",
+        "assessmentVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidateCount": 4,
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyComplete": true,
+        "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "researchOnly": true,
+        "results": [
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.004,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.004,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "candidateId": "partial-reject-candidate-01",
+            "holm": {
+              "adjustedPValue": 0.004,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "rank": 1,
+            "rawPValue": 0.001
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.02,
+              "criticalThreshold": 0.025,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.04,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "candidateId": "partial-reject-candidate-02",
+            "holm": {
+              "adjustedPValue": 0.03,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "rank": 2,
+            "rawPValue": 0.01
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.04,
+              "criticalThreshold": 0.0375,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.12,
+              "criticalThreshold": 0.0125,
+              "rejected": false
+            },
+            "candidateId": "partial-reject-candidate-03",
+            "holm": {
+              "adjustedPValue": 0.06,
+              "criticalThreshold": 0.025,
+              "rejected": false
+            },
+            "rank": 3,
+            "rawPValue": 0.03
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.2,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.8,
+              "criticalThreshold": 0.0125,
+              "rejected": false
+            },
+            "candidateId": "partial-reject-candidate-04",
+            "holm": {
+              "adjustedPValue": 0.2,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "rank": 4,
+            "rawPValue": 0.2
+          }
+        ],
+        "schemaVersion": "gotrader-v2-multiple-comparison-assessment-v1"
+      },
+      "registration": {
+        "alpha": 0.05,
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidates": [
+          {
+            "candidateId": "partial-reject-candidate-01",
+            "label": "Candidate 1"
+          },
+          {
+            "candidateId": "partial-reject-candidate-02",
+            "label": "Candidate 2"
+          },
+          {
+            "candidateId": "partial-reject-candidate-03",
+            "label": "Candidate 3"
+          },
+          {
+            "candidateId": "partial-reject-candidate-04",
+            "label": "Candidate 4"
+          }
+        ],
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+        "familyKey": "partial-reject",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "hypothesis": "At least one preregistered candidate has positive out-of-sample expectancy after family correction.",
+        "methods": [
+          "benjamini_hochberg",
+          "holm",
+          "bonferroni"
+        ],
+        "primaryStatistic": "one-sided studentized mean out-of-sample R multiple",
+        "registrationVersion": "v1",
+        "researchOnly": true,
+        "schemaVersion": "gotrader-v2-controlled-experiment-v1",
+        "tail": "right"
+      },
+      "trials": [
+        {
+          "candidateId": "partial-reject-candidate-01",
+          "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+          "rawPValue": 0.001
+        },
+        {
+          "candidateId": "partial-reject-candidate-02",
+          "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+          "rawPValue": 0.01
+        },
+        {
+          "candidateId": "partial-reject-candidate-03",
+          "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+          "rawPValue": 0.03
+        },
+        {
+          "candidateId": "partial-reject-candidate-04",
+          "familyId": "sha256:9c07b11bb583cc0009a76f406aa8b9e911ea6a55fd7da94328561f806bae530f",
+          "rawPValue": 0.2
+        }
+      ]
+    },
+    "ties_and_boundaries": {
+      "assessment": {
+        "alpha": 0.05,
+        "assessmentId": "sha256:81f5c518a1cfc256cf1dc56b0a0362af450665a4a0ae79a2e660ca0b0cbcfb3e",
+        "assessmentVersion": "v1",
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidateCount": 4,
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyComplete": true,
+        "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "researchOnly": true,
+        "results": [
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "candidateId": "ties-boundaries-candidate-01",
+            "holm": {
+              "adjustedPValue": 0,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "rank": 1,
+            "rawPValue": 0
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.016666666667,
+              "criticalThreshold": 0.025,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.05,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "candidateId": "ties-boundaries-candidate-02",
+            "holm": {
+              "adjustedPValue": 0.0375,
+              "criticalThreshold": 0.016666666667,
+              "rejected": true
+            },
+            "rank": 2,
+            "rawPValue": 0.0125
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 0.016666666667,
+              "criticalThreshold": 0.0375,
+              "rejected": true
+            },
+            "bonferroni": {
+              "adjustedPValue": 0.05,
+              "criticalThreshold": 0.0125,
+              "rejected": true
+            },
+            "candidateId": "ties-boundaries-candidate-03",
+            "holm": {
+              "adjustedPValue": 0.0375,
+              "criticalThreshold": 0.025,
+              "rejected": true
+            },
+            "rank": 3,
+            "rawPValue": 0.0125
+          },
+          {
+            "benjaminiHochberg": {
+              "adjustedQValue": 1,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "bonferroni": {
+              "adjustedPValue": 1,
+              "criticalThreshold": 0.0125,
+              "rejected": false
+            },
+            "candidateId": "ties-boundaries-candidate-04",
+            "holm": {
+              "adjustedPValue": 1,
+              "criticalThreshold": 0.05,
+              "rejected": false
+            },
+            "rank": 4,
+            "rawPValue": 1
+          }
+        ],
+        "schemaVersion": "gotrader-v2-multiple-comparison-assessment-v1"
+      },
+      "registration": {
+        "alpha": 0.05,
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "automaticPromotionAllowed": false,
+        "automaticSelectionAllowed": false,
+        "candidates": [
+          {
+            "candidateId": "ties-boundaries-candidate-01",
+            "label": "Candidate 1"
+          },
+          {
+            "candidateId": "ties-boundaries-candidate-02",
+            "label": "Candidate 2"
+          },
+          {
+            "candidateId": "ties-boundaries-candidate-03",
+            "label": "Candidate 3"
+          },
+          {
+            "candidateId": "ties-boundaries-candidate-04",
+            "label": "Candidate 4"
+          }
+        ],
+        "dependencyAssumption": "independent_or_positive_dependency",
+        "diagnostics": [
+          {
+            "applicability": "not_applicable",
+            "method": "bootstrap_reality_check",
+            "reason": "This policy consumes supplied p-values and does not own a preregistered dependent-return null generator."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "deflated_sharpe",
+            "reason": "No Sharpe sampling distribution, non-normality estimate, or independent-trial count is supplied to this policy."
+          },
+          {
+            "applicability": "not_applicable",
+            "method": "probability_of_backtest_overfitting",
+            "reason": "No preregistered combinatorially symmetric cross-validation matrix is supplied to this policy."
+          }
+        ],
+        "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+        "familyKey": "ties-boundaries",
+        "fdrTarget": 0.05,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "hypothesis": "At least one preregistered candidate has positive out-of-sample expectancy after family correction.",
+        "methods": [
+          "benjamini_hochberg",
+          "holm",
+          "bonferroni"
+        ],
+        "primaryStatistic": "one-sided studentized mean out-of-sample R multiple",
+        "registrationVersion": "v1",
+        "researchOnly": true,
+        "schemaVersion": "gotrader-v2-controlled-experiment-v1",
+        "tail": "right"
+      },
+      "trials": [
+        {
+          "candidateId": "ties-boundaries-candidate-01",
+          "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+          "rawPValue": 0
+        },
+        {
+          "candidateId": "ties-boundaries-candidate-02",
+          "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+          "rawPValue": 0.0125
+        },
+        {
+          "candidateId": "ties-boundaries-candidate-03",
+          "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+          "rawPValue": 0.0125
+        },
+        {
+          "candidateId": "ties-boundaries-candidate-04",
+          "familyId": "sha256:a7fb8691f7cd0da69c7557375892dad44492478b69c049f4e22b66c0fad9c2e4",
+          "rawPValue": 1
+        }
+      ]
+    }
+  },
+  "schemaVersion": "gotrader-bt3-experiment-policy-snapshot-v1"
+}
