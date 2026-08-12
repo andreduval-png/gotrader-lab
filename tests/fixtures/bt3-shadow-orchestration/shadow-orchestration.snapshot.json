@@ -1,0 +1,1180 @@
+{
+  "payload": {
+    "blocked": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:881c39ddd272e5227474e7a500621ad70e59f3b4c8e15d2216add6219f168974",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "synthetic_policy_block"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:ca68fb138010872a429a8a3c41010f862429fbb2f38166fff76f344572cab6d3",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "blocked",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_blocked"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:ca68fb138010872a429a8a3c41010f862429fbb2f38166fff76f344572cab6d3"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:ca68fb138010872a429a8a3c41010f862429fbb2f38166fff76f344572cab6d3",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:3282b9589294b58275d4e9ae9de4f3a97c1a215ba69739a1d1e87cc2dfbb7540",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_blocked"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:3282b9589294b58275d4e9ae9de4f3a97c1a215ba69739a1d1e87cc2dfbb7540"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:3282b9589294b58275d4e9ae9de4f3a97c1a215ba69739a1d1e87cc2dfbb7540",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:40c16d8db0647854e7e5014602ce1bfd7aa03cb36d7c8a03d48df74e64380494",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": false,
+        "checkpointId": "sha256:e7c5d1a9b894dad12cf4a8806f41b4f20424c6a13fe785fab4ed59bff9312220",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:ca68fb138010872a429a8a3c41010f862429fbb2f38166fff76f344572cab6d3",
+          "sha256:3282b9589294b58275d4e9ae9de4f3a97c1a215ba69739a1d1e87cc2dfbb7540",
+          "sha256:40c16d8db0647854e7e5014602ce1bfd7aa03cb36d7c8a03d48df74e64380494"
+        ],
+        "previousCheckpointId": "sha256:3c66d412b85bb2f73077fda9d0af98d74f052d4a819951c093da938acab7f280",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "blocked"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [
+          "synthetic_policy_block",
+          "upstream_blocked"
+        ],
+        "completedStageCount": 1,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:0f03f0a2dd6879c0b96c9038f5c9cb1fcdeba175c052ab56ab80117956a4f0a4",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:e7c5d1a9b894dad12cf4a8806f41b4f20424c6a13fe785fab4ed59bff9312220",
+        "terminalSealId": "sha256:8d1a84ff2b7ef2a1590936941abca41aa2f0c535e01dff33628ea146a8f16763",
+        "terminalStatus": "blocked",
+        "totalStageCount": 4,
+        "warnings": []
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:ca68fb138010872a429a8a3c41010f862429fbb2f38166fff76f344572cab6d3",
+          "sha256:3282b9589294b58275d4e9ae9de4f3a97c1a215ba69739a1d1e87cc2dfbb7540",
+          "sha256:40c16d8db0647854e7e5014602ce1bfd7aa03cb36d7c8a03d48df74e64380494"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:b846ce8a243b7d978c668e518782ce75269e0c4ab69f867897b479925f025b5d",
+        "terminalCheckpointId": "sha256:e7c5d1a9b894dad12cf4a8806f41b4f20424c6a13fe785fab4ed59bff9312220",
+        "terminalSealId": "sha256:8d1a84ff2b7ef2a1590936941abca41aa2f0c535e01dff33628ea146a8f16763",
+        "terminalStatus": "blocked"
+      }
+    },
+    "cancelled": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:881c39ddd272e5227474e7a500621ad70e59f3b4c8e15d2216add6219f168974",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "cancellation_requested_before_stage"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:0f01ad2511140829d5260d936f6d5164e58e01e92ca57a5120fbc24c61d01a12",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "cancelled",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_cancelled"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:0f01ad2511140829d5260d936f6d5164e58e01e92ca57a5120fbc24c61d01a12"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:0f01ad2511140829d5260d936f6d5164e58e01e92ca57a5120fbc24c61d01a12",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:604c7f948846ed533d1c5ceb88e0b36f4f66b75ec57e3ab1641a721b9b1dff51",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_cancelled"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:604c7f948846ed533d1c5ceb88e0b36f4f66b75ec57e3ab1641a721b9b1dff51"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:604c7f948846ed533d1c5ceb88e0b36f4f66b75ec57e3ab1641a721b9b1dff51",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:7a8a6551e88ceccea8c4b2c6f11aec0e1955430ae8a456a7213cc1bc020a26f2",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": true,
+        "checkpointId": "sha256:a6929f283fdc54663ce25e1b5ebf65ce68ec95920719f2160662a59626e23af5",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:0f01ad2511140829d5260d936f6d5164e58e01e92ca57a5120fbc24c61d01a12",
+          "sha256:604c7f948846ed533d1c5ceb88e0b36f4f66b75ec57e3ab1641a721b9b1dff51",
+          "sha256:7a8a6551e88ceccea8c4b2c6f11aec0e1955430ae8a456a7213cc1bc020a26f2"
+        ],
+        "previousCheckpointId": "sha256:e51707d34b55403195cbeaf30a5731d5bee25844cf193c4cf02ebbb30dd4ad8c",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "cancelled"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [
+          "cancellation_requested_before_stage",
+          "upstream_cancelled"
+        ],
+        "completedStageCount": 1,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:f01b0d06cdff2930851501990ab14f90dcbf25117695d13e17e6b67f8892548f",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:a6929f283fdc54663ce25e1b5ebf65ce68ec95920719f2160662a59626e23af5",
+        "terminalSealId": "sha256:d0cd9a6eabca82a44c7dd6ee4ae907fcaf67bac66421b6c5f3c45bc0d7377780",
+        "terminalStatus": "cancelled",
+        "totalStageCount": 4,
+        "warnings": []
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:0f01ad2511140829d5260d936f6d5164e58e01e92ca57a5120fbc24c61d01a12",
+          "sha256:604c7f948846ed533d1c5ceb88e0b36f4f66b75ec57e3ab1641a721b9b1dff51",
+          "sha256:7a8a6551e88ceccea8c4b2c6f11aec0e1955430ae8a456a7213cc1bc020a26f2"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:4ce185dac8cc02fef8741ba225a97388456b159ca790edfdb98798aa6694726e",
+        "terminalCheckpointId": "sha256:a6929f283fdc54663ce25e1b5ebf65ce68ec95920719f2160662a59626e23af5",
+        "terminalSealId": "sha256:d0cd9a6eabca82a44c7dd6ee4ae907fcaf67bac66421b6c5f3c45bc0d7377780",
+        "terminalStatus": "cancelled"
+      }
+    },
+    "failed": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:21871347bb4a23d5e65f0ea13f1e6d8ba47e473409de753b7a5d53ac4c425009",
+          "attemptNumber": 2,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "synthetic_retry_exhausted"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:39a64ff5bf99fe6b62ec48f43eb6bf2aceb3774462bd57b3935524df6809c859",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "failed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_failed"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:39a64ff5bf99fe6b62ec48f43eb6bf2aceb3774462bd57b3935524df6809c859"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:39a64ff5bf99fe6b62ec48f43eb6bf2aceb3774462bd57b3935524df6809c859",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:b60ad25086cc93d2e6822b1eb7483a9acb07c351fbd7de9e610d1a3e06c318d4",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "upstream_failed"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:b60ad25086cc93d2e6822b1eb7483a9acb07c351fbd7de9e610d1a3e06c318d4"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:b60ad25086cc93d2e6822b1eb7483a9acb07c351fbd7de9e610d1a3e06c318d4",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:60bb477b30afb8787cd8289bec017ff082ef0816f9397c170a4a8d8da2785385",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": false,
+        "checkpointId": "sha256:f30daaf21de368aaffed71768e968404c3f404bebc8e2b0bddf10a670bc4d40f",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:39a64ff5bf99fe6b62ec48f43eb6bf2aceb3774462bd57b3935524df6809c859",
+          "sha256:b60ad25086cc93d2e6822b1eb7483a9acb07c351fbd7de9e610d1a3e06c318d4",
+          "sha256:60bb477b30afb8787cd8289bec017ff082ef0816f9397c170a4a8d8da2785385"
+        ],
+        "previousCheckpointId": "sha256:8064e98f9448b8e496af8c17a0bfbd3a8c2a361f8c2436f712085906e396c470",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "failed"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [
+          "synthetic_retry_exhausted",
+          "upstream_failed"
+        ],
+        "completedStageCount": 1,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:77f48fd942cf66f7f49de9b4b05a537c5eeef614f5c8f1577ff915b78734a522",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:f30daaf21de368aaffed71768e968404c3f404bebc8e2b0bddf10a670bc4d40f",
+        "terminalSealId": "sha256:065079c041bee47b31aebc24d80f841192c255ab04806fa9e0bd743f2a42be3a",
+        "terminalStatus": "failed",
+        "totalStageCount": 4,
+        "warnings": []
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:39a64ff5bf99fe6b62ec48f43eb6bf2aceb3774462bd57b3935524df6809c859",
+          "sha256:b60ad25086cc93d2e6822b1eb7483a9acb07c351fbd7de9e610d1a3e06c318d4",
+          "sha256:60bb477b30afb8787cd8289bec017ff082ef0816f9397c170a4a8d8da2785385"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:1b586d45a5c271d12b2ee1b2f0b477af9a8b75a1b8a3a9d807693b1e9c92380d",
+        "terminalCheckpointId": "sha256:f30daaf21de368aaffed71768e968404c3f404bebc8e2b0bddf10a670bc4d40f",
+        "terminalSealId": "sha256:065079c041bee47b31aebc24d80f841192c255ab04806fa9e0bd743f2a42be3a",
+        "terminalStatus": "failed"
+      }
+    },
+    "optionalSkipped": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:21871347bb4a23d5e65f0ea13f1e6d8ba47e473409de753b7a5d53ac4c425009",
+          "attemptNumber": 2,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "attemptNumber": 2,
+            "derived": 4
+          },
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": [
+            "retry_recovered"
+          ]
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "eligible": true,
+            "score": 0.75
+          },
+          "previousStageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [
+            "stage_handler_missing"
+          ],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {},
+          "previousStageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:edf7ccac629a8300050ebefc914f0a1af93106a68c975d9ad1be33d16b6c0ea1",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "skipped",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": false,
+        "checkpointId": "sha256:6c66417778675c50ed353a625c266b91478fdffae702e61c829c58308f42230d",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:edf7ccac629a8300050ebefc914f0a1af93106a68c975d9ad1be33d16b6c0ea1"
+        ],
+        "previousCheckpointId": "sha256:8eeb5eec753d149af76752b0a3512c3b61456db0b6195e377786b1650ad0f153",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "completed"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [
+          "stage_handler_missing"
+        ],
+        "completedStageCount": 3,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:d660917de3b3931b4df1a522b656ea1bc96e094c4277aca9ac03c330ff7702ca",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:6c66417778675c50ed353a625c266b91478fdffae702e61c829c58308f42230d",
+        "terminalSealId": "sha256:d6cb4ceb8ec4f542f2d5be8f58da44be98ae3f4305eaae4fa72a56b3245baef6",
+        "terminalStatus": "completed",
+        "totalStageCount": 4,
+        "warnings": [
+          "retry_recovered"
+        ]
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:edf7ccac629a8300050ebefc914f0a1af93106a68c975d9ad1be33d16b6c0ea1"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:282b0d1e161dbe9c2200d0cdab23cc2f0183fae5e7b8ec1300df5a4a5e36d8dd",
+        "terminalCheckpointId": "sha256:6c66417778675c50ed353a625c266b91478fdffae702e61c829c58308f42230d",
+        "terminalSealId": "sha256:d6cb4ceb8ec4f542f2d5be8f58da44be98ae3f4305eaae4fa72a56b3245baef6",
+        "terminalStatus": "completed"
+      }
+    },
+    "resumed": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:21871347bb4a23d5e65f0ea13f1e6d8ba47e473409de753b7a5d53ac4c425009",
+          "attemptNumber": 2,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "attemptNumber": 2,
+            "derived": 4
+          },
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": [
+            "retry_recovered"
+          ]
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "eligible": true,
+            "score": 0.75
+          },
+          "previousStageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "projectionRows": 1
+          },
+          "previousStageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": false,
+        "checkpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a"
+        ],
+        "previousCheckpointId": "sha256:8eeb5eec753d149af76752b0a3512c3b61456db0b6195e377786b1650ad0f153",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "completed"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [],
+        "completedStageCount": 4,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:be1142bac3c261102e629c5127643ff85cf98d4d1ab1deecaf49de9590adb432",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "terminalSealId": "sha256:4348d64edad6177bc0238593a8f474abee8c24711ca80ee1278f3aed33e03ee2",
+        "terminalStatus": "completed",
+        "totalStageCount": 4,
+        "warnings": [
+          "retry_recovered"
+        ]
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:0efd35e90c8c6395303d20b360a6ea07597909b54601c992ab6234272e858d40",
+        "terminalCheckpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "terminalSealId": "sha256:4348d64edad6177bc0238593a8f474abee8c24711ca80ee1278f3aed33e03ee2",
+        "terminalStatus": "completed"
+      }
+    },
+    "uninterrupted": {
+      "artifacts": [
+        {
+          "attemptId": "sha256:f10953f6eaba34aef34fb29e1501429d3644b21bb808e41ddf051a783c96be84",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "accepted": 4,
+            "attemptNumber": 1
+          },
+          "previousStageArtifactId": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "stageName": "ingest",
+          "stageOrdinal": 0,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:21871347bb4a23d5e65f0ea13f1e6d8ba47e473409de753b7a5d53ac4c425009",
+          "attemptNumber": 2,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "attemptNumber": 2,
+            "derived": 4
+          },
+          "previousStageArtifactId": "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "retryLimit": 1,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "stageName": "derive",
+          "stageOrdinal": 1,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": [
+            "retry_recovered"
+          ]
+        },
+        {
+          "attemptId": "sha256:e9933d922327b6e70cd15fa22cb1748c71371041af600d5db21a443ed2da370f",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "eligible": true,
+            "score": 0.75
+          },
+          "previousStageArtifactId": "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "stageName": "assess",
+          "stageOrdinal": 2,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        },
+        {
+          "attemptId": "sha256:6dafe5e4de05c09b5f258dcbf00d0455cecffa7eddd2e53ea66190fd1eb87c70",
+          "attemptNumber": 1,
+          "authority": {
+            "brokerAuthority": "none",
+            "executionAuthority": "none",
+            "readinessOverrideAuthority": "none"
+          },
+          "blockers": [],
+          "hashVersion": "gotrader-v2-sha256-v1",
+          "inputArtifactIds": [
+            "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24"
+          ],
+          "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+          "outputSummary": {
+            "projectionRows": 1
+          },
+          "previousStageArtifactId": "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "retryLimit": 0,
+          "runtimeAdoptionAllowed": false,
+          "schemaVersion": "gotrader-v2-shadow-stage-artifact-v1",
+          "shadowOnly": true,
+          "stageArtifactId": "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a",
+          "stageName": "project",
+          "stageOrdinal": 3,
+          "stageVersion": "v1",
+          "status": "completed",
+          "warnings": []
+        }
+      ],
+      "checkpoint": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "cancellationRequested": false,
+        "checkpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "checkpointVersion": "v1",
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "heartbeatSequence": 4,
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "nextStageOrdinal": 4,
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a"
+        ],
+        "previousCheckpointId": "sha256:8eeb5eec753d149af76752b0a3512c3b61456db0b6195e377786b1650ad0f153",
+        "schemaVersion": "gotrader-v2-shadow-orchestration-checkpoint-v1",
+        "shadowOnly": true,
+        "terminalStatus": "completed"
+      },
+      "projection": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "blockers": [],
+        "completedStageCount": 4,
+        "currentResearchCycleAuthoritative": true,
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "lastStageName": "project",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "projectionId": "sha256:be1142bac3c261102e629c5127643ff85cf98d4d1ab1deecaf49de9590adb432",
+        "projectionVersion": "v1",
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-operator-projection-v1",
+        "shadowOnly": true,
+        "terminalCheckpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "terminalSealId": "sha256:4348d64edad6177bc0238593a8f474abee8c24711ca80ee1278f3aed33e03ee2",
+        "terminalStatus": "completed",
+        "totalStageCount": 4,
+        "warnings": [
+          "retry_recovered"
+        ]
+      },
+      "seal": {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "hashVersion": "gotrader-v2-sha256-v1",
+        "logicalJobId": "sha256:a62fd29702c6aff8669badf3b4623f15f9805f41663b0770871db9417f274112",
+        "orderedStageArtifactIds": [
+          "sha256:9bd6e50605cb70cca7398be1ee96feb73a0d87c58726936abdb5d1a68d11e807",
+          "sha256:fdc05e8bb1643ec5938794632d4dc55b697f1567332593bc44b1bb3742132a07",
+          "sha256:00f07f75bc0d4fce20ed6e0dbfa60af35899c0aa6a598e24aef38a05d4a46f24",
+          "sha256:f144436aa9fa01d98e53d8e7a96b63101f0a36b55e85ae3c2a07c5538e4c6a9a"
+        ],
+        "runtimeAdoptionAllowed": false,
+        "schemaVersion": "gotrader-v2-shadow-terminal-seal-v1",
+        "sealVersion": "v1",
+        "shadowOnly": true,
+        "stageChainRoot": "sha256:0efd35e90c8c6395303d20b360a6ea07597909b54601c992ab6234272e858d40",
+        "terminalCheckpointId": "sha256:f10a4cf96731aace369caccc23e332935151d0937bdfd9b40fa9c2853e2d0c02",
+        "terminalSealId": "sha256:4348d64edad6177bc0238593a8f474abee8c24711ca80ee1278f3aed33e03ee2",
+        "terminalStatus": "completed"
+      }
+    }
+  },
+  "schemaVersion": "gotrader-bt3-shadow-orchestration-snapshot-v1"
+}
