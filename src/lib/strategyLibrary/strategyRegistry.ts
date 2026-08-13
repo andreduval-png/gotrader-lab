@@ -1404,6 +1404,35 @@ export const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
     authority: STRATEGY_LIBRARY_AUTHORITY
   },
   {
+    id: "liquidity_reclaim_scalper_v1",
+    name: "Liquidity Reclaim Scalper",
+    family: "scalp",
+    status: "research_only",
+    detectorStatus: "executable_research",
+    description: "Experimental causal continuation scalp using an external-liquidity objective, opposite-side raid, directional displacement, canonical IFVG reclaim, structural invalidation, and external-liquidity target.",
+    side: "both",
+    supportedSymbols: ["MNQ", "NQ", "USTECH"],
+    primaryTimeframes: ["1m", "5m"],
+    higherTimeframes: ["15m"],
+    sourceRequirements: mt5ResearchSource,
+    requiredConditions: [
+      { id: "external_liquidity_objective", label: "External liquidity objective", description: "An unconsumed canonical external-liquidity objective supplies direction.", requiredFor: ["intake", "replay", "walk_forward", "paper_watchlist", "paper_demo"] },
+      { id: "opposite_side_raid", label: "Opposite-side raid", description: "Canonical opposite-side liquidity sweep must precede continuation.", requiredFor: ["intake", "replay", "walk_forward", "paper_watchlist", "paper_demo"] },
+      { id: "directional_displacement", label: "Directional displacement", description: "Canonical displacement away from the raid must match the objective direction.", requiredFor: ["replay", "walk_forward", "paper_watchlist", "paper_demo"] },
+      { id: "canonical_ifvg_reclaim", label: "Canonical IFVG reclaim", description: "A directional canonical IFVG must become available after displacement.", requiredFor: ["replay", "walk_forward", "paper_watchlist", "paper_demo"] },
+      { id: "native_geometry", label: "Native geometry", description: "Entry, structural stop, external target, and theoretical R:R must be coherent.", requiredFor: ["replay", "walk_forward", "paper_watchlist", "paper_demo"] }
+    ],
+    invalidationRules: ["External target consumed before entry.", "Raid or IFVG structure invalidated.", "Setup/session expiry.", "Source, dataset, or causal context blocked."],
+    targetRules: ["Native target is the available external-liquidity objective.", "Standardized R is a separately identified research overlay only."],
+    minimumRR: 0,
+    sessionRules: ["Base research profile uses no session filter; any session policy uses America/New_York and a new parameter identity."],
+    regimeRules: ["Direction comes from liquidity objective by default; canonical HTF bias is an optional research filter."],
+    validationRequirements: compactValidation,
+    paperDemoRequirements: [{ id: "lrs_full_validation", label: "LRS full validation", required: true, detail: "Requires sample sufficiency, corrected statistical testing, robustness, walk-forward/OOS, cold-instrument, sealed holdout, and separate human approval." }],
+    forbiddenPromotionReasons: ["experimental strategy", "baseline only", "missing causal facts", "missing statistical validation", "missing untouched forward evidence", "Paper-Demo human gate incomplete"],
+    authority: STRATEGY_LIBRARY_AUTHORITY
+  },
+  {
     id: "market_map_only_diagnostic_v1",
     name: "Market-Map Only Diagnostic",
     family: "market_map",
@@ -1450,6 +1479,7 @@ export const suggestStrategyIdForRecognition = (input: {
     input.targetSubsystem,
     ...(input.candidateFamilies ?? [])
   ].filter(Boolean).join(" ").toLowerCase();
+  if (/liquidity.*reclaim.*scalp|reclaim.*raid.*ifvg/.test(text)) return "liquidity_reclaim_scalper_v1";
   if (/silver[_\s-]*bullet.*v2|v2.*silver[_\s-]*bullet|refined.*silver[_\s-]*bullet|silver_bullet_v2/.test(text)) {
     return "silver_bullet_v2_refined_research";
   }

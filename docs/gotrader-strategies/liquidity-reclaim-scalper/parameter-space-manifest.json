@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "gotrader-lrs-parameter-space-v1",
+  "strategyId": "liquidity_reclaim_scalper_v1",
+  "profileId": "liquidity_reclaim_scalper_v1_base_research",
+  "status": "handoff_only",
+  "searchAuthorized": false,
+  "dimensions": ["timeframeCombination", "liquidityTargetType", "raidLiquidityType", "raidConfirmationMode", "minimumRaidPenetration", "displacementMode", "minimumDisplacement", "ifvgFreshnessRequirement", "entryModel", "entryRetracementRatio", "stopModel", "stopBufferPoints", "targetModel", "sessionPolicy", "biasModel", "dealingRangeRequirement", "minimumTheoreticalRR", "maximumSetupAgeBars", "maximumEntryWaitBars"],
+  "authority": {"executionAuthority":"none","brokerAuthority":"none","readinessOverrideAuthority":"none"}
+}

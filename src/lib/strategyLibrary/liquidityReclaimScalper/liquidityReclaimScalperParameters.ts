@@ -1,4 +1,4 @@
-import { canonicalHash } from "@/lib/canonical/canonicalValueSerialization";
+import { canonicalHash } from "../../canonical/canonicalValueSerialization";
 import { LRS_PARAMETER_SCHEMA_VERSION, LRS_PROFILE_ID, LRS_STRATEGY_ID, type LrsParameters, type LrsProfile } from "./liquidityReclaimScalperTypes";
 
 export const LRS_BASE_PARAMETERS: Readonly<LrsParameters> = Object.freeze({ contextTimeframe: "15m", structureTimeframe: "5m",

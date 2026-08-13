@@ -35,6 +35,21 @@ const sharedUi = [
 ];
 
 const supplements: Record<string, StrategyBaselineSupplement> = {
+  liquidity_reclaim_scalper_v1: {
+    profileVersion: "v1",
+    classification: "experimental",
+    detectorStatus: "experimental",
+    detectorPaths: ["src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"],
+    typePaths: ["src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes.ts", "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts"],
+    tradeConstructionPaths: ["src/lib/backtestStrategyAdapters/liquidityReclaimScalperCanonicalAdapter.ts"],
+    validationProfilePaths: [registryPath],
+    replayScripts: ["scripts/test-liquidity-reclaim-scalper-causal.mjs"],
+    oosScripts: [],
+    evidencePaths: ["docs/gotrader-strategies/liquidity-reclaim-scalper/implementation-report.md"],
+    testCommands: ["test:liquidity-reclaim-scalper", "test:liquidity-reclaim-scalper-causal", "test:liquidity-reclaim-scalper-bt2"],
+    baselineFixtureIds: ["lrs_bullish_valid", "lrs_bearish_valid", "lrs_lookahead_trap"],
+    notes: ["Experimental research-only family; baseline performance is descriptive and cannot create readiness."]
+  },
   silver_bullet_v1: {
     profileVersion: "v1",
     classification: "behavioral_fixture",

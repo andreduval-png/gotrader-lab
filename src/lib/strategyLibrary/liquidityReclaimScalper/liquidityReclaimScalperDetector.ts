@@ -1,7 +1,7 @@
-import { canonicalHash } from "@/lib/canonical/canonicalValueSerialization";
-import { SIMULATION_AUTHORITY_NONE, SIMULATION_CAPABILITIES_DISABLED } from "@/lib/backtestSimulation/simulationAuthority";
+import { canonicalHash } from "../../canonical/canonicalValueSerialization";
+import { SIMULATION_AUTHORITY_NONE, SIMULATION_CAPABILITIES_DISABLED } from "../../backtestSimulation/simulationAuthority";
 import type { V2CanonicalMarketState, V2DealingRangeFactPayload, V2DisplacementFactPayload, V2FactEnvelope,
-  V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "@/lib/v2/context/v2ContextTypes";
+  V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "../../v2/context/v2ContextTypes";
 import { buildLrsBaseProfile } from "./liquidityReclaimScalperParameters";
 import { buildLrsTransition } from "./liquidityReclaimScalperStateMachine";
 import { LRS_CANDIDATE_SCHEMA_VERSION, LRS_PROFILE_ID, LRS_STRATEGY_ID, LRS_STRATEGY_VERSION,
@@ -104,9 +104,13 @@ export async function detectLiquidityReclaimScalper(request: Readonly<LrsDetecti
   const factIds = unique([selected.objective?.factId, selected.raid?.factId, selected.displacement?.factId, selected.ifvg?.factId].filter((v): v is string => Boolean(v)));
   const identityCore = { strategyId: LRS_STRATEGY_ID, strategyVersion: LRS_STRATEGY_VERSION, direction: selected.direction,
     sourceFingerprint: request.context.identity.source.sourceFingerprint, datasetCertificateId: request.datasetCertificateId,
-    contextIdentityHash: request.context.identity.identityHash, triggerCandleId: request.triggerCandleId, liquidityObjectiveId: selected.objective?.factId,
-    raidEventId: selected.raid?.factId, displacementFactId: selected.displacement?.factId, ifvgId: selected.ifvg?.factId,
-    profileId: LRS_PROFILE_ID, parameterHash: profile.parameterHash, entryPrice, stopPrice, targetPrice };
+    contextIdentityHash: request.context.identity.identityHash, triggerCandleId: request.triggerCandleId,
+    ...(selected.objective ? { liquidityObjectiveId: selected.objective.factId } : {}),
+    ...(selected.raid ? { raidEventId: selected.raid.factId } : {}),
+    ...(selected.displacement ? { displacementFactId: selected.displacement.factId } : {}),
+    ...(selected.ifvg ? { ifvgId: selected.ifvg.factId } : {}), profileId: LRS_PROFILE_ID,
+    parameterHash: profile.parameterHash, ...(entryPrice !== undefined ? { entryPrice } : {}),
+    ...(stopPrice !== undefined ? { stopPrice } : {}), ...(targetPrice !== undefined ? { targetPrice } : {}) };
   const achieved = selected.chain.state; const explanation = `${selected.direction === "long" ? "Bullish" : "Bearish"} Liquidity Reclaim Scalper ${achieved === "ENTRY_ELIGIBLE" ? "entry eligible" : "forming"}. ` +
     `${selected.objective ? "External liquidity remains available." : "External liquidity objective is missing."} ` +
     `${selected.raid ? "Opposite-side liquidity was raided." : "Waiting for opposite-side liquidity raid."} ` +
