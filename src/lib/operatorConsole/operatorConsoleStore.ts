@@ -19,8 +19,18 @@ import {
   latestValidationChainEntry,
   VALIDATION_CHAIN_UPDATED_EVENT
 } from "@/lib/validationChain";
+import {
+  hydrateResearchEvidenceAggregateIndex,
+  loadResearchEvidenceAggregateIndex,
+  RESEARCH_EVIDENCE_UPDATED_EVENT
+} from "@/lib/researchEvidenceLedger";
+import {
+  GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT,
+  loadGbrainMemoryOutbox
+} from "@/lib/researchMemory";
 
 import { buildOperatorConsoleSnapshot } from "./buildOperatorConsoleSnapshot";
+import { buildOperatorMemorySummary } from "./operatorMemorySummary";
 import {
   OPERATOR_CYCLE_UPDATED_EVENT,
   readOperatorCycleState
@@ -71,14 +81,18 @@ export const getOperatorConsoleSnapshot = () => snapshot;
 
 export const refreshOperatorConsoleSnapshot = (): Promise<OperatorConsoleSnapshot> => {
   if (refreshPromise) return refreshPromise;
-  refreshPromise = resolveResearchRuntimeSnapshot()
-    .then((runtime) => {
+  refreshPromise = Promise.all([
+    resolveResearchRuntimeSnapshot().catch(() => undefined),
+    hydrateResearchEvidenceAggregateIndex().catch(() => loadResearchEvidenceAggregateIndex())
+  ])
+    .then(([runtime, evidence]) => {
       snapshot = buildOperatorConsoleSnapshot({
         runtime,
         activation: readLatestActivateMarketSummary(),
         autonomousRun: latestAutonomousResearchRun(loadAutonomousResearchState()),
         validation: latestValidationChainEntry(),
         prediction: readPredictionSummary(),
+        memory: buildOperatorMemorySummary(evidence, loadGbrainMemoryOutbox()),
         cycle: readOperatorCycleState()
       });
       notify();
@@ -90,6 +104,7 @@ export const refreshOperatorConsoleSnapshot = (): Promise<OperatorConsoleSnapsho
         autonomousRun: latestAutonomousResearchRun(loadAutonomousResearchState()),
         validation: latestValidationChainEntry(),
         prediction: readPredictionSummary(),
+        memory: buildOperatorMemorySummary(loadResearchEvidenceAggregateIndex(), loadGbrainMemoryOutbox()),
         cycle: readOperatorCycleState()
       });
       notify();
@@ -142,6 +157,8 @@ const eventNames = [
   RESEARCH_CYCLE_UPDATED_EVENT,
   PREDICTION_LEDGER_UPDATED_EVENT,
   VALIDATION_CHAIN_UPDATED_EVENT,
+  RESEARCH_EVIDENCE_UPDATED_EVENT,
+  GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT,
   "gotrader:mt5-feed-status-updated",
   "gotrader:mt5-readonly-feed-updated"
 ];

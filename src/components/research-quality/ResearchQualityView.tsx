@@ -84,6 +84,7 @@ export function ResearchQualityView() {
     loadLatestValidationReport()
   );
   const [review, setReview] = useState<ResearchQualityReview | undefined>(() => loadLatestResearchQualityReview());
+  const failureAttribution = review?.failureAttribution;
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
   const runtimeValidationSummary = runtimeSnapshot?.latestResearchCycle.latestValidationSummary;
   const runtimeQualitySummary = runtimeSnapshot?.latestResearchCycle.latestResearchQualitySummary;
@@ -322,10 +323,14 @@ export function ResearchQualityView() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>False-Positive Patterns</CardDescription>
-                <CardTitle className="text-2xl">{review.falsePositivePatterns.length}</CardTitle>
+                <CardDescription>Completed Stop Hits</CardDescription>
+                <CardTitle className="text-2xl">{failureAttribution?.stopHitCount ?? review.falsePositivePatterns.length}</CardTitle>
               </CardHeader>
-              <CardContent className="text-xs text-muted-foreground">Estimated from weak scenario outcomes</CardContent>
+              <CardContent className="text-xs text-muted-foreground">
+                {failureAttribution
+                  ? `${Math.round((failureAttribution.contextEvaluationCoverage ?? 0) * 100)}% context evaluated; ${Math.round(failureAttribution.attributionCoverage * 100)}% causally qualified`
+                  : "Legacy estimate; rerun validation for completed-outcome attribution"}
+              </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
@@ -348,6 +353,47 @@ export function ResearchQualityView() {
               Do not proceed to broker demo unless readiness is Paper-Demo Candidate.
             </CardContent>
           </Card>
+
+          {failureAttribution ? (
+            <Card className="border-cyan-300/20 bg-cyan-300/[0.035]">
+              <CardHeader>
+                <CardTitle>Failure Attribution</CardTitle>
+                <CardDescription>
+                  Completed outcomes from {failureAttribution.canonicalScenarioName ?? "the canonical validation scenario"}; skipped context is not counted as a false positive.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {[
+                    ["Profile", failureAttribution.strategyProfile ?? "unknown"],
+                    ["Completed", String(failureAttribution.completedTradeCount)],
+                    ["Stop-hit rate", formatPercent(failureAttribution.stopHitRate)],
+                    ["Context evaluated", formatPercent(failureAttribution.contextEvaluationCoverage ?? 0)],
+                    ["Red clusters", String(failureAttribution.drawdownClusters.filter((cluster) => cluster.risk === "red").length)]
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md border border-border bg-background/45 p-3">
+                      <div className="text-xs uppercase text-muted-foreground">{label}</div>
+                      <div className="mt-1 break-words font-mono text-sm">{value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-md border border-border bg-background/45 p-3 text-sm">
+                  <div className="font-medium">
+                    {failureAttribution.topFailureCause?.label ?? "No discriminating failure cause yet"}
+                  </div>
+                  <p className="mt-1 text-muted-foreground">{failureAttribution.recommendedExperiment}</p>
+                  {!failureAttribution.topFailureCause && failureAttribution.topContextAssociation ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Context flag reviewed: {failureAttribution.topContextAssociation.label}. {failureAttribution.topContextAssociation.evidence}
+                    </p>
+                  ) : null}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Identity: {failureAttribution.sourceProvider ?? "source unknown"} / {failureAttribution.requestedSymbol ?? "symbol unknown"} / {failureAttribution.brokerSymbol ?? "broker symbol unknown"} / {failureAttribution.timeframe ?? "timeframe unknown"}. Draft guidance cannot create evidence, mutate the profile, or promote readiness.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
           <div className="grid gap-5 xl:grid-cols-2">
             <Card>
               <CardHeader>
@@ -500,8 +546,8 @@ export function ResearchQualityView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>False Positive Patterns</CardTitle>
-              <CardDescription>Scenarios where confidence, confluence, or target logic produced fragile theses.</CardDescription>
+              <CardTitle>Stop-Hit Failure Contexts</CardTitle>
+              <CardDescription>Completed stop-hit outcomes grouped by recorded pre-entry context. Rejected and diagnostic rows are counted separately.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -509,7 +555,7 @@ export function ResearchQualityView() {
                   <thead className="border-b border-border text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="py-3 pr-4 font-medium">Scenario</th>
-                      <th className="py-3 pr-4 font-medium">Est. False Positives</th>
+                      <th className="py-3 pr-4 font-medium">Stop Hits</th>
                       <th className="py-3 pr-4 font-medium">Win</th>
                       <th className="py-3 pr-4 font-medium">Confidence</th>
                       <th className="py-3 pr-4 font-medium">Worst R</th>
@@ -533,7 +579,7 @@ export function ResearchQualityView() {
                     {!review.falsePositivePatterns.length && (
                       <tr>
                         <td className="py-4 text-muted-foreground" colSpan={6}>
-                          No major false-positive pattern was isolated in the latest mock validation sample.
+                          No stop-hit context was isolated. Rerun validation to generate completed-outcome telemetry.
                         </td>
                       </tr>
                     )}
@@ -547,7 +593,7 @@ export function ResearchQualityView() {
             <Card>
               <CardHeader>
                 <CardTitle>Drawdown Cluster Notes</CardTitle>
-                <CardDescription>Risk concentrations that should block premature demo planning.</CardDescription>
+                <CardDescription>Chronological peak-to-recovery loss sequences from the canonical completed outcomes.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {review.drawdownClusters.slice(0, 6).map((cluster) => (

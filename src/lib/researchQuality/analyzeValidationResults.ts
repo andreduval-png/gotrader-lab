@@ -3,6 +3,8 @@ import { isLLMAdvisoryReviewPassed } from "@/lib/llm/llmProvider";
 import { analyzeDrawdownClusters } from "@/lib/researchQuality/drawdownAnalysis";
 import { analyzeFalsePositivePatterns } from "@/lib/researchQuality/falsePositiveAnalysis";
 import { compareLongShortPerformance, compareSessions } from "@/lib/researchQuality/sessionComparison";
+import { buildResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttribution";
+import type { ResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 import { safeArray, safeTopN } from "@/lib/utils";
 import type {
   AgentUsefulnessReview,
@@ -276,7 +278,10 @@ const suggestedCalibrationChangesFor = (report: ValidationSuiteReport): Suggeste
   return safeTopN(changes, 5);
 };
 
-const nextStepFor = (grade: ResearchQualityReadinessGrade) => {
+const nextStepFor = (grade: ResearchQualityReadinessGrade, attribution?: ResearchQualityFailureAttribution) => {
+  if (attribution?.blockers.length) {
+    return attribution.nextAction;
+  }
   if (grade === "Paper-Demo Candidate") {
     return "Keep execution disabled. Repeat validation on broader independent samples, then review paper-demo risk gates.";
   }
@@ -292,6 +297,7 @@ const nextStepFor = (grade: ResearchQualityReadinessGrade) => {
 export function analyzeValidationResults(report: ValidationSuiteReport): ResearchQualityReview {
   const generatedAt = new Date().toISOString();
   const readinessGrade = readinessGradeFor(report);
+  const failureAttribution = buildResearchQualityFailureAttribution(report);
 
   return {
     id: `research_quality_${Date.now()}`,
@@ -304,9 +310,10 @@ export function analyzeValidationResults(report: ValidationSuiteReport): Researc
     topWeaknesses: topWeaknessesFor(report),
     topStrengths: topStrengthsFor(report),
     suggestedCalibrationChanges: suggestedCalibrationChangesFor(report),
-    sessionComparison: compareSessions(report),
-    falsePositivePatterns: analyzeFalsePositivePatterns(report),
-    drawdownClusters: analyzeDrawdownClusters(report),
+    sessionComparison: compareSessions(report, failureAttribution),
+    falsePositivePatterns: analyzeFalsePositivePatterns(report, failureAttribution),
+    drawdownClusters: analyzeDrawdownClusters(report, failureAttribution),
+    failureAttribution,
     agentUsefulness: agentUsefulnessFor(report),
     confluenceThresholdSensitivity: thresholdSensitivityFor(
       "confluence",
@@ -320,7 +327,7 @@ export function analyzeValidationResults(report: ValidationSuiteReport): Researc
     ),
     longShortComparison: compareLongShortPerformance(report),
     invalidationTargetQuality: invalidationTargetQualityFor(report),
-    recommendedNextStep: nextStepFor(readinessGrade),
+    recommendedNextStep: nextStepFor(readinessGrade, failureAttribution),
     safetyNotice: "Simulation/backtesting review only. No broker connection. No real trades."
   };
 }

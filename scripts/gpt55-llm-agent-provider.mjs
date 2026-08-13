@@ -338,9 +338,11 @@ function freeTextFieldsFor(response) {
 function isSafelyNegated(text, matchIndex) {
   const prefix = text.slice(Math.max(0, matchIndex - 32), matchIndex).toLowerCase();
   const suffix = text.slice(matchIndex, matchIndex + 96).toLowerCase();
+  const clause = text.slice(matchIndex, matchIndex + 160).split(/[.;!?\n]/, 1)[0].toLowerCase();
   return (
     /\b(?:no|not|cannot|can not|must not|do not|does not|without)\s+[\w\s-]*$/.test(prefix) ||
-    /\b(?:disabled|locked|blocked|unavailable|not\s+available|not\s+implemented|not\s+permitted|none)\b/.test(suffix)
+    /\b(?:disabled|locked|blocked|unavailable|not\s+available|not\s+implemented|not\s+permitted|none)\b/.test(suffix) ||
+    /\b(?:is|are|remains?|must\s+remain)\s+(?:strictly\s+)?(?:prohibited|forbidden|disallowed|prevented|disabled|blocked|not\s+permitted)\b/.test(clause)
   );
 }
 

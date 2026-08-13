@@ -9,6 +9,7 @@ import {
   type OperatorCycleState,
   type OperatorDecision,
   type OperatorInsightSummary,
+  type OperatorMemorySummary,
   type OperatorPredictionSummary
 } from "./operatorConsoleTypes";
 
@@ -18,6 +19,7 @@ export interface BuildOperatorConsoleSnapshotInput {
   autonomousRun?: AutonomousResearchRun;
   validation?: ValidationChainEntry;
   prediction?: OperatorPredictionSummary;
+  memory?: OperatorMemorySummary;
   cycle?: OperatorCycleState;
   now?: string;
 }
@@ -37,6 +39,34 @@ const clean = (value: unknown, fallback: string) => {
   return text || fallback;
 };
 
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const roundedPrice = (value: number) => Number(value.toFixed(5));
+
+const impliedEntryFor = ({
+  side,
+  stopLoss,
+  takeProfit,
+  riskReward
+}: {
+  side: "long" | "short" | "flat";
+  stopLoss?: number;
+  takeProfit?: number;
+  riskReward?: number;
+}) => {
+  if ((side !== "long" && side !== "short") || !finite(stopLoss) || !finite(takeProfit) || !finite(riskReward) || riskReward <= 0) {
+    return undefined;
+  }
+  const entry = (takeProfit + riskReward * stopLoss) / (1 + riskReward);
+  const geometryValid = side === "long"
+    ? stopLoss < entry && entry < takeProfit
+    : takeProfit < entry && entry < stopLoss;
+  if (!geometryValid) return undefined;
+  const reproducedRiskReward = Math.abs(takeProfit - entry) / Math.abs(entry - stopLoss);
+  return Math.abs(reproducedRiskReward - riskReward) <= Math.max(0.01, riskReward * 0.005)
+    ? roundedPrice(entry)
+    : undefined;
+};
+
 const providerFor = (runtime?: ResearchRuntimeSnapshot) =>
   clean(runtime?.marketData.activeResearchSource.provider, runtime?.marketData.activeDataSource ?? "unavailable");
 
@@ -54,6 +84,138 @@ const sourceIsEligible = (runtime?: ResearchRuntimeSnapshot) =>
       runtime.marketData.activeResearchSource.authority.brokerAuthority === "none" &&
       runtime.marketData.activeResearchSource.authority.readinessOverrideAuthority === "none"
   );
+
+const emptyMemory = (): OperatorMemorySummary => ({
+  storedEvidenceRecords: 0,
+  profileIdentities: 0,
+  independentCycleDates: 0,
+  positiveEdgeCycles: 0,
+  gbrainTotal: 0,
+  gbrainPending: 0,
+  gbrainDelivered: 0,
+  gbrainFailed: 0,
+  gbrainDeliveryEnabled: false
+});
+
+const researchPlanFor = (
+  activation: IctActivateMarketLatestSummary | undefined,
+  sourceFingerprint: string | undefined
+): OperatorConsoleSnapshot["researchPlan"] => {
+  const currentCandidate = activation?.currentOpportunitySummary?.topOpportunity
+    ?? activation?.currentOpportunitySummary?.topNearMiss
+    ?? activation?.currentOpportunitySummary?.topRejected;
+  const stopLoss = activation?.proposedStopLoss;
+  const takeProfit = activation?.proposedTakeProfit;
+  const levelImpliedSide = finite(stopLoss) && finite(takeProfit) && stopLoss !== takeProfit
+    ? stopLoss < takeProfit ? "long" as const : "short" as const
+    : undefined;
+  const candidateSide = currentCandidate?.side;
+  const side = activation?.researchSide === "long" || activation?.researchSide === "short" || activation?.researchSide === "flat"
+    ? activation.researchSide
+    : candidateSide === "long" || candidateSide === "short"
+      ? candidateSide
+      : levelImpliedSide ?? "flat";
+  const proposedEntryZone = activation?.proposedEntryZone;
+  const entryZone = proposedEntryZone && finite(proposedEntryZone.lower) && finite(proposedEntryZone.upper)
+    ? {
+        lower: Math.min(proposedEntryZone.lower, proposedEntryZone.upper),
+        upper: Math.max(proposedEntryZone.lower, proposedEntryZone.upper)
+      }
+    : undefined;
+  const directional = side === "long" || side === "short";
+  const riskReward = activation?.proposedRiskReward;
+  const candidateMatchesSide = candidateSide === side || candidateSide === undefined;
+  const canonicalEntryPrice = activation?.proposedEntryPrice ?? (candidateMatchesSide ? currentCandidate?.entry : undefined);
+  const recoveredEntryPrice = impliedEntryFor({ side, stopLoss, takeProfit, riskReward });
+  const entryPrice = directional && finite(canonicalEntryPrice)
+    ? roundedPrice(canonicalEntryPrice)
+    : directional && entryZone
+      ? roundedPrice((entryZone.lower + entryZone.upper) / 2)
+      : recoveredEntryPrice;
+  const complete =
+    directional &&
+    finite(entryPrice) &&
+    finite(stopLoss) &&
+    finite(takeProfit) &&
+    finite(riskReward);
+  const geometryCoherent = !complete
+    ? undefined
+    : side === "long"
+      ? stopLoss < entryPrice && entryPrice < takeProfit
+      : side === "short"
+        ? takeProfit < entryPrice && entryPrice < stopLoss
+        : false;
+  const reproducedRiskReward = complete && geometryCoherent
+    ? Math.abs(takeProfit - entryPrice) / Math.abs(entryPrice - stopLoss)
+    : undefined;
+  const riskRewardCoherent = reproducedRiskReward === undefined || !finite(riskReward)
+    ? undefined
+    : Math.abs(reproducedRiskReward - riskReward) <= Math.max(0.15, riskReward * 0.1);
+  const planCoherence = geometryCoherent === false || riskRewardCoherent === false
+    ? "incoherent" as const
+    : complete
+      ? "coherent" as const
+      : "incomplete" as const;
+  const planCoherenceReason = geometryCoherent === false
+    ? `${side === "long" ? "Bullish" : "Bearish"} direction conflicts with entry, stop-loss, and take-profit geometry.`
+    : riskRewardCoherent === false
+      ? "The stated risk/reward does not match the entry, stop-loss, and take-profit prices."
+      : complete
+        ? "Direction, entry, stop-loss, take-profit, and risk/reward are mutually coherent."
+        : "A complete directional price structure is not available.";
+  const setupDirection = planCoherence === "incoherent"
+    ? "neutral" as const
+    : side === "long" ? "bullish" as const : side === "short" ? "bearish" as const : "neutral" as const;
+  const candidateStatus = activation?.proposedCandidateStatus ?? (candidateMatchesSide ? currentCandidate?.status : undefined);
+  const candidateRejected = candidateStatus === "rejected" || candidateStatus === "no_trade" || candidateStatus === "needs_more_data";
+  const riskBlocked = /reject|no[_ ]?trade|avoid|unsuitable|blocked/i.test(activation?.riskScreeningStatus ?? "");
+  const hasAnyLevel = finite(entryPrice) || Boolean(entryZone) || finite(stopLoss) || finite(takeProfit);
+  const status = side === "flat" || candidateRejected || riskBlocked || planCoherence === "incoherent"
+    ? "no_trade"
+    : complete
+      ? "complete"
+      : hasAnyLevel
+        ? "partial"
+        : "unavailable";
+  const signal = complete && planCoherence === "coherent" && !candidateRejected && !riskBlocked ? (side === "long" ? "BUY" : "SELL") : "NO_TRADE";
+
+  return {
+    status,
+    setup: clean(activation?.modelName, "No qualified research plan").replace(/_/g, " "),
+    side,
+    setupDirection,
+    signal,
+    planSource: activation?.proposedEntryPrice !== undefined ? "signal_contract" : finite(entryPrice) ? "legacy_recovery" : "unavailable",
+    planCoherence,
+    planCoherenceReason,
+    candidateStatus,
+    entryZone,
+    entryPrice,
+    entryPriceMethod: finite(canonicalEntryPrice)
+      ? "canonical_candidate"
+      : entryZone && finite(entryPrice)
+        ? "zone_midpoint"
+        : finite(recoveredEntryPrice)
+          ? "rr_implied_recovery"
+        : undefined,
+    stopLoss,
+    takeProfit,
+    riskReward,
+    riskScreeningStatus: clean(activation?.riskScreeningStatus, "not evaluated").replace(/_/g, " "),
+    riskScreeningReason: `${clean(
+      activation?.riskScreeningReason,
+      complete
+        ? "Market-context screening is complete; independent account-risk evaluation has not run."
+        : "A complete directional research plan is required before independent account-risk evaluation."
+    )}${planCoherence === "incoherent" ? ` ${planCoherenceReason}` : ""}`,
+    accountRiskEvaluation: "not_evaluated",
+    recommendedMaxRiskPerTradePct: activation?.recommendedMaxRiskPerTradePct,
+    sourceFingerprint,
+    generatedAt: activation?.activationTimestamp,
+    informationalOnly: true,
+    executionAllowed: false
+  };
+};
 
 const insightFor = (
   runtime: ResearchRuntimeSnapshot | undefined,
@@ -162,6 +324,7 @@ export const buildOperatorConsoleSnapshot = ({
   autonomousRun,
   validation,
   prediction,
+  memory = emptyMemory(),
   cycle = idleCycle(),
   now = new Date().toISOString()
 }: BuildOperatorConsoleSnapshotInput): OperatorConsoleSnapshot => {
@@ -230,6 +393,8 @@ export const buildOperatorConsoleSnapshot = ({
       classification: "uncalibrated",
       nextAction: "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
     },
+    memory,
+    researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint),
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,
     autoApplyAllowed: false,

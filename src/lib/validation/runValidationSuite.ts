@@ -10,6 +10,7 @@ import type {
   ValidationSuiteReport
 } from "@/lib/validation/validationTypes";
 import type { Candle } from "@/lib/types";
+import { buildValidationScenarioQualityTelemetry } from "@/lib/researchQuality/researchQualityFailureAttribution";
 import {
   buildValidationProvenanceIdentity,
   fingerprintValidationParameters,
@@ -232,6 +233,7 @@ const scenarioResultFor = (definition: ValidationScenarioDefinition, result: Bac
     profitFactor,
     confidenceCalibration,
     agentContributionSummary: agentContributionsFor(result),
+    qualityTelemetry: buildValidationScenarioQualityTelemetry(result),
     score,
     readiness: readinessFor(
       summary.totalTrades,

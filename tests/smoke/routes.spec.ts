@@ -159,6 +159,11 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(page.getByTestId("operator-market-brief")).toBeVisible();
     await expect(page.getByTestId("operator-prediction-summary")).toBeVisible();
     await expect(page.getByTestId("operator-decision-summary")).toBeVisible();
+    await expect(page.getByTestId("operator-gbrain-memory-summary")).toBeVisible();
+    await expect(page.getByTestId("operator-gbrain-memory-summary")).toContainText(/Stored cycles/i);
+    await expect(page.getByTestId("operator-research-risk-preview")).toBeVisible();
+    await expect(page.getByTestId("operator-research-risk-preview")).toContainText(/Proposed entry/i);
+    await expect(page.getByTestId("operator-research-risk-preview")).toContainText(/Informational only/i);
     await expect(page.locator("main")).toContainText(/supervised research cycle/i);
     await expect(page.locator("main")).toContainText(/Research trades/i);
     await expect(page.locator("main")).toContainText(/Advanced Research Lab/i);

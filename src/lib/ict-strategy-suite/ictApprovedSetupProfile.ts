@@ -737,7 +737,6 @@ export const evaluateApprovedSetupProfile = (
   if (normalized.hasDisplacement) approvedReasons.push("Displacement evidence present.");
   if (normalized.hasLiquiditySweep) approvedReasons.push("Liquidity sweep evidence present.");
   if (normalized.smt?.confirmsCandidate) approvedReasons.push(`SMT/relative strength confirms candidate: ${normalized.smt.reason}`);
-  if (normalized.smt?.divergenceType === "insufficient_data") watchlistReasons.push("SMT/relative strength unavailable; candidate remains governed by deterministic ICT filters.");
   if (normalized.smt && !normalized.smt.confirmsCandidate && !normalized.smt.rejectsCandidate && (normalized.smt.confidenceAdjustment ?? 0) < 0) {
     watchlistReasons.push(`SMT/relative strength confidence drag: ${normalized.smt.reason}`);
   }

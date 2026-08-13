@@ -54,10 +54,24 @@ const contextFixture = () => ({
     approvedStatus: "rejected",
     riskStatus: "clear",
     smtStatus: "insufficient_data",
-    topReasons: ["RR below threshold"],
+    topReasons: [
+      "Depth is insufficient; current compact read covers 3.59 of requested 90 days.",
+      "RR below threshold"
+    ],
     nextAction: "Run replay validation.",
     opportunityDetected: true,
-    opportunityBlockers: ["RR below threshold"]
+    opportunityBlockers: [
+      "Insufficient active-market depth: only 3.59 days are available.",
+      "RR below threshold"
+    ],
+    availableLookbackDays: 3.59,
+    requestedLookbackDays: 90,
+    dataDepthStatus: "limited",
+    currentOpportunitySummary: {
+      depthStatus: "validation_context_ready",
+      rangeHistoryAvailable: true,
+      validationLookbackDays: 89.99
+    }
   },
   snapshot: {
     marketData: {
@@ -106,6 +120,16 @@ async function main() {
   assert.equal(packet.sourceContext.provider, "mt5_read_only");
   assert.equal(packet.sourceContext.brokerSymbol, "USTECH");
   assert.equal(packet.conversation.length, 8, "conversation history must stay bounded");
+  assert.equal(packet.currentRead.tacticalWindow.availableLookbackDays, 3.59);
+  assert.equal(packet.currentRead.tacticalWindow.purpose, "chart_and_session_reference_only");
+  assert.equal(packet.currentRead.validationContext.availableLookbackDays, 89.99);
+  assert.equal(packet.currentRead.validationContext.status, "validation_context_ready");
+  assert.equal(packet.currentRead.smtPolicy.role, "optional_confluence");
+  assert.equal(packet.currentRead.smtPolicy.missingBlocksCandidate, false);
+  assert.equal(packet.currentRead.smtPolicy.opposingSignalBlocksCandidate, true);
+  assert.match(packet.currentRead.interpretationRule, /Do not cite the smaller tactical chart window/);
+  assert.deepEqual(packet.currentRead.topReasons, ["RR below threshold"]);
+  assert.deepEqual(packet.currentRead.opportunityBlockers, ["RR below threshold"]);
 
   const keys = collectKeys(packet);
   for (const forbidden of ["candles", "rawcandles", "account", "orders", "positions", "apikey", "token", "password"]) {

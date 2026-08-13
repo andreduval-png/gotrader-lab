@@ -272,6 +272,8 @@ async function main() {
   assert.equal(typeof read.paperWatchlistEligible, "boolean", "Paper-watchlist eligibility should be explicit");
   assert.equal(read.executionAllowed, false, "Current read must keep execution disabled");
   assert.ok(read.smtStatus, "SMT status should be included");
+  assert.equal(read.readinessSummary.reasons.some((reason) => /SMT|relative.strength/i.test(reason)), false, "missing SMT must not downgrade readiness");
+  assert.doesNotMatch(read.nextAction, /SMT|relative.strength|correlated index/i, "missing SMT must not become the next required action");
   assert.ok(read.riskStatus, "news/session risk status should be included");
   assert.ok(read.topReasons.length >= 1, "Rejected/no-trade/current states should explain why");
   assert.ok(read.nextAction, "Current read should provide an operator next action");

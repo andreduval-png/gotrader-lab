@@ -13,6 +13,9 @@ const normalizeList = (values?: Array<string | undefined>) =>
 const clampDays = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.max(0, Number(value.toFixed(2))) : 0;
 
+const maximumLookbackDays = (values: Array<number | undefined>) =>
+  clampDays(Math.max(0, ...values.filter((value): value is number => typeof value === "number" && Number.isFinite(value))));
+
 const parseEntryMidpoint = (entryZone?: string) => {
   if (!entryZone) return undefined;
   const numbers = entryZone.match(/-?\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) ?? [];
@@ -97,12 +100,15 @@ export const buildCurrentOpportunitySourceDepth = ({
     packet?.marketAnalysisContext?.analysisDepthStatus ??
     packet?.compactSummary?.analysisDepthStatus ??
     packet?.compactSummary?.dataDepthStatus;
-  const validationLookbackDays = clampDays(
-    currentRead?.availableLookbackDays ??
-    packet?.compactSummary?.availableLookbackDays ??
-    packet?.sessionNarrative?.dataDepth.availableLookbackDays ??
-    packet?.marketAnalysisContext?.analysisTimeframes?.reduce((max, timeframe) => Math.max(max, timeframe.availableLookbackDays ?? 0), 0)
+  const compactLookbackDays = maximumLookbackDays([
+    currentRead?.availableLookbackDays,
+    packet?.compactSummary?.availableLookbackDays,
+    packet?.sessionNarrative?.dataDepth.availableLookbackDays
+  ]);
+  const deepAnalysisLookbackDays = maximumLookbackDays(
+    packet?.marketAnalysisContext?.analysisTimeframes?.map((timeframe) => timeframe.availableLookbackDays) ?? []
   );
+  const validationLookbackDays = Math.max(compactLookbackDays, deepAnalysisLookbackDays);
   const rangeHistoryCandleCount = packet?.marketAnalysisContext?.analysisTimeframes?.reduce((sum, timeframe) => sum + (timeframe.candleCount ?? 0), 0);
   const rangeHistoryAvailable =
     analysisDepthStatus === "sufficient" ||
@@ -201,7 +207,10 @@ export const buildCurrentOpportunityContext = ({
     side: currentRead?.side,
     setupName: currentRead?.bestSetup ?? packet?.recommendedSignal?.setup,
     thesis: currentRead?.opportunitySummary ?? packet?.recommendedSignal?.summary,
-    entry: packet?.recommendedSignal?.entryZone?.midpoint ?? parseEntryMidpoint(currentRead?.entryZone),
+    entry: currentRead?.entryReference
+      ?? packet?.recommendedSignal?.entryReference
+      ?? packet?.recommendedSignal?.entryZone?.midpoint
+      ?? parseEntryMidpoint(currentRead?.entryZone),
     invalidation: currentRead?.invalidation ?? packet?.recommendedSignal?.invalidation,
     target: currentRead?.target ?? packet?.recommendedSignal?.target,
     rrEstimate: currentRead?.rrEstimate ?? packet?.recommendedSignal?.rrEstimate,

@@ -249,6 +249,7 @@ export const buildIctResearchSignalFromCurrentRead = (
     setup: currentRead.bestSetup,
     phase: phaseFor(currentRead),
     side: currentRead.side,
+    entryReference: currentRead.entryReference,
     entryZone: parseEntryZone(currentRead.entryZone),
     invalidation: currentRead.invalidation,
     target: currentRead.target,

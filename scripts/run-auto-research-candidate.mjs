@@ -868,7 +868,8 @@ const summarizeCandidate = ({
   comparison,
   scoreBreakdown,
   expansionReplayDiagnostics,
-  profileWalkForward
+  profileWalkForward,
+  detectorQualityTelemetry
 }) => {
   const grinch = reportGrinch(backtestResult);
   const strategySummary = backtestResult.summary.strategyProfileSummary;
@@ -919,6 +920,23 @@ const summarizeCandidate = ({
     maturityScore: "unavailable_in_headless_runner",
     walkForwardVerdict: profileWalkForward?.verdict ?? "not_run",
     profileWalkForward,
+    researchQualityAttribution: detectorQualityTelemetry
+      ? {
+          completedTradeCount: detectorQualityTelemetry.completedTradeCount,
+          targetHitCount: detectorQualityTelemetry.targetHitCount,
+          stopHitCount: detectorQualityTelemetry.stopHitCount,
+          attributedStopHitCount: detectorQualityTelemetry.attributedStopHitCount,
+          unattributedStopHitCount: detectorQualityTelemetry.unattributedStopHitCount,
+          contextEvaluatedStopHitCount: detectorQualityTelemetry.contextEvaluatedStopHitCount,
+          contextEvaluationCoverage: detectorQualityTelemetry.contextEvaluationCoverage,
+          attributionCoverage: detectorQualityTelemetry.attributionCoverage,
+          failureCauses: detectorQualityTelemetry.failureCauses,
+          contextAssociations: detectorQualityTelemetry.contextAssociations,
+          sessionOutcomes: detectorQualityTelemetry.sessionOutcomes,
+          authority: detectorQualityTelemetry.authority,
+          safety: detectorQualityTelemetry.safety
+        }
+      : undefined,
     expansionReplayDiagnostics,
     validationReadinessStatus: metrics.readinessStatus,
     stabilityScore: metrics.stabilityScore,
@@ -1054,7 +1072,10 @@ const main = async () => {
 
   const detectorOnlyRun = candidateConfigs.every((candidate) => Boolean(candidate.config.strategyProfile));
   if (config.validationMode === "full" && detectorOnlyRun) {
-    detectorProfileValidationModules = await bundle.importLib("walkForward/detectorProfileWalkForward.js");
+    detectorProfileValidationModules = {
+      ...(await bundle.importLib("walkForward/detectorProfileWalkForward.js")),
+      ...(await bundle.importLib("researchQuality/researchQualityFailureAttribution.js"))
+    };
   } else if (config.validationMode === "full") {
     fullValidationModules = {
       ...(await bundle.importLib("autoResearch/scoreCandidateConfig.js")),
@@ -1104,6 +1125,7 @@ const main = async () => {
     let comparison;
     let scoreBreakdown;
     let profileWalkForward;
+    let detectorQualityTelemetry;
     const strategyProfile = backtestResult.summary.strategyProfileSummary?.strategyProfile;
     const isDetectorProfile = strategyProfile && strategyProfile !== "agent_consensus";
     if (config.validationMode === "full" && isDetectorProfile && detectorProfileValidationModules) {
@@ -1120,6 +1142,7 @@ const main = async () => {
           outcome: trade.outcome
         }))
       });
+      detectorQualityTelemetry = detectorProfileValidationModules.buildValidationScenarioQualityTelemetry(backtestResult);
       metrics = metricsFromBacktest(backtestResult);
       metrics.readinessStatus = "not_ready";
       readiness = { state: "Not Ready" };
@@ -1162,7 +1185,8 @@ const main = async () => {
       comparison,
       scoreBreakdown,
       expansionReplayDiagnostics,
-      profileWalkForward
+      profileWalkForward,
+      detectorQualityTelemetry
     });
   });
 

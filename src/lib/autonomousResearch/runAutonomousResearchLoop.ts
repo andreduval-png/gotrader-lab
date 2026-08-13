@@ -233,6 +233,7 @@ const shouldStopAfterIteration = ({
     };
   }
   const llmUnavailableReason = iteration.llmAdvisoryUnavailableReason;
+  const llmUnavailableDetail = iteration.llmAdvisoryUnavailableDetail;
   const llmAdvisoryWasIntentionallyDeferred =
     llmUnavailableReason === "deferred_until_evidence_ready" ||
     llmUnavailableReason === "skipped_for_autonomous_stability";
@@ -246,7 +247,7 @@ const shouldStopAfterIteration = ({
           ? "LLM bridge is online, but the advisory provider is not configured. Autonomous retries are paused until provider configuration is available."
           : bridgeOffline
             ? "LLM advisory bridge is offline. Deterministic research completed; autonomous retries are paused."
-            : `LLM advisory is unavailable (${llmUnavailableReason ?? "unknown reason"}). Deterministic research completed; autonomous retries are paused.`
+            : `LLM advisory is unavailable (${llmUnavailableReason ?? "unknown reason"}). ${llmUnavailableDetail ? `${llmUnavailableDetail} ` : ""}Deterministic research completed; autonomous retries are paused.`
     };
   }
   if (snapshot.evidence.evidenceQualityScore < 45) {
@@ -808,6 +809,7 @@ export async function runAutonomousResearchLoop({
         cycleId: cycle.cycleId,
         llmAdvisoryUnavailable: cycle.llmAdvisoryUnavailable,
         llmAdvisoryUnavailableReason: cycle.llmAdvisoryUnavailableReason,
+        llmAdvisoryUnavailableDetail: cycle.llmAdvisoryUnavailableDetail,
         autoResearchCycleId: cycle.autoResearchCycle?.cycleId,
         bestCandidateLabel,
         proposalId: proposal?.proposalId,
@@ -824,7 +826,7 @@ export async function runAutonomousResearchLoop({
                   ? "LLM bridge online; advisory provider is not configured."
                   : cycle.llmAdvisoryUnavailableReason === "bridge_offline"
                     ? "LLM advisory bridge offline. Deterministic research completed; advisory unavailable."
-                    : `LLM advisory unavailable (${cycle.llmAdvisoryUnavailableReason ?? "unknown reason"}).`
+                    : `LLM advisory unavailable (${cycle.llmAdvisoryUnavailableReason ?? "unknown reason"}).${cycle.llmAdvisoryUnavailableDetail ? ` ${cycle.llmAdvisoryUnavailableDetail}` : ""}`
             : undefined,
           proposal ? `Proposal ${proposal.proposalId} available for policy review.` : "No proposal was created."
         ].filter((note): note is string => Boolean(note))

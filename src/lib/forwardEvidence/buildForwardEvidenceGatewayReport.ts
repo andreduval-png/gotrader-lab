@@ -23,6 +23,22 @@ export interface ForwardEvidenceGatewayReport {
   averageR: number | null;
   profitFactor: number | null;
   maxDrawdownR: number | null;
+  qualityAttribution: Pick<
+    ForwardEvidenceLedgerEvaluation["qualityAttribution"],
+    | "basis"
+    | "completedOutcomes"
+    | "invalidationCount"
+    | "attributedInvalidationCount"
+    | "unattributedInvalidationCount"
+    | "attributionCoverage"
+    | "failureCauses"
+    | "sessionLanes"
+    | "strongestSessionLane"
+    | "weakestSessionLane"
+    | "nextAction"
+    | "authority"
+    | "safety"
+  >;
   reassessmentEligible: boolean;
   blockers: string[];
   recommendation: ForwardEvidenceLedgerEvaluation["recommendation"];
@@ -51,6 +67,7 @@ export const buildForwardEvidenceGatewayReport = (
   averageR: evaluation.averageR,
   profitFactor: evaluation.profitFactor,
   maxDrawdownR: evaluation.maxDrawdownR,
+  qualityAttribution: evaluation.qualityAttribution,
   reassessmentEligible: evaluation.reassessmentEligible,
   blockers: [...evaluation.blockers],
   recommendation: evaluation.recommendation,

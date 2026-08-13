@@ -9,6 +9,7 @@ import { runIctActivateMarketPipeline } from "@/lib/ict-strategy-suite/ictActiva
 import { ensureMt5CanonicalResearchSource } from "@/lib/ict-strategy-suite/ictActivateMarketSourceActivation";
 import { loadActiveMt5ReadOnlyCandleFeed } from "@/lib/integrations/mt5/mt5ReadOnlyClient";
 import { publishClosedMt5ReadOnlyCandles } from "@/lib/mt5PushFeed/mt5ReadOnlyEventAdapter";
+import { ifvgShallowRetestV4FrozenProfile } from "@/lib/forwardEvidence/frozenProfileRegistry";
 import { recordForwardScenarioPrediction } from "@/lib/predictionLedger";
 import { resolveResearchRuntimeSnapshot } from "@/lib/runtime";
 import type { LabState } from "@/lib/types";
@@ -26,6 +27,7 @@ export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
 // The outer budget must accommodate deep detector validation plus the separately
 // bounded LLM advisory request without misclassifying a successful run as canceled.
 const OPERATOR_RESEARCH_TIMEOUT_MS = 300_000;
+const OPERATOR_RESEARCH_PROFILE = ifvgShallowRetestV4FrozenProfile.profileId;
 
 const initialState = (): OperatorCycleState => ({
   status: "idle",
@@ -285,7 +287,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         advancedFullResearchMode: false,
         runLlmAdvisory: true,
         autoApplyPolicyEnabled: false,
-        researchStrategyProfile: "ifvg_fresh_retest_v3_research",
+        researchStrategyProfile: OPERATOR_RESEARCH_PROFILE,
         maxResearchCandles: 1000
       },
       onUpdate: (run) => {

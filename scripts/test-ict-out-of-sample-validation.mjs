@@ -33,6 +33,12 @@ const timingZone = process.env.ICT_SESSION_NARRATIVE_TIMING_ZONE || "America/New
 
 const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -44,6 +50,8 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictIndexSmtTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRiskTypes.ts" },
   { root: sourceRoot, file: "ictNewsSessionRisk.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictRealReplayRunnerTypes.ts" },
   { root: sourceRoot, file: "ictManualReplayReviewTypes.ts" },
   { root: sourceRoot, file: "ictMarketScorecardTypes.ts" },
@@ -145,9 +153,21 @@ function compileSuiteForNode() {
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
-      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
+      .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
+  fs.writeFileSync(
+    path.join(outRoot, "index.mjs"),
+    sourceFiles
+      .filter(({ file, root }) => root === sourceRoot && file !== "index.ts")
+      .map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`)
+      .join("\n"),
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -157,6 +177,20 @@ export async function listCanonicalCandleSourceSummaries() {
   return Array.from(globalThis.__ICT_OOS_TEST_SOURCES?.values() ?? []).map(({ candles, ...summary }) => summary);
 }
 `,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "currentOpportunityStub.mjs"),
+    `export function buildCurrentOpportunityContext(input) { return input; }
+export function detectCurrentOpportunities() {
+  return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
+}
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "forwardScenarioStub.mjs"),
+    "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
     "utf8"
   );
 }

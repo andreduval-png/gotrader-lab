@@ -485,13 +485,15 @@ const scoreIfvgFilteredTrade = ({
   decisionIndex,
   candles,
   config,
-  profileId
+  profileId,
+  qualityContext
 }: {
   candidate: ReturnType<typeof assessIctIfvgFilteredV2>["candidate"];
   decisionIndex: number;
   candles: Candle[];
   config: ResolvedBacktestConfig;
   profileId: "ifvg_filtered_v2_research" | "ifvg_fresh_retest_v3_research" | "ifvg_fresh_retest_v4_candidate";
+  qualityContext?: SimulatedTradeRecord["qualityContext"];
 }): SimulatedTradeRecord | undefined => {
   if (
     candidate.side === "flat" ||
@@ -592,7 +594,8 @@ const scoreIfvgFilteredTrade = ({
       riskReward: round(targetR, 3),
       mode: "simulation"
     },
-    agentAttribution: []
+    agentAttribution: [],
+    qualityContext
   };
 };
 
@@ -682,7 +685,21 @@ const runIfvgResearchBacktest = (
         ? "ifvg_fresh_retest_v4_candidate"
         : resolved.strategyProfile === "ifvg_fresh_retest_v3_research"
           ? "ifvg_fresh_retest_v3_research"
-          : "ifvg_filtered_v2_research"
+          : "ifvg_filtered_v2_research",
+      qualityContext: {
+        strategyProfile: resolved.strategyProfile,
+        setupFamily: "ifvg",
+        htfAlignment: assessment.candidate.htfAlignment,
+        sessionPreferred: assessment.candidate.sessionContext?.preferredWindow,
+        liquidityTargetPresent: Boolean(assessment.candidate.liquidityTarget),
+        cleanRetest: assessment.cleanRetest,
+        freshRetest: assessment.signalFresh,
+        signalAgeBars: "signalAgeBars" in assessment ? assessment.signalAgeBars : 0,
+        displacementConfirmed:
+          "displacementConfirmed" in assessment ? Boolean(assessment.displacementConfirmed) : undefined,
+        presentConditions: assessment.candidate.presentConditions.slice(0, 8),
+        warnings: assessment.candidate.warnings.slice(0, 8)
+      }
     });
     if (!trade) {
       blockerCounts.insufficient_outcome_window = (blockerCounts.insufficient_outcome_window ?? 0) + 1;

@@ -383,7 +383,6 @@ const readinessSummaryFor = (input: {
   paperSimEligibilityReason: string;
   requiredTimeframesLoaded?: boolean;
   riskStatus?: string;
-  smtStatus?: string;
 }): IctReadinessSummary => {
   const reasons = uniqueReasons([
     input.dataStatus !== "ready" ? `Current read data is ${input.dataStatus ?? "unknown"}.` : undefined,
@@ -391,7 +390,6 @@ const readinessSummaryFor = (input: {
     input.missingTimeframes?.length ? `Missing analysis timeframes: ${input.missingTimeframes.join(", ")}.` : undefined,
     input.analysisDepthStatus && input.analysisDepthStatus !== "sufficient" ? `Analysis depth is ${input.analysisDepthStatus}.` : undefined,
     input.modelDetectionStatus !== "detected" ? "No complete session model detected." : undefined,
-    /comparison_sources_missing|insufficient|missing|unavailable/i.test(input.smtStatus ?? "") ? "SMT/relative-strength context is incomplete." : undefined,
     /unknown|unavailable/i.test(input.riskStatus ?? "") ? "News/session risk context is incomplete." : undefined,
     input.paperSimAllowed ? undefined : input.paperSimEligibilityReason,
     "Execution readiness is disabled by design."
@@ -400,7 +398,7 @@ const readinessSummaryFor = (input: {
   const researchReadiness =
     !usableResearch
       ? "not_ready"
-      : reasons.some((reason) => /M5\/M15|Missing analysis|depth|No complete|SMT|risk context/i.test(reason))
+      : reasons.some((reason) => /M5\/M15|Missing analysis|depth|No complete|risk context/i.test(reason))
         ? "partial"
         : "ready";
   const paperReadiness = input.paperSimAllowed
@@ -427,7 +425,6 @@ const nextActionFor = (packet: IctAdvisorPacket, reasons: string[]) => {
   if (status === "watchlist_candidate") return "Keep on watchlist and test the blocking evidence with replay.";
   if (reasons.some((reason) => /rr|target/i.test(reason))) return "Wait for a cleaner target and RR profile.";
   if (reasons.some((reason) => /fvg|displacement/i.test(reason))) return "Wait for displacement/FVG evidence before retesting.";
-  if (reasons.some((reason) => /smt|relative strength/i.test(reason))) return "Fetch or compare correlated index context for SMT confirmation.";
   if (reasons.some((reason) => /news|session/i.test(reason))) return "Wait until news/session risk clears.";
   return "Continue observation; current setup is not an approved research candidate.";
 };
@@ -768,7 +765,9 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     ...packet.approvedProfileDecision.watchlistReasons,
     ...recommended.noTradeReasons,
     ...(recommended.newsSessionRisk?.newsSessionRiskNotes ?? []),
-    recommended.smt?.reason,
+    recommended.smt?.confirmsCandidate || recommended.smt?.rejectsCandidate
+      ? recommended.smt.reason
+      : undefined,
     ...(packet.sessionNarrative?.topReasons ?? []),
     ...(packet.sessionNarrative?.primaryModelDetection?.modelReasons ?? []),
     ...(packet.sessionNarrative?.primaryModelDetection?.missingEvidence?.map((reason) => `Model missing evidence: ${reason}.`) ?? []),
@@ -779,7 +778,6 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     targetConstructionStatus === "missing" ? targetConstructionReason : undefined,
     invalidationConstructionStatus === "missing" ? invalidationConstructionReason : undefined,
     rrConstructionStatus === "missing" ? rrConstructionReason : undefined,
-    smtStatus === "comparison_sources_missing" || smtStatus === "insufficient_data" ? smtReason : undefined,
     riskStatus === "unknown_no_calendar" || riskStatus === "unavailable" ? riskReason : undefined,
     packet.sessionNarrative?.dataDepth.status !== "sufficient" ? packet.sessionNarrative?.dataDepth.note : undefined
   ]);
@@ -874,7 +872,6 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     paperSimEligibilityStatus: paperSim.paperSimEligibilityStatus,
     requiredTimeframesLoaded,
     riskStatus,
-    smtStatus
   });
   const multiTimeframeReasons = uniqueReasons([
     analysisTimeframesUsed.length <= 1 ? "Multi-timeframe context incomplete." : undefined,
@@ -1040,6 +1037,7 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     liquiditySwept: liquidityLabel(recommended.liquiditySwept),
     fvgStatus: fvgStatusFor(recommended),
     displacementStatus: displacementStatusFor(recommended),
+    entryReference: recommended.entryReference ?? recommended.entryZone?.midpoint,
     entryZone: entryZoneLabel(recommended.entryZone),
     ...latestResearchSummaryFor(latestState, packet),
     sessionNarrativeProfile,

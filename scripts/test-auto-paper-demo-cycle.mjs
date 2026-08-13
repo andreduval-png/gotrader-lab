@@ -315,6 +315,22 @@ async function main() {
   assert.ok(eligible.watchlistCandidateId);
   assert.equal(eligible.dailyReport?.authority.executionAuthority, "none");
 
+  const reusedValidation = await mod.runAutoPaperDemoCycle({
+    sourceSnapshot: validSource,
+    cmdIndependentDateEvidence,
+    createWatchlistCandidate: false,
+    now: "2026-06-12T11:06:00.000Z"
+  });
+  assert.equal(reusedValidation.validationChainId, "cmd_independent_dates_passed");
+  assert.equal(reusedValidation.replaySummary?.verdict, "passed");
+  assert.equal(reusedValidation.walkForwardSummary?.verdict, "passed");
+  assert.equal(reusedValidation.evidenceMaturitySummary?.evidenceQualityScore, 68);
+  assert.doesNotMatch(reusedValidation.blockers.join(" "), /validation chain is missing|replay runner not wired/i);
+  assert.ok(
+    reusedValidation.events.some((event) => event.title === "Existing validation chain reused"),
+    "default cycle must reuse matching evidence instead of replacing it with an empty chain"
+  );
+
   const state = mod.loadAutoPaperDemoCycleState();
   assert.equal(state.latestCycle?.cycleId, eligible.cycleId);
   assert.equal(state.latestCycle?.authority.executionAuthority, "none");

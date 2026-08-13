@@ -1,0 +1,427 @@
+{
+  "schemaVersion": "gotrader-v2-normalized-snapshot-v1",
+  "payload": {
+    "authority": {
+      "brokerAuthority": "none",
+      "executionAuthority": "none",
+      "readinessOverrideAuthority": "none"
+    },
+    "entries": [
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "silver_bullet_v1_behavior"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v1",
+        "strategyId": "silver_bullet_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "silver_bullet_v2_behavior"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v2",
+        "strategyId": "silver_bullet_v2_refined_research"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "camerons_model_catalog_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "camerons_model_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ifvg_v1_valid",
+          "ifvg_v1_blocked"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v1",
+        "strategyId": "ifvg_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ifvg_v2_negative_control"
+        ],
+        "classification": "negative_control",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v2",
+        "strategyId": "ifvg_filtered_v2_research"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ifvg_v3_valid",
+          "ifvg_v3_forming",
+          "ifvg_v3_rejected",
+          "ifvg_v3_historical_oos"
+        ],
+        "classification": "positive_canary",
+        "currentResearchStatus": "evidence_building",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v3",
+        "strategyId": "ifvg_fresh_retest_v3_research"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ifvg_v4_shallow_candidate",
+          "ifvg_v4_deep_retest_blocked"
+        ],
+        "classification": "experimental",
+        "currentResearchStatus": "evidence_building",
+        "detectorStatus": "experimental",
+        "profileVersion": "v4",
+        "strategyId": "ifvg_fresh_retest_v4_candidate"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "turtle_soup_valid",
+          "turtle_soup_no_setup"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v1",
+        "strategyId": "turtle_soup_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "crt_catalog_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "crt_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ote_catalog_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "ote_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "cisd_bullish_valid",
+          "cisd_chop_blocked"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v1",
+        "strategyId": "cisd_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "amd_catalog_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "amd_power_of_three_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "cmd_short_date_concentrated_blocked"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "ict_cmd_short_paper_watchlist_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "cmd_high_displacement_v2_research_only"
+        ],
+        "classification": "experimental",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "experimental",
+        "profileVersion": "v2",
+        "strategyId": "cmd_high_displacement_v2_research"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "grinch_reversal_legacy_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "grinch_reversal_expansion_confirmation_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "grinch_model_one_legacy_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "grinch_model_1_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "grinch_consolidation_legacy_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "grinch_consolidation_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "pd_array_forming_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "pd_array_setup_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "scalp_forming_only"
+        ],
+        "classification": "placeholder",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "placeholder",
+        "profileVersion": "v1",
+        "strategyId": "scalp_setup_research_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "session_raid_v1_complete",
+          "session_raid_v1_no_trade"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v1",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "session_raid_v2_filtered_behavior"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "replay_required",
+        "detectorStatus": "executable_research",
+        "profileVersion": "v2",
+        "strategyId": "nasdaq_london_raid_ny_reversal_v2_filtered_research"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "market_map_context_only"
+        ],
+        "classification": "diagnostic",
+        "currentResearchStatus": "retired",
+        "detectorStatus": "diagnostic",
+        "profileVersion": "v1",
+        "strategyId": "market_map_only_diagnostic_v1"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ict_bread_and_butter_buy_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "executable_research",
+        "profileVersion": "phase2_v1",
+        "strategyId": "ict-bread-and-butter-buy"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ict_bread_and_butter_sell_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "executable_research",
+        "profileVersion": "phase2_v1",
+        "strategyId": "ict-bread-and-butter-sell"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "ict_one_shot_one_kill_parity"
+        ],
+        "classification": "behavioral_fixture",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "executable_research",
+        "profileVersion": "phase2_v1",
+        "strategyId": "ict-one-shot-one-kill"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "order_block_taxonomy_context_only"
+        ],
+        "classification": "diagnostic",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "diagnostic",
+        "profileVersion": "phase2_v1",
+        "strategyId": "ict-order-block-taxonomy"
+      },
+      {
+        "authority": {
+          "brokerAuthority": "none",
+          "executionAuthority": "none",
+          "readinessOverrideAuthority": "none"
+        },
+        "baselineFixtureIds": [
+          "universal_recognition_context_only"
+        ],
+        "classification": "diagnostic",
+        "currentResearchStatus": "research_only",
+        "detectorStatus": "diagnostic",
+        "profileVersion": "v1",
+        "strategyId": "universal_recognition_service"
+      }
+    ],
+    "schemaVersion": "gotrader-v2-strategy-catalog-baseline-v1",
+    "sourceCommit": "f6dbe33489a122d36995c5eb260d763917d186b3"
+  }
+}

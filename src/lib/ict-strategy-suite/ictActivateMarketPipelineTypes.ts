@@ -18,7 +18,7 @@ import type {
 } from "./ictOpportunityDetectionTypes";
 import type { IctResearchHypothesis, IctResearchHypothesisStatus } from "./ictSelfImprovementTypes";
 import type { IctResearchSignal } from "./ictSignalContractTypes";
-import type { CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
+import type { CurrentOpportunity, CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
 
 export type IctActivateMarketStepId =
   | "resolve_symbol"
@@ -113,6 +113,16 @@ export interface IctActivateMarketLatestSummary {
   selfImprovementHypothesisQueued?: boolean;
   selfImprovementHypothesisStatus?: IctResearchHypothesisStatus;
   selfImprovementHypothesisReason?: string;
+  researchSide?: IctCurrentRead["side"];
+  proposedCandidateStatus?: CurrentOpportunity["status"];
+  proposedEntryPrice?: number;
+  proposedEntryZone?: { lower: number; upper: number };
+  proposedStopLoss?: number;
+  proposedTakeProfit?: number;
+  proposedRiskReward?: number;
+  riskScreeningStatus?: string;
+  riskScreeningReason?: string;
+  recommendedMaxRiskPerTradePct?: number;
   nextAction?: string;
   executionAllowed: false;
   researchOnly: true;
@@ -209,6 +219,15 @@ export interface IctActivateMarketResult {
     recommendedMaxRiskPerTradePct?: number;
     recommendedMaxRiskStatus?: "available" | "unavailable";
     recommendedMaxRiskReason?: string;
+    researchSide?: IctCurrentRead["side"];
+    proposedCandidateStatus?: CurrentOpportunity["status"];
+    proposedEntryPrice?: number;
+    proposedEntryZone?: { lower: number; upper: number };
+    proposedStopLoss?: number;
+    proposedTakeProfit?: number;
+    proposedRiskReward?: number;
+    riskScreeningStatus?: string;
+    riskScreeningReason?: string;
     nextAction?: string;
     executionAllowed: false;
   };

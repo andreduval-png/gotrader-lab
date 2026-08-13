@@ -7,6 +7,7 @@ import {
   type ForwardEvidenceRecommendation
 } from "./forwardEvidenceTypes";
 import { getFrozenResearchProfile, ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
+import { analyzeForwardEvidenceQuality } from "./analyzeForwardEvidenceQuality";
 
 export const FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS = Object.freeze({
   completedOutcomes: 40,
@@ -99,6 +100,7 @@ export const evaluateForwardEvidenceLedger = (
   const reassessmentEligible = blockers.length === 0;
   const averageR = realized.length ? rounded(realized.reduce((sum, value) => sum + value, 0) / realized.length) : null;
   const profitFactor = grossLoss > 0 ? rounded(grossProfit / grossLoss) : null;
+  const qualityAttribution = analyzeForwardEvidenceQuality(completed);
   let recommendation: ForwardEvidenceRecommendation = "keep_collecting";
 
   if (reassessmentEligible) {
@@ -131,6 +133,7 @@ export const evaluateForwardEvidenceLedger = (
     averageR,
     profitFactor,
     maxDrawdownR: maxDrawdownR(realized),
+    qualityAttribution,
     reassessmentEligible,
     blockers,
     recommendation,

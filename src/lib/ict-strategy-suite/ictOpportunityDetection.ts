@@ -335,7 +335,6 @@ const confirmationNeededFor = (context: IctOpportunityDetectionContext, signal?:
     !finite(signal?.rrEstimate) ? "RR calculation" : undefined,
     !signal?.displacement && type !== "range_liquidity_sweep" ? "displacement confirmation" : undefined,
     !signal?.fairValueGap && !context.sessionNarrative?.fvgTarget?.detected ? "FVG or PD-array draw" : undefined,
-    !signal?.smt ? "SMT/relative-strength context" : undefined,
     !signal?.newsSessionRisk ? "news/session risk review" : undefined
   ]).slice(0, 10);
 

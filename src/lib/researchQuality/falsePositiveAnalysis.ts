@@ -1,5 +1,6 @@
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
 import type { FalsePositivePattern } from "@/lib/researchQuality/researchQualityTypes";
+import type { ResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 
 const estimatedLossesFor = (scenario: ValidationScenarioResult) =>
   Math.max(0, scenario.totalTrades - Math.round(scenario.totalTrades * scenario.winRate));
@@ -33,7 +34,34 @@ const patternFor = (scenario: ValidationScenarioResult) => {
   return "Negative or poorly calibrated simulated theses appeared in this scenario.";
 };
 
-export function analyzeFalsePositivePatterns(report: ValidationSuiteReport): FalsePositivePattern[] {
+const mitigationForCause = (causeCode: string) => {
+  if (causeCode.includes("session") || causeCode.includes("timing")) return "Test one session/timing exclusion against the frozen baseline.";
+  if (causeCode.includes("htf")) return "Test one HTF-alignment requirement against the frozen baseline.";
+  if (causeCode.includes("displacement") || causeCode.includes("entry_confirmation")) return "Test one displacement/entry-confirmation requirement.";
+  if (causeCode === "unattributed_model_loss") return "Capture richer compact pre-entry context before changing any threshold.";
+  return "Test one causal exclusion at a time and require non-degrading chronological OOS evidence.";
+};
+
+export function analyzeFalsePositivePatterns(
+  report: ValidationSuiteReport,
+  attribution?: ResearchQualityFailureAttribution
+): FalsePositivePattern[] {
+  if (attribution && attribution.canonicalScenarioId) {
+    const scenario = report.scenarios.find((item) => item.id === attribution.canonicalScenarioId);
+    const resolved = attribution.targetHitCount + attribution.stopHitCount;
+    return attribution.failureCauses.map((cause) => ({
+      scenarioName: `${attribution.canonicalScenarioName ?? "Canonical scenario"}: ${cause.label}`,
+      estimatedFalsePositives: cause.stopHitCount,
+      winRate: attribution.targetHitCount / Math.max(1, resolved),
+      averageConfidence: cause.averageConfidence,
+      calibrationGap: scenario?.confidenceCalibration.calibrationGap ?? 0,
+      worstR: cause.worstR,
+      pattern: cause.evidence,
+      mitigation: mitigationForCause(cause.causeCode),
+      causeCode: cause.causeCode,
+      countBasis: "completed_stop_hits"
+    }));
+  }
   const candidates = report.scenarios
     .filter(
       (scenario) =>
@@ -51,7 +79,8 @@ export function analyzeFalsePositivePatterns(report: ValidationSuiteReport): Fal
       calibrationGap: scenario.confidenceCalibration.calibrationGap,
       worstR: scenario.worstTradeR,
       pattern: patternFor(scenario),
-      mitigation: mitigationFor(scenario)
+      mitigation: mitigationFor(scenario),
+      countBasis: "legacy_estimate" as const
     }))
     .sort(
       (a, b) =>

@@ -51,11 +51,17 @@ async function main() {
     ]
   );
   compile(
+    "src/lib/forwardEvidence/analyzeForwardEvidenceQuality.ts",
+    "analyzeForwardEvidenceQuality.mjs",
+    [["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"]]
+  );
+  compile(
     "src/lib/forwardEvidence/evaluateForwardEvidenceLedger.ts",
     "evaluateForwardEvidenceLedger.mjs",
     [
       ["./forwardEvidenceTypes", "./forwardEvidenceTypes.mjs"],
-      ["./frozenProfileRegistry", "./frozenProfileRegistry.mjs"]
+      ["./frozenProfileRegistry", "./frozenProfileRegistry.mjs"],
+      ["./analyzeForwardEvidenceQuality", "./analyzeForwardEvidenceQuality.mjs"]
     ]
   );
   compile(
@@ -203,6 +209,9 @@ async function main() {
       stop: 99,
       target: 105,
       rr: 2,
+      htfAlignment: "aligned",
+      sessionContext: { id: "new_york_open", preferredWindow: true },
+      liquidityTarget: { price: 105 },
       presentConditions: ["full_inversion", "unused_ifvg_zone", "ifvg_retest"],
       missingConditions: [],
       warnings: []
@@ -216,6 +225,11 @@ async function main() {
   assert.equal(pendingObservation.authority.executionAuthority, "none");
   assert.equal(pendingObservation.authority.brokerAuthority, "none");
   assert.equal(pendingObservation.authority.readinessOverrideAuthority, "none");
+  assert.equal(pendingObservation.qualityContext?.session, "New York AM");
+  assert.equal(pendingObservation.qualityContext?.htfAlignment, "aligned");
+  assert.equal(pendingObservation.qualityContext?.preferredSession, true);
+  assert.equal(pendingObservation.qualityContext?.cleanRetest, true);
+  assert.equal(pendingObservation.qualityContext?.freshRetest, true);
   assert.doesNotMatch(JSON.stringify(pendingObservation), /"(?:candles|rawCandles|accountData|orderData|positionData)"\s*:/i);
 
   const v4PendingObservation = ifvgPolicy.buildIfvgV4ForwardObservation({
@@ -231,6 +245,9 @@ async function main() {
       stop: 203,
       target: 196,
       rr: 2,
+      htfAlignment: "mixed",
+      sessionContext: { id: "new_york_open", preferredWindow: true },
+      liquidityTarget: { price: 196 },
       presentConditions: ["fresh_clean_retest", "shallow_retest"],
       missingConditions: [],
       warnings: []
@@ -355,6 +372,18 @@ async function main() {
       independentDate: afterCutoff(dayIndex).slice(0, 10),
       forwardWindowId: index < 20 ? "forward_window_1" : "forward_window_2",
       direction: index % 2 ? "short" : "long",
+      qualityContext: {
+        session: index % 2 ? "New York AM" : "London",
+        htfAlignment: index % 5 === 0 ? "against_htf" : "aligned",
+        preferredSession: index % 5 !== 0,
+        liquidityTargetPresent: true,
+        cleanRetest: true,
+        freshRetest: true,
+        signalAgeBars: 0,
+        displacementConfirmed: true,
+        presentConditions: ["fresh_clean_retest", "external_liquidity_target"],
+        warnings: []
+      },
       outcome: winning ? "target_first" : "invalidation_first",
       realizedR: winning ? 2.5 : -1,
       lastCheckedAt: afterCutoff(dayIndex, 17)
@@ -380,6 +409,16 @@ async function main() {
   assert.equal(eligible.authority.executionAuthority, "none");
   assert.ok((eligible.averageR ?? 0) > 0);
   assert.ok((eligible.profitFactor ?? 0) > 1);
+  assert.equal(eligible.qualityAttribution.completedOutcomes, 40);
+  assert.equal(eligible.qualityAttribution.invalidationCount, 8);
+  assert.equal(eligible.qualityAttribution.attributedInvalidationCount, 8);
+  assert.equal(eligible.qualityAttribution.attributionCoverage, 1);
+  assert.equal(eligible.qualityAttribution.failureCauses[0]?.causeCode, "session_window_mismatch");
+  assert.equal(eligible.qualityAttribution.sessionLanes.filter((lane) => lane.side === "all").length, 2);
+  assert.equal(eligible.qualityAttribution.strongestSessionLane?.status, "stable_research");
+  assert.ok((eligible.qualityAttribution.strongestSessionLane?.costAdjustedAverageR05 ?? 0) > 0);
+  assert.equal(eligible.qualityAttribution.authority.executionAuthority, "none");
+  assert.equal(eligible.qualityAttribution.safety.profileMutationAllowed, false);
 
   const gatewayReport = gatewayReportBuilder.buildForwardEvidenceGatewayReport(
     eligible,
@@ -391,6 +430,8 @@ async function main() {
   assert.equal(gatewayReport.reassessmentEligible, true);
   assert.equal(gatewayReport.autoPromotionAllowed, false);
   assert.deepEqual(gatewayReport.authority, frozen.authority);
+  assert.equal(gatewayReport.qualityAttribution.attributionCoverage, 1);
+  assert.equal(gatewayReport.qualityAttribution.sessionLanes.length, eligible.qualityAttribution.sessionLanes.length);
   assert.doesNotMatch(
     JSON.stringify(gatewayReport),
     /"(?:entries|candles|rawCandles|runtimeSnapshot|account|orders|positions|apiKey|password|secret|token)"\s*:/i

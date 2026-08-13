@@ -1,0 +1,21 @@
+# GoTrader V2 Phase 0 Test Manifest
+
+The machine-readable manifest is `scripts/v2-baseline/test-manifest.json`; `scripts/v2-baseline/run-baseline-suite.mjs` executes named suites and stops on the first failure.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `npm.cmd run test:core` | Fast deterministic type, catalog, snapshot, source, regime, provenance, push-feed, and authority checks. |
+| `npm.cmd run test:strategy-baselines` | Representative detector and legacy-engine parity checks. |
+| `npm.cmd run test:source-integrity` | Source identity, timing, push-feed, and multi-timeframe checks. |
+| `npm.cmd run test:provenance` | Source, validation-chain, and research-cycle lineage checks. |
+| `npm.cmd run test:safety` | Authority, MT5 read-only, OpenClaw draft, and auto-apply safety checks. |
+| `npm.cmd run test:browser-smoke` | Existing Playwright route and console smoke. |
+| `npm.cmd run test:deep-research` | Service-dependent performance, detector walk-forward, OOS, replay, and research-quality checks. |
+
+The manifest groups existing commands under source integrity, strategy detection, trade geometry, replay, walk-forward/OOS, research quality, evidence/provenance, readiness, storage, safety/authority, browser smoke, and build/typecheck. Existing scripts remain available; Phase 0 does not delete or rename them.
+
+There is no lint command or lint configuration in the current repository. TypeScript project compilation is exposed separately as `npm.cmd run typecheck`.
+
+Deep-history work is excluded from `test:core` because it depends on live local MT5 services and can exceed normal fast-suite time limits.

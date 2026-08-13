@@ -62,7 +62,33 @@ const sessionConsistencyPassed = (quality?: ResearchQualityReview) => {
 };
 
 const falsePositiveTotal = (quality?: ResearchQualityReview) =>
-  quality?.falsePositivePatterns.reduce((sum, item) => sum + item.estimatedFalsePositives, 0) ?? 0;
+  quality?.failureAttribution
+    ? quality.failureAttribution.attributedStopHitCount
+    : quality?.falsePositivePatterns.reduce((sum, item) => sum + item.estimatedFalsePositives, 0) ?? 0;
+
+const falsePositiveControlFor = (quality?: ResearchQualityReview) => {
+  const attribution = quality?.failureAttribution;
+  if (!attribution) {
+    const count = falsePositiveTotal(quality);
+    const patterns = quality?.falsePositivePatterns.length ?? 99;
+    return {
+      passed: Boolean(quality) && count <= 2 && patterns <= 2,
+      currentValue: `${count} legacy estimated; ${patterns === 99 ? "missing" : patterns} patterns`,
+      requiredValue: "legacy estimated <= 2 and patterns <= 2",
+      detail: `Legacy estimated false positives ${count}; patterns ${patterns === 99 ? 0 : patterns}.`
+    };
+  }
+  const directlyAttributedFamilies = attribution.failureCauses.filter((cause) => cause.directlyAttributed).length;
+  const attributableRate = attribution.attributedStopHitCount / Math.max(1, attribution.completedTradeCount);
+  const contextCoverage = attribution.contextEvaluationCoverage ?? 0;
+  const coveragePassed = attribution.stopHitCount === 0 || contextCoverage >= 0.9;
+  return {
+    passed: coveragePassed && attributableRate <= 0.25 && directlyAttributedFamilies <= 2,
+    currentValue: `${Math.round(attributableRate * 100)}% avoidable-loss rate; ${directlyAttributedFamilies} causal families; ${Math.round(contextCoverage * 100)}% context evaluated`,
+    requiredValue: "avoidable-loss rate <= 25%, causal families <= 2, context evaluation >= 90%",
+    detail: `${attribution.stopHitCount} completed stop hits; ${attribution.attributedStopHitCount} have a discriminating pre-entry cause; ${attribution.unattributedStopHitCount} are ordinary/unexplained model losses, not automatically false positives.`
+  };
+};
 
 const redDrawdownClusters = (quality?: ResearchQualityReview) =>
   quality?.drawdownClusters.filter((cluster) => cluster.clusterRisk === "red").length ?? 0;
@@ -201,7 +227,7 @@ export function evaluateReadinessGate({
   const maxDrawdown = maxDrawdownFor(validation);
   const averageCalibration = averageCalibrationFor(validation);
   const validationTrades = totalValidationTrades(validation);
-  const falsePositives = falsePositiveTotal(quality);
+  const falsePositiveControl = falsePositiveControlFor(quality);
   const redClusters = redDrawdownClusters(quality);
   const llmSnapshot = llmSnapshotFor();
   const validationProvenanceReview = matchValidationProvenance(
@@ -378,14 +404,14 @@ export function evaluateReadinessGate({
     requirement(
       "false-positive-control",
       "False positives are controlled",
-      Boolean(quality) && falsePositives <= 2 && (quality?.falsePositivePatterns.length ?? 99) <= 2,
-      `Estimated false positives ${falsePositives}; patterns ${quality?.falsePositivePatterns.length ?? 0}.`,
+      falsePositiveControl.passed,
+      falsePositiveControl.detail,
       "blocker",
       {
-        currentValue: `${falsePositives} estimated; ${quality?.falsePositivePatterns.length ?? 0} patterns`,
-        requiredValue: "estimated <= 2 and patterns <= 2",
-        explanation: "Too many false positives means the strategy is still accepting fragile theses.",
-        suggestedFix: "Review false-positive patterns in /research-quality and tune one variable at a time in Backtest Lab.",
+        currentValue: falsePositiveControl.currentValue,
+        requiredValue: falsePositiveControl.requiredValue,
+        explanation: "Completed stop hits are separated from attributable, recurring quality failures. Larger samples are judged by rate and causal families, not an absolute loss count.",
+        suggestedFix: "Review stop-hit attribution in /research-quality, raise coverage to 90%, then test one causal exclusion at a time.",
         runPage: "/research-quality"
       }
     ),

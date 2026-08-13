@@ -2,6 +2,7 @@ import type { CIOSynthesisResult, InternalAgentOpinion } from "@/lib/agents";
 import type { InternalAgentId } from "@/lib/agents";
 import type { GrinchActiveProfile, GrinchFalsePositiveBlocker, GrinchStrategyScore } from "@/lib/strategyLibrary";
 import type { EdgeStatistics } from "@/lib/statistics/edgeStatistics";
+import type { ResearchQualityTradeContext } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 import type {
   Candle,
   ICTContext,
@@ -140,6 +141,8 @@ export interface SimulatedTradeRecord {
   simulatedTradePlan: SimulatedTradePlan;
   agentAttribution: SimulatedTradeAgentAttribution[];
   grinchScore?: GrinchStrategyScore;
+  /** Compact pre-entry setup state for research-quality attribution. Never contains candles or broker state. */
+  qualityContext?: ResearchQualityTradeContext;
 }
 
 export interface EquityCurvePoint {

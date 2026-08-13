@@ -1,3 +1,8 @@
+import type {
+  AccountRiskDecision,
+  SimulationRiskAcknowledgement
+} from "@/lib/risk/accountRiskTypes";
+
 export interface PaperDemoGatewayAuthority {
   executionAuthority: "none";
   brokerAuthority: "none";
@@ -17,6 +22,8 @@ export interface PaperDemoGatewayPreparation {
   preparedAt: string;
   expiresAt: string;
   strategyProfileId: string;
+  sourceProvider: "mt5_read_only";
+  sourceFingerprint: string;
   requestedSymbol: string;
   brokerSymbol: string;
   timeframe: string;
@@ -25,6 +32,11 @@ export interface PaperDemoGatewayPreparation {
   stop: number;
   targets: number[];
   paperUnitsPreview: number;
+  riskBudgetUsd: number;
+  riskDecisionId: string;
+  riskPolicyVersion: "gotrader_simulation_account_risk_v1";
+  riskState: "monitoring" | "warning" | "pre_breach";
+  mt5BrokerRevalidationRequired: true;
   status: "prepared_for_local_paper_simulation_review";
   paperOnly: true;
   executable: false;
@@ -48,5 +60,9 @@ export interface PaperDemoGatewayResult {
   nextAction: string;
   state: PaperDemoGatewayState;
   brokerSubmissionAttempted: false;
+  accountRisk?: {
+    decision: AccountRiskDecision;
+    acknowledgement?: SimulationRiskAcknowledgement;
+  };
   authority: PaperDemoGatewayAuthority;
 }

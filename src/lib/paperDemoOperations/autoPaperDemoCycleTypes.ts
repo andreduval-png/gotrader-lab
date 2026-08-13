@@ -2,6 +2,7 @@ import type { PaperDemoAuthority, PaperDemoEligibilityResult, PaperDemoReport } 
 import type { PaperDemoChecklistSummary } from "../readiness";
 import type { IctCmdIndependentDateEvidence } from "../ict-strategy-suite/ictCmdIndependentDateGateTypes";
 import type {
+  ValidationChainEntry,
   ValidationChainEvidenceSummary,
   ValidationChainRecognitionType,
   ValidationChainReplaySummary,
@@ -90,6 +91,7 @@ export interface AutoPaperDemoDailyReport {
 export interface AutoPaperDemoCycleConfig {
   persist?: boolean;
   createWatchlistCandidate?: boolean;
+  validationEntry?: ValidationChainEntry;
   sourceSnapshot?: AutoPaperDemoCycleSourceSummary & {
     isMockOrSample?: boolean;
     isResearchActive?: boolean;

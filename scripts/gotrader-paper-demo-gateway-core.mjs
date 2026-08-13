@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -7,6 +7,19 @@ import {
   readRecentTradeProposalAudits,
   TRADE_PROPOSAL_MCP_AUTHORITY
 } from "./gotrader-trade-proposal-core.mjs";
+import {
+  appendSimulationRiskLedger,
+  buildRiskEvaluationRequest,
+  buildSimulationAccountRiskStatus,
+  buildSimulationAccountSnapshot,
+  createSimulationRiskCommand,
+  evaluateSimulationAccountRisk,
+  executeSimulationRiskCommand,
+  loadSimulationAccountRiskPolicy,
+  loadSimulationAccountRiskState,
+  refreshSimulationAccountHeartbeat,
+  saveSimulationAccountRiskState
+} from "./gotrader-account-risk-core.mjs";
 
 export const PAPER_DEMO_GATEWAY_POLICY_VERSION = "gotrader_paper_demo_gateway_v1";
 export const PAPER_DEMO_GATEWAY_AUTHORITY = TRADE_PROPOSAL_MCP_AUTHORITY;
@@ -24,6 +37,7 @@ const DEFAULT_OUTBOX_DIR = ".gotrader/paper-demo-outbox";
 const DEFAULT_RECEIPT_DIR = ".gotrader/paper-demo-receipts";
 const DEFAULT_MT5_DEMO_OUTBOX_DIR = ".gotrader/mt5-demo-outbox";
 const DEFAULT_MT5_DEMO_RECEIPT_DIR = ".gotrader/mt5-demo-receipts";
+const PAPER_DEMO_RISK_LOCK_DIR = ".gotrader/paper-demo-risk-transaction.lock";
 
 const finitePositive = (value) => typeof value === "number" && Number.isFinite(value) && value > 0;
 const unique = (values) => [...new Set(values.filter(Boolean))];
@@ -157,6 +171,7 @@ const sourceFingerprintIsCanonical = (proposal) =>
   );
 
 export const evaluatePaperDemoPreparation = ({
+  accountRiskEvaluation,
   forwardEvidence,
   now = new Date().toISOString(),
   policy = loadPaperDemoGatewayPolicy(),
@@ -188,6 +203,21 @@ export const evaluatePaperDemoPreparation = ({
   if (!proposalEvaluation?.deterministicChecks?.geometryValid) blockers.push("proposal_geometry_not_valid");
   if ((proposalEvaluation?.deterministicChecks?.rr ?? 0) < 2) blockers.push("proposal_minimum_rr_not_met");
   if (!sizingIsPrepared(proposalEvaluation)) blockers.push("operator_paper_sizing_not_prepared");
+  if (accountRiskEvaluation?.status !== "approved_for_simulation") {
+    blockers.push("account_risk_governor_not_approved");
+    blockers.push(...(accountRiskEvaluation?.blockers ?? []).map((item) => `account_risk:${item}`));
+  }
+  if (!authorityIsNone(accountRiskEvaluation?.authority)) blockers.push("account_risk_authority_not_none");
+  if (
+    accountRiskEvaluation?.simulationOnly !== true ||
+    accountRiskEvaluation?.brokerSubmissionAllowed !== false ||
+    accountRiskEvaluation?.liveExecutionAllowed !== false
+  ) {
+    blockers.push("account_risk_simulation_boundary_invalid");
+  }
+  if (!finitePositive(accountRiskEvaluation?.sizing?.estimatedRiskUsd)) {
+    blockers.push("account_risk_sizing_not_approved");
+  }
   if (!Number.isFinite(proposalMs) || !Number.isFinite(nowMs) || nowMs - proposalMs > policy.signalMaxAgeMs || nowMs < proposalMs) {
     blockers.push("paper_demo_signal_stale");
   }
@@ -218,7 +248,7 @@ export const evaluatePaperDemoPreparation = ({
   if (dailyCount >= policy.maxPreparationsPerDay) blockers.push("paper_demo_daily_request_limit_reached");
 
   const uniqueBlockers = unique(blockers);
-  if (existing) {
+  if (existing && uniqueBlockers.length === 0) {
     return {
       status: "already_prepared",
       preparation: existing,
@@ -259,8 +289,12 @@ export const evaluatePaperDemoPreparation = ({
     entry: proposal.entry,
     stop: proposal.stop,
     targets: proposal.targets,
-    paperUnitsPreview: proposalEvaluation.sizingPreview.paperUnitsPreview,
-    riskBudgetUsd: proposalEvaluation.sizingPreview.riskBudgetUsd,
+    paperUnitsPreview: accountRiskEvaluation.sizing.simulationVolumePreview,
+    riskBudgetUsd: accountRiskEvaluation.sizing.estimatedRiskUsd,
+    riskDecisionId: accountRiskEvaluation.decisionId,
+    riskPolicyVersion: accountRiskEvaluation.policyVersion,
+    riskState: accountRiskEvaluation.riskState,
+    mt5BrokerRevalidationRequired: true,
     status: "prepared_for_local_paper_simulation_review",
     paperOnly: true,
     executable: false,
@@ -328,7 +362,13 @@ export const buildPaperDemoExecutionRequest = ({
     riskPolicy: {
       maximumDailyLossR: policy.maxDailyLossR,
       maximumRequestsPerDay: policy.maxPreparationsPerDay,
-      maximumLossPerScenarioR: 1
+      maximumLossPerScenarioR: 1,
+      simulationRiskDecisionId: preparation.riskDecisionId,
+      simulationRiskPolicyVersion: preparation.riskPolicyVersion,
+      simulationRiskState: preparation.riskState,
+      approvedRiskUsd: preparation.riskBudgetUsd,
+      simulationVolumePreview: preparation.paperUnitsPreview,
+      mt5BrokerRevalidationRequired: true
     },
     permissions: {
       paperSimulationAllowed: true,
@@ -399,6 +439,16 @@ export const buildMt5DemoExecutionRequest = ({
       targets: preparation.targets,
       maxRiskUsd: Math.min(preparation.riskBudgetUsd, policy.mt5DemoMaxRiskUsd)
     },
+    riskEnvelope: {
+      simulationRiskDecisionId: preparation.riskDecisionId,
+      simulationRiskPolicyVersion: preparation.riskPolicyVersion,
+      simulationRiskState: preparation.riskState,
+      maximumApprovedRiskUsd: Math.min(preparation.riskBudgetUsd, policy.mt5DemoMaxRiskUsd),
+      simulationVolumePreview: preparation.paperUnitsPreview,
+      simulationVolumeIsAuthoritative: false,
+      brokerMustRecomputeVolume: true,
+      brokerMustRevalidateRiskAtDispatch: true
+    },
     permissions: {
       mt5DemoSubmissionAllowed: true,
       liveExecutionAllowed: false,
@@ -410,7 +460,15 @@ export const buildMt5DemoExecutionRequest = ({
       rawCandlesIncluded: false,
       credentialsIncluded: false,
       demoAccountRequired: true,
-      liveAccountAllowed: false
+      liveAccountAllowed: false,
+      freshBrokerSnapshotRequired: true,
+      terminalSymbolMetadataRequired: true,
+      tickValueRequired: true,
+      tickSizeRequired: true,
+      volumeMinMaxStepRequired: true,
+      marginCheckRequired: true,
+      protectedStopAndTargetRequired: true,
+      simulationVolumeTrustedByBroker: false
     },
     authority: PAPER_DEMO_GATEWAY_AUTHORITY
   };
@@ -563,17 +621,52 @@ export const savePaperDemoGatewayState = async (state, { repoRoot = process.cwd(
   return filePath;
 };
 
-export const preparePaperDemoSimulation = async (
+const preparePaperDemoSimulationUnlocked = async (
   proposalId,
   { env = process.env, now = new Date().toISOString(), repoRoot = process.cwd() } = {}
 ) => {
   const policy = loadPaperDemoGatewayPolicy(env);
+  const accountRiskPolicy = loadSimulationAccountRiskPolicy(env);
   const proposals = await readRecentTradeProposalAudits({ limit: 20, repoRoot });
   const proposalEvaluation = proposals.find((item) => item.proposalId === proposalId);
   const validationReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.validationReportPath));
   const forwardReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.forwardEvidenceReportPath));
   const state = await loadPaperDemoGatewayState({ repoRoot, now });
+  const loadedAccountRiskState = await loadSimulationAccountRiskState({
+    now,
+    policy: accountRiskPolicy,
+    repoRoot
+  });
+  const accountRiskState = refreshSimulationAccountHeartbeat(loadedAccountRiskState, accountRiskPolicy, now);
+  const riskIdempotencyKey = proposalEvaluation?.proposalId
+    ? `${proposalEvaluation.proposalId}:${proposalEvaluation?.compactProposal?.validationChainId ?? "missing"}`
+    : undefined;
+  const existingRiskReservation = riskIdempotencyKey
+    ? accountRiskState.activeReservations.find((item) => item.idempotencyKey === riskIdempotencyKey)
+    : undefined;
+  const accountRiskSnapshotState = existingRiskReservation
+    ? {
+        ...accountRiskState,
+        activeReservations: accountRiskState.activeReservations.filter(
+          (item) => item.idempotencyKey !== riskIdempotencyKey
+        ),
+        openRiskUsd: Math.max(0, accountRiskState.openRiskUsd - existingRiskReservation.riskUsd)
+      }
+    : accountRiskState;
+  const accountRiskSnapshot = buildSimulationAccountSnapshot(accountRiskSnapshotState, now);
+  const accountRiskRequest = buildRiskEvaluationRequest({
+    now,
+    proposalEvaluation,
+    requestedRiskUsd: Number(proposalEvaluation?.sizingPreview?.riskBudgetUsd)
+  });
+  const accountRiskEvaluation = evaluateSimulationAccountRisk({
+    now,
+    policy: accountRiskPolicy,
+    request: accountRiskRequest,
+    snapshot: accountRiskSnapshot
+  });
   const result = evaluatePaperDemoPreparation({
+    accountRiskEvaluation,
     forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
     now,
     policy,
@@ -581,7 +674,48 @@ export const preparePaperDemoSimulation = async (
     state,
     validationEvidence: summarizeValidationReport(validationReport, proposalEvaluation?.compactProposal?.strategyProfileId)
   });
+  let accountRiskAcknowledgement;
   if (result.status === "prepared_for_local_paper_simulation_review") {
+    const command = createSimulationRiskCommand({
+      decision: accountRiskEvaluation,
+      expiresAt: result.preparation.expiresAt,
+      now,
+      request: accountRiskRequest
+    });
+    const riskCommandResult = executeSimulationRiskCommand({
+      command,
+      now,
+      policy: accountRiskPolicy,
+      state: accountRiskState
+    });
+    accountRiskAcknowledgement = riskCommandResult.acknowledgement;
+    if (accountRiskAcknowledgement.status === "reservation_rejected") {
+      return {
+        ...result,
+        status: "blocked",
+        preparation: undefined,
+        blockers: [
+          ...result.blockers,
+          ...(accountRiskAcknowledgement.blockers ?? ["account_risk_reservation_rejected"])
+            .map((item) => `account_risk:${item}`)
+        ],
+        nextAction: "Re-evaluate account risk against the latest simulation state before preparing any paper request.",
+        state,
+        brokerSubmissionAttempted: false,
+        accountRisk: {
+          decision: accountRiskEvaluation,
+          acknowledgement: accountRiskAcknowledgement
+        }
+      };
+    }
+    await saveSimulationAccountRiskState(riskCommandResult.state, {
+      policy: accountRiskPolicy,
+      repoRoot
+    });
+    await appendSimulationRiskLedger(
+      { acknowledgement: accountRiskAcknowledgement, command, decision: accountRiskEvaluation, now },
+      { policy: accountRiskPolicy, repoRoot }
+    );
     await savePaperDemoGatewayState(result.state, { repoRoot });
   }
   if (result.status === "prepared_for_local_paper_simulation_review" || result.status === "already_prepared") {
@@ -621,6 +755,10 @@ export const preparePaperDemoSimulation = async (
     }
     return {
       ...result,
+      accountRisk: {
+        decision: accountRiskEvaluation,
+        acknowledgement: accountRiskAcknowledgement
+      },
       gatewayRequest: {
         requestId: request.requestId,
         requestHash: request.requestHash,
@@ -634,17 +772,54 @@ export const preparePaperDemoSimulation = async (
         : "The immutable paper-only request is queued for independent simulation and monitoring. MT5 demo submission remains disabled."
     };
   }
-  return result;
+  return {
+    ...result,
+    accountRisk: {
+      decision: accountRiskEvaluation,
+      acknowledgement: accountRiskAcknowledgement
+    }
+  };
+};
+
+export const preparePaperDemoSimulation = async (
+  proposalId,
+  options = {}
+) => {
+  const repoRoot = options.repoRoot ?? process.cwd();
+  const lockDir = resolveInsideRepo(repoRoot, PAPER_DEMO_RISK_LOCK_DIR);
+  await mkdir(path.dirname(lockDir), { recursive: true });
+  try {
+    await mkdir(lockDir);
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      return {
+        status: "blocked",
+        blockers: ["account_risk_transaction_already_in_progress"],
+        nextAction: "Wait for the active account-risk transaction to finish, then reevaluate against fresh state.",
+        state: await loadPaperDemoGatewayState({ repoRoot, now: options.now }),
+        brokerSubmissionAttempted: false,
+        authority: PAPER_DEMO_GATEWAY_AUTHORITY
+      };
+    }
+    throw error;
+  }
+  try {
+    return await preparePaperDemoSimulationUnlocked(proposalId, options);
+  } finally {
+    await rm(lockDir, { recursive: true, force: true });
+  }
 };
 
 export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot = process.cwd() } = {}) => {
   const policy = loadPaperDemoGatewayPolicy(env);
+  const accountRiskPolicy = loadSimulationAccountRiskPolicy(env);
   const validationReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.validationReportPath));
   const forwardReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.forwardEvidenceReportPath));
   const outboxCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.outboxDir))).length;
   const receiptCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.receiptDir))).length;
   const mt5OutboxCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.mt5DemoOutboxDir))).length;
   const mt5ReceiptCount = (await listJsonFiles(resolveInsideRepo(repoRoot, policy.mt5DemoReceiptDir))).length;
+  const accountRiskState = await loadSimulationAccountRiskState({ policy: accountRiskPolicy, repoRoot });
   return {
     provider: "gotrader_local_paper_demo_gateway",
     stage: "paper_simulation_preparation",
@@ -672,6 +847,10 @@ export const buildPaperDemoGatewayStatus = async ({ env = process.env, repoRoot 
       queuedRequestCount: mt5OutboxCount,
       receiptCount: mt5ReceiptCount
     },
+    accountRiskGovernor: buildSimulationAccountRiskStatus({
+      policy: accountRiskPolicy,
+      state: accountRiskState
+    }),
     paperGateway: {
       status: policy.enabled ? "operator_enabled" : "disabled",
       immutableOutboxSupported: true,

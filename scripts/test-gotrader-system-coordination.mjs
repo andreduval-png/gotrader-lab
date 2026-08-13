@@ -15,6 +15,10 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
   { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -102,7 +106,9 @@ function compileSuiteForNode() {
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
       .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
       .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
-      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -131,6 +137,11 @@ export function detectCurrentOpportunities() {
   return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
 }
 `,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "forwardScenarioStub.mjs"),
+    "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
     "utf8"
   );
 }
@@ -782,7 +793,7 @@ async function main() {
   assert.equal(currentReadWithLatest.latestReplayStatus, "target-first 50%");
   assert.equal(currentReadWithLatest.latestMonteCarloRobustness, "insufficient_data");
   assert.equal(currentReadWithLatest.latestScorecardBestSymbol, "MNQ");
-  assert.match(currentReadWithLatest.latestResearchStateNote, /manual research result/i);
+  assert.match(currentReadWithLatest.latestResearchStateNote, /compact research evidence.*identity matching/i);
   assert.equal(suite.assertIctCurrentReadIsCompact(currentReadWithLatest).ok, true);
 
   const advisorJournal = suite.buildIctAdvisorJournalEvent(packet.recommendedSignal, packet.approvedProfileDecision);

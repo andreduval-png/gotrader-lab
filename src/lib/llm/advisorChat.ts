@@ -25,9 +25,52 @@ export interface AdvisorChatReply {
   fallbackReason?: string;
 }
 
+const isContradictoryDepthReason = (reason: string) => {
+  const normalized = reason.toLowerCase();
+  return (
+    /compact read.*covers?.*requested/.test(normalized) ||
+    /(?:insufficient.*(?:current|active)[- ]market depth|(?:current|active)[- ]market depth.*insufficient)/.test(normalized) ||
+    /(?:data|analysis|validation) depth.*(?:insufficient|limited)/.test(normalized) ||
+    /covers? only .* days.*requested/.test(normalized)
+  );
+};
+
+const governedCurrentReadContext = (currentRead: IctCurrentRead) => {
+  const opportunity = currentRead.currentOpportunitySummary;
+  const validationContextReady = Boolean(
+    opportunity?.rangeHistoryAvailable &&
+    opportunity.validationLookbackDays >= 60 &&
+    opportunity.depthStatus === "validation_context_ready"
+  );
+  const keepReason = (reason: string) => !validationContextReady || !isContradictoryDepthReason(reason);
+
+  return {
+    topReasons: currentRead.topReasons.filter(keepReason).slice(0, 5),
+    opportunityBlockers: currentRead.opportunityBlockers.filter(keepReason).slice(0, 4),
+    tacticalWindow: {
+      status: currentRead.dataDepthStatus,
+      availableLookbackDays: currentRead.availableLookbackDays,
+      requestedLookbackDays: currentRead.requestedLookbackDays,
+      purpose: "chart_and_session_reference_only" as const
+    },
+    validationContext: opportunity
+      ? {
+          status: opportunity.depthStatus,
+          availableLookbackDays: opportunity.validationLookbackDays,
+          rangeHistoryAvailable: opportunity.rangeHistoryAvailable,
+          purpose: "candidate_validation_and_blocker_assessment" as const
+        }
+      : undefined,
+    interpretationRule: validationContextReady
+      ? "Validated range history is ready. Do not cite the smaller tactical chart window as an insufficient-depth blocker."
+      : "Validated range history is not ready; depth may remain an active candidate blocker."
+  };
+};
+
 export const buildAdvisorChatPacket = (context: AdvisorChatContext) => {
   const chain = latestValidationChainEntry();
   const activeSource = context.snapshot.marketData.activeResearchSource;
+  const governedRead = governedCurrentReadContext(context.currentRead);
   return {
     packetId: `advisor_chat_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
     timestamp: new Date().toISOString(),
@@ -66,10 +109,18 @@ export const buildAdvisorChatPacket = (context: AdvisorChatContext) => {
       approvedStatus: context.currentRead.approvedStatus,
       riskStatus: context.currentRead.riskStatus,
       smtStatus: context.currentRead.smtStatus,
-      topReasons: context.currentRead.topReasons.slice(0, 5),
+      smtPolicy: {
+        role: "optional_confluence",
+        missingBlocksCandidate: false,
+        opposingSignalBlocksCandidate: true
+      },
+      topReasons: governedRead.topReasons,
       nextAction: context.currentRead.nextAction,
       opportunityDetected: context.currentRead.opportunityDetected,
-      opportunityBlockers: context.currentRead.opportunityBlockers.slice(0, 4)
+      opportunityBlockers: governedRead.opportunityBlockers,
+      tacticalWindow: governedRead.tacticalWindow,
+      validationContext: governedRead.validationContext,
+      interpretationRule: governedRead.interpretationRule
     },
     recommendedSignal: context.packet
       ? {

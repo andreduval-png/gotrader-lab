@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,13 +14,19 @@ const DEFAULT_PORT = 8787;
 const DEFAULT_MODEL = "gpt-5.5";
 const DEFAULT_ADVISORY_TIMEOUT_MS = 120_000;
 const HEALTH_TIMEOUT_MS = 2_000;
-const PROVIDER_SCRIPT = path.join("scripts", "gpt55-llm-agent-provider.mjs");
-const LATEST_RESPONSE_FILE = path.join("llm", "responses", "latest-llm-response.json");
+const PROVIDER_SCRIPT = process.env.LLM_ADVISORY_PROVIDER_SCRIPT
+  ? path.resolve(process.env.LLM_ADVISORY_PROVIDER_SCRIPT)
+  : path.join("scripts", "gpt55-llm-agent-provider.mjs");
+const RESPONSE_DIR = process.env.LLM_ADVISORY_RESPONSE_DIR
+  ? path.resolve(process.env.LLM_ADVISORY_RESPONSE_DIR)
+  : path.join("llm", "responses");
+const LATEST_RESPONSE_FILE = path.join(RESPONSE_DIR, "latest-llm-response.json");
+const TRANSIENT_RESPONSE_DIR = path.join(".gotrader", "llm-bridge", "responses");
 const TASK_RESPONSE_FILES = {
   advisory: LATEST_RESPONSE_FILE,
-  chat: path.join("llm", "responses", "latest-llm-chat-response.json"),
-  debate: path.join("llm", "responses", "latest-llm-debate-response.json"),
-  committee: path.join("llm", "responses", "latest-llm-committee-response.json")
+  chat: path.join(RESPONSE_DIR, "latest-llm-chat-response.json"),
+  debate: path.join(RESPONSE_DIR, "latest-llm-debate-response.json"),
+  committee: path.join(RESPONSE_DIR, "latest-llm-committee-response.json")
 };
 const TASK_ROUTES = {
   "/llm/run-advisory": "advisory",
@@ -226,7 +233,11 @@ function parseJson(raw, label) {
 function runProviderWithContext(packet, task = "advisory") {
   return new Promise((resolve, reject) => {
     const timeoutMs = advisoryTimeoutMs();
-    const outputFile = TASK_RESPONSE_FILES[task] ?? LATEST_RESPONSE_FILE;
+    const latestOutputFile = TASK_RESPONSE_FILES[task] ?? LATEST_RESPONSE_FILE;
+    const outputFile = path.join(
+      TRANSIENT_RESPONSE_DIR,
+      `${task}-${Date.now()}-${randomUUID()}.json`
+    );
     const child = spawn(
       process.execPath,
       [PROVIDER_SCRIPT, "--task", task, "--output-file", outputFile],
@@ -247,6 +258,7 @@ function runProviderWithContext(packet, task = "advisory") {
       }
       settled = true;
       child.kill();
+      fs.rm(outputFile, { force: true }).catch(() => {});
       const error = new Error(`LLM advisory provider timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
       error.statusCode = 504;
       error.code = "LLM_ADVISORY_TIMEOUT";
@@ -271,6 +283,7 @@ function runProviderWithContext(packet, task = "advisory") {
       stderr += chunk;
     });
     child.on("error", (error) => {
+      fs.rm(outputFile, { force: true }).catch(() => {});
       settle(() => reject(error));
     });
     child.on("close", async (code) => {
@@ -284,10 +297,16 @@ function runProviderWithContext(packet, task = "advisory") {
 
         try {
           const responseJson = await fs.readFile(outputFile, "utf8");
-          resolve(parseJson(responseJson, "provider response"));
+          const providerOutput = parseJson(responseJson, "provider response");
+          // Each request reads its own file. Updating the familiar latest file is
+          // best-effort diagnostics only and can never corrupt the HTTP result.
+          await writeJsonFile(latestOutputFile, providerOutput).catch(() => {});
+          resolve(providerOutput);
         } catch (error) {
           error.statusCode = 502;
           reject(error);
+        } finally {
+          await fs.rm(outputFile, { force: true }).catch(() => {});
         }
       });
     });

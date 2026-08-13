@@ -23,6 +23,14 @@ const upstreamSource = explicitUpstreamBaseUrl
     : "disabled";
 const upstreamTransport = process.env.MT5_READONLY_UPSTREAM_TRANSPORT || "rest";
 const upstreamTimeoutMs = Number(process.env.MT5_READONLY_UPSTREAM_TIMEOUT_MS || 2500);
+const upstreamReadAttempts = Math.max(
+  1,
+  Math.min(3, Number(process.env.MT5_READONLY_UPSTREAM_READ_ATTEMPTS || 2))
+);
+const upstreamRetryDelayMs = Math.max(
+  50,
+  Math.min(2000, Number(process.env.MT5_READONLY_UPSTREAM_RETRY_DELAY_MS || 250))
+);
 const defaultRequestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
 const defaultBrokerSymbol =
   process.env.MT5_READONLY_BROKER_SYMBOL ||
@@ -296,28 +304,45 @@ const fetchUpstreamPath = async (path, params) => {
   }
   const request = upstreamRequestFor(path, params);
   const requestUrl = upstreamUrl(request.path, request.params);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
-  try {
-    const response = await fetch(requestUrl, {
-      cache: "no-store",
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      const body = safeBodyPreview(await response.text().catch(() => ""));
-      throw new Error(`HTTP ${response.status} from ${requestUrl}${body ? `; body: ${body}` : ""}`);
+  let lastError;
+  let attemptsMade = 0;
+  for (let attempt = 1; attempt <= upstreamReadAttempts; attempt += 1) {
+    attemptsMade = attempt;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
+    try {
+      const response = await fetch(requestUrl, {
+        cache: "no-store",
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        const body = safeBodyPreview(await response.text().catch(() => ""));
+        const error = new Error(`HTTP ${response.status} from ${requestUrl}${body ? `; body: ${body}` : ""}`);
+        error.statusCode = response.status;
+        throw error;
+      }
+      return await response.json();
+    } catch (error) {
+      const message = error?.name === "AbortError"
+        ? `timeout after ${upstreamTimeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : String(error);
+      lastError = new Error(message.includes(requestUrl) ? message : `${message} while requesting ${requestUrl}`);
+      const statusCode = Number(error?.statusCode);
+      const retryable =
+        error?.name === "AbortError" ||
+        !Number.isFinite(statusCode) ||
+        [502, 503, 504].includes(statusCode);
+      if (!retryable || attempt >= upstreamReadAttempts) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, upstreamRetryDelayMs * attempt));
+    } finally {
+      clearTimeout(timeout);
     }
-    return await response.json();
-  } catch (error) {
-    const message = error?.name === "AbortError"
-      ? `timeout after ${upstreamTimeoutMs}ms`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-    throw new Error(message.includes(requestUrl) ? message : `${message} while requesting ${requestUrl}`);
-  } finally {
-    clearTimeout(timeout);
   }
+  throw new Error(`${lastError?.message || `upstream read failed for ${requestUrl}`} after ${attemptsMade} attempt(s)`);
 };
 const fetchUpstreamJson = async (kind, params, validator = () => true) => {
   const candidates = [

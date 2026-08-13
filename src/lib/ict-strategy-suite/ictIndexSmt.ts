@@ -357,8 +357,6 @@ export const applySmtToApprovedDecision = <T extends IctApprovedSetupDecision>(
     if (next.status !== "no_trade") next.status = "rejected_candidate";
   } else if (smt.confirmsCandidate) {
     approvedReasons.add(`SMT/relative strength confirms candidate: ${smt.reason}`);
-  } else if (smt.divergenceType === "insufficient_data") {
-    watchlistReasons.add("SMT/relative strength unavailable; candidate remains governed by deterministic ICT filters.");
   } else if (smt.confidenceAdjustment < 0) {
     watchlistReasons.add(`SMT/relative strength confidence drag: ${smt.reason}`);
   }

@@ -28,8 +28,9 @@ flowchart TD
     K --> L["GoTrader validates payload, source identity, profile, geometry, and freshness"]
     L --> M{"Deterministic checks pass?"}
     M -- "No" --> M1["Blocked audit receipt"]
-    M -- "Yes" --> N["GoTrader computes operator-owned paper sizing"]
-    N --> O{"Kill switch and paper risk policy pass?"}
+    M -- "Yes" --> N["GoTrader computes a non-authoritative simulation sizing preview"]
+    N --> RG["Simulation Account Risk Governor: drawdown, daily loss, open risk, concurrency, freshness"]
+    RG --> O{"Risk decision, kill switch, and Paper-Demo policy pass?"}
     O -- "No" --> O1["Blocked; no request emitted"]
     O -- "Yes" --> P["Atomic SHA-256 paper request outbox"]
     P --> Q["Independent paper simulator"]
@@ -43,7 +44,7 @@ flowchart TD
     BA --> BB["Independent MT5 Python gateway"]
     BB --> BC{"Demo mode, exact login/server, symbol, risk, freshness, and hash pass?"}
     BC -- "No" --> BD["Compact blocked receipt; no order"]
-    BC -- "Yes" --> BE["Recompute volume from MT5 tick metadata"]
+    BC -- "Yes" --> BE["Recompute volume from fresh MT5 tick value, tick size, volume step, and margin"]
     BE --> BF["order_check protected non-crossing pending order"]
     BF --> BG["Submit entry + stop + target + expiry atomically"]
     BG --> BH["Reconcile pending, fill, close, cancel, or expiry"]
@@ -82,6 +83,8 @@ The default policy is disabled with the kill switch active and zero risk capacit
 ## MT5 Demo Broker Boundary
 
 The sibling `go-trader` repository contains `shared_scripts/gotrader_mt5_demo_gateway.py`. It is the only GoTrader component allowed to import `MetaTrader5`. It consumes the compact MT5 demo outbox, verifies the local terminal is logged into an exact allowlisted demo account and server, independently sizes the request, sends one protected pending order, and reconciles compact status receipts.
+
+The GoTrader simulation-account risk governor runs before either outbox. It reserves only simulated risk and emits no broker command. Its volume is explicitly non-authoritative. The MT5 gateway must recompute volume from fresh terminal symbol metadata, perform a margin check, and apply the stricter result before any demo submission.
 
 Live MT5 accounts are hard blocked. TopstepX and Tradovate remain future options and are not automatic fallbacks. Neither the LLM nor the research app can grant broker authority, change the demo-account requirement, bypass risk checks, or promote readiness.
 

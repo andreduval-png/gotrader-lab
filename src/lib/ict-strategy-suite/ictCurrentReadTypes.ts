@@ -121,6 +121,7 @@ export interface IctCurrentRead {
   liquiditySwept?: string;
   fvgStatus?: string;
   displacementStatus?: string;
+  entryReference?: number;
   entryZone?: string;
   latestReplayStatus?: string;
   latestWalkForwardVerdict?: "passed" | "failed" | "needs_more_data";

@@ -260,6 +260,7 @@ async function main() {
     }
   });
   assert.equal(retracement.type, "mitigation_reaction");
+  assert.equal(retracement.confirmationNeeded.includes("SMT/relative-strength context"), false, "missing SMT must not be a required confirmation");
   assertSafe(suite, retracement);
 
   const expansion = detectOne(suite, {

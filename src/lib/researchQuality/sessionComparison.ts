@@ -1,5 +1,6 @@
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
 import type { LongShortComparison, SessionQualityComparison } from "@/lib/researchQuality/researchQualityTypes";
+import type { ResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 
 const scenarioById = (report: ValidationSuiteReport, id: string) =>
   report.scenarios.find((scenario) => scenario.id === id);
@@ -14,7 +15,32 @@ const noteFor = (scenario: ValidationScenarioResult) => {
   return "Session underperformed or remains weakly calibrated in this validation sample.";
 };
 
-export function compareSessions(report: ValidationSuiteReport): SessionQualityComparison[] {
+const readinessForSession = (trades: number, winRate: number, averageR: number, maxDrawdown: number) =>
+  trades >= 5 && winRate >= 0.52 && averageR >= 0.15 && maxDrawdown <= 4
+    ? "green" as const
+    : trades >= 2 && averageR >= -0.1 && maxDrawdown <= 6
+      ? "yellow" as const
+      : "red" as const;
+
+export function compareSessions(
+  report: ValidationSuiteReport,
+  attribution?: ResearchQualityFailureAttribution
+): SessionQualityComparison[] {
+  if (attribution?.canonicalScenarioId && attribution.sessionMatrix.length) {
+    return attribution.sessionMatrix.map((session) => ({
+      session: session.session,
+      scenarioName: attribution.canonicalScenarioName ?? "Canonical completed outcomes",
+      totalTrades: session.completedTrades,
+      winRate: session.targetFirstRate,
+      averageR: session.averageR,
+      maxDrawdown: session.maxDrawdownR,
+      profitFactor: session.profitFactor,
+      readiness: readinessForSession(session.completedTrades, session.targetFirstRate, session.averageR, session.maxDrawdownR),
+      note: session.completedTrades < 5
+        ? "Completed-outcome session sample is too small to rank."
+        : "Derived from completed outcomes in the canonical validation scenario."
+    }));
+  }
   return [
     ["NY AM", scenarioById(report, "ny-am-only")],
     ["London", scenarioById(report, "london-only")]

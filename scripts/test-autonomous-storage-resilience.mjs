@@ -34,6 +34,11 @@ transpile(
 );
 transpile("src/lib/researchCycle/safeResearchCycleObserver.ts", "safeResearchCycleObserver.mjs");
 transpile("src/lib/validation/validationReportStorage.ts", "validationReportStorage.mjs");
+transpile(
+  "src/lib/llm/llmProvider.ts",
+  "llmProvider.mjs",
+  [[/from\s+"@\/lib\/utils"/g, 'from "./utils.mjs"']]
+);
 
 class MemoryStorage {
   constructor(alwaysThrow = false) {
@@ -162,6 +167,35 @@ assert.ok(storage.estimateAutonomousResearchStateBytes(saved) < 100_000, "minima
 const serializedRun = JSON.stringify(saved);
 assert.doesNotMatch(serializedRun, /"(?:rawCandles|candles|accountData|orderData|positionData)"\s*:/i);
 assert.equal(saved.activeRun.settings.autoApplyPolicyEnabled, false);
+
+const llmLocalStorage = new MemoryStorage(true);
+const llmSessionStorage = new MemoryStorage(false);
+window.localStorage = llmLocalStorage;
+window.sessionStorage = llmSessionStorage;
+const llm = await import(pathToFileURL(path.join(out, "llmProvider.mjs")));
+const llmRun = {
+  runId: "llm_quota_test",
+  timestamp: "2026-07-19T12:00:00.000Z",
+  researchMode: "llm_required",
+  providerMode: "deterministic_fallback",
+  providerConfigured: true,
+  status: "fallback_complete",
+  realProvider: false,
+  advisoryPassed: false,
+  contextPacketId: "context_quota_test",
+  responses: [],
+  validationResults: {},
+  unsafeResponseRejections: 0,
+  readinessImpact: longText,
+  safetyNotice: "LLM agents are advisory only. They cannot execute trades or override readiness gates."
+};
+const savedLlm = llm.saveLLMAdvisoryRun(llmRun);
+assert.equal(savedLlm.latestRunId, llmRun.runId);
+assert.equal(llm.latestLLMAdvisoryRun().runId, llmRun.runId);
+assert.ok(llmLocalStorage.setAttempts >= 6, "LLM persistence should exhaust bounded local-history retries");
+assert.ok(llmSessionStorage.getItem(llm.LLM_RESEARCH_STORAGE_KEY), "LLM state should fall back to session storage");
+window.localStorage = localStorage;
+window.sessionStorage = sessionStorage;
 
 const observer = await import(pathToFileURL(path.join(out, "safeResearchCycleObserver.mjs")));
 let validationCompleted = false;

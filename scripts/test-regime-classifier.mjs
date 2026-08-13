@@ -101,7 +101,8 @@ const event = classifyMarketRegime({
   marketContext: baseContext(highRangeCandles, {
     macro: {
       economicCalendar: [{ id: "test-cpi", name: "CPI", impact: "high", scheduledAt: eventTime, status: "mock" }],
-      vix: 24
+      vix: 24,
+      status: "available_live"
     }
   }),
   symbol: "NQ",

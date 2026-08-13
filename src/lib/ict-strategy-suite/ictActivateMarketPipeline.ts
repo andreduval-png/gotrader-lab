@@ -4,7 +4,6 @@ import {
   detectCurrentOpportunities,
   saveCurrentOpportunityScan
 } from "../currentOpportunity";
-import { buildIctAdvisorPacketFromRuntime } from "./ictAdvisorEngine";
 import type { IctAdvisorPacket } from "./ictAdvisorTypes";
 import { evaluateCmdPaperTrackingEligibility } from "./ictCmdPaperTracking";
 import { buildIctCurrentReadFromPacket } from "./ictCurrentRead";
@@ -16,6 +15,7 @@ import { queueIctResearchHypothesis } from "./ictSelfImprovement";
 import type { IctResearchHypothesisQueueResult } from "./ictSelfImprovementTypes";
 import { buildIctResearchSignalFromCurrentRead } from "./ictSignalContract";
 import type { IctResearchSignal } from "./ictSignalContractTypes";
+import { runIctAdvisorPacket } from "./runIctAdvisorPacket";
 import type {
   IctActivateMarketCallbacks,
   IctActivateMarketLatestSummary,
@@ -102,6 +102,7 @@ const msBetween = (start?: string, end?: string) =>
   start && end ? Math.max(0, new Date(end).getTime() - new Date(start).getTime()) : undefined;
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error ?? "unknown_error");
 const asList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+const asFiniteNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
 const updateStep = (
   steps: IctActivateMarketStep[],
@@ -197,6 +198,28 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
       selfImprovementHypothesisQueued: parsed.selfImprovementHypothesisQueued === true,
       selfImprovementHypothesisStatus: typeof parsed.selfImprovementHypothesisStatus === "string" ? parsed.selfImprovementHypothesisStatus : undefined,
       selfImprovementHypothesisReason: typeof parsed.selfImprovementHypothesisReason === "string" ? parsed.selfImprovementHypothesisReason : undefined,
+      researchSide: ["long", "short", "flat"].includes(parsed.researchSide)
+        ? parsed.researchSide as IctActivateMarketLatestSummary["researchSide"]
+        : undefined,
+      proposedCandidateStatus: typeof parsed.proposedCandidateStatus === "string"
+        ? parsed.proposedCandidateStatus as IctActivateMarketLatestSummary["proposedCandidateStatus"]
+        : undefined,
+      proposedEntryPrice: asFiniteNumber(parsed.proposedEntryPrice),
+      proposedEntryZone:
+        parsed.proposedEntryZone &&
+        asFiniteNumber(parsed.proposedEntryZone.lower) !== undefined &&
+        asFiniteNumber(parsed.proposedEntryZone.upper) !== undefined
+          ? {
+              lower: Number(parsed.proposedEntryZone.lower),
+              upper: Number(parsed.proposedEntryZone.upper)
+            }
+          : undefined,
+      proposedStopLoss: asFiniteNumber(parsed.proposedStopLoss),
+      proposedTakeProfit: asFiniteNumber(parsed.proposedTakeProfit),
+      proposedRiskReward: asFiniteNumber(parsed.proposedRiskReward),
+      riskScreeningStatus: typeof parsed.riskScreeningStatus === "string" ? parsed.riskScreeningStatus : undefined,
+      riskScreeningReason: typeof parsed.riskScreeningReason === "string" ? parsed.riskScreeningReason : undefined,
+      recommendedMaxRiskPerTradePct: asFiniteNumber(parsed.recommendedMaxRiskPerTradePct),
       nextAction: typeof parsed.nextAction === "string" ? parsed.nextAction : undefined,
       executionAllowed: false,
       researchOnly: true,
@@ -452,6 +475,16 @@ const buildLatestSummary = (result: IctActivateMarketResult): IctActivateMarketL
   selfImprovementHypothesisQueued: result.summary.selfImprovementHypothesisQueued,
   selfImprovementHypothesisStatus: result.summary.selfImprovementHypothesisStatus,
   selfImprovementHypothesisReason: result.summary.selfImprovementHypothesisReason,
+  researchSide: result.summary.researchSide,
+  proposedCandidateStatus: result.summary.proposedCandidateStatus,
+  proposedEntryPrice: result.summary.proposedEntryPrice,
+  proposedEntryZone: result.summary.proposedEntryZone,
+  proposedStopLoss: result.summary.proposedStopLoss,
+  proposedTakeProfit: result.summary.proposedTakeProfit,
+  proposedRiskReward: result.summary.proposedRiskReward,
+  riskScreeningStatus: result.summary.riskScreeningStatus,
+  riskScreeningReason: result.summary.riskScreeningReason,
+  recommendedMaxRiskPerTradePct: result.summary.recommendedMaxRiskPerTradePct,
   nextAction: result.operatorWorkflow?.recommendedAction ?? result.summary.nextAction,
   executionAllowed: false,
   researchOnly: true,
@@ -521,6 +554,21 @@ export async function runIctActivateMarketPipeline(
   let selfImprovementQueue: IctActivateMarketResult["selfImprovementQueue"];
   let latestMonteCarlo = latestMonteCarloFor(config.latestResearchState);
 
+  const buildOrReadAdvisorPacket = async () => {
+    if (advisorPacket) return advisorPacket;
+    if (dependencies.buildAdvisorPacketFromRuntime) {
+      const bundle = await buildOrReadMarketContext();
+      advisorPacket = await dependencies.buildAdvisorPacketFromRuntime(snapshot, {
+        marketAnalysisContextBundle: bundle
+      });
+    } else {
+      // The worker builds the raw multi-timeframe context internally and sends
+      // back only the compact packet, avoiding a large structured clone on the UI thread.
+      advisorPacket = await runIctAdvisorPacket({ snapshot });
+    }
+    return advisorPacket;
+  };
+
   const buildOrReadMarketContext = async () => {
     if (!marketAnalysisContextBundle) {
       const buildMarketContext =
@@ -532,7 +580,9 @@ export async function runIctActivateMarketPipeline(
   };
 
   const analysisContextFor = (timeframe: IctAnalysisTimeframe) =>
-    marketAnalysisContextBundle?.context.analysisTimeframes.find((context) => context.timeframe === timeframe);
+    (marketAnalysisContextBundle?.context ?? advisorPacket?.marketAnalysisContext)?.analysisTimeframes.find(
+      (context) => context.timeframe === timeframe
+    );
 
   const run = async (
     id: IctActivateMarketStepId,
@@ -541,6 +591,7 @@ export async function runIctActivateMarketPipeline(
   ) => {
     steps = markActivationStepRunning(steps, id, runningMessage);
     notify(callbacks, id, steps);
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
     try {
       const output = await task();
       if (typeof output === "string") {
@@ -561,6 +612,7 @@ export async function runIctActivateMarketPipeline(
       steps = markActivationStepFailed(steps, id, message);
     }
     notify(callbacks, id, steps);
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
   };
 
   await run("resolve_symbol", "Resolving requested and broker symbol.", async () =>
@@ -614,50 +666,53 @@ export async function runIctActivateMarketPipeline(
   }
 
   await run("load_analysis_m5", "Loading explicit M5 90-day confirmation/refinement context.", async () => {
-    const bundle = await buildOrReadMarketContext();
-    const context = bundle.context.analysisTimeframes.find((item) => item.timeframe === "M5");
+    const packet = dependencies.buildAdvisorPacketFromRuntime
+      ? undefined
+      : await buildOrReadAdvisorPacket();
+    const bundle = packet ? undefined : await buildOrReadMarketContext();
+    const context = (packet?.marketAnalysisContext ?? bundle?.context)?.analysisTimeframes.find((item) => item.timeframe === "M5");
     if (!context?.candleCount) return { error: "M5 analysis context is unavailable from MT5 read-only history." };
     return `M5 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_analysis_m15", "Loading explicit M15 90-day session-model context.", async () => {
-    await buildOrReadMarketContext();
+    if (!advisorPacket) await buildOrReadMarketContext();
     const context = analysisContextFor("M15");
     if (!context?.candleCount) return { error: "M15 session-model context is unavailable from MT5 read-only history." };
     return `M15 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_analysis_h1", "Loading explicit H1 90-day dealing-range context.", async () => {
-    await buildOrReadMarketContext();
+    if (!advisorPacket) await buildOrReadMarketContext();
     const context = analysisContextFor("H1");
     if (!context?.candleCount) return { skipped: true, warning: "H1 analysis context is missing; HTF bias will be partial." };
     return `H1 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_analysis_h4", "Loading explicit H4 90-day HTF bias context.", async () => {
-    await buildOrReadMarketContext();
+    if (!advisorPacket) await buildOrReadMarketContext();
     const context = analysisContextFor("H4");
     if (!context?.candleCount) return { skipped: true, warning: "H4 analysis context is missing; HTF bias will be partial." };
     return `H4 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_analysis_daily", "Loading explicit daily 90-day bias context.", async () => {
-    await buildOrReadMarketContext();
+    if (!advisorPacket) await buildOrReadMarketContext();
     const context = analysisContextFor("D1");
     if (!context?.candleCount) return { skipped: true, warning: "Daily analysis context is missing; daily bias will be partial." };
     return `D1 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_analysis_weekly", "Loading explicit weekly 90-day bias context.", async () => {
-    await buildOrReadMarketContext();
+    if (!advisorPacket) await buildOrReadMarketContext();
     const context = analysisContextFor("W1");
     if (!context?.candleCount) return { skipped: true, warning: "W1 context unavailable from MT5 range endpoint." };
     return `W1 ${context.dataDepthStatus}; ${context.candleCount.toLocaleString()} candles over ${context.availableLookbackDays.toFixed(1)} days.`;
   });
 
   await run("load_weekly_bias", "Computing compact weekly bias from W1 context.", async () => {
-    const bundle = await buildOrReadMarketContext();
-    const { weeklyBiasStatus, weeklyBiasDirection, weeklyBiasReason } = bundle.context;
+    const context = advisorPacket?.marketAnalysisContext ?? (await buildOrReadMarketContext()).context;
+    const { weeklyBiasStatus, weeklyBiasDirection, weeklyBiasReason } = context;
     if (weeklyBiasStatus === "loaded") {
       return `Weekly bias ${weeklyBiasDirection}; ${weeklyBiasReason}`;
     }
@@ -665,25 +720,23 @@ export async function runIctActivateMarketPipeline(
   });
 
   await run("build_multi_timeframe_context", "Building compact multi-timeframe analysis summary.", async () => {
-    const bundle = await buildOrReadMarketContext();
+    const context = advisorPacket?.marketAnalysisContext ?? (await buildOrReadMarketContext()).context;
     const fingerprint = sourceFingerprint(snapshot);
     if (!fingerprint) return { error: "Canonical MT5 source fingerprint is missing." };
-    const missing = bundle.context.missingTimeframes;
-    const loaded = bundle.context.analysisTimeframesLoaded.join(", ") || "none";
+    const missing = context.missingTimeframes;
+    const loaded = context.analysisTimeframesLoaded.join(", ") || "none";
     if (missing.length) {
       return {
-        message: `Multi-timeframe context ${bundle.context.multiTimeframeContextStatus}; loaded ${loaded}. Fingerprint ${fingerprint}.`,
+        message: `Multi-timeframe context ${context.multiTimeframeContextStatus}; loaded ${loaded}. Fingerprint ${fingerprint}.`,
         warning: `Missing analysis timeframes: ${missing.join(", ")}.`
       };
     }
-    return `Analysis ${bundle.context.analysisDepthStatus}; ${bundle.context.analysisTimeframesUsed.join(", ")} loaded. Fingerprint ${fingerprint}.`;
+    return `Analysis ${context.analysisDepthStatus}; ${context.analysisTimeframesUsed.join(", ")} loaded. Fingerprint ${fingerprint}.`;
   });
 
   await run("build_current_read", "Building compact ICT current read.", async () => {
-    const buildPacket = dependencies.buildAdvisorPacketFromRuntime ?? buildIctAdvisorPacketFromRuntime;
     const buildRead = dependencies.buildCurrentRead ?? buildIctCurrentReadFromPacket;
-    const bundle = await buildOrReadMarketContext();
-    advisorPacket = await buildPacket(snapshot, { marketAnalysisContextBundle: bundle });
+    advisorPacket = await buildOrReadAdvisorPacket();
     currentRead = buildRead(advisorPacket, config.latestResearchState);
     const currentOpportunityScan = detectCurrentOpportunities(buildCurrentOpportunityContext({ packet: advisorPacket, currentRead }));
     currentRead = {
@@ -767,11 +820,11 @@ export async function runIctActivateMarketPipeline(
   await run("run_smt", "Checking SMT / relative strength.", async () => {
     const smt = currentRead?.smtStatus ?? "";
     if (smt === "comparison_sources_missing") {
-      return { message: "SMT check completed with missing comparison context.", warning: currentRead?.smtReason ?? "SMT comparison sources are missing; activation continues with explicit SMT warning." };
+      return "Optional SMT confluence is unavailable; primary ICT candidate gates continue unchanged.";
     }
     return smt && !/not available|unavailable|missing|pending/i.test(smt)
       ? `SMT status: ${smt}.`
-      : { message: "SMT check completed with partial context.", warning: currentRead?.smtReason ?? "SMT comparison data unavailable; activation continues with a partial warning." };
+      : "Optional SMT confluence is unavailable; primary ICT candidate gates continue unchanged.";
   });
 
   await run("run_news_session_risk", "Checking news and session risk.", async () => {
@@ -828,6 +881,18 @@ export async function runIctActivateMarketPipeline(
     const failed = resultErrors.length > 0;
     const partial = resultWarnings.length > 0 || steps.some((step) => step.status === "skipped");
     const status: IctActivateMarketStatus = failed ? "failed" : partial ? "partial" : "completed";
+    const currentCandidate = currentRead?.currentOpportunitySummary?.topOpportunity
+      ?? currentRead?.currentOpportunitySummary?.topNearMiss
+      ?? currentRead?.currentOpportunitySummary?.topRejected;
+    const planSide = signalContract?.side ?? currentRead?.side;
+    const matchingCandidate = currentCandidate && currentCandidate.side === planSide
+      ? currentCandidate
+      : undefined;
+    const signalCandidateStatus = signalContract?.status === "rejected_signal"
+      ? "rejected" as const
+      : signalContract?.status === "no_signal"
+        ? "no_trade" as const
+        : undefined;
     return {
       researchOnly: true,
       status,
@@ -838,7 +903,7 @@ export async function runIctActivateMarketPipeline(
       htfTimeframes: currentRead?.htfTimeframes ?? htfTimeframes(snapshot),
       steps,
       advisorPacket,
-      marketAnalysisContext: marketAnalysisContextBundle?.context,
+      marketAnalysisContext: marketAnalysisContextBundle?.context ?? advisorPacket?.marketAnalysisContext,
       currentRead,
       opportunity: currentRead?.opportunity,
       selfImprovementHypothesis: currentRead?.selfImprovementHypothesis,
@@ -888,6 +953,20 @@ export async function runIctActivateMarketPipeline(
         recommendedMaxRiskPerTradePct: latestMonteCarlo.summary?.recommendedMaxRiskPerTradePct,
         recommendedMaxRiskStatus: typeof latestMonteCarlo.summary?.recommendedMaxRiskPerTradePct === "number" ? "available" : "unavailable",
         recommendedMaxRiskReason: latestMonteCarlo.recommendedMaxRiskReason,
+        researchSide: planSide,
+        proposedCandidateStatus: matchingCandidate?.status ?? signalCandidateStatus,
+        proposedEntryPrice: signalContract?.entryReference
+          ?? signalContract?.entryZone?.midpoint
+          ?? currentRead?.entryReference
+          ?? matchingCandidate?.entry,
+        proposedEntryZone: signalContract?.entryZone
+          ? { lower: signalContract.entryZone.low, upper: signalContract.entryZone.high }
+          : undefined,
+        proposedStopLoss: signalContract?.invalidation,
+        proposedTakeProfit: signalContract?.target,
+        proposedRiskReward: signalContract?.rrEstimate,
+        riskScreeningStatus: currentRead?.riskStatus,
+        riskScreeningReason: currentRead?.riskReason,
         nextAction: operatorWorkflow?.recommendedAction ?? currentRead?.nextAction,
         executionAllowed: false
       },

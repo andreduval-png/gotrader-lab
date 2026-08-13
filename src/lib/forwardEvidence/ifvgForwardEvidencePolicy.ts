@@ -19,6 +19,12 @@ export interface IfvgV3ForwardAssessmentInput {
     stop?: number;
     target?: number;
     rr?: number;
+    htfAlignment?: "aligned" | "against_htf" | "mixed" | "unavailable";
+    sessionContext?: {
+      id?: string;
+      preferredWindow?: boolean;
+    };
+    liquidityTarget?: { price?: number };
     presentConditions: string[];
     missingConditions: string[];
     warnings: string[];
@@ -40,6 +46,24 @@ const newYorkDate = (timestamp: string) => {
     }).formatToParts(new Date(timestamp)).map((part) => [part.type, part.value])
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const newYorkSession = (timestamp: string) => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(new Date(timestamp)).map((part) => [part.type, part.value])
+  );
+  const hour = Number(parts.hour === "24" ? 0 : parts.hour);
+  const minute = hour * 60 + Number(parts.minute ?? 0);
+  if (minute >= 120 && minute < 300) return "London" as const;
+  if (minute >= 510 && minute < 720) return "New York AM" as const;
+  if (minute >= 720 && minute < 810) return "New York Lunch" as const;
+  if (minute >= 810 && minute < 960) return "New York PM" as const;
+  return "Globex" as const;
 };
 
 const forwardWindowFor = (profileId: ForwardEvidenceProfileId, date: string) => {
@@ -105,6 +129,20 @@ const buildIfvgForwardObservation = (
       ...candidate.presentConditions
     ],
     missingEvidence: candidate.missingConditions,
+    qualityContext: {
+      session: newYorkSession(setupTimestamp),
+      htfAlignment: candidate.htfAlignment,
+      preferredSession: candidate.sessionContext?.preferredWindow,
+      liquidityTargetPresent: Boolean(candidate.liquidityTarget?.price ?? candidate.target),
+      cleanRetest: assessment.cleanRetest,
+      freshRetest: assessment.signalFresh,
+      signalAgeBars: assessment.signalFresh ? 0 : undefined,
+      displacementConfirmed: candidate.presentConditions.some((condition) => /displacement/i.test(condition))
+        ? true
+        : undefined,
+      presentConditions: candidate.presentConditions,
+      warnings: candidate.warnings
+    },
     outcome: "pending",
     barsObserved: 0,
     blockerSummary: `Frozen ${profileId} forward observation. Research-only; no readiness promotion or execution authority.`,

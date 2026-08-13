@@ -38,7 +38,14 @@ import {
 } from "@/lib/paperDemoOperations";
 import { resolveSourceStatusSnapshot, type SourceStatusSnapshot } from "@/lib/sourceStatus";
 import { getStrategyDefinition, suggestStrategyIdForRecognition } from "@/lib/strategyLibrary";
-import { latestValidationChainEntry, readValidationChainState, type ValidationChainEntry } from "@/lib/validationChain";
+import {
+  latestValidationChainEntry,
+  linkResearchCycleValidationChain,
+  readValidationChainState,
+  type ValidationChainEntry
+} from "@/lib/validationChain";
+import { latestResearchCycleRun, RESEARCH_CYCLE_UPDATED_EVENT } from "@/lib/researchCycle";
+import { matchingWalkForwardRun, WALK_FORWARD_UPDATED_EVENT } from "@/lib/walkForward";
 import { cn } from "@/lib/utils";
 
 type PaperDemoTab = "overview" | "watchlist" | "auto" | "checklist" | "detail" | "journal" | "export";
@@ -117,11 +124,26 @@ function useSourceAndValidation() {
       .catch(() => {
         if (active) setSource(undefined);
       });
-    const refreshChain = () => setValidationChain(latestValidationChainEntry(readValidationChainState()));
-    window.addEventListener("gotrader:validation-chain-updated", refreshChain);
+    const refreshStoredChain = () =>
+      setValidationChain(latestValidationChainEntry(readValidationChainState()));
+    const linkLatestCycle = () => {
+      const cycle = latestResearchCycleRun();
+      const provenance = cycle?.validationSummary?.provenance;
+      const matchingWalkForward = provenance ? matchingWalkForwardRun(provenance) : undefined;
+      const linked = cycle
+        ? linkResearchCycleValidationChain({ cycle, walkForwardRun: matchingWalkForward, persist: true })
+        : undefined;
+      setValidationChain(linked?.entry ?? latestValidationChainEntry(readValidationChainState()));
+    };
+    linkLatestCycle();
+    window.addEventListener("gotrader:validation-chain-updated", refreshStoredChain);
+    window.addEventListener(RESEARCH_CYCLE_UPDATED_EVENT, linkLatestCycle);
+    window.addEventListener(WALK_FORWARD_UPDATED_EVENT, linkLatestCycle);
     return () => {
       active = false;
-      window.removeEventListener("gotrader:validation-chain-updated", refreshChain);
+      window.removeEventListener("gotrader:validation-chain-updated", refreshStoredChain);
+      window.removeEventListener(RESEARCH_CYCLE_UPDATED_EVENT, linkLatestCycle);
+      window.removeEventListener(WALK_FORWARD_UPDATED_EVENT, linkLatestCycle);
     };
   }, []);
 

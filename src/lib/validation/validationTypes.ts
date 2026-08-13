@@ -6,6 +6,7 @@ import type {
   SimulatedTradeRecord
 } from "@/lib/backtesting";
 import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
+import type { ValidationScenarioQualityTelemetry } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 
 export type ValidationReadinessStatus = "red" | "yellow" | "green";
 
@@ -68,6 +69,7 @@ export interface ValidationScenarioResult {
   profitFactor: number | null;
   confidenceCalibration: ValidationConfidenceCalibration;
   agentContributionSummary: ValidationAgentContribution[];
+  qualityTelemetry?: ValidationScenarioQualityTelemetry;
   score: number;
   readiness: ValidationReadinessStatus;
 }

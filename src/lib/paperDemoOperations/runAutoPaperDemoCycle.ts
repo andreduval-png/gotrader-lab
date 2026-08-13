@@ -6,7 +6,11 @@ import {
   markValidationChainWalkForwardRunning,
   queueValidationChainEntry
 } from "../validationChain/buildValidationChain";
-import { saveValidationChainEntry } from "../validationChain/validationChainStore";
+import {
+  latestValidationChainEntry,
+  readValidationChainState,
+  saveValidationChainEntry
+} from "../validationChain/validationChainStore";
 import type {
   ValidationChainEntry,
   ValidationChainEvidenceSummary,
@@ -192,6 +196,31 @@ const sourceIsBlocked = (source: SourceStatusSnapshot | AutoPaperDemoCycleConfig
   !source.sourceFingerprint ||
   source.sourceFingerprint === "no fingerprint";
 
+const validationEntryMatchesSource = (
+  entry: ValidationChainEntry | undefined,
+  source: AutoPaperDemoCycleSourceSummary
+): entry is ValidationChainEntry =>
+  Boolean(
+    entry &&
+      entry.sourceStatus.sourceProvider === source.sourceProvider &&
+      entry.symbol === source.requestedSymbol &&
+      (entry.brokerSymbol ?? "") === (source.brokerSymbol ?? "") &&
+      entry.timeframe === source.primaryTimeframe &&
+      !entry.sourceStatus.isMockOrSample &&
+      entry.sourceStatus.isResearchActive
+  );
+
+const hasExplicitValidationWork = (config: AutoPaperDemoCycleConfig) =>
+  Boolean(
+    config.recognition ||
+      config.replaySummary ||
+      config.walkForwardSummary ||
+      config.evidenceSummary ||
+      config.deterministicReplayRunner ||
+      config.deterministicWalkForwardRunner ||
+      config.deterministicEvidenceRunner
+  );
+
 const recognitionTypeFor = (input?: AutoPaperDemoCycleConfig["recognition"]): ValidationChainRecognitionType =>
   input?.recognitionType ?? "unknown_structured_opportunity";
 
@@ -252,41 +281,57 @@ export async function runAutoPaperDemoCycle(config: AutoPaperDemoCycleConfig = {
     });
     eventFor(events, status, "Source blocked", blockers[0], "warning");
   } else {
-    const recognitionId = config.recognition?.recognitionId ?? makeId("auto_recognition", startedAt);
-    const queue = queueValidationChainEntry({
-      recognitionId,
-      recognitionType: recognitionTypeFor(config.recognition),
-      setupLabel: config.recognition?.setupLabel ?? "Active research source scan",
-      symbol: sourceSummary.requestedSymbol,
-      brokerSymbol: sourceSummary.brokerSymbol,
-      timeframe: sourceSummary.primaryTimeframe,
-      htfContext: [],
-      sourceFingerprint: sourceSummary.sourceFingerprint,
-      sourceStatus: {
-        sourceProvider: sourceSummary.sourceProvider,
-        isMockOrSample: false,
-        isResearchActive: true,
-        statusLabel: sourceSummary.sourceStatus
-      },
-      provenance: config.recognition?.provenance,
-      generatedAt: startedAt
-    });
-
-    if (!queue.ok) {
-      status = "paper_demo_blocked";
-      blockers.push(queue.reason);
-      validationEntry = queue.entry;
-      eventFor(events, "paper_demo_blocked", "Recognition blocked", queue.reason, "warning");
+    const storedEntry = config.validationEntry ?? latestValidationChainEntry(readValidationChainState());
+    if (!hasExplicitValidationWork(config) && validationEntryMatchesSource(storedEntry, sourceSummary)) {
+      validationEntry = storedEntry;
+      replaySummary = storedEntry.replayResult;
+      walkForwardSummary = storedEntry.walkForwardResult;
+      evidenceSummary = storedEntry.evidenceQuality;
+      status = storedEntry.hypothesisStatus === "evidence_updated" ? "evidence_updated" : "validation_queued";
+      eventFor(
+        events,
+        status,
+        "Existing validation chain reused",
+        `Using ${storedEntry.recognitionId}; no empty replacement chain was created.`,
+        "success"
+      );
     } else {
-      validationEntry = queue.entry;
-      status = "validation_queued";
-      eventFor(events, "recognition_found", "Recognition found", validationEntry.setupLabel, "success");
-      eventFor(events, "validation_queued", "Validation queued", validationEntry.nextAction, "info");
-      if (config.persist) saveValidationChainEntry(validationEntry);
+      const recognitionId = config.recognition?.recognitionId ?? makeId("auto_recognition", startedAt);
+      const queue = queueValidationChainEntry({
+        recognitionId,
+        recognitionType: recognitionTypeFor(config.recognition),
+        setupLabel: config.recognition?.setupLabel ?? "Active research source scan",
+        symbol: sourceSummary.requestedSymbol,
+        brokerSymbol: sourceSummary.brokerSymbol,
+        timeframe: sourceSummary.primaryTimeframe,
+        htfContext: [],
+        sourceFingerprint: sourceSummary.sourceFingerprint,
+        sourceStatus: {
+          sourceProvider: sourceSummary.sourceProvider,
+          isMockOrSample: false,
+          isResearchActive: true,
+          statusLabel: sourceSummary.sourceStatus
+        },
+        provenance: config.recognition?.provenance,
+        generatedAt: startedAt
+      });
+
+      if (!queue.ok) {
+        status = "paper_demo_blocked";
+        blockers.push(queue.reason);
+        validationEntry = queue.entry;
+        eventFor(events, "paper_demo_blocked", "Recognition blocked", queue.reason, "warning");
+      } else {
+        validationEntry = queue.entry;
+        status = "validation_queued";
+        eventFor(events, "recognition_found", "Recognition found", validationEntry.setupLabel, "success");
+        eventFor(events, "validation_queued", "Validation queued", validationEntry.nextAction, "info");
+        if (config.persist) saveValidationChainEntry(validationEntry);
+      }
     }
   }
 
-  if (validationEntry && !blockers.length) {
+  if (validationEntry && !replaySummary && !blockers.length) {
     const replay = await replayFromConfigOrRunner(config);
     if (!replay) {
       blockers.push("deterministic replay runner not wired");
@@ -309,7 +354,7 @@ export async function runAutoPaperDemoCycle(config: AutoPaperDemoCycleConfig = {
     }
   }
 
-  if (validationEntry && replaySummary?.verdict === "passed" && !blockers.length) {
+  if (validationEntry && replaySummary?.verdict === "passed" && !walkForwardSummary && !blockers.length) {
     const walkForward = await walkForwardFromConfigOrRunner(config);
     if (!walkForward) {
       blockers.push("deterministic walk-forward runner not wired");
@@ -345,7 +390,7 @@ export async function runAutoPaperDemoCycle(config: AutoPaperDemoCycleConfig = {
     }
   }
 
-  if (validationEntry && walkForwardSummary?.verdict === "passed" && !blockers.length) {
+  if (validationEntry && walkForwardSummary?.verdict === "passed" && !evidenceSummary && !blockers.length) {
     const evidence = await evidenceFromConfigOrRunner(config);
     if (!evidence) {
       blockers.push("deterministic evidence/maturity updater not wired");

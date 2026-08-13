@@ -35,6 +35,7 @@ import {
 } from "@/lib/llm";
 import { recordOpenClawPilotProposalIntent } from "@/lib/openclawPilot";
 import { mt5CfdProxyWarning } from "@/lib/integrations/mt5";
+import { readLatestActivateMarketSummary } from "@/lib/ict-strategy-suite/ictActivateMarketPipeline";
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
 import { safeArray, safeTopN, uid } from "@/lib/utils";
 
@@ -305,6 +306,22 @@ const buildAdvisoryPacket = (snapshot: ResearchRuntimeSnapshot, question: string
   const blockers = blockersFor(snapshot);
   const latestMetrics = snapshot.latestResearchCycle.latestCycleMetrics;
   const sourceBrokerSymbol = snapshot.mt5ReadOnly.brokerSymbol ?? source.provenance.providerSymbol ?? undefined;
+  const latestActivation = readLatestActivateMarketSummary();
+  const activationMatchesSource = Boolean(
+    latestActivation &&
+    latestActivation.requestedSymbol === snapshot.marketData.symbol &&
+    latestActivation.brokerSymbol === (sourceBrokerSymbol ?? snapshot.marketData.symbol) &&
+    latestActivation.primaryTimeframe === snapshot.marketData.timeframe
+  );
+  const opportunitySummary = activationMatchesSource ? latestActivation?.currentOpportunitySummary : undefined;
+  const validationContextReady = Boolean(
+    opportunitySummary?.rangeHistoryAvailable &&
+    (opportunitySummary.validationLookbackDays ?? 0) >= 60 &&
+    opportunitySummary.depthStatus === "validation_context_ready"
+  );
+  const currentOpportunity = opportunitySummary?.topOpportunity
+    ?? opportunitySummary?.topNearMiss
+    ?? opportunitySummary?.topRejected;
 
   return withPayloadDiagnostics({
     packetId: uid("dashboard_advisory"),
@@ -342,6 +359,16 @@ const buildAdvisoryPacket = (snapshot: ResearchRuntimeSnapshot, question: string
       }`,
       `Candle count: ${source.candleCount}`,
       `First/last timestamp: ${source.firstTimestamp ?? "n/a"} -> ${source.lastTimestamp ?? "n/a"}`,
+      `Tactical chart window: ${source.candleCount} ${snapshot.marketData.timeframe} candles; chart/session reference only, not total validation coverage.`,
+      `Validated candidate context: ${opportunitySummary
+        ? `${opportunitySummary.validationLookbackDays.toFixed(2)} days / ${opportunitySummary.depthStatus} / range history ${opportunitySummary.rangeHistoryAvailable ? "available" : "unavailable"}`
+        : "not available for the active source identity"}.`,
+      validationContextReady
+        ? "Depth interpretation: validated range history is ready; do not cite the smaller tactical chart window as an insufficient-depth blocker."
+        : "Depth interpretation: validated range history is not ready, so depth may remain an active candidate blocker.",
+      `Current opportunity: ${currentOpportunity
+        ? `${currentOpportunity.side} ${currentOpportunity.setupName} / ${currentOpportunity.status}; blockers ${currentOpportunity.blockers.join("; ") || "none"}; missing ${currentOpportunity.missingConditions.join("; ") || "none"}`
+        : "none saved for the active source identity"}.`,
       `Source eligibility reasons: ${safeArray(source.eligibilityReasons).join("; ") || "none"}`,
       `Regime: ${snapshot.regime.label} / ${Math.round(snapshot.regime.confidence * 100)}% / ${snapshot.regime.dataQuality}`,
       `Grinch profile: ${grinch ? `${grinch.profile}/${grinch.state}/${grinch.hardGateReason ?? "no hard gate"}` : "not available"}`,

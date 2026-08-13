@@ -1,5 +1,6 @@
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
 import type { DrawdownClusterNote } from "@/lib/researchQuality/researchQualityTypes";
+import type { ResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 
 const clusterRiskFor = (scenario: ValidationScenarioResult) => {
   if (scenario.maxDrawdown >= 4 || scenario.worstTradeR <= -1.5) {
@@ -24,7 +25,23 @@ const notesFor = (scenario: ValidationScenarioResult) => {
   return "Review losing sequences and threshold gates before increasing strategy trust.";
 };
 
-export function analyzeDrawdownClusters(report: ValidationSuiteReport): DrawdownClusterNote[] {
+export function analyzeDrawdownClusters(
+  report: ValidationSuiteReport,
+  attribution?: ResearchQualityFailureAttribution
+): DrawdownClusterNote[] {
+  if (attribution?.canonicalScenarioId) {
+    return attribution.drawdownClusters.map((cluster) => ({
+      scenarioName: `${attribution.canonicalScenarioName ?? "Canonical scenario"} / ${cluster.clusterId}`,
+      maxDrawdown: cluster.maxDrawdownR,
+      worstTradeR: -cluster.maxDrawdownR,
+      clusterRisk: cluster.risk,
+      notes: `${cluster.tradeCount} chronological trades, ${cluster.stopHitCount} stop hits; ${cluster.recovered ? "recovered" : "open at sample end"}${cluster.dominantFailureCause ? `; dominant context ${cluster.dominantFailureCause}` : ""}.`,
+      clusterId: cluster.clusterId,
+      startAt: cluster.startAt,
+      endAt: cluster.endAt,
+      recovered: cluster.recovered
+    }));
+  }
   return report.scenarios
     .filter((scenario) => scenario.maxDrawdown > 0 || scenario.worstTradeR < 0)
     .map((scenario) => ({

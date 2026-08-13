@@ -157,6 +157,13 @@ const proposedChangesFor = (
 
 const reasonFor = (targetProblem: CalibrationTargetProblem) => {
   const quality = loadLatestResearchQualityReview();
+  const attribution = quality?.failureAttribution;
+  if (attribution?.blockers.includes("false_positive_context_coverage_below_90_percent")) {
+    return `Pre-entry context coverage is incomplete (${Math.round((attribution.contextEvaluationCoverage ?? 0) * 100)}% evaluated). ${attribution.recommendedExperiment}`;
+  }
+  if (attribution?.topFailureCause) {
+    return `${attribution.topFailureCause.label}: ${attribution.topFailureCause.evidence} ${attribution.recommendedExperiment}`;
+  }
   const topWeakness = quality?.topWeaknesses[0];
   if (topWeakness) {
     return `${topWeakness.title}: ${topWeakness.detail}`;

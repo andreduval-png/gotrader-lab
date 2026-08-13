@@ -100,6 +100,7 @@ const compactIteration = (iteration: AutonomousLoopIteration, mode: CompactMode)
   proposalId: iteration.proposalId,
   llmAdvisoryUnavailable: iteration.llmAdvisoryUnavailable,
   llmAdvisoryUnavailableReason: text(iteration.llmAdvisoryUnavailableReason, 300),
+  llmAdvisoryUnavailableDetail: text(iteration.llmAdvisoryUnavailableDetail, 500),
   walkForwardRunId: iteration.walkForwardRunId,
   walkForwardVerdict: iteration.walkForwardVerdict,
   autoApplyEligibility: iteration.autoApplyEligibility

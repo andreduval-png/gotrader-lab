@@ -1,4 +1,5 @@
 import type { ValidationReadinessStatus } from "@/lib/validation";
+import type { ResearchQualityFailureAttribution } from "@/lib/researchQuality/researchQualityFailureAttributionTypes";
 
 export type ResearchQualityReadinessGrade = "Not Ready" | "Research Ready" | "Paper-Demo Candidate";
 export type ResearchQualityPriority = "high" | "medium" | "low";
@@ -40,6 +41,8 @@ export interface FalsePositivePattern {
   worstR: number;
   pattern: string;
   mitigation: string;
+  causeCode?: string;
+  countBasis?: "completed_stop_hits" | "legacy_estimate";
 }
 
 export interface DrawdownClusterNote {
@@ -48,6 +51,10 @@ export interface DrawdownClusterNote {
   worstTradeR: number;
   clusterRisk: ValidationReadinessStatus;
   notes: string;
+  clusterId?: string;
+  startAt?: string;
+  endAt?: string;
+  recovered?: boolean;
 }
 
 export interface AgentUsefulnessReview {
@@ -104,6 +111,7 @@ export interface ResearchQualityReview {
   sessionComparison: SessionQualityComparison[];
   falsePositivePatterns: FalsePositivePattern[];
   drawdownClusters: DrawdownClusterNote[];
+  failureAttribution?: ResearchQualityFailureAttribution;
   agentUsefulness: AgentUsefulnessReview[];
   confluenceThresholdSensitivity: ThresholdSensitivityReview;
   confidenceThresholdSensitivity: ThresholdSensitivityReview;

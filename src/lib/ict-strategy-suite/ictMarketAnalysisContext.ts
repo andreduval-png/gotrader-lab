@@ -710,7 +710,11 @@ export async function buildIctMarketAnalysisContextBundle(
     analysisCandlesByTimeframe,
     depthSummariesByTimeframe
   };
-  if (useDefaultFetchers) {
+  const cacheable =
+    bundle.context.multiTimeframeContextStatus === "built" &&
+    bundle.context.requiredTimeframesLoaded &&
+    bundle.context.missingTimeframes.length === 0;
+  if (useDefaultFetchers && cacheable) {
     marketAnalysisBundleCache.set(cacheKey, {
       bundle,
       expiresAt: Date.now() + ICT_MARKET_ANALYSIS_CACHE_TTL_MS

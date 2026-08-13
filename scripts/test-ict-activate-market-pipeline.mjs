@@ -37,6 +37,11 @@ function compileForNode() {
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return { compactSummary: {} }; }\n", "utf8");
+  fs.writeFileSync(
+    path.join(outRoot, "runIctAdvisorPacket.mjs"),
+    "export async function runIctAdvisorPacket() { return globalThis.__ACTIVATE_MARKET_TEST_PACKET ?? { compactSummary: {} }; }\n",
+    "utf8"
+  );
   fs.writeFileSync(path.join(outRoot, "ictCurrentRead.mjs"), "export function buildIctCurrentReadFromPacket() { return globalThis.__ACTIVATE_MARKET_TEST_READ; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictMarketAnalysisContext.mjs"), "export async function buildIctMarketAnalysisContextBundle() { return globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictSignalContract.mjs"), "export function buildIctResearchSignalFromCurrentRead() { return globalThis.__ACTIVATE_MARKET_TEST_SIGNAL; }\n", "utf8");
@@ -358,6 +363,10 @@ async function main() {
     analysisCandlesByTimeframe: {},
     depthSummariesByTimeframe: {}
   };
+  globalThis.__ACTIVATE_MARKET_TEST_PACKET = {
+    marketAnalysisContext: globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT.context,
+    compactSummary: {}
+  };
   globalThis.__ACTIVATE_MARKET_TEST_CMD_ELIGIBILITY = {
     eligible: true,
     reasons: ["CMD strict paper-watchlist candidate is eligible for paper-only tracking."]
@@ -516,6 +525,10 @@ async function main() {
       htfBiasSource: ["W1", "D1", "H4"]
     }
   };
+  globalThis.__ACTIVATE_MARKET_TEST_PACKET = {
+    ...globalThis.__ACTIVATE_MARKET_TEST_PACKET,
+    marketAnalysisContext: globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT.context
+  };
   const missingHtf = await suite.runIctActivateMarketPipeline(
     { snapshot: snapshot({}, []), saveLatestSummary: false },
     undefined,
@@ -534,8 +547,9 @@ async function main() {
   );
   assert.equal(missingSmt.status, "partial");
   assert.equal(missingSmt.steps.find((step) => step.id === "run_smt").status, "completed");
-  assert.match(missingSmt.steps.find((step) => step.id === "run_smt").warning, /SMT comparison data unavailable/i);
-  assert.match(missingSmt.warnings.join(" "), /SMT comparison data unavailable/i);
+  assert.equal(missingSmt.steps.find((step) => step.id === "run_smt").warning, undefined);
+  assert.match(missingSmt.steps.find((step) => step.id === "run_smt").message, /Optional SMT confluence is unavailable/i);
+  assert.doesNotMatch(missingSmt.warnings.join(" "), /SMT|relative.strength/i);
   assertSafe(missingSmt);
 
   globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
@@ -580,6 +594,63 @@ async function main() {
   assert.match(noTrade.cmdPaperEligibility.reason, /Only CMD paper-watchlist/i);
   assertSafe(noTrade);
 
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    modelQualityLane: "no_trade",
+    riskStatus: "reject_candidate",
+    currentOpportunitySummary: {
+      topRejected: {
+        status: "rejected",
+        side: "short",
+        entry: 23124.75
+      }
+    }
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    status: "rejected_signal",
+    side: "short",
+    entryZone: undefined,
+    invalidation: 23156.25,
+    target: 23088.5,
+    rrEstimate: 1.15
+  });
+  const rejectedWithCanonicalEntry = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedCandidateStatus, "rejected");
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryPrice, 23124.75);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryZone, undefined);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedStopLoss, 23156.25);
+  assertSafe(rejectedWithCanonicalEntry);
+
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    currentOpportunitySummary: {
+      topRejected: {
+        status: "rejected",
+        side: "long",
+        entry: 23050
+      }
+    }
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    status: "rejected_signal",
+    side: "short",
+    entryReference: 23100,
+    invalidation: 23150,
+    target: 23000,
+    rrEstimate: 2
+  });
+  const mismatchedScannerCandidate = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.equal(mismatchedScannerCandidate.summary.researchSide, "short");
+  assert.equal(mismatchedScannerCandidate.summary.proposedEntryPrice, 23100);
+  assert.equal(mismatchedScannerCandidate.summary.proposedCandidateStatus, "rejected");
+  assertSafe(mismatchedScannerCandidate);
+
   console.log(JSON.stringify({
     status: "passed",
     tested: [
@@ -590,6 +661,8 @@ async function main() {
       "missing_smt_skipped",
       "progress_updates",
       "operator_workflow",
+      "rejected_candidate_canonical_entry",
+      "cross_source_direction_coherence",
       "safety_contract"
     ],
     authority,

@@ -6,7 +6,10 @@ export const AUTONOMOUS_CALIBRATION_APPLY_NOT_ENABLED =
   "autonomous_calibration_apply_not_enabled";
 
 const CONSENT_SCHEMA_VERSION = 1 as const;
-const FROZEN_IFVG_V3_PROFILE = "ifvg_fresh_retest_v3_research";
+const FROZEN_IFVG_PROFILES = new Set([
+  "ifvg_fresh_retest_v3_research",
+  "ifvg_fresh_retest_v4_candidate"
+]);
 
 export const AUTONOMOUS_CALIBRATION_ALLOWED_FIELDS = Object.freeze([
   "confluenceThreshold",
@@ -253,12 +256,12 @@ export function validateAutonomousCalibrationFinalApply(
   details.push(...patchReview.details);
 
   if (
-    input.baseProfileId === FROZEN_IFVG_V3_PROFILE ||
-    input.targetProfileId === FROZEN_IFVG_V3_PROFILE
+    FROZEN_IFVG_PROFILES.has(input.baseProfileId ?? "") ||
+    FROZEN_IFVG_PROFILES.has(input.targetProfileId ?? "")
   ) {
     blockerCodes.push("autonomous_calibration_frozen_profile_requires_new_version");
     details.push(
-      "IFVG v3 is frozen; any calibration change requires a new candidate/profile version."
+      "The selected IFVG profile is frozen; any calibration change requires a new candidate/profile version."
     );
   }
 

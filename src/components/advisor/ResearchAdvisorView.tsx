@@ -2605,9 +2605,16 @@ function CurrentReadPanel({
           detail={`${currentRead.debug.selectedSessionDate ?? "no session date"} / ${formatToken(currentRead.sessionDirectionalRead)} / ${pct(currentRead.sessionNarrativeConfidence)}`}
         />
         <AdvisorReadout
-          label="NY mitigation / depth"
+          label="NY mitigation / tactical window"
           value={currentRead.sessionMitigationDetected ? "mitigation detected" : "mitigation missing"}
-          detail={`${formatToken(currentRead.dataDepthStatus)} / ${currentRead.availableLookbackDays ?? 0} of ${currentRead.requestedLookbackDays ?? 90} days`}
+          detail={`${formatToken(currentRead.dataDepthStatus)} / ${currentRead.availableLookbackDays ?? 0} of ${currentRead.requestedLookbackDays ?? 90} days / chart-session reference only`}
+        />
+        <AdvisorReadout
+          label="Validated range history"
+          value={formatToken(currentRead.currentOpportunitySummary?.depthStatus)}
+          detail={currentRead.currentOpportunitySummary?.rangeHistoryAvailable
+            ? `${currentRead.currentOpportunitySummary.validationLookbackDays.toFixed(2)} days available for candidate validation`
+            : "validation context not ready"}
         />
         <AdvisorReadout
           label="FVG target"

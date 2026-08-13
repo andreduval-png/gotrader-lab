@@ -85,6 +85,7 @@ export interface IctResearchSignal {
   setup?: string;
   phase?: "phase_1" | "phase_2" | "combined";
   side: IctSide;
+  entryReference?: number;
   entryZone?: IctResearchSignalEntryZone;
   invalidation?: number;
   target?: number;

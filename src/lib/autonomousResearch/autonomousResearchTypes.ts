@@ -203,6 +203,7 @@ export interface AutonomousLoopIteration {
   proposalId?: string;
   llmAdvisoryUnavailable?: boolean;
   llmAdvisoryUnavailableReason?: string;
+  llmAdvisoryUnavailableDetail?: string;
   walkForwardRunId?: string;
   walkForwardVerdict?: string;
   autoApplyEligibility?: AutoApplyEligibility;

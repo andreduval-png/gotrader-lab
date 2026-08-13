@@ -129,6 +129,7 @@ export interface IctAdvisorSignal {
     low: number;
     midpoint: number;
   };
+  entryReference?: number;
   invalidation?: number;
   target?: number;
   rrEstimate?: number;

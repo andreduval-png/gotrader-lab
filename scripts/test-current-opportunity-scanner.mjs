@@ -198,7 +198,7 @@ async function main() {
     analysisTimeframesUsed: ["W1", "D1", "H4", "H1", "M15", "M5"],
     missingTimeframes: [],
     analysisDepthStatus: "sufficient",
-    availableLookbackDays: 88.95
+    availableLookbackDays: 3.59
   };
   const deepPacket = {
     ...basePacket,
@@ -224,6 +224,7 @@ async function main() {
   const deepScan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: deepPacket, currentRead: deepRead }));
   assert.equal(deepScan.summary.rangeHistoryAvailable, true, "90-day range metadata should be used");
   assert.equal(deepScan.summary.depthStatus, "validation_context_ready");
+  assert.equal(deepScan.summary.validationLookbackDays, 88.95, "compact chart depth must not mask deeper validated range history");
   assert.ok(deepScan.summary.validCandidateCount >= 1, "approved compact candidate with full structure should become valid_candidate");
   assertSafe(suite, deepScan);
 

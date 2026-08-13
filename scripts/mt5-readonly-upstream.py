@@ -13,6 +13,7 @@ import json
 import os
 import signal
 import threading
+import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -107,10 +108,14 @@ class Mt5ReadOnlyState:
         self.connected = False
         self.last_error: str | None = None
         self.last_connected_at: str | None = None
+        self.reconnect_count = 0
+        self.last_data_error: str | None = None
+        self.last_data_error_at: str | None = None
+        self.last_data_recovered_at: str | None = None
 
-    def ensure_connected(self) -> bool:
+    def ensure_connected(self, force: bool = False) -> bool:
         with MT5_LOCK:
-            terminal = mt5.terminal_info() if self.connected else None
+            terminal = mt5.terminal_info() if self.connected and not force else None
             if terminal is not None and bool(getattr(terminal, "connected", False)):
                 return True
 
@@ -119,12 +124,44 @@ class Mt5ReadOnlyState:
             terminal = mt5.terminal_info() if initialized else None
             self.connected = bool(initialized and terminal and getattr(terminal, "connected", False))
             if self.connected:
+                if force:
+                    self.reconnect_count += 1
                 self.last_error = None
                 self.last_connected_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             else:
                 code, message = mt5.last_error()
                 self.last_error = f"MT5 initialize failed ({code}): {message}"
             return self.connected
+
+    def read_market_data(self, label: str, operation: Any) -> Any:
+        """Run one market-data read and recover once from a stale MT5 IPC session."""
+        last_error: Any = None
+        for attempt in range(2):
+            if not self.ensure_connected(force=attempt > 0):
+                last_error = self.last_error
+            else:
+                with MT5_LOCK:
+                    try:
+                        result = operation()
+                        last_error = mt5.last_error()
+                    except Exception as error:  # MetaTrader5 can raise on stale IPC handles
+                        result = None
+                        last_error = error
+                if result is not None:
+                    if attempt > 0:
+                        self.last_data_recovered_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    self.last_data_error = None
+                    self.last_data_error_at = None
+                    self.connected = True
+                    return result
+
+            self.connected = False
+            self.last_data_error = f"{label} failed: {last_error}"
+            self.last_data_error_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if attempt == 0:
+                time.sleep(0.2)
+
+        raise RuntimeError(self.last_data_error or f"{label} failed after reconnect")
 
     def status(self, probe_terminal: bool = True) -> dict[str, Any]:
         # Process health must not queue behind a potentially slow MT5 history call.
@@ -144,6 +181,10 @@ class Mt5ReadOnlyState:
             "rangeEndpointAvailable": connected,
             "lastConnectedAt": self.last_connected_at,
             "lastError": self.last_error,
+            "reconnectCount": self.reconnect_count,
+            "lastDataError": self.last_data_error,
+            "lastDataErrorAt": self.last_data_error_at,
+            "lastDataRecoveredAt": self.last_data_recovered_at,
             "authority": AUTHORITY,
             **AUTHORITY,
         }
@@ -266,21 +307,16 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
         return normalized, TIMEFRAMES[normalized]
 
     def handle_symbols(self) -> None:
-        with MT5_LOCK:
-            symbols = mt5.symbols_get()
-            error = mt5.last_error()
-        if symbols is None:
-            raise RuntimeError(f"MT5 symbols_get failed: {error}")
+        symbols = self.state.read_market_data("MT5 symbols_get", mt5.symbols_get)
         self.send_json(200, [item.name for item in symbols])
 
     def handle_quote(self, symbol: str | None) -> None:
         if not symbol:
             raise ValueError("symbol_name is required")
-        with MT5_LOCK:
-            tick = mt5.symbol_info_tick(symbol)
-            error = mt5.last_error()
-        if tick is None:
-            raise RuntimeError(f"MT5 quote unavailable for {symbol}: {error}")
+        tick = self.state.read_market_data(
+            f"MT5 quote for {symbol}",
+            lambda: mt5.symbol_info_tick(symbol),
+        )
         timestamp = utc_iso(int(tick.time))
         self.send_json(
             200,
@@ -304,11 +340,10 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
             raise ValueError("symbol_name is required")
         timeframe_name, timeframe_value = self.timeframe(query)
         count = min(max(int(self.query_value(query, "count", "limit", default="100") or 100), 1), MAX_CANDLES)
-        with MT5_LOCK:
-            rates = mt5.copy_rates_from_pos(symbol, timeframe_value, 0, count)
-            error = mt5.last_error()
-        if rates is None:
-            raise RuntimeError(f"MT5 latest candles unavailable for {symbol} {timeframe_name}: {error}")
+        rates = self.state.read_market_data(
+            f"MT5 latest candles for {symbol} {timeframe_name}",
+            lambda: mt5.copy_rates_from_pos(symbol, timeframe_value, 0, count),
+        )
         candles = sorted((compact_candle(row) for row in rates), key=lambda item: item["timestamp"])
         self.send_json(200, candles)
 
@@ -324,11 +359,10 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
         if date_from >= date_to:
             raise ValueError("date_from must be before date_to")
         count = min(max(int(self.query_value(query, "count", "limit", default=str(MAX_CANDLES)) or MAX_CANDLES), 1), MAX_CANDLES)
-        with MT5_LOCK:
-            rates = mt5.copy_rates_range(symbol, timeframe_value, date_from, date_to)
-            error = mt5.last_error()
-        if rates is None:
-            raise RuntimeError(f"MT5 range candles unavailable for {symbol} {timeframe_name}: {error}")
+        rates = self.state.read_market_data(
+            f"MT5 range candles for {symbol} {timeframe_name}",
+            lambda: mt5.copy_rates_range(symbol, timeframe_value, date_from, date_to),
+        )
         candles = sorted((compact_candle(row) for row in rates), key=lambda item: item["timestamp"])[-count:]
         self.send_json(
             200,

@@ -422,6 +422,7 @@ const completeSignalTradeStructure = (
     : "Session structure did not provide a safe target/invalidation/RR fallback.";
   return {
     ...signal,
+    entryReference: entry,
     target: target?.price ?? signal.target,
     invalidation: invalidation?.price ?? signal.invalidation,
     rrEstimate: rrEstimate ?? signal.rrEstimate,

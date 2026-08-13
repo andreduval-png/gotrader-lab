@@ -10,6 +10,9 @@ export const LLM_RESEARCH_STORAGE_KEY = "gotrader_ai_lab_llm_research_state";
 export const LLM_RESEARCH_UPDATED_EVENT = "gotrader-ai-lab-llm-research-updated";
 
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const MAX_LLM_RESEARCH_RUNS = 20;
+const MAX_LLM_RESEARCH_BYTES = 512 * 1024;
+let inMemoryState: LLMResearchState | undefined;
 
 const initialState = (): LLMResearchState => ({
   researchMode: "llm_required",
@@ -23,53 +26,78 @@ const initialState = (): LLMResearchState => ({
   safetyNotice: "LLM agents are required for real research mode, but advisory only."
 });
 
-const publish = (state: LLMResearchState) => {
-  if (isBrowser()) {
-    window.localStorage.setItem(LLM_RESEARCH_STORAGE_KEY, JSON.stringify(state));
-    window.dispatchEvent(new CustomEvent(LLM_RESEARCH_UPDATED_EVENT, { detail: state }));
+const normalizeState = (state: Partial<LLMResearchState>): LLMResearchState => ({
+  ...initialState(),
+  ...state,
+  researchMode: "llm_required",
+  providerMode: state.providerMode ?? "local_command",
+  runs: safeTopN(safeArray(state.runs), MAX_LLM_RESEARCH_RUNS),
+  totalContextExports: state.totalContextExports ?? 0,
+  totalResponseImports: state.totalResponseImports ?? 0,
+  unsafeResponseRejections: state.unsafeResponseRejections ?? 0,
+  deterministicFallbackEnabled: true,
+  mockModeAllowed: true,
+  safetyNotice: "LLM agents are required for real research mode, but advisory only."
+});
+
+const parseState = (raw: string | null) => {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<LLMResearchState>;
+    return normalizeState(parsed);
+  } catch {
+    return undefined;
   }
-  return state;
+};
+
+const serializedBytes = (value: string) => new TextEncoder().encode(value).byteLength;
+
+const publish = (state: LLMResearchState) => {
+  const normalized = normalizeState(state);
+  inMemoryState = normalized;
+  if (!isBrowser()) return normalized;
+
+  let storedLocally = false;
+  for (const maximumRuns of [20, 10, 5, 3, 1, 0]) {
+    const candidate = normalizeState({ ...normalized, runs: normalized.runs.slice(0, maximumRuns) });
+    const serialized = JSON.stringify(candidate);
+    if (serializedBytes(serialized) > MAX_LLM_RESEARCH_BYTES) continue;
+    try {
+      window.localStorage.setItem(LLM_RESEARCH_STORAGE_KEY, serialized);
+      storedLocally = true;
+      break;
+    } catch {
+      // Retry with a smaller immutable history projection.
+    }
+  }
+
+  if (!storedLocally) {
+    try {
+      window.sessionStorage?.setItem(LLM_RESEARCH_STORAGE_KEY, JSON.stringify(normalized));
+    } catch {
+      // The active tab retains the advisory state in memory.
+    }
+    console.warn("LLM research persistence fell back after browser storage reached its quota.");
+  }
+  window.dispatchEvent(new CustomEvent(LLM_RESEARCH_UPDATED_EVENT, { detail: normalized }));
+  return normalized;
 };
 
 export function loadLLMResearchState(): LLMResearchState {
   if (!isBrowser()) {
-    return initialState();
+    return inMemoryState ?? initialState();
   }
-  const raw = window.localStorage.getItem(LLM_RESEARCH_STORAGE_KEY);
-  if (!raw) {
-    return publish(initialState());
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<LLMResearchState>;
-    return {
-      ...initialState(),
-      ...parsed,
-      researchMode: "llm_required",
-      providerMode: parsed.providerMode ?? "local_command",
-      runs: safeArray(parsed.runs),
-      latestContextExportAt: parsed.latestContextExportAt,
-      latestResponseImportAt: parsed.latestResponseImportAt,
-      totalContextExports: parsed.totalContextExports ?? 0,
-      totalResponseImports: parsed.totalResponseImports ?? 0,
-      unsafeResponseRejections: parsed.unsafeResponseRejections ?? 0,
-      deterministicFallbackEnabled: true,
-      mockModeAllowed: true,
-      safetyNotice: "LLM agents are required for real research mode, but advisory only."
-    };
-  } catch {
-    return publish(initialState());
-  }
+  if (inMemoryState) return inMemoryState;
+  const local = parseState(window.localStorage.getItem(LLM_RESEARCH_STORAGE_KEY));
+  if (local) return local;
+  const session = typeof window.sessionStorage !== "undefined"
+    ? parseState(window.sessionStorage.getItem(LLM_RESEARCH_STORAGE_KEY))
+    : undefined;
+  return session ?? publish(initialState());
 }
 
 export function saveLLMResearchState(state: LLMResearchState): LLMResearchState {
-  return publish({
-    ...initialState(),
-    ...state,
-    researchMode: "llm_required",
-    deterministicFallbackEnabled: true,
-    mockModeAllowed: true,
-    safetyNotice: "LLM agents are required for real research mode, but advisory only."
-  });
+  return publish(normalizeState(state));
 }
 
 export function saveLLMAdvisoryRun(run: LLMAdvisoryRun, providerMode?: LLMProviderMode): LLMResearchState {
@@ -78,7 +106,7 @@ export function saveLLMAdvisoryRun(run: LLMAdvisoryRun, providerMode?: LLMProvid
     ...state,
     providerMode: providerMode ?? run.providerMode,
     latestRunId: run.runId,
-    runs: safeTopN([run, ...safeArray(state.runs)], 20),
+    runs: safeTopN([run, ...safeArray(state.runs)], MAX_LLM_RESEARCH_RUNS),
     unsafeResponseRejections: (state.unsafeResponseRejections ?? 0) + (run.unsafeResponseRejections ?? 0)
   });
 }

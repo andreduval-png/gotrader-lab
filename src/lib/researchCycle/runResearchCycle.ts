@@ -117,10 +117,7 @@ import {
   saveWalkForwardRun,
   walkForwardProvenanceReview
 } from "@/lib/walkForward";
-import {
-  recordEvidenceUpdateInValidationChain,
-  recordWalkForwardRunInValidationChain
-} from "@/lib/validationChain";
+import { linkResearchCycleValidationChain } from "@/lib/validationChain";
 import { buildForwardScenarioMap } from "@/lib/forwardScenario";
 import {
   recordFrozenMarketEpisodeProfileObservationsFromClosedCandle,
@@ -1123,7 +1120,12 @@ export async function runResearchCycle({
     throwIfCanceled();
     let backtestResult: BacktestResult | undefined;
     try {
-      backtestResult = runBacktest(researchCandles, activeConfig);
+      backtestResult = await runDetectorProfileBacktest({
+        candles: researchCandles,
+        config: activeConfig,
+        signal,
+        timeoutMs: autoResearchTimeoutMs ?? 120_000
+      });
       run.backtestSummary = summarizeBacktest(backtestResult);
       // Edge auditor waits for walk-forward OOS; do not use in-sample backtest edge here.
       if (backtestResult.summary.totalTrades === 0) {
@@ -1561,7 +1563,6 @@ export async function runResearchCycle({
         }
       });
       }
-      recordWalkForwardRunInValidationChain(cycleWalkForwardRun);
       const oosEdge = cycleWalkForwardRun.stability?.edgeStatistics;
       run.edgeAuditorSummary = reviewEdgeStatistics(
         oosEdge?.provenance === "out_of_sample" ? oosEdge : undefined,
@@ -1826,17 +1827,22 @@ export async function runResearchCycle({
         const bridgeResult = await runLocalBridgeAdvisory(llmPacket);
         if (bridgeResult.advisoryStatus === "unavailable") {
           const advisoryUnavailableSummary = llmUnavailableSummary(bridgeResult.reason);
+          const advisoryUnavailableDetail = safeArray(bridgeResult.details)
+            .filter((detail): detail is string => typeof detail === "string" && Boolean(detail.trim()))
+            .join(" ")
+            .slice(0, 500);
           run.llmBridgeAvailable = llmBridgeProcessAvailable(bridgeResult.reason);
           run.llmAdvisoryUnavailable = true;
           run.llmAdvisoryUnavailableReason = bridgeResult.reason;
+          run.llmAdvisoryUnavailableDetail = advisoryUnavailableDetail || bridgeResult.warnings[0];
           run.llmRun = unavailableLLMRun({
             contextPacketId: llmPacket.packetId,
             reason: bridgeResult.reason,
-            warnings: bridgeResult.warnings
+            warnings: [...bridgeResult.warnings, ...safeArray(bridgeResult.details)]
           });
           warnStep("llm_advisory", {
             summary: advisoryUnavailableSummary,
-            warning: bridgeResult.warnings.join(" ")
+            warning: [...bridgeResult.warnings, ...safeArray(bridgeResult.details)].join(" ")
           });
         } else {
           run.llmBridgeAvailable = true;
@@ -1857,20 +1863,22 @@ export async function runResearchCycle({
           }
         }
       } catch (error) {
+        const advisoryUnavailableDetail = error instanceof Error ? error.message : "Local LLM bridge request failed.";
         run.llmBridgeAvailable = false;
         run.llmAdvisoryUnavailable = true;
         run.llmAdvisoryUnavailableReason = "request_failed";
+        run.llmAdvisoryUnavailableDetail = advisoryUnavailableDetail.slice(0, 500);
         run.llmRun = unavailableLLMRun({
           contextPacketId: llmPacket.packetId,
           reason: "request_failed",
           warnings: [
             llmUnavailableSummary("request_failed"),
-            error instanceof Error ? error.message : "Local LLM bridge request failed."
+            advisoryUnavailableDetail
           ]
         });
         warnStep("llm_advisory", {
           summary: llmUnavailableSummary("request_failed"),
-          warning: error instanceof Error ? error.message : "Local LLM bridge request failed."
+          warning: advisoryUnavailableDetail
         });
       }
     }
@@ -1988,15 +1996,10 @@ export async function runResearchCycle({
       nextMaturityRequirement: maturitySummary.nextMaturityRequirement
     };
 
-    if (matchedCycleWalkForward) {
-      recordWalkForwardRunInValidationChain(matchedCycleWalkForward);
-    }
-    recordEvidenceUpdateInValidationChain({
-      evidenceQualityScore: cycleEvidenceSummary.overallScore,
-      maturityScore: maturitySummary.score,
-      maturityGrade: maturitySummary.grade,
-      selfImprovementStatus: run.createdProposalId ? "proposal_created" : "none",
-      provenance: matchedCycleWalkForward?.provenance
+    linkResearchCycleValidationChain({
+      cycle: run,
+      walkForwardRun: matchedCycleWalkForward,
+      persist: true
     });
 
     let auditWarning: string | undefined;

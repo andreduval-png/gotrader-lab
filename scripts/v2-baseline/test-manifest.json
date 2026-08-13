@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Phase 0 baseline suites for compatibility-preserving GoTrader V2 migration.",
+  "categories": {
+    "build_and_typecheck": ["typecheck", "build"],
+    "source_integrity": ["test:v2-source-timing", "test:source-status", "test:mt5-push-feed"],
+    "strategy_detection": ["test:v2-strategy-manifest", "test:ict-ifvg", "test:ict-universal-recognition", "test:gotrader-system-coordination"],
+    "trade_geometry": ["test:ict-trade-construction", "test:ict-ifvg"],
+    "replay": ["test:ict-replay-validation"],
+    "walk_forward_oos": ["test:detector-profile-walk-forward", "test:ict-out-of-sample-validation"],
+    "research_quality": ["test:regime-classifier", "test:research-quality-failure-attribution"],
+    "evidence_provenance": ["test:source-status", "test:validation-chain", "test:research-cycle-validation-linkage"],
+    "readiness": ["test:paper-demo-operations", "test:readiness-blocker-priority"],
+    "storage": ["test:local-journal", "test:forward-evidence-ledger"],
+    "safety_authority": ["test:v2-baseline-authority", "test:mt5-readonly-safety", "test:openclaw-pilot-dry-run", "test:autonomous-calibration-auto-apply"],
+    "browser_smoke": ["smoke:browser"]
+  },
+  "suites": {
+    "core": [
+      "typecheck",
+      "test:v2-strategy-manifest",
+      "test:v2-baseline-snapshots",
+      "test:v2-source-timing",
+      "test:regime-classifier",
+      "test:source-status",
+      "test:validation-chain",
+      "test:mt5-push-feed",
+      "test:v2-baseline-authority"
+    ],
+    "strategy-baselines": [
+      "test:v2-strategy-manifest",
+      "test:v2-baseline-snapshots",
+      "test:ict-ifvg",
+      "test:ict-silver-bullet",
+      "test:ict-turtle-soup",
+      "test:ict-cisd",
+      "test:ict-phase2-models",
+      "test:ict-universal-recognition",
+      "test:gotrader-system-coordination"
+    ],
+    "provenance": [
+      "test:source-status",
+      "test:validation-chain",
+      "test:research-cycle-validation-linkage"
+    ],
+    "source-integrity": [
+      "test:v2-source-timing",
+      "test:source-status",
+      "test:mt5-push-feed",
+      "test:ict-multi-timeframe-context"
+    ],
+    "safety": [
+      "test:v2-baseline-authority",
+      "test:mt5-readonly-safety",
+      "test:openclaw-pilot-dry-run",
+      "test:autonomous-calibration-auto-apply"
+    ],
+    "browser-smoke": ["smoke:browser"],
+    "deep-research": [
+      "test:ifvg-performance",
+      "test:detector-profile-walk-forward",
+      "test:ict-out-of-sample-validation",
+      "test:ict-replay-validation",
+      "test:research-quality-failure-attribution"
+    ]
+  }
+}

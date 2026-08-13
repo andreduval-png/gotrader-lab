@@ -40,8 +40,14 @@ function compileForNode() {
   }
   fs.writeFileSync(
     path.join(outRoot, "mt5ReadOnlyClientStub.mjs"),
-    `export async function fetchMt5ReadOnlyCandles() { throw new Error("test should inject display fetch"); }
-export async function fetchMt5CandlesInChunks() { throw new Error("test should inject chunked fetch"); }
+    `export async function fetchMt5ReadOnlyCandles(request) {
+  if (typeof globalThis.__ICT_TEST_DISPLAY_FETCH === "function") return globalThis.__ICT_TEST_DISPLAY_FETCH(request);
+  throw new Error("test should inject display fetch");
+}
+export async function fetchMt5CandlesInChunks(request) {
+  if (typeof globalThis.__ICT_TEST_HISTORY_FETCH === "function") return globalThis.__ICT_TEST_HISTORY_FETCH(request);
+  throw new Error("test should inject chunked fetch");
+}
 `,
     "utf8"
   );
@@ -225,6 +231,11 @@ async function main() {
   }
   assert.match(currentReadSource, /analysisTimeframesUsed/, "current read should expose analysis timeframes");
   assert.match(currentReadSource, /displayTimeframeRole/, "current read should label chart timeframe as display/reference only");
+  assert.match(
+    fs.readFileSync(path.join(sourceRoot, "ictMarketAnalysisContext.ts"), "utf8"),
+    /multiTimeframeContextStatus === "built"[\s\S]*requiredTimeframesLoaded[\s\S]*missingTimeframes\.length === 0/,
+    "only complete deep contexts should enter the five-minute cache"
+  );
 
   const fallbackHistoryRequests = [];
   const fallbackBundle = await contextModule.buildIctMarketAnalysisContextBundle(
@@ -265,6 +276,36 @@ async function main() {
   assert.equal(fallbackBundle.context.missingTimeframes.includes("W1"), false, "derived W1 should not remain missing");
   assert.doesNotMatch(JSON.stringify(fallbackBundle.context), /"candles"\s*:|"rawSnapshot"\s*:|"snapshot"\s*:|"password"\s*:|"secret"\s*:|"api[_-]?key"\s*:/i);
 
+  let cacheRecoveryGeneration = 1;
+  let defaultHistoryRequestCount = 0;
+  globalThis.__ICT_TEST_DISPLAY_FETCH = fetchDisplayCandles;
+  globalThis.__ICT_TEST_HISTORY_FETCH = async (request) => {
+    defaultHistoryRequestCount += 1;
+    if (cacheRecoveryGeneration === 1 && request.timeframe === "4h") {
+      throw new Error("transient H4 outage");
+    }
+    return fetchChunkedHistory(request);
+  };
+  const cacheRecoveryConfig = {
+    brokerSymbol: "USTECH",
+    displayTimeframe: "5m",
+    lookbackDays: 90,
+    requestedSymbol: "MNQ",
+    to: "2026-06-08T00:00:00.000Z"
+  };
+  const partialBundle = await contextModule.buildIctMarketAnalysisContextBundle(cacheRecoveryConfig);
+  assert.ok(partialBundle.context.missingTimeframes.includes("H4"), "transient missing H4 should remain explicit");
+  const firstGenerationRequests = defaultHistoryRequestCount;
+  cacheRecoveryGeneration = 2;
+  const recoveredBundle = await contextModule.buildIctMarketAnalysisContextBundle(cacheRecoveryConfig);
+  assert.ok(defaultHistoryRequestCount > firstGenerationRequests, "partial bundle must be retried instead of cached");
+  assert.deepEqual(recoveredBundle.context.missingTimeframes, [], "fresh retry should recover all deep timeframes");
+  const recoveredRequestCount = defaultHistoryRequestCount;
+  await contextModule.buildIctMarketAnalysisContextBundle(cacheRecoveryConfig);
+  assert.equal(defaultHistoryRequestCount, recoveredRequestCount, "complete deep bundle may use the bounded cache");
+  delete globalThis.__ICT_TEST_DISPLAY_FETCH;
+  delete globalThis.__ICT_TEST_HISTORY_FETCH;
+
   console.log(JSON.stringify({
     status: "passed",
     displayTimeframe: bundle.context.displayTimeframe,
@@ -275,6 +316,10 @@ async function main() {
       weeklyBiasStatus: fallbackBundle.context.weeklyBiasStatus,
       weeklyBiasDirection: fallbackBundle.context.weeklyBiasDirection,
       candleCount: derivedWeekly?.candleCount
+    },
+    partialCacheRecovery: {
+      initialMissing: partialBundle.context.missingTimeframes,
+      recoveredMissing: recoveredBundle.context.missingTimeframes
     },
     rawCandlesExposedInContext: false,
     authority: bundle.context.authority

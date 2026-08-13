@@ -47,6 +47,8 @@ export function IfvgForwardEvidenceCard({
     () => evaluateForwardEvidenceLedger(entries, frozen.profileId),
     [entries, frozen.profileId]
   );
+  const forwardQuality = evaluation.qualityAttribution;
+  const strongestLane = forwardQuality.strongestSessionLane;
   const collectorStatus = collectorStatuses[frozen.profileId];
   const cycleAudit = useMemo(
     () => auditForwardEvidenceCycleSample(
@@ -144,6 +146,39 @@ export function IfvgForwardEvidenceCard({
                 : " Any further refinement requires a separately versioned research profile and new validation."}
             </span>
           ) : null}
+        </div>
+        <div className="rounded-md border border-border bg-background/45 p-3 text-sm" data-testid="ifvg-forward-quality-attribution">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Forward session quality</p>
+            <Badge variant={forwardQuality.attributionCoverage >= 0.9 ? "success" : "warning"}>
+              {Math.round(forwardQuality.attributionCoverage * 100)}% loss attribution
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Strongest lane</p>
+              <p className="mt-1 font-medium">
+                {strongestLane
+                  ? `${strongestLane.session} / ${readable(strongestLane.status)}`
+                  : "Awaiting completed outcomes"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Cost stress</p>
+              <p className="mt-1 font-medium">
+                {strongestLane?.costAdjustedAverageR05 == null
+                  ? "n/a"
+                  : `${strongestLane.costAdjustedAverageR05.toFixed(2)}R at +0.50R`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Invalidations</p>
+              <p className="mt-1 font-medium">
+                {forwardQuality.attributedInvalidationCount} attributed / {forwardQuality.invalidationCount} total
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Next: {forwardQuality.nextAction}</p>
         </div>
         <div className="rounded-md border border-border bg-background/45 p-3 text-sm" data-testid="ifvg-forward-collector-status">
           <div className="flex flex-wrap items-center justify-between gap-2">

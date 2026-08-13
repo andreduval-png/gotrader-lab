@@ -247,6 +247,7 @@ export interface ResearchCycleRun {
   llmBridgeAvailable: boolean;
   llmAdvisoryUnavailable?: boolean;
   llmAdvisoryUnavailableReason?: string;
+  llmAdvisoryUnavailableDetail?: string;
   candidateProgress?: AutoResearchProgressSnapshot;
   autoResearchCheckpoint?: AutoResearchExecutionCheckpoint;
   llmRun?: LLMAdvisoryRun;

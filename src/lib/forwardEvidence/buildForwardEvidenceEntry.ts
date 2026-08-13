@@ -3,6 +3,8 @@ import {
   forwardEvidenceCollectionCutoff,
   type ForwardEvidenceEntry,
   type ForwardEvidenceEntryInput,
+  type ForwardEvidenceQualityContext,
+  type ForwardEvidenceSession,
   type ForwardEvidenceTargetReference
 } from "./forwardEvidenceTypes";
 import { getFrozenResearchProfile, ifvgFreshRetestV3FrozenProfile } from "./frozenProfileRegistry";
@@ -100,6 +102,42 @@ const normalizeTargets = (targets: unknown): ForwardEvidenceTargetReference[] =>
         .slice(0, 6)
     : [];
 
+const allowedSessions = new Set<ForwardEvidenceSession>([
+  "Globex",
+  "London",
+  "New York AM",
+  "New York Lunch",
+  "New York PM",
+  "Unknown"
+]);
+const allowedHtfAlignment = new Set(["aligned", "against_htf", "mixed", "unavailable"]);
+const optionalBoolean = (value: unknown) => typeof value === "boolean" ? value : undefined;
+
+const normalizeQualityContext = (value: unknown): ForwardEvidenceQualityContext | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const session = allowedSessions.has(record.session as ForwardEvidenceSession)
+    ? record.session as ForwardEvidenceSession
+    : "Unknown";
+  const htfAlignment = allowedHtfAlignment.has(String(record.htfAlignment))
+    ? record.htfAlignment as ForwardEvidenceQualityContext["htfAlignment"]
+    : undefined;
+  return {
+    session,
+    htfAlignment,
+    preferredSession: optionalBoolean(record.preferredSession),
+    liquidityTargetPresent: optionalBoolean(record.liquidityTargetPresent),
+    cleanRetest: optionalBoolean(record.cleanRetest),
+    freshRetest: optionalBoolean(record.freshRetest),
+    signalAgeBars: finiteNumber(record.signalAgeBars) === undefined
+      ? undefined
+      : Math.max(0, Math.floor(finiteNumber(record.signalAgeBars)!)),
+    displacementConfirmed: optionalBoolean(record.displacementConfirmed),
+    presentConditions: compactList(record.presentConditions, 8),
+    warnings: compactList(record.warnings, 8)
+  };
+};
+
 const entryId = () =>
   `forward_evidence_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -170,6 +208,7 @@ export const buildForwardEvidenceEntry = (input: ForwardEvidenceEntryInput): For
     targetReferences: normalizeTargets(input.targetReferences),
     triggerEvidence: compactList(input.triggerEvidence),
     missingEvidence: compactList(input.missingEvidence),
+    qualityContext: normalizeQualityContext(input.qualityContext),
     outcome,
     realizedR: outcome === "pending" || outcome === "rejected" ? undefined : finiteNumber(input.realizedR),
     barsObserved: Math.max(0, Math.floor(finiteNumber(input.barsObserved) ?? 0)),

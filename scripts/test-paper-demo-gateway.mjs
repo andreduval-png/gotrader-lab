@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -21,6 +21,14 @@ import {
   writePaperDemoExecutionRequest
 } from "./gotrader-paper-demo-gateway-core.mjs";
 import { appendTradeProposalAudit, evaluateTradeProposal } from "./gotrader-trade-proposal-core.mjs";
+import {
+  buildRiskEvaluationRequest,
+  buildSimulationAccountSnapshot,
+  createInitialSimulationAccountRiskState,
+  evaluateSimulationAccountRisk,
+  loadSimulationAccountRiskPolicy,
+  refreshSimulationAccountHeartbeat
+} from "./gotrader-account-risk-core.mjs";
 
 const authorityNone = {
   executionAuthority: "none",
@@ -109,8 +117,41 @@ const emptyState = {
   preparations: [],
   authority: authorityNone
 };
+const accountRiskEnv = {
+  GOTRADER_SIM_RISK_GOVERNOR_ENABLED: "true",
+  GOTRADER_SIM_RISK_KILL_SWITCH: "false",
+  GOTRADER_SIM_ACCOUNT_ID: "paper-demo-test",
+  GOTRADER_SIM_STARTING_EQUITY_USD: "50000",
+  GOTRADER_SIM_MAX_DAILY_LOSS_USD: "4000",
+  GOTRADER_SIM_MAX_OPEN_RISK_USD: "1000",
+  GOTRADER_SIM_MAX_RISK_PER_SCENARIO_USD: "300",
+  GOTRADER_SIM_MAX_CONCURRENT_INTENTS: "3",
+  GOTRADER_SIM_POINT_VALUE_USD: "2",
+  GOTRADER_SIM_VOLUME_MIN: "1",
+  GOTRADER_SIM_VOLUME_MAX: "5",
+  GOTRADER_SIM_VOLUME_STEP: "1"
+};
+const accountRiskPolicy = loadSimulationAccountRiskPolicy(accountRiskEnv);
+const accountRiskState = refreshSimulationAccountHeartbeat(
+  createInitialSimulationAccountRiskState(accountRiskPolicy, "2026-07-18T14:03:00.000Z"),
+  accountRiskPolicy,
+  "2026-07-18T14:03:00.000Z"
+);
+const accountRiskRequest = buildRiskEvaluationRequest({
+  now: "2026-07-18T14:03:00.000Z",
+  proposalEvaluation: proposal,
+  requestedRiskUsd: proposal.sizingPreview.riskBudgetUsd
+});
+const accountRiskEvaluation = evaluateSimulationAccountRisk({
+  now: "2026-07-18T14:03:00.000Z",
+  policy: accountRiskPolicy,
+  request: accountRiskRequest,
+  snapshot: buildSimulationAccountSnapshot(accountRiskState, "2026-07-18T14:03:00.000Z")
+});
+assert.equal(accountRiskEvaluation.status, "approved_for_simulation");
 
 const prepared = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -126,6 +167,7 @@ assert.equal(prepared.preparation.riskBudgetUsd, 300);
 assert.deepEqual(prepared.authority, authorityNone);
 
 const duplicate = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -136,7 +178,25 @@ const duplicate = evaluatePaperDemoPreparation({
 assert.equal(duplicate.status, "already_prepared");
 assert.equal(duplicate.state.preparations.length, 1);
 
+const duplicateAfterRiskLock = evaluatePaperDemoPreparation({
+  accountRiskEvaluation: {
+    ...accountRiskEvaluation,
+    status: "blocked",
+    riskState: "locked",
+    blockers: ["simulation_daily_loss_limit_reached"]
+  },
+  proposalEvaluation: proposal,
+  validationEvidence: summarizeValidationReport(validationReport),
+  forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
+  policy: enabledPolicy,
+  state: prepared.state,
+  now: "2026-07-18T14:03:01.000Z"
+});
+assert.equal(duplicateAfterRiskLock.status, "blocked");
+assert(duplicateAfterRiskLock.blockers.includes("account_risk:simulation_daily_loss_limit_reached"));
+
 const disabled = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -147,6 +207,7 @@ const disabled = evaluatePaperDemoPreparation({
 assert(disabled.blockers.includes("paper_demo_gateway_not_enabled"));
 
 const killed = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -157,6 +218,7 @@ const killed = evaluatePaperDemoPreparation({
 assert(killed.blockers.includes("paper_demo_kill_switch_active"));
 
 const stale = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -167,6 +229,7 @@ const stale = evaluatePaperDemoPreparation({
 assert(stale.blockers.includes("paper_demo_signal_stale"));
 
 const notReady = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport({
     ...validationReport,
@@ -183,6 +246,7 @@ const notReady = evaluatePaperDemoPreparation({
 assert(notReady.blockers.includes("paper_demo_readiness_not_granted"));
 
 const nonCanonicalFingerprint = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: {
     ...proposal,
     compactProposal: { ...proposal.compactProposal, sourceFingerprint: "opaque_unverified_fingerprint" }
@@ -196,6 +260,7 @@ const nonCanonicalFingerprint = evaluatePaperDemoPreparation({
 assert(nonCanonicalFingerprint.blockers.includes("proposal_source_fingerprint_not_canonical"));
 
 const noForward = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(undefined),
@@ -206,6 +271,7 @@ const noForward = evaluatePaperDemoPreparation({
 assert(noForward.blockers.includes("untouched_forward_evidence_missing"));
 
 const lossLocked = evaluatePaperDemoPreparation({
+  accountRiskEvaluation,
   proposalEvaluation: proposal,
   validationEvidence: summarizeValidationReport(validationReport),
   forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
@@ -215,12 +281,29 @@ const lossLocked = evaluatePaperDemoPreparation({
 });
 assert(lossLocked.blockers.includes("paper_demo_daily_loss_limit_reached"));
 
+const accountRiskBlocked = evaluatePaperDemoPreparation({
+  accountRiskEvaluation: {
+    ...accountRiskEvaluation,
+    status: "blocked",
+    blockers: ["projected_open_risk_limit_exceeded"]
+  },
+  proposalEvaluation: proposal,
+  validationEvidence: summarizeValidationReport(validationReport),
+  forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
+  policy: enabledPolicy,
+  state: emptyState,
+  now: "2026-07-18T14:03:00.000Z"
+});
+assert(accountRiskBlocked.blockers.includes("account_risk_governor_not_approved"));
+assert(accountRiskBlocked.blockers.includes("account_risk:projected_open_risk_limit_exceeded"));
+
 const tempRoot = await mkdtemp(path.join(os.tmpdir(), "gotrader-paper-demo-gateway-"));
 await mkdir(path.join(tempRoot, ".gotrader"), { recursive: true });
 await appendTradeProposalAudit(proposal, { repoRoot: tempRoot });
 await writeFile(path.join(tempRoot, ".gotrader", "validation.json"), JSON.stringify(validationReport), "utf8");
 await writeFile(path.join(tempRoot, ".gotrader", "forward.json"), JSON.stringify(forwardReport), "utf8");
 const env = {
+  ...accountRiskEnv,
   GOTRADER_PAPER_DEMO_GATEWAY_ENABLED: "true",
   GOTRADER_PAPER_DEMO_KILL_SWITCH: "false",
   GOTRADER_PAPER_MAX_DAILY_LOSS_R: "4",
@@ -237,11 +320,38 @@ const integrated = await preparePaperDemoSimulation(proposal.proposalId, {
 assert.equal(integrated.status, "prepared_for_local_paper_simulation_review");
 assert.equal(integrated.gatewayRequest.status, "queued");
 assert.equal(integrated.gatewayRequest.brokerSubmissionAllowed, false);
+assert.equal(integrated.accountRisk.decision.status, "approved_for_simulation");
+assert.equal(integrated.accountRisk.acknowledgement.status, "simulation_risk_reserved");
 assert.equal(integrated.mt5DemoRequest.status, "disabled");
 assert.equal(integrated.mt5DemoRequest.liveExecutionAllowed, false);
 const persisted = JSON.parse(await readFile(path.join(tempRoot, ".gotrader", "paper-demo-gateway-state.json"), "utf8"));
 assert.equal(persisted.preparations.length, 1);
 assert.equal(persisted.preparations[0].brokerSubmissionAttempted, false);
+const persistedRisk = JSON.parse(
+  await readFile(path.join(tempRoot, ".gotrader", "simulation-account-risk-state.json"), "utf8")
+);
+assert.equal(persistedRisk.activeReservations.length, 1);
+assert.equal(persistedRisk.openRiskUsd, 300);
+const riskLedger = await readFile(
+  path.join(tempRoot, ".gotrader", "simulation-account-risk-ledger.jsonl"),
+  "utf8"
+);
+assert.equal(riskLedger.trim().split(/\r?\n/).length, 1);
+assert(!/"(?:candles|rawCandles)"\s*:/.test(riskLedger));
+
+await mkdir(path.join(tempRoot, ".gotrader", "paper-demo-risk-transaction.lock"));
+const concurrentBlocked = await preparePaperDemoSimulation(proposal.proposalId, {
+  env,
+  now: "2026-07-18T14:03:00.500Z",
+  repoRoot: tempRoot
+});
+assert.equal(concurrentBlocked.status, "blocked");
+assert(concurrentBlocked.blockers.includes("account_risk_transaction_already_in_progress"));
+const riskStateAfterConcurrentBlock = JSON.parse(
+  await readFile(path.join(tempRoot, ".gotrader", "simulation-account-risk-state.json"), "utf8")
+);
+assert.equal(riskStateAfterConcurrentBlock.activeReservations.length, 1);
+await rm(path.join(tempRoot, ".gotrader", "paper-demo-risk-transaction.lock"), { recursive: true, force: true });
 const queuedRequest = JSON.parse(
   await readFile(
     path.join(tempRoot, ".gotrader", "paper-demo-outbox", `${integrated.gatewayRequest.requestId}.json`),
@@ -254,6 +364,8 @@ assert.equal(queuedRequest.permissions.paperSimulationAllowed, true);
 assert.equal(queuedRequest.permissions.brokerSubmissionAllowed, false);
 assert.equal(queuedRequest.permissions.liveExecutionAllowed, false);
 assert.equal(queuedRequest.safety.rawCandlesIncluded, false);
+assert.equal(queuedRequest.riskPolicy.approvedRiskUsd, 300);
+assert.equal(queuedRequest.riskPolicy.mt5BrokerRevalidationRequired, true);
 assert.equal(verifyPaperDemoExecutionRequestHash(queuedRequest), true);
 assert.deepEqual(queuedRequest.authority, authorityNone);
 
@@ -281,6 +393,9 @@ const mt5QueuedRequest = JSON.parse(
 assert.equal(mt5QueuedRequest.contract, "gotrader.mt5_demo_execution_request");
 assert.equal(mt5QueuedRequest.mode, "mt5_demo");
 assert.equal(mt5QueuedRequest.scenario.maxRiskUsd, 25);
+assert.equal(mt5QueuedRequest.riskEnvelope.simulationVolumeIsAuthoritative, false);
+assert.equal(mt5QueuedRequest.riskEnvelope.brokerMustRecomputeVolume, true);
+assert.equal(mt5QueuedRequest.safety.simulationVolumeTrustedByBroker, false);
 assert.equal(mt5QueuedRequest.permissions.mt5DemoSubmissionAllowed, true);
 assert.equal(mt5QueuedRequest.permissions.liveExecutionAllowed, false);
 assert.equal(mt5QueuedRequest.safety.demoAccountRequired, true);
@@ -436,6 +551,8 @@ assert.equal(currentStatus.brokerGateway.provider, "mt5_demo_gateway");
 assert.equal(currentStatus.brokerGateway.liveSubmissionSupported, false);
 assert.equal(currentStatus.paperGateway.immutableOutboxSupported, true);
 assert.equal(currentStatus.paperGateway.monitoringSupported, true);
+assert.equal(currentStatus.accountRiskGovernor.enabled, false);
+assert.equal(currentStatus.accountRiskGovernor.brokerSubmissionAllowed, false);
 assert.deepEqual(currentStatus.authority, authorityNone);
 
 const serialized = JSON.stringify({ prepared, currentStatus });

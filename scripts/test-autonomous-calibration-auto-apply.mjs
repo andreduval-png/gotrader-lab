@@ -136,6 +136,19 @@ async function main() {
     )
   );
 
+  const frozenV4Apply = policy.validateAutonomousCalibrationFinalApply({
+    ...baseGuard,
+    preference: policy.saveAutonomousCalibrationAutoApplyPreference(true),
+    baseProfileId: "ifvg_fresh_retest_v4_candidate",
+    targetProfileId: "ifvg_fresh_retest_v4_candidate"
+  });
+  assert.equal(frozenV4Apply.allowed, false, "IFVG v4 must never be mutated in place");
+  assert.ok(
+    frozenV4Apply.blockerCodes.includes(
+      "autonomous_calibration_frozen_profile_requires_new_version"
+    )
+  );
+
   const unsafeFields = policy.validateAutonomousCalibrationFinalApply({
     ...baseGuard,
     preference: policy.loadAutonomousCalibrationAutoApplyPreference(),
@@ -206,6 +219,7 @@ async function main() {
         explicitOptInRequired: true,
         allowlistedFields: policy.AUTONOMOUS_CALIBRATION_ALLOWED_FIELDS,
         frozenIfvgV3MutationAllowed: false,
+        frozenIfvgV4MutationAllowed: false,
         staleOrCanceledApplyAllowed: false,
         authority: authorityNone
       },

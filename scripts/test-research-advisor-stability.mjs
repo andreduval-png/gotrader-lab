@@ -9,6 +9,7 @@ import ts from "typescript";
 const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const advisorViewPath = path.join(projectRoot, "src", "components", "advisor", "ResearchAdvisorView.tsx");
+const dashboardAdvisorPath = path.join(projectRoot, "src", "components", "dashboard", "LLMAdvisoryReviewPanel.tsx");
 const outRoot = path.join(projectRoot, ".gotrader", "research-advisor-stability-test");
 
 const authority = {
@@ -132,6 +133,14 @@ function assertAdvisorViewSource() {
   assert.match(source, /saveIctResearchReport\(buildMarketScorecardResearchReport\(marketScorecard\)\)/, "Scorecard report save should use the compact report builder");
 }
 
+function assertDashboardDepthContract() {
+  const source = fs.readFileSync(dashboardAdvisorPath, "utf8");
+  assert.match(source, /readLatestActivateMarketSummary/, "Dashboard advisory should read the governed activation summary");
+  assert.match(source, /Tactical chart window:/, "Dashboard advisory should label tactical chart depth explicitly");
+  assert.match(source, /Validated candidate context:/, "Dashboard advisory should include validated candidate depth");
+  assert.match(source, /do not cite the smaller tactical chart window as an insufficient-depth blocker/, "Dashboard advisory should prevent tactical depth from overriding ready validation context");
+}
+
 async function assertReportPersistenceFailsSafely() {
   const reports = await import(pathToFileURL(path.join(outRoot, "ictResearchReport.mjs")));
   const circular = { reportId: "circular_report" };
@@ -187,6 +196,7 @@ async function main() {
     "ictLatestResearchState.ts"
   ]);
   assertAdvisorViewSource();
+  assertDashboardDepthContract();
   await assertReportPersistenceFailsSafely();
   await assertLatestResearchStateFailsSafely();
 

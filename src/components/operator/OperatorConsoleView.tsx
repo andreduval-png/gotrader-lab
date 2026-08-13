@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   CircleStop,
   Clock3,
+  Crosshair,
   Database,
   Gauge,
   Play,
@@ -42,12 +43,53 @@ const percent = (value?: number) => {
 const number = (value?: number, suffix = "") =>
   typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)}${suffix}` : "--";
 
+const price = (value?: number) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: Math.abs(value) >= 100 ? 2 : 4,
+    maximumFractionDigits: Math.abs(value) >= 100 ? 2 : 5
+  });
+};
+
 const time = (value?: string) => {
   if (!value) return "Not yet";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "Not yet";
   return parsed.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 };
+
+const elapsedTime = (startedAt?: string, completedAt?: string, now = Date.now()) => {
+  const startedMs = Date.parse(startedAt ?? "");
+  if (!Number.isFinite(startedMs)) return "--:--";
+  const completedMs = Date.parse(completedAt ?? "");
+  const elapsedSeconds = Math.max(0, Math.floor(((Number.isFinite(completedMs) ? completedMs : now) - startedMs) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  const seconds = elapsedSeconds % 60;
+  return hours > 0
+    ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const normalizedConfidence = (value?: number) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.abs(value) <= 1 ? value : value / 100;
+};
+
+const probabilityPresentation = (value?: number) => {
+  const normalized = normalizedConfidence(value);
+  if (normalized === undefined) return { label: "Unavailable", tone: "neutral" as const };
+  if (normalized >= 0.7) return { label: "High", tone: "positive" as const };
+  if (normalized >= 0.5) return { label: "Medium", tone: "caution" as const };
+  return { label: "Low", tone: "negative" as const };
+};
+
+const toneClasses = {
+  neutral: "bg-[#0d1420] text-slate-100",
+  positive: "bg-emerald-400/[0.07] text-emerald-300",
+  negative: "bg-rose-400/[0.07] text-rose-300",
+  caution: "bg-amber-400/[0.07] text-amber-200"
+} as const;
 
 const metricRows = (snapshot: ReturnType<typeof useOperatorConsole>["snapshot"]) => [
   { label: "Research trades", value: snapshot.results.totalTrades.toLocaleString(), note: "latest cycle" },
@@ -75,11 +117,21 @@ const cycleHeartbeatFor = (stage: OperatorCycleStage) => {
 export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const { snapshot, refresh } = useOperatorConsole();
   const [commandError, setCommandError] = useState<string>();
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
+  const cycleElapsed = elapsedTime(snapshot.cycle.startedAt, snapshot.cycle.completedAt, clockNow);
+  const probability = probabilityPresentation(snapshot.insight.confidence);
   const cycleHeartbeat = cycleHeartbeatFor(snapshot.cycle.stage);
   const cycleHeartbeatStyle = {
     "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
   } as CSSProperties;
+
+  useEffect(() => {
+    setClockNow(Date.now());
+    if (!cycleActive) return undefined;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [cycleActive, snapshot.cycle.cycleId, snapshot.cycle.startedAt]);
 
   const start = async () => {
     setCommandError(undefined);
@@ -130,13 +182,13 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           </div>
         </div>
 
-        <div className="grid gap-px bg-white/10 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-px bg-white/10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <div
-            className={cn("relative bg-[#0b111b] px-5 py-5 sm:px-7", cycleActive && "cycle-status-running")}
+            className={cn("relative min-w-0 bg-[#0b111b] px-5 py-5 sm:px-7", cycleActive && "cycle-status-running")}
             data-cycle-running={cycleActive ? "true" : "false"}
             style={cycleActive ? cycleHeartbeatStyle : undefined}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 items-start gap-3">
               {cycleActive ? (
                 <div
                   className="cycle-heartbeat-beacon mt-1 shrink-0"
@@ -162,8 +214,8 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cycle status</p>
                     <p className="mt-1 text-lg font-semibold capitalize text-slate-100">{snapshot.cycle.status.replace(/_/g, " ")}</p>
                     {cycleActive ? (
@@ -172,7 +224,17 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                       </p>
                     ) : null}
                   </div>
-                  <span className="text-sm font-semibold tabular-nums text-slate-300">{snapshot.cycle.progressPercent}%</span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className="inline-flex items-center gap-1.5 font-mono text-sm font-semibold tabular-nums text-sky-200"
+                      data-testid="operator-cycle-elapsed"
+                      title={cycleActive ? "Elapsed cycle time" : "Final cycle duration"}
+                    >
+                      <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                      {cycleElapsed}
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-slate-300">{snapshot.cycle.progressPercent}%</span>
+                  </div>
                 </div>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                   <div
@@ -216,6 +278,121 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
         ))}
       </section>
 
+      <div className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
+        <section
+          className="overflow-hidden rounded-2xl border border-white/10 bg-[#0d1420]"
+          data-testid="operator-gbrain-memory-summary"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-5 sm:px-6">
+            <div>
+              <p className={WORKSPACE_SECTION_LABEL}>Research memory</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-100">GoTrader + gbrain inventory</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Native evidence is authoritative; gbrain packets are compact advisory copies.</p>
+            </div>
+            <Badge variant={snapshot.memory.gbrainDeliveryEnabled ? "warning" : "muted"}>
+              gbrain delivery {snapshot.memory.gbrainDeliveryEnabled ? "on" : "off"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4 xl:grid-cols-2">
+            {[
+              ["Stored cycles", snapshot.memory.storedEvidenceRecords],
+              ["Profile identities", snapshot.memory.profileIdentities],
+              ["gbrain queued", snapshot.memory.gbrainPending],
+              ["gbrain delivered", snapshot.memory.gbrainDelivered]
+            ].map(([label, value]) => (
+              <div key={label} className="bg-[#0d1420] px-5 py-4">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">{label}</p>
+                <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-100">{Number(value).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 sm:px-6">
+            <p className="min-w-0 truncate text-xs text-slate-500">
+              {snapshot.memory.latestProfile
+                ? `${snapshot.memory.latestProfile.replace(/_/g, " ")} / ${snapshot.memory.independentCycleDates} independent dates`
+                : "No completed cycle evidence stored yet."}
+              {snapshot.memory.gbrainFailed ? ` / ${snapshot.memory.gbrainFailed} delivery failures` : ""}
+            </p>
+            <Link className="inline-flex items-center text-xs font-medium text-sky-300 hover:text-sky-200" to="/self-improvement">
+              Open memory <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </div>
+        </section>
+
+        <section
+          className="overflow-hidden rounded-2xl border border-white/10 bg-[#0d1420]"
+          data-testid="operator-research-risk-preview"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-5 sm:px-6">
+            <div className="flex min-w-0 items-start gap-3">
+              <Crosshair className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className={WORKSPACE_SECTION_LABEL}>Research trade plan</p>
+                <h3 className="mt-2 truncate text-lg font-semibold capitalize text-slate-100">{snapshot.researchPlan.setup}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {snapshot.researchPlan.entryPriceMethod === "rr_implied_recovery"
+                    ? "Entry recovered from the stored stop, target, and R:R geometry."
+                    : "Deterministic entry from the latest compact current read."}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={snapshot.researchPlan.setupDirection === "bullish" ? "success" : snapshot.researchPlan.setupDirection === "bearish" ? "danger" : "muted"}>
+                {snapshot.researchPlan.setupDirection} setup
+              </Badge>
+              <Badge variant={snapshot.researchPlan.signal === "NO_TRADE" ? "muted" : "success"}>
+                {snapshot.researchPlan.signal.replace("_", " ")}
+              </Badge>
+              <Badge variant="muted">{snapshot.researchPlan.status.replace(/_/g, " ")}</Badge>
+              <Badge variant="warning">Informational only</Badge>
+            </div>
+          </div>
+
+          {snapshot.researchPlan.planCoherence === "incoherent" ? (
+            <div className="border-b border-amber-400/20 bg-amber-400/[0.07] px-5 py-3 text-sm leading-6 text-amber-200 sm:px-6" role="alert">
+              Price plan rejected: {snapshot.researchPlan.planCoherenceReason}
+            </div>
+          ) : null}
+
+          <div className="grid gap-px bg-white/10 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              { label: "Entry price", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },
+              { label: "Stop loss", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
+              { label: "Take profit", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
+              { label: "Risk / reward", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
+              { label: "Probability", value: `${probability.label} · ${percent(snapshot.insight.confidence)}`, tone: probability.tone }
+            ].map(({ label, value, tone }) => (
+              <div key={label} className={cn("min-w-0 px-4 py-4", toneClasses[tone])} data-result-tone={tone}>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">{label}</p>
+                <p className="mt-2 truncate font-mono text-base font-semibold tabular-nums" title={String(value)}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 border-t border-white/10 px-5 py-4 sm:grid-cols-3 sm:px-6">
+            <div>
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Market risk screen</p>
+              <p className="mt-1 text-sm capitalize text-slate-300">{snapshot.researchPlan.riskScreeningStatus}</p>
+            </div>
+            <div>
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Account-risk engine</p>
+              <p className="mt-1 text-sm text-amber-200">Not evaluated</p>
+            </div>
+            <div>
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Max research risk</p>
+              <p className="mt-1 text-sm tabular-nums text-slate-300">
+                {typeof snapshot.researchPlan.recommendedMaxRiskPerTradePct === "number"
+                  ? `${snapshot.researchPlan.recommendedMaxRiskPerTradePct.toFixed(2)}%`
+                  : "Not available"}
+              </p>
+            </div>
+            <p className="text-xs leading-5 text-slate-500 sm:col-span-3">
+              {snapshot.researchPlan.riskScreeningReason} No order is created; sizing and account-risk approval require a separate deterministic simulation evaluation.
+            </p>
+          </div>
+        </section>
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-2xl border border-white/10 bg-[#0d1420] p-5 sm:p-6" data-testid="operator-market-brief">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -226,7 +403,9 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             <div className="flex flex-wrap gap-2">
               <Badge variant="muted">{snapshot.insight.bias}</Badge>
               <Badge variant="secondary">{snapshot.insight.modelLane}</Badge>
-              <Badge variant="muted">{percent(snapshot.insight.confidence)} confidence</Badge>
+              <Badge variant={probability.tone === "positive" ? "success" : probability.tone === "negative" ? "danger" : probability.tone === "caution" ? "warning" : "muted"}>
+                {probability.label} probability · {percent(snapshot.insight.confidence)}
+              </Badge>
             </div>
           </div>
           <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-400">{snapshot.insight.summary}</p>

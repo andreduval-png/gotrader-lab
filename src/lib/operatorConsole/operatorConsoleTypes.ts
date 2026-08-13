@@ -106,6 +106,48 @@ export interface OperatorPredictionSummary {
   nextAction: string;
 }
 
+export interface OperatorMemorySummary {
+  storedEvidenceRecords: number;
+  profileIdentities: number;
+  independentCycleDates: number;
+  positiveEdgeCycles: number;
+  gbrainTotal: number;
+  gbrainPending: number;
+  gbrainDelivered: number;
+  gbrainFailed: number;
+  gbrainDeliveryEnabled: boolean;
+  latestProfile?: string;
+  latestUpdatedAt?: string;
+}
+
+export type OperatorResearchPlanStatus = "complete" | "partial" | "no_trade" | "unavailable";
+
+export interface OperatorResearchPlanSummary {
+  status: OperatorResearchPlanStatus;
+  setup: string;
+  side: "long" | "short" | "flat";
+  setupDirection: "bullish" | "bearish" | "neutral";
+  signal: "BUY" | "SELL" | "NO_TRADE";
+  planSource: "signal_contract" | "legacy_recovery" | "unavailable";
+  planCoherence: "coherent" | "incomplete" | "incoherent";
+  planCoherenceReason: string;
+  candidateStatus?: string;
+  entryZone?: { lower: number; upper: number };
+  entryPrice?: number;
+  entryPriceMethod?: "canonical_candidate" | "zone_midpoint" | "rr_implied_recovery";
+  stopLoss?: number;
+  takeProfit?: number;
+  riskReward?: number;
+  riskScreeningStatus: string;
+  riskScreeningReason: string;
+  accountRiskEvaluation: "not_evaluated";
+  recommendedMaxRiskPerTradePct?: number;
+  sourceFingerprint?: string;
+  generatedAt?: string;
+  informationalOnly: true;
+  executionAllowed: false;
+}
+
 export interface OperatorConsoleSnapshot {
   generatedAt: string;
   source: OperatorSourceSummary;
@@ -114,6 +156,8 @@ export interface OperatorConsoleSnapshot {
   results: OperatorResultsSummary;
   validation: OperatorValidationSummary;
   prediction: OperatorPredictionSummary;
+  memory: OperatorMemorySummary;
+  researchPlan: OperatorResearchPlanSummary;
   decisions: OperatorDecision[];
   authority: OperatorAuthority;
   autoApplyAllowed: false;
