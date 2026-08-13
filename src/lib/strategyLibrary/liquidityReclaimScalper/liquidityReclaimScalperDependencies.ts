@@ -1,0 +1,5 @@
+export const LRS_FEATURE_DEPENDENCY_GRAPH = Object.freeze({ mandatory: Object.freeze(["external_liquidity_objective", "opposite_side_raid", "directional_displacement", "ifvg_reclaim", "entry_geometry", "structural_invalidation", "target_geometry"]),
+  optional: Object.freeze(["dealing_range_filter", "session_filter", "canonical_htf_bias"]), dependent: Object.freeze({ directional_displacement: Object.freeze(["opposite_side_raid"]), ifvg_reclaim: Object.freeze(["directional_displacement"]), entry_geometry: Object.freeze(["ifvg_reclaim"]) }),
+  inseparable: Object.freeze([Object.freeze(["external_liquidity_objective", "opposite_side_raid"]), Object.freeze(["entry_geometry", "structural_invalidation", "target_geometry"])]),
+  invalidAblations: Object.freeze(["remove_external_liquidity_objective", "remove_opposite_side_raid", "remove_geometry_identity"]),
+  validResearchOverlays: Object.freeze(["disable_dealing_range_filter", "apply_session_filter", "apply_canonical_htf_bias", "compare_entry_model", "compare_stop_model", "compare_target_model"]) });

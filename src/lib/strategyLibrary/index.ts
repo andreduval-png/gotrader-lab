@@ -6,6 +6,7 @@ export { buildGrinchExpansionReplayDiagnostics } from "@/lib/strategyLibrary/gri
 export { buildGrinchProfileEvidenceDiagnostics } from "@/lib/strategyLibrary/grinchProfileDiagnostics";
 export { calculateGrinchStrategyScore, summarizeGrinchStrategyScore } from "@/lib/strategyLibrary/grinchStrategyScore";
 export { resolveGrinchActiveProfile } from "@/lib/strategyLibrary/grinchProfileSelection";
+export * from "@/lib/strategyLibrary/liquidityReclaimScalper";
 export {
   STRATEGY_DEFINITIONS,
   STRATEGY_LIBRARY_AUTHORITY,
