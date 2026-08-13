@@ -6,7 +6,7 @@ Branch: `codex/gotrader-bt3-strategy-profile-coverage`
 
 Coverage authorization: `833619e93c3b302762b0f6c543f86526a47e8589`
 
-Gap report: `28a4aacdb2be38c34f8d809414094fae6058b127`
+Gap report: `28a4aacd13ad3c7c76dc91f8c8501dbbaaf7ceda`
 
 Slice authorization: `b71cfeed51ae58cb1989c9a50b0df2b0ba2b9913`
 
@@ -49,4 +49,3 @@ runtimeAdoptionAllowed: false
 paperDemoAllowed: false
 executionAllowed: false
 ```
-
