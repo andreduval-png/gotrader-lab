@@ -4,6 +4,8 @@ export * from "./shadowOrchestrationIndexedDb";
 export * from "./shadowOrchestrationLease";
 export * from "./shadowOrchestrationCancellation";
 export * from "./shadowOrchestrationHost";
+export * from "./shadowScheduler";
+export * from "./shadowSchedulerIndexedDb";
 export * from "./researchCycleShadowAdapter";
 export * from "./researchCycleTerminalShadowMirror";
 export * from "./researchCycleCheckpointRecovery";
