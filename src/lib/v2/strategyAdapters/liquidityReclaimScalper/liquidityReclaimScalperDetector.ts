@@ -4,6 +4,7 @@ import type { V2CanonicalMarketState, V2DealingRangeFactPayload, V2DisplacementF
   V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "../../context/v2ContextTypes";
 import { buildLrsBaseProfile } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters";
 import { buildLrsTransition } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine";
+import { V2_IFVG_V3_MAX_INVERSION_BARS } from "../ifvg/v2IfvgV3Types";
 import { LRS_CANDIDATE_SCHEMA_VERSION, LRS_PROFILE_ID, LRS_STRATEGY_ID, LRS_STRATEGY_VERSION,
   type LrsBlocker, type LrsCandidate, type LrsDirection, type LrsParameters, type LrsSetupState, type LrsTransition } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes";
 
@@ -34,8 +35,17 @@ const displacementFor = (facts: readonly Readonly<V2MarketFact>[], direction: Lr
   .filter((fact): fact is DisplacementFact => fact.kind === "displacement" && fact.payload.direction === (direction === "long" ? "bullish" : "bearish"))
   .filter((fact) => !raid || Date.parse(fact.causalClosedCandleTime) >= Date.parse(raid.causalClosedCandleTime))
   .sort((a, b) => Date.parse(a.causalClosedCandleTime) - Date.parse(b.causalClosedCandleTime))[0];
+const ifvgTradeDirection = (fact: FvgFact): LrsDirection | undefined => {
+  if (fact.payload.gapType === "ifvg") return fact.payload.direction === "bullish" ? "long" : "short";
+  if (fact.payload.state !== "inverted" || !fact.payload.inversionTime || fact.payload.preInversionUsage !== "unused" ||
+    fact.payload.inversionBarsAfterConfirmation === undefined ||
+    fact.payload.inversionBarsAfterConfirmation > V2_IFVG_V3_MAX_INVERSION_BARS) return undefined;
+  return fact.payload.direction === "bearish" ? "long" : "short";
+};
 const ifvgFor = (facts: readonly Readonly<V2MarketFact>[], direction: LrsDirection, displacement?: DisplacementFact) => facts
-  .filter((fact): fact is FvgFact => fact.kind === "fair_value_gap" && fact.payload.gapType === "ifvg" && fact.payload.direction === (direction === "long" ? "bullish" : "bearish"))
+  .filter((fact): fact is FvgFact => fact.kind === "fair_value_gap" &&
+    (fact.payload.gapType === "ifvg" || (fact.payload.gapType === "fvg" && fact.payload.state === "inverted" && Boolean(fact.payload.inversionTime))) &&
+    ifvgTradeDirection(fact) === direction)
   .filter((fact) => ["fresh", "touched", "partially_filled", "inverted"].includes(fact.payload.state))
   .filter((fact) => !displacement || Date.parse(fact.causalClosedCandleTime) >= Date.parse(displacement.causalClosedCandleTime))
   .sort((a, b) => Date.parse(a.causalClosedCandleTime) - Date.parse(b.causalClosedCandleTime))[0];
