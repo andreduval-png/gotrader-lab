@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "decisionId": "CC-GOV-2026-08-13",
+  "status": "adopted_governance_process_only",
+  "authorizationCommit": "1c1f5b596dc34a3183ef6a0a7465c3c6e5425827",
+  "acceptedParentCommit": "877ccc047912d7b016f2d603623a01e362cf7596",
+  "governanceBaselineCommit": "b06493496b51dff74b578a881dcc31d5cd07ac11",
+  "sourceInventory": [
+    {
+      "path": "docs/gotrader-runtime/architecture-change-control.md",
+      "blobId": "2cc41c59915417964595b58652eeb35e4769a601"
+    },
+    {
+      "path": "docs/gotrader-runtime/architecture-roadmap.md",
+      "blobId": "ad80a5801c04da21c87c95a4173e9277be37ba7e"
+    },
+    {
+      "path": "docs/gotrader-runtime/architecture-index.md",
+      "blobId": "27936d6894312fdd7ae0fc093d2393dc2c734a4c"
+    },
+    {
+      "path": "docs/gotrader-backtest/product-integrity-audit-acceptance.md",
+      "blobId": "c71e2ca85e4de9e9eb4ce944b466b4d681e1c6a8"
+    },
+    {
+      "path": "docs/gotrader-backtest/bt3-phase-8-freeze-acceptance-report.md",
+      "blobId": "b1a4c7a73ea47723a633541f3e51fe6eb52bb93d"
+    }
+  ],
+  "requiredSequence": [
+    "exact_clean_preflight",
+    "isolated_codex_branch",
+    "explicit_authorization_commit",
+    "narrow_implementation_commit",
+    "focused_validation",
+    "complete_regression_validation",
+    "exact_identity_capture",
+    "separate_acceptance_commit",
+    "freeze_governance_update",
+    "explicit_next_phase_decision"
+  ],
+  "identityBinding": {
+    "exactParentCommitRequired": true,
+    "exactAuthorizationCommitRequired": true,
+    "implementationCommitMustBeIndependent": true,
+    "acceptanceCommitMustBeIndependent": true,
+    "testedImplementationCommitMustMatchAcceptedCommit": true,
+    "branchNameIsNotIdentity": true
+  },
+  "failurePolicy": {
+    "preserveFailures": true,
+    "stopOnFailedGate": true,
+    "noFabricatedAcceptance": true,
+    "noAdvancementWhileBlocked": true
+  },
+  "rollbackPolicy": {
+    "exactRestoreIdentityRequired": true,
+    "previewAndEvidenceRequired": true,
+    "preserveAuditHistory": true,
+    "noAuthorityExpansion": true
+  },
+  "evidenceRetention": {
+    "acceptedEvidenceImmutable": true,
+    "failedEvidenceImmutable": true,
+    "rawCandlesMayBeCommitted": false,
+    "identityAndProvenanceRequired": true
+  },
+  "reviewBoundaries": {
+    "humanReviewRequiredForPaperDemo": true,
+    "humanReviewRequiredForLiveExecution": true,
+    "humanReviewRequiredForBrokerMutation": true,
+    "humanReviewRequiredForAuthorityChange": true
+  },
+  "authority": {
+    "executionAuthority": "none",
+    "brokerAuthority": "none",
+    "readinessOverrideAuthority": "none",
+    "productionAdoptionAllowed": false,
+    "canCreateTradeIntent": false
+  },
+  "implicitAuthorizations": {
+    "bt3a": false,
+    "laterPhase": false,
+    "runtimeAdoption": false,
+    "readinessChange": false,
+    "paperDemo": false,
+    "brokerMutation": false,
+    "execution": false
+  }
+}

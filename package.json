@@ -123,6 +123,7 @@
     "bt1-6:review-calendar": "node scripts/prepare-bt1-6-reviewed-calendar-input.mjs",
     "bt1-6:certify": "node scripts/prepare-bt1-6-dataset-certificate.mjs",
     "bt1-6:register": "node scripts/update-bt1-6-dataset-registry.mjs",
+    "test:change-control-decision": "node scripts/test-change-control-governance-decision.mjs",
     "test:runtime-freeze-baseline-review": "node scripts/test-runtime-freeze-baseline-review.mjs",
     "audit:runtime-freeze-baseline-review": "node scripts/prepare-runtime-freeze-baseline-review.mjs",
     "test:gotrader-supervisor": "node scripts/test-gotrader-supervisor.mjs",
