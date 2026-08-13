@@ -1,4 +1,5 @@
-import type { SimulationAuthority, SimulationCapabilities } from "@/lib/backtestSimulation/simulationAuthority";
+import type { SimulationAuthority } from "@/lib/backtestSimulation/simulationAuthority";
+import type { SimulationCapabilities } from "@/lib/backtestSimulation/simulationTypes";
 
 export const LRS_STRATEGY_ID = "liquidity_reclaim_scalper_v1" as const;
 export const LRS_PROFILE_ID = "liquidity_reclaim_scalper_v1_base_research" as const;

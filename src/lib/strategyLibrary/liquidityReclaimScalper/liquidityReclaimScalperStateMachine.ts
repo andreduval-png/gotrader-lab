@@ -1,4 +1,4 @@
-import { canonicalHash } from "@/lib/backtestSimulation/canonical/canonicalValueSerialization";
+import { canonicalHash } from "@/lib/canonical/canonicalValueSerialization";
 import type { LrsBlocker, LrsSetupState, LrsTransition } from "./liquidityReclaimScalperTypes";
 const legal: Readonly<Record<LrsSetupState, readonly LrsSetupState[]>> = Object.freeze({ SEARCHING: ["LIQUIDITY_OBJECTIVE_IDENTIFIED", "SOURCE_BLOCKED", "CONTEXT_INVALIDATED"],
   LIQUIDITY_OBJECTIVE_IDENTIFIED: ["WAITING_FOR_RAID", "TARGET_CONSUMED", "SETUP_EXPIRED", "CONTEXT_INVALIDATED"],
