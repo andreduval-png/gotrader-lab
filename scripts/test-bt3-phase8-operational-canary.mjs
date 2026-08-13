@@ -19,13 +19,25 @@ const base = {
 const checkpoint = sealCheckpoint(base);
 assert.equal(validateCheckpoint(checkpoint, config), true);
 assert.equal(validateCheckpoint({ ...checkpoint, sequence: 47 }, config), false);
+const roundtrip = JSON.parse(JSON.stringify(checkpoint));
+assert.equal(validateCheckpoint(roundtrip, config), true);
+const second = sealCheckpoint({ ...roundtrip, observedAt: "2026-08-13T08:05:00.000Z", monotonicElapsedMs: MINIMUM_DURATION_MS + 300_000, sequence: 49, browserRestartObserved: true });
+assert.equal(validateCheckpoint(second, config), true);
+assert.notEqual(second.integrityHash, checkpoint.integrityHash);
+assert.equal(Object.hasOwn(second, "priorIntegrityHash"), false);
+const third = sealCheckpoint({ ...JSON.parse(JSON.stringify(second)), observedAt: "2026-08-13T08:10:00.000Z", monotonicElapsedMs: MINIMUM_DURATION_MS + 600_000, sequence: 50 });
+assert.equal(validateCheckpoint(third, config), true);
+assert.equal(validateCheckpoint({ ...third, injectedMetadata: "rejected" }, config), false);
 assert.equal(assessCanary(checkpoint, config).status, "passed");
 assert.equal(assessCanary(sealCheckpoint({ ...base, monotonicElapsedMs: MINIMUM_DURATION_MS - 1 }), config).status, "blocked");
 const report = sealFinalReport(checkpoint, config);
 assert.equal(report.assessment.status, "passed");
 assert.equal(report.reportId, canonicalHash(Object.fromEntries(Object.entries(report).filter(([key]) => key !== "reportId"))));
+const resumedReport = sealFinalReport(third, config);
+assert.equal(resumedReport.finalCheckpointHash, third.integrityHash);
+assert.equal(resumedReport.assessment.status, "passed");
+assert.equal(resumedReport.reportId, canonicalHash(Object.fromEntries(Object.entries(resumedReport).filter(([key]) => key !== "reportId"))));
 const output = path.join(process.cwd(), ".gotrader/bt3-phase8-operational-canary/focused-report.json");
 fs.mkdirSync(path.dirname(output), { recursive: true });
-fs.writeFileSync(output, `${JSON.stringify({ schemaVersion: "gotrader-bt3-phase8-operational-canary-focused-report-v1", status: "passed", minimumDurationEnforced: true, injectedTimeCannotBypassMonotonicDuration: true, checkpointIntegrityValidated: true, resumeIdentityBound: true, failClosedAssessment: true, operationalAcceptanceClaimed: false, authority: config.authority }, null, 2)}\n`);
+fs.writeFileSync(output, `${JSON.stringify({ schemaVersion: "gotrader-bt3-phase8-operational-canary-focused-report-v1", status: "passed", minimumDurationEnforced: true, injectedTimeCannotBypassMonotonicDuration: true, checkpointIntegrityValidated: true, consecutiveCheckpointIntegrityValidated: true, diskRoundtripValidated: true, browserRestartStateValidated: true, resumeIdentityBound: true, finalReportBindingValidated: true, unexpectedMetadataRejected: true, failClosedAssessment: true, operationalAcceptanceClaimed: false, authority: config.authority }, null, 2)}\n`);
 console.log(fs.readFileSync(output, "utf8"));
-

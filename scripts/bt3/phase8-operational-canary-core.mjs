@@ -37,15 +37,41 @@ export function buildCanaryConfig(input) {
   return Object.freeze({ ...config, configId: canonicalHash(config) });
 }
 
-export function sealCheckpoint(core) {
-  const value = Object.freeze({ ...core, schemaVersion: `${CANARY_SCHEMA}-checkpoint`, integrityHash: canonicalHash({ ...core, schemaVersion: `${CANARY_SCHEMA}-checkpoint` }) });
+const checkpointCore = (input) => Object.freeze({
+  schemaVersion: `${CANARY_SCHEMA}-checkpoint`,
+  runId: input.runId,
+  candidateHead: input.candidateHead,
+  configId: input.configId,
+  startedAt: input.startedAt,
+  observedAt: input.observedAt,
+  sequence: input.sequence,
+  monotonicElapsedMs: input.monotonicElapsedMs,
+  controlledCancellationObserved: input.controlledCancellationObserved,
+  browserRestartObserved: input.browserRestartObserved,
+  exercisedContracts: Object.freeze([...(input.exercisedContracts ?? [])]),
+  maxRssBytesObserved: input.maxRssBytesObserved,
+  storageBytesObserved: input.storageBytesObserved,
+  unexpectedFailures: input.unexpectedFailures,
+  blockers: Object.freeze([...(input.blockers ?? [])]),
+  authority: Object.freeze({
+    executionAuthority: input.authority?.executionAuthority,
+    brokerAuthority: input.authority?.brokerAuthority,
+    readinessOverrideAuthority: input.authority?.readinessOverrideAuthority,
+  }),
+});
+
+export function sealCheckpoint(input) {
+  const core = checkpointCore(input);
+  const value = Object.freeze({ ...core, integrityHash: canonicalHash(core) });
   return value;
 }
 
 export function validateCheckpoint(value, config) {
   if (!value || value.schemaVersion !== `${CANARY_SCHEMA}-checkpoint` || value.configId !== config.configId || value.candidateHead !== config.candidateHead) return false;
-  const { integrityHash, ...core } = value;
-  return integrityHash === canonicalHash(core) && Number.isInteger(value.sequence) && value.sequence >= 0 && value.monotonicElapsedMs >= 0;
+  const core = checkpointCore(value);
+  return value.integrityHash === canonicalHash(core) &&
+    Object.keys(value).sort().join(",") === [...Object.keys(core), "integrityHash"].sort().join(",") &&
+    Number.isInteger(value.sequence) && value.sequence >= 0 && value.monotonicElapsedMs >= 0;
 }
 
 export function assessCanary(checkpoint, config) {
@@ -90,4 +116,3 @@ export function sealFinalReport(checkpoint, config) {
   };
   return Object.freeze({ ...core, reportId: canonicalHash(core) });
 }
-
