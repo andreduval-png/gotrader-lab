@@ -964,8 +964,8 @@ export function BacktestLab() {
                 </div>
                 <Badge variant={lastEquity >= 0 ? "success" : "danger"}>{formatSigned(lastEquity, 2)}R</Badge>
               </div>
-              <div className="mt-3 h-56">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="mt-3 h-56 min-w-0">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 224 }}>
                   <LineChart data={summary.equityCurve}>
                     <XAxis dataKey="index" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                     <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />

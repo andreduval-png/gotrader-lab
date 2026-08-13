@@ -49,7 +49,7 @@ const WalkForwardView = lazy(() => import("@/components/walk-forward/WalkForward
 function RouteFallback() {
   return (
     <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground" role="status">
-      Loading workspace…
+      Loading workspace...
     </div>
   );
 }

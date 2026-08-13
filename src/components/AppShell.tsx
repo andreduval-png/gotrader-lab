@@ -105,7 +105,19 @@ const loadStoredFlag = (key: string) => {
   if (typeof window === "undefined") {
     return false;
   }
-  return window.localStorage.getItem(key) === "true";
+  try {
+    return window.localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+};
+
+const saveStoredFlag = (key: string, value: boolean) => {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // Navigation preferences are optional and must never break the shell.
+  }
 };
 
 const routeMatchesItem = (pathname: string, href: string) =>
@@ -134,11 +146,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showAdvancedContext = Boolean(activeHub.hidden);
 
   useEffect(() => {
-    window.localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, String(navCollapsed));
+    saveStoredFlag(NAV_COLLAPSED_STORAGE_KEY, navCollapsed);
   }, [navCollapsed]);
 
   useEffect(() => {
-    window.localStorage.setItem(CONTEXT_PANEL_STORAGE_KEY, String(contextOpen));
+    saveStoredFlag(CONTEXT_PANEL_STORAGE_KEY, contextOpen);
   }, [contextOpen]);
 
   // Native capture-phase click handler keeps SPA navigation reliable even if
@@ -352,13 +364,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.7rem] text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-emerald-300" aria-hidden="true" />
               <span>Research operations</span>
-              <span aria-hidden="true">·</span>
-              <span>MT5 read-only :7341</span>
-              <span aria-hidden="true">·</span>
+              <span aria-hidden="true">/</span>
+              <span>MT5 read-only market-data contract</span>
+              <span aria-hidden="true">/</span>
               <span>Execution authority none</span>
-              <span aria-hidden="true">·</span>
+              <span aria-hidden="true">/</span>
               <span>Broker authority none</span>
-              <span aria-hidden="true">·</span>
+              <span aria-hidden="true">/</span>
               <span>Readiness override none</span>
               <Badge variant="warning" className="ml-auto hidden sm:inline-flex">
                 Research only

@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -49,6 +49,19 @@ const time = (value?: string) => {
   return parsed.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
+const elapsed = (startedAt?: string, completedAt?: string, now = Date.now()) => {
+  const start = startedAt ? new Date(startedAt).getTime() : Number.NaN;
+  const end = completedAt ? new Date(completedAt).getTime() : now;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return "--:--";
+  const seconds = Math.max(0, Math.floor((end - start) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = seconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+};
+
 const metricRows = (snapshot: ReturnType<typeof useOperatorConsole>["snapshot"]) => [
   { label: "Research trades", value: snapshot.results.totalTrades.toLocaleString(), note: "latest cycle" },
   { label: "Win rate", value: percent(snapshot.results.winRate), note: "simulation" },
@@ -75,11 +88,18 @@ const cycleHeartbeatFor = (stage: OperatorCycleStage) => {
 export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const { snapshot, refresh } = useOperatorConsole();
   const [commandError, setCommandError] = useState<string>();
+  const [clock, setClock] = useState(() => Date.now());
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
   const cycleHeartbeat = cycleHeartbeatFor(snapshot.cycle.stage);
   const cycleHeartbeatStyle = {
     "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
   } as CSSProperties;
+
+  useEffect(() => {
+    if (!cycleActive) return undefined;
+    const timer = window.setInterval(() => setClock(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [cycleActive]);
 
   const start = async () => {
     setCommandError(undefined);
@@ -174,6 +194,13 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                   </div>
                   <span className="text-sm font-semibold tabular-nums text-slate-300">{snapshot.cycle.progressPercent}%</span>
                 </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500" data-testid="operator-cycle-elapsed">
+                  <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Elapsed</span>
+                  <span className="font-mono font-semibold tabular-nums text-slate-300">
+                    {elapsed(snapshot.cycle.startedAt, snapshot.cycle.completedAt, clock)}
+                  </span>
+                </div>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                   <div
                     className="h-full rounded-full bg-sky-400 transition-[width] duration-300"
@@ -195,7 +222,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                   {snapshot.source.brokerSymbol ?? snapshot.source.requestedSymbol} <span className="font-normal text-slate-500">to</span> {snapshot.source.requestedSymbol}
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
-                  {snapshot.source.candleCount.toLocaleString()} {snapshot.source.timeframe} candles · {snapshot.source.statusLabel}
+                  {snapshot.source.candleCount.toLocaleString()} {snapshot.source.timeframe} candles / {snapshot.source.statusLabel}
                 </p>
                 <p className="mt-2 truncate font-mono text-[0.68rem] text-slate-600" title={snapshot.source.fingerprint}>
                   {snapshot.source.fingerprint ?? "No source fingerprint"}
@@ -230,6 +257,59 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
           </div>
           <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-400">{snapshot.insight.summary}</p>
+          <div className="mt-5 border-t border-white/10 pt-4" data-testid="operator-research-trade-plan">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Research trade plan</p>
+              <Badge variant="muted">Research only</Badge>
+            </div>
+            {snapshot.insight.tradePlan?.status === "valid_research_plan" ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-2">
+                  <p className="text-[0.68rem] uppercase text-emerald-300/80">Side / bias</p>
+                  <p className="mt-1 font-semibold uppercase text-emerald-300">
+                    {snapshot.insight.tradePlan.side} / {snapshot.insight.tradePlan.bias}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-sky-400/25 bg-sky-400/10 px-3 py-2">
+                  <p className="text-[0.68rem] uppercase text-sky-300/80">Entry</p>
+                  <p className="mt-1 font-mono font-semibold text-sky-200">{number(snapshot.insight.tradePlan.entry)}</p>
+                </div>
+                <div className="rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2">
+                  <p className="text-[0.68rem] uppercase text-rose-300/80">Stop loss</p>
+                  <p className="mt-1 font-mono font-semibold text-rose-300">{number(snapshot.insight.tradePlan.stopLoss)}</p>
+                </div>
+                <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-2">
+                  <p className="text-[0.68rem] uppercase text-emerald-300/80">Take profit</p>
+                  <p className="mt-1 font-mono font-semibold text-emerald-300">{number(snapshot.insight.tradePlan.takeProfit)}</p>
+                </div>
+                <div className={cn(
+                  "rounded-lg border px-3 py-2",
+                  (snapshot.insight.tradePlan.riskReward ?? 0) > 0
+                    ? "border-emerald-400/25 bg-emerald-400/10"
+                    : "border-rose-400/25 bg-rose-400/10"
+                )}>
+                  <p className="text-[0.68rem] uppercase text-slate-400">Risk / reward</p>
+                  <p className="mt-1 font-mono font-semibold text-slate-100">{number(snapshot.insight.tradePlan.riskReward, "R")}</p>
+                </div>
+                <div className={cn(
+                  "rounded-lg border px-3 py-2",
+                  (snapshot.insight.tradePlan.confidence ?? 0) >= 0.7
+                    ? "border-emerald-400/25 bg-emerald-400/10"
+                    : "border-rose-400/25 bg-rose-400/10"
+                )}>
+                  <p className="text-[0.68rem] uppercase text-slate-400">Probability</p>
+                  <p className="mt-1 font-semibold text-slate-100">{percent(snapshot.insight.tradePlan.confidence)}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-3">
+                <p className="text-sm font-medium text-amber-200">No valid research plan</p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {snapshot.insight.tradePlan?.reason ?? "Run a research cycle to construct a side-validated entry, stop-loss, and take-profit tuple."}
+                </p>
+              </div>
+            )}
+          </div>
           <div className="mt-5 flex items-start gap-3 border-t border-white/10 pt-4">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
             <div>

@@ -78,8 +78,8 @@ export function DashboardOverview({ state }: { state: LabState }) {
             <CardDescription>Mock confidence calibration across active research agents.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-72 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 288 }}>
                 <BarChart data={confidenceData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} interval={0} angle={-20} height={72} textAnchor="end" />
@@ -173,8 +173,8 @@ export function DashboardOverview({ state }: { state: LabState }) {
             <CardDescription>Local simulated calibration trend for the decision layer.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-56 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 224 }}>
                 <LineChart data={safeArray(cio.confidenceHistory).map((item, index) => ({ label: `T${index + 1}`, value: Math.round(item.value * 100) }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" />
                   <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />

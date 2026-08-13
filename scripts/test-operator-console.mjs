@@ -64,6 +64,18 @@ const runtime = ({ provider = "mt5_read_only", candles = 1000, fingerprint = "mt
       bias: "bullish",
       confidence: 62,
       summary: "Bullish research thesis with guarded confidence."
+    },
+    latestRun: {
+      ictAdvisorSignalSummary: {
+        side: "long",
+        decision: "research_only",
+        confidence: 0.74,
+        entryZoneMidpoint: 20000,
+        invalidation: 19980,
+        target: 20050,
+        rrEstimate: 2.5,
+        noTradeReasons: []
+      }
     }
   },
   performance: {
@@ -124,6 +136,26 @@ async function main() {
   assert.equal(active.results.totalTrades, 24);
   assert.equal(active.results.walkForwardStatus, "passed");
   assert.equal(active.decisions.length, 0);
+  assert.deepEqual(active.insight.tradePlan, {
+    status: "valid_research_plan",
+    side: "buy",
+    bias: "bullish",
+    decision: "research_only",
+    entry: 20000,
+    stopLoss: 19980,
+    takeProfit: 20050,
+    riskReward: 2.5,
+    confidence: 0.74,
+    reason: "Canonical midpoint entry with side-validated research geometry. No execution authority."
+  });
+
+  const invalidGeometryRuntime = runtime();
+  invalidGeometryRuntime.latestResearchCycle.latestRun.ictAdvisorSignalSummary.target = 19950;
+  const invalidGeometry = buildOperatorConsoleSnapshot({ runtime: invalidGeometryRuntime });
+  assert.equal(invalidGeometry.insight.tradePlan.status, "unavailable");
+  assert.equal(invalidGeometry.insight.tradePlan.entry, undefined);
+  assert.equal(invalidGeometry.insight.tradePlan.stopLoss, undefined);
+  assert.equal(invalidGeometry.insight.tradePlan.takeProfit, undefined);
 
   const unavailable = buildOperatorConsoleSnapshot({ runtime: runtime({ provider: "mock", candles: 48, fingerprint: "" }) });
   assert.equal(unavailable.source.researchEligible, false);
@@ -271,6 +303,9 @@ async function main() {
     /cycleActive\s*&&\s*"cycle-status-running"/,
     "the Overview cycle-status panel must radiate only while the cycle is active"
   );
+  assert.match(operatorViewSource, /data-testid="operator-cycle-elapsed"/, "cycle status must display timestamp-derived elapsed time");
+  assert.match(operatorViewSource, /data-testid="operator-research-trade-plan"/, "operator console must display the canonical trade-plan contract");
+  assert.match(operatorViewSource, /tradePlan\?\.status === "valid_research_plan"/, "partial or invalid trade geometry must not render as a plan");
   for (const stage of ["activating_source", "building_market_read", "running_research", "finalizing"]) {
     assert.match(
       operatorViewSource,

@@ -28,6 +28,20 @@ export interface OperatorInsightSummary {
   confidence?: number;
   summary: string;
   nextAction: string;
+  tradePlan?: OperatorTradePlanSummary;
+}
+
+export interface OperatorTradePlanSummary {
+  status: "valid_research_plan" | "blocked" | "unavailable";
+  side: "buy" | "sell" | "no_trade";
+  bias: "bullish" | "bearish" | "neutral";
+  decision: string;
+  entry?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskReward?: number;
+  confidence?: number;
+  reason: string;
 }
 
 export interface OperatorCycleState {

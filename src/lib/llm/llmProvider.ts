@@ -23,9 +23,36 @@ const initialState = (): LLMResearchState => ({
   safetyNotice: "LLM agents are required for real research mode, but advisory only."
 });
 
+let memoryState = initialState();
+
+const compactState = (state: LLMResearchState, runLimit: number): LLMResearchState => ({
+  ...state,
+  runs: safeArray(state.runs).slice(0, runLimit)
+});
+
 const publish = (state: LLMResearchState) => {
+  memoryState = state;
   if (isBrowser()) {
-    window.localStorage.setItem(LLM_RESEARCH_STORAGE_KEY, JSON.stringify(state));
+    let persisted = false;
+    for (const limit of [20, 8, 3, 1]) {
+      try {
+        window.localStorage.setItem(LLM_RESEARCH_STORAGE_KEY, JSON.stringify(compactState(state, limit)));
+        persisted = true;
+        break;
+      } catch {
+        // Retry with less advisory history; deterministic research must continue.
+      }
+    }
+    if (!persisted) {
+      try {
+        window.localStorage.removeItem(LLM_RESEARCH_STORAGE_KEY);
+        window.sessionStorage.setItem(LLM_RESEARCH_STORAGE_KEY, JSON.stringify(compactState(state, 1)));
+      } catch {
+        // Memory state still preserves this page session.
+      }
+    } else {
+      try { window.sessionStorage.removeItem(LLM_RESEARCH_STORAGE_KEY); } catch { /* optional storage */ }
+    }
     window.dispatchEvent(new CustomEvent(LLM_RESEARCH_UPDATED_EVENT, { detail: state }));
   }
   return state;
@@ -33,15 +60,19 @@ const publish = (state: LLMResearchState) => {
 
 export function loadLLMResearchState(): LLMResearchState {
   if (!isBrowser()) {
-    return initialState();
+    return memoryState;
   }
-  const raw = window.localStorage.getItem(LLM_RESEARCH_STORAGE_KEY);
+  let raw: string | null = null;
+  try { raw = window.localStorage.getItem(LLM_RESEARCH_STORAGE_KEY); } catch { /* try session */ }
   if (!raw) {
-    return publish(initialState());
+    try { raw = window.sessionStorage.getItem(LLM_RESEARCH_STORAGE_KEY); } catch { /* use memory */ }
+  }
+  if (!raw) {
+    return publish(memoryState);
   }
   try {
     const parsed = JSON.parse(raw) as Partial<LLMResearchState>;
-    return {
+    memoryState = {
       ...initialState(),
       ...parsed,
       researchMode: "llm_required",
@@ -56,6 +87,7 @@ export function loadLLMResearchState(): LLMResearchState {
       mockModeAllowed: true,
       safetyNotice: "LLM agents are required for real research mode, but advisory only."
     };
+    return memoryState;
   } catch {
     return publish(initialState());
   }

@@ -7,14 +7,20 @@ import {
 export const PREDICTION_LEDGER_STORAGE_KEY = "gotrader.prediction-ledger.v1";
 export const PREDICTION_LEDGER_UPDATED_EVENT = "gotrader-prediction-ledger-updated";
 const MAX_PREDICTION_ENTRIES = 500;
+const COMPACT_ENTRY_LIMITS = [500, 200, 75, 20, 5] as const;
+let memoryState = defaultStatePlaceholder();
+
+function defaultStatePlaceholder(): PredictionLedgerState {
+  return {
+    version: 1,
+    updatedAt: new Date(0).toISOString(),
+    entries: [],
+    authority: PREDICTION_LEDGER_AUTHORITY
+  };
+}
 
 const isBrowser = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-const defaultState = (): PredictionLedgerState => ({
-  version: 1,
-  updatedAt: new Date(0).toISOString(),
-  entries: [],
-  authority: PREDICTION_LEDGER_AUTHORITY
-});
+const defaultState = (): PredictionLedgerState => defaultStatePlaceholder();
 
 const safeEntry = (value: unknown): UniversalPredictionLedgerEntry | undefined => {
   if (!value || typeof value !== "object") return undefined;
@@ -38,19 +44,23 @@ const safeEntry = (value: unknown): UniversalPredictionLedgerEntry | undefined =
 };
 
 export function loadPredictionLedger(): PredictionLedgerState {
-  if (!isBrowser()) return defaultState();
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(PREDICTION_LEDGER_STORAGE_KEY) ?? "null") as Partial<PredictionLedgerState> | null;
-    if (!parsed || !Array.isArray(parsed.entries)) return defaultState();
-    return {
-      version: 1,
-      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString(),
-      entries: parsed.entries.map(safeEntry).filter((entry): entry is UniversalPredictionLedgerEntry => Boolean(entry)).slice(-MAX_PREDICTION_ENTRIES),
-      authority: PREDICTION_LEDGER_AUTHORITY
-    };
-  } catch {
-    return defaultState();
+  if (!isBrowser()) return memoryState;
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    try {
+      const parsed = JSON.parse(storage.getItem(PREDICTION_LEDGER_STORAGE_KEY) ?? "null") as Partial<PredictionLedgerState> | null;
+      if (!parsed || !Array.isArray(parsed.entries)) continue;
+      memoryState = {
+        version: 1,
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date(0).toISOString(),
+        entries: parsed.entries.map(safeEntry).filter((entry): entry is UniversalPredictionLedgerEntry => Boolean(entry)).slice(-MAX_PREDICTION_ENTRIES),
+        authority: PREDICTION_LEDGER_AUTHORITY
+      };
+      return memoryState;
+    } catch {
+      // Try the next bounded storage tier.
+    }
   }
+  return memoryState;
 }
 
 export function savePredictionLedger(entries: UniversalPredictionLedgerEntry[]): PredictionLedgerState {
@@ -60,8 +70,29 @@ export function savePredictionLedger(entries: UniversalPredictionLedgerEntry[]):
     entries: entries.map(safeEntry).filter((entry): entry is UniversalPredictionLedgerEntry => Boolean(entry)).slice(-MAX_PREDICTION_ENTRIES),
     authority: PREDICTION_LEDGER_AUTHORITY
   };
+  memoryState = state;
   if (isBrowser()) {
-    window.localStorage.setItem(PREDICTION_LEDGER_STORAGE_KEY, JSON.stringify(state));
+    let persisted = false;
+    for (const limit of COMPACT_ENTRY_LIMITS) {
+      try {
+        const compact = { ...state, entries: state.entries.slice(-limit) };
+        window.localStorage.setItem(PREDICTION_LEDGER_STORAGE_KEY, JSON.stringify(compact));
+        persisted = true;
+        break;
+      } catch {
+        // Retry with a smaller bounded history.
+      }
+    }
+    if (!persisted) {
+      try {
+        window.localStorage.removeItem(PREDICTION_LEDGER_STORAGE_KEY);
+        window.sessionStorage.setItem(PREDICTION_LEDGER_STORAGE_KEY, JSON.stringify({ ...state, entries: state.entries.slice(-20) }));
+      } catch {
+        // Memory state still preserves this page session.
+      }
+    } else {
+      try { window.sessionStorage.removeItem(PREDICTION_LEDGER_STORAGE_KEY); } catch { /* optional storage */ }
+    }
     window.dispatchEvent(new CustomEvent(PREDICTION_LEDGER_UPDATED_EVENT, { detail: state }));
   }
   return state;
@@ -76,6 +107,10 @@ export function recordPredictionLedgerEntry(entry: UniversalPredictionLedgerEntr
 }
 
 export function clearPredictionLedger() {
-  if (isBrowser()) window.localStorage.removeItem(PREDICTION_LEDGER_STORAGE_KEY);
-  return defaultState();
+  memoryState = defaultState();
+  if (isBrowser()) {
+    try { window.localStorage.removeItem(PREDICTION_LEDGER_STORAGE_KEY); } catch { /* optional storage */ }
+    try { window.sessionStorage.removeItem(PREDICTION_LEDGER_STORAGE_KEY); } catch { /* optional storage */ }
+  }
+  return memoryState;
 }

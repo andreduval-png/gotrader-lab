@@ -75,6 +75,16 @@ const insightFor = (
   const setup = rawSetup.toLowerCase() === "none" ? "No qualified setup" : rawSetup;
   const modelLane = clean(activation?.modelLane, setup === "No qualified setup" ? "no trade" : "research").replace(/_/g, " ");
   const confidence = typeof thesis?.confidence === "number" ? thesis.confidence : undefined;
+  const advisor = runtime?.latestResearchCycle.latestRun?.ictAdvisorSignalSummary;
+  const advisorSide = advisor?.side === "long" ? "buy" : advisor?.side === "short" ? "sell" : "no_trade";
+  const advisorBias = advisorSide === "buy" ? "bullish" : advisorSide === "sell" ? "bearish" : "neutral";
+  const entry = advisor?.entryZoneMidpoint;
+  const stopLoss = advisor?.invalidation;
+  const takeProfit = advisor?.target;
+  const geometryValid = typeof entry === "number" && Number.isFinite(entry) &&
+    typeof stopLoss === "number" && Number.isFinite(stopLoss) &&
+    typeof takeProfit === "number" && Number.isFinite(takeProfit) &&
+    (advisorSide === "buy" ? stopLoss < entry && entry < takeProfit : advisorSide === "sell" ? takeProfit < entry && entry < stopLoss : false);
   const summary = clean(
     thesisText,
     activation?.modelName
@@ -88,7 +98,25 @@ const insightFor = (
     modelLane,
     confidence,
     summary,
-    nextAction: clean(activation?.nextAction ?? runtime?.readiness.nextAction, "Start a research cycle to refresh the current read.")
+    nextAction: clean(activation?.nextAction ?? runtime?.readiness.nextAction, "Start a research cycle to refresh the current read."),
+    tradePlan: advisor
+      ? {
+          status: geometryValid && advisor.decision === "research_only" ? "valid_research_plan" : geometryValid ? "blocked" : "unavailable",
+          side: advisorSide,
+          bias: advisorBias,
+          decision: advisor.decision,
+          entry: geometryValid ? entry : undefined,
+          stopLoss: geometryValid ? stopLoss : undefined,
+          takeProfit: geometryValid ? takeProfit : undefined,
+          riskReward: geometryValid ? advisor.rrEstimate : undefined,
+          confidence: advisor.confidence,
+          reason: geometryValid
+            ? advisor.decision === "research_only"
+              ? "Canonical midpoint entry with side-validated research geometry. No execution authority."
+              : advisor.noTradeReasons[0] ?? "The deterministic advisor did not qualify this plan."
+            : advisor.noTradeReasons[0] ?? "A complete side-consistent entry, stop-loss, and take-profit tuple is unavailable."
+        }
+      : undefined
   };
 };
 

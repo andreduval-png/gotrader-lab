@@ -115,8 +115,8 @@ export function AgentDetail({ state }: { state: LabState }) {
             <CardDescription>Local simulated confidence trend.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-64 min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 640, height: 256 }}>
                 <LineChart data={historyData}>
                   <XAxis dataKey="label" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} domain={[30, 100]} />

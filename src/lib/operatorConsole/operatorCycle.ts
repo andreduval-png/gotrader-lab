@@ -17,7 +17,8 @@ import {
   OPERATOR_AUTHORITY,
   type OperatorCycleStage,
   type OperatorCycleState,
-  type OperatorInsightSummary
+  type OperatorInsightSummary,
+  type OperatorTradePlanSummary
 } from "./operatorConsoleTypes";
 import { prepareOperatorForwardScenario } from "./operatorForwardScenario";
 
@@ -40,6 +41,80 @@ const initialState = (): OperatorCycleState => ({
 let memoryState = initialState();
 let activeController: AbortController | undefined;
 
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+const sanitizeTradePlan = (plan: OperatorTradePlanSummary | undefined): OperatorTradePlanSummary | undefined => {
+  if (!plan) return undefined;
+  const geometryValid = finite(plan.entry) && finite(plan.stopLoss) && finite(plan.takeProfit) &&
+    (plan.side === "buy"
+      ? plan.stopLoss < plan.entry && plan.entry < plan.takeProfit
+      : plan.side === "sell"
+        ? plan.takeProfit < plan.entry && plan.entry < plan.stopLoss
+        : false);
+  return {
+    status: geometryValid ? plan.status : plan.status === "unavailable" ? "unavailable" : "blocked",
+    side: plan.side === "buy" || plan.side === "sell" ? plan.side : "no_trade",
+    bias: plan.bias === "bullish" || plan.bias === "bearish" ? plan.bias : "neutral",
+    decision: String(plan.decision ?? "no_trade").slice(0, 80),
+    entry: geometryValid ? plan.entry : undefined,
+    stopLoss: geometryValid ? plan.stopLoss : undefined,
+    takeProfit: geometryValid ? plan.takeProfit : undefined,
+    riskReward: geometryValid && finite(plan.riskReward) ? plan.riskReward : undefined,
+    confidence: finite(plan.confidence) ? plan.confidence : undefined,
+    reason: String(plan.reason ?? "Research plan unavailable.").slice(0, 400)
+  };
+};
+
+const tradePlanFromPipeline = (
+  result: Awaited<ReturnType<typeof runIctActivateMarketPipeline>>
+): OperatorTradePlanSummary => {
+  const signal = result.advisorPacket?.recommendedSignal;
+  if (!signal || signal.side === "flat") {
+    return {
+      status: "unavailable",
+      side: "no_trade",
+      bias: "neutral",
+      decision: signal?.decision ?? "no_trade",
+      confidence: signal?.confidence,
+      reason: signal?.noTradeReasons?.[0] ?? "No directional research plan is available."
+    };
+  }
+
+  const side = signal.side === "long" ? "buy" : "sell";
+  const bias = signal.side === "long" ? "bullish" : "bearish";
+  const entry = signal.entryZone?.midpoint;
+  const stopLoss = signal.invalidation;
+  const takeProfit = signal.target;
+  const ordered = finite(entry) && finite(stopLoss) && finite(takeProfit) &&
+    (signal.side === "long" ? stopLoss < entry && entry < takeProfit : takeProfit < entry && entry < stopLoss);
+
+  if (!ordered) {
+    return {
+      status: "blocked",
+      side,
+      bias,
+      decision: signal.decision,
+      confidence: signal.confidence,
+      reason: signal.noTradeReasons?.[0] ?? "Entry, stop-loss, and take-profit do not form valid side-specific geometry."
+    };
+  }
+
+  return {
+    status: signal.decision === "research_only" ? "valid_research_plan" : "blocked",
+    side,
+    bias,
+    decision: signal.decision,
+    entry,
+    stopLoss,
+    takeProfit,
+    riskReward: signal.rrEstimate,
+    confidence: signal.confidence,
+    reason: signal.decision === "research_only"
+      ? "Canonical midpoint entry with side-validated research geometry. No execution authority."
+      : signal.noTradeReasons?.[0] ?? "The deterministic advisor did not qualify this plan."
+  };
+};
+
 const sanitize = (state: OperatorCycleState): OperatorCycleState => ({
   cycleId: state.cycleId,
   status: state.status,
@@ -57,7 +132,8 @@ const sanitize = (state: OperatorCycleState): OperatorCycleState => ({
         modelLane: String(state.latestInsight.modelLane).slice(0, 80),
         confidence: state.latestInsight.confidence,
         summary: String(state.latestInsight.summary).slice(0, 600),
-        nextAction: String(state.latestInsight.nextAction).slice(0, 400)
+        nextAction: String(state.latestInsight.nextAction).slice(0, 400),
+        tradePlan: sanitizeTradePlan(state.latestInsight.tradePlan)
       }
     : undefined,
   authority: OPERATOR_AUTHORITY,
@@ -85,12 +161,16 @@ export const readOperatorCycleState = (): OperatorCycleState => {
     return memoryState;
   }
   try {
-    const raw = window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY);
+    let raw: string | null = null;
+    try { raw = window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY); } catch { /* try session */ }
+    if (!raw) {
+      try { raw = window.sessionStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY); } catch { /* use memory */ }
+    }
     if (!raw) return memoryState;
     const recovered = recoverInterruptedState(sanitize(JSON.parse(raw) as OperatorCycleState));
     memoryState = recovered;
     if (recovered.status === "canceled") {
-      window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, JSON.stringify(recovered));
+      try { window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, JSON.stringify(recovered)); } catch { /* memory is authoritative */ }
     }
     return recovered;
   } catch {
@@ -106,7 +186,17 @@ export const saveOperatorCycleState = (state: OperatorCycleState): OperatorCycle
     if (/"candles"\s*:/i.test(serialized)) {
       throw new Error("Operator cycle state must not contain candle arrays.");
     }
-    window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
+    try {
+      window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
+      try { window.sessionStorage.removeItem(OPERATOR_CYCLE_STORAGE_KEY); } catch { /* optional storage */ }
+    } catch {
+      try {
+        window.localStorage.removeItem(OPERATOR_CYCLE_STORAGE_KEY);
+        window.sessionStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
+      } catch {
+        // The in-memory checkpoint still keeps the active page consistent.
+      }
+    }
     window.dispatchEvent(new CustomEvent(OPERATOR_CYCLE_UPDATED_EVENT, { detail: compact }));
   }
   return compact;
@@ -141,7 +231,8 @@ const insightFromPipeline = (result: Awaited<ReturnType<typeof runIctActivateMar
     modelLane,
     confidence: read?.confidence ?? read?.modelConfidence,
     summary,
-    nextAction: result.operatorWorkflow?.recommendedAction ?? read?.nextAction ?? result.summary.nextAction ?? "Wait for the next qualified market event."
+    nextAction: result.operatorWorkflow?.recommendedAction ?? read?.nextAction ?? result.summary.nextAction ?? "Wait for the next qualified market event.",
+    tradePlan: tradePlanFromPipeline(result)
   };
 };
 
