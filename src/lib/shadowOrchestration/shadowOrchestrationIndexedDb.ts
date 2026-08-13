@@ -299,6 +299,18 @@ export async function persistShadowOrchestrationQuarantine(input: Readonly<{
   } finally { db.close(); }
 }
 
+export async function loadShadowOrchestrationQuarantines(logicalJobId: string) {
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_QUARANTINE_STORE], "readonly");
+    const values = await requestResult<ShadowOrchestrationQuarantine[]>(tx.objectStore(SHADOW_QUARANTINE_STORE).getAll());
+    await transactionDone(tx);
+    const owned = values.filter((value) => value.logicalJobId === logicalJobId).sort((a, b) => a.quarantinedAt.localeCompare(b.quarantinedAt) || a.quarantineId.localeCompare(b.quarantineId));
+    for (const value of owned) if (!await validateShadowOrchestrationQuarantine(value)) throw new Error("Shadow persisted quarantine evidence is invalid.");
+    return Object.freeze(owned);
+  } finally { db.close(); }
+}
+
 export async function loadShadowOrchestrationLease(logicalJobId: string) {
   const db = await openShadowOrchestrationDb();
   try {

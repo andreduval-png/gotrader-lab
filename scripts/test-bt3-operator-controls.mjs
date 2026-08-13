@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { compileTypescriptModules } from "./v2-baseline/compile-typescript-modules.mjs";
+
+const root = process.cwd(); const out = path.join(root, ".gotrader/bt3-operator-controls/node");
+compileTypescriptModules({ files: [path.join(root, "src/lib/shadowOrchestration/shadowOperatorControls.ts")], outRoot: out });
+const mod = await import(`${pathToFileURL(path.join(out, "shadowOperatorControls.mjs")).href}?v=${Date.now()}`);
+const job = `sha256:${"a".repeat(64)}`; const lease = `sha256:${"b".repeat(64)}`;
+const fresh = await mod.buildShadowOperatorSnapshot({ logicalJobId: job, observedAt: "2026-08-12T16:00:05.000Z", evidenceUpdatedAt: "2026-08-12T16:00:00.000Z", staleAfterMs: 10_000, schedulerState: "running" });
+const repeat = await mod.buildShadowOperatorSnapshot({ logicalJobId: job, observedAt: "2026-08-12T16:00:05.000Z", evidenceUpdatedAt: "2026-08-12T16:00:00.000Z", staleAfterMs: 10_000, schedulerState: "running" });
+assert.equal(fresh.snapshotId, repeat.snapshotId); assert.equal(fresh.freshness, "fresh"); assert.equal(await mod.validateShadowOperatorSnapshot(fresh), true);
+const stale = await mod.buildShadowOperatorSnapshot({ logicalJobId: job, observedAt: "2026-08-12T16:01:00.000Z", evidenceUpdatedAt: "2026-08-12T16:00:00.000Z", staleAfterMs: 10_000 });
+assert.equal(stale.freshness, "stale"); assert.deepEqual(stale.blockers, ["shadow_operator_evidence_stale"]);
+const empty = await mod.buildShadowOperatorSnapshot({ logicalJobId: job, observedAt: "2026-08-12T16:00:00.000Z", staleAfterMs: 10_000 });
+assert.equal(empty.freshness, "unavailable"); assert.equal(empty.queueDepth, 0); assert.equal(empty.activeLeaseId, "");
+await assert.rejects(mod.buildShadowOperatorCommand({ action: "cancel", logicalJobId: job, operatorId: "owner-a", expectedLeaseId: lease, requestedAt: "2026-08-12T16:00:00.000Z" }), /confirmation/);
+const command = await mod.buildShadowOperatorCommand({ action: "cancel", logicalJobId: job, operatorId: "owner-a", expectedLeaseId: lease, requestedAt: "2026-08-12T16:00:00.000Z", reason: "operator_request", confirmationToken: mod.shadowOperatorConfirmationToken("cancel", job, lease) });
+const repo = new mod.InMemoryShadowOperatorCommandRepository(); let calls = 0;
+const handlers = Object.fromEntries(["inspect", "tick", "pause", "resume", "stop", "cancel"].map((action) => [action, async () => { calls += 1; return { resultIdentity: lease }; }]));
+const controller = new mod.ManualShadowOperatorController(repo, handlers);
+const first = await controller.execute(command, "2026-08-12T16:00:01.000Z"); const second = await controller.execute(command, "2026-08-12T16:00:01.000Z");
+assert.equal(first.status, "succeeded"); assert.equal(second.status, "coalesced"); assert.equal(calls, 1); assert.equal(first.receipt.receiptId, second.receipt.receiptId);
+assert.equal(await mod.validateShadowOperatorCommandReceipt(first.receipt), true); assert.equal(await mod.validateShadowOperatorCommand({ ...command, confirmationToken: "" }), false);
+const rejecting = new mod.ManualShadowOperatorController(new mod.InMemoryShadowOperatorCommandRepository(), { ...handlers, cancel: async () => ({ blocker: "shadow_lease_held_by_foreign_owner" }) });
+const rejected = await rejecting.execute(command, "2026-08-12T16:00:02.000Z"); assert.equal(rejected.status, "rejected"); assert.equal(rejected.receipt.blocker, "shadow_lease_held_by_foreign_owner");
+const report = { schemaVersion: "gotrader-bt3-operator-controls-report-v1", status: "passed", projectionDeterminism: true, staleAndEmptyFailClosed: true, confirmationBound: true, commandIdempotence: true, rejectedOwnershipAudited: true, automaticStartup: false, mt5Contacted: false, authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" } };
+fs.mkdirSync(path.dirname(path.join(root, ".gotrader/bt3-operator-controls/report.json")), { recursive: true }); fs.writeFileSync(path.join(root, ".gotrader/bt3-operator-controls/report.json"), `${JSON.stringify(report, null, 2)}\n`); console.log(JSON.stringify(report, null, 2));
