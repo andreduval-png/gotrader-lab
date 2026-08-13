@@ -29,13 +29,15 @@ try {
   await page.goto(`http://127.0.0.1:${port}/`);
   const result = await page.evaluate(async ({ completed, unsafe }) => {
     const dbName = "gotrader-v2-shadow-orchestration";
+    const mirror = await import("/researchCycleTerminalShadowMirror.mjs");
+    const repository = await import("/shadowOrchestrationIndexedDb.mjs");
     const deleteDb = () => new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase(dbName);
       request.onsuccess = resolve;
       request.onerror = () => reject(request.error);
     });
     const counts = () => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 3);
+      const request = indexedDB.open(dbName, repository.SHADOW_ORCHESTRATION_DB_VERSION);
       request.onsuccess = () => {
         const db = request.result;
         const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads"];
@@ -51,7 +53,6 @@ try {
       request.onerror = () => reject(request.error);
     });
     await deleteDb();
-    const mirror = await import("/researchCycleTerminalShadowMirror.mjs");
     const events = [];
     window.addEventListener(mirror.RESEARCH_CYCLE_TERMINAL_SHADOW_EVENT, (event) => events.push(event.detail));
     const before = JSON.stringify(completed);

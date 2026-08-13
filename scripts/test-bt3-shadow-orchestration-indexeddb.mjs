@@ -29,13 +29,14 @@ try {
   await page.goto(`http://127.0.0.1:${port}/`);
   const result = await page.evaluate(async ({ job, interrupted, terminal }) => {
     const dbName = "gotrader-v2-shadow-orchestration";
+    const repository = await import("/shadowOrchestrationIndexedDb.mjs");
     const deleteDb = () => new Promise((resolve, reject) => {
       const request = indexedDB.deleteDatabase(dbName);
       request.onsuccess = resolve;
       request.onerror = () => reject(request.error);
     });
     const mutate = (stores, operation) => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 3);
+      const request = indexedDB.open(dbName, repository.SHADOW_ORCHESTRATION_DB_VERSION);
       request.onsuccess = () => {
         const db = request.result;
         const transaction = db.transaction(stores, "readwrite");
@@ -47,7 +48,7 @@ try {
       request.onerror = () => reject(request.error);
     });
     const counts = () => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 3);
+      const request = indexedDB.open(dbName, repository.SHADOW_ORCHESTRATION_DB_VERSION);
       request.onsuccess = () => {
         const db = request.result;
         const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads", "cancellations", "cancellation_heads", "quarantines"];
@@ -63,7 +64,6 @@ try {
       request.onerror = () => reject(request.error);
     });
     await deleteDb();
-    const repository = await import("/shadowOrchestrationIndexedDb.mjs");
     const interruptedSnapshot = { job, checkpoint: interrupted.checkpoint, artifacts: interrupted.artifacts };
     const terminalSnapshot = { job, ...terminal };
     const first = await repository.persistShadowOrchestrationSnapshot(interruptedSnapshot);
