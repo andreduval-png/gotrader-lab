@@ -5,3 +5,4 @@ export * from "./silverBulletCanonicalAdapter";
 export * from "./turtleSoupCanonicalAdapter";
 export * from "./cisdCanonicalAdapter";
 export * from "./sessionRaidCanonicalAdapter";
+export * from "./phase2CanonicalAdapter";

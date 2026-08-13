@@ -1,0 +1,95 @@
+{
+  "payload": [
+    {
+      "approvedProfileStatus": "no_trade",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "Order-block direction does not support a long Bread & Butter model.",
+        "Draw-on-liquidity target is too close or missing."
+      ],
+      "decision": "no_trade",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "expiresAtUtc": "2026-06-05T14:40:00.000Z",
+        "fixtureId": "phase2_bread_and_butter_buy_fail_closed",
+        "generatedAt": "2026-06-05T12:40:00.000Z",
+        "lastClosedCandleOpen": "2026-06-05T12:35:00.000Z",
+        "parameterFingerprint": "ict-bread-and-butter-buy|phase2_v1|native_geometry|approved_profile|rr_2",
+        "profileVersion": "phase2_v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "b71cfeed51ae58cb1989c9a50b0df2b0ba2b9913",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_phase2|phase2_bread_and_butter_buy_fail_closed",
+        "strategyId": "ict-bread-and-butter-buy",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-phase2-fixture-v1",
+      "side": "flat"
+    },
+    {
+      "approvedProfileStatus": "no_trade",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "Order-block direction does not support a short Bread & Butter model.",
+        "Draw-on-liquidity target is too close or missing."
+      ],
+      "decision": "no_trade",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "expiresAtUtc": "2026-06-05T14:40:00.000Z",
+        "fixtureId": "phase2_bread_and_butter_sell_fail_closed",
+        "generatedAt": "2026-06-05T12:40:00.000Z",
+        "lastClosedCandleOpen": "2026-06-05T12:35:00.000Z",
+        "parameterFingerprint": "ict-bread-and-butter-sell|phase2_v1|native_geometry|approved_profile|rr_2",
+        "profileVersion": "phase2_v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "b71cfeed51ae58cb1989c9a50b0df2b0ba2b9913",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_phase2|phase2_bread_and_butter_sell_fail_closed",
+        "strategyId": "ict-bread-and-butter-sell",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-phase2-fixture-v1",
+      "side": "flat"
+    },
+    {
+      "approvedProfileStatus": "no_trade",
+      "authority": {
+        "brokerAuthority": "none",
+        "executionAuthority": "none",
+        "readinessOverrideAuthority": "none"
+      },
+      "blockers": [
+        "OSOK requires matching liquidity sweep evidence.",
+        "Draw-on-liquidity target is too close or missing."
+      ],
+      "decision": "no_trade",
+      "identity": {
+        "brokerSymbol": "USTECH",
+        "expiresAtUtc": "2026-06-05T14:40:00.000Z",
+        "fixtureId": "phase2_osok_fail_closed",
+        "generatedAt": "2026-06-05T12:40:00.000Z",
+        "lastClosedCandleOpen": "2026-06-05T12:35:00.000Z",
+        "parameterFingerprint": "ict-one-shot-one-kill|phase2_v1|native_geometry|approved_profile|rr_2",
+        "profileVersion": "phase2_v1",
+        "requestedSymbol": "MNQ",
+        "sourceCommit": "b71cfeed51ae58cb1989c9a50b0df2b0ba2b9913",
+        "sourceFingerprint": "mt5|MNQ|USTECH|bt3_phase2|phase2_osok_fail_closed",
+        "strategyId": "ict-one-shot-one-kill",
+        "timeframe": "5m"
+      },
+      "promotionAllowed": false,
+      "schemaVersion": "gotrader-bt3-phase2-fixture-v1",
+      "side": "flat"
+    }
+  ],
+  "schemaVersion": "gotrader-bt3-phase2-snapshot-v1"
+}
