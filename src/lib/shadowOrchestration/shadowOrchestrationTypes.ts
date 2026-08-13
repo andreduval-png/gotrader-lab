@@ -6,6 +6,8 @@ export const SHADOW_CHECKPOINT_SCHEMA = "gotrader-v2-shadow-orchestration-checkp
 export const SHADOW_SEAL_SCHEMA = "gotrader-v2-shadow-terminal-seal-v1" as const;
 export const SHADOW_PROJECTION_SCHEMA = "gotrader-v2-shadow-operator-projection-v1" as const;
 export const SHADOW_LEASE_SCHEMA = "gotrader-v2-shadow-orchestration-lease-v1" as const;
+export const SHADOW_CANCELLATION_SCHEMA = "gotrader-v2-shadow-orchestration-cancellation-v1" as const;
+export const SHADOW_QUARANTINE_SCHEMA = "gotrader-v2-shadow-orchestration-quarantine-v1" as const;
 
 export const SHADOW_ORCHESTRATION_AUTHORITY = Object.freeze({
   executionAuthority: "none" as const,
@@ -135,6 +137,39 @@ export interface ShadowOrchestrationLease {
   runtimeAdoptionAllowed: false;
   authority: typeof SHADOW_ORCHESTRATION_AUTHORITY;
   leaseId: string;
+}
+
+export interface ShadowOrchestrationCancellation {
+  schemaVersion: typeof SHADOW_CANCELLATION_SCHEMA;
+  cancellationVersion: "v1";
+  hashVersion: typeof V2_CANONICAL_HASH_VERSION;
+  logicalJobId: string;
+  leaseId: string;
+  ownerId: string;
+  leaseEpoch: number;
+  requestedAt: string;
+  reason: string;
+  shadowOnly: true;
+  runtimeAdoptionAllowed: false;
+  authority: typeof SHADOW_ORCHESTRATION_AUTHORITY;
+  cancellationId: string;
+}
+
+export interface ShadowOrchestrationQuarantine {
+  schemaVersion: typeof SHADOW_QUARANTINE_SCHEMA;
+  quarantineVersion: "v1";
+  hashVersion: typeof V2_CANONICAL_HASH_VERSION;
+  logicalJobId: string;
+  rejectedLeaseId: string;
+  currentLeaseId: string;
+  ownerId: string;
+  attemptedAction: "checkpoint_advance" | "terminal_seal" | "cancellation";
+  blocker: string;
+  quarantinedAt: string;
+  shadowOnly: true;
+  runtimeAdoptionAllowed: false;
+  authority: typeof SHADOW_ORCHESTRATION_AUTHORITY;
+  quarantineId: string;
 }
 
 export type ShadowStageHandler = (context: Readonly<{

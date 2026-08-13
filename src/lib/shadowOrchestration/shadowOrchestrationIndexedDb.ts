@@ -7,6 +7,12 @@ import {
   validateShadowOrchestrationLease
 } from "./shadowOrchestrationLease";
 import {
+  buildShadowOrchestrationCancellation,
+  buildShadowOrchestrationQuarantine,
+  validateShadowOrchestrationCancellation,
+  validateShadowOrchestrationQuarantine
+} from "./shadowOrchestrationCancellation";
+import {
   buildShadowTerminalSeal,
   materializeShadowOperatorProjection,
   validateShadowCheckpoint,
@@ -21,12 +27,14 @@ import type {
   ShadowOrchestrationCheckpoint,
   ShadowResearchJob,
   ShadowOrchestrationLease,
+  ShadowOrchestrationCancellation,
+  ShadowOrchestrationQuarantine,
   ShadowStageArtifact,
   ShadowTerminalSeal
 } from "./shadowOrchestrationTypes";
 
 export const SHADOW_ORCHESTRATION_DB_NAME = "gotrader-v2-shadow-orchestration";
-export const SHADOW_ORCHESTRATION_DB_VERSION = 2;
+export const SHADOW_ORCHESTRATION_DB_VERSION = 3;
 export const SHADOW_JOB_STORE = "jobs";
 export const SHADOW_STAGE_STORE = "stage_artifacts";
 export const SHADOW_CHECKPOINT_STORE = "checkpoints";
@@ -35,8 +43,11 @@ export const SHADOW_PROJECTION_STORE = "operator_projections";
 export const SHADOW_HEAD_STORE = "job_heads";
 export const SHADOW_LEASE_STORE = "leases";
 export const SHADOW_LEASE_HEAD_STORE = "lease_heads";
+export const SHADOW_CANCELLATION_STORE = "cancellations";
+export const SHADOW_CANCELLATION_HEAD_STORE = "cancellation_heads";
+export const SHADOW_QUARANTINE_STORE = "quarantines";
 
-const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE, SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE];
+const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE, SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE, SHADOW_CANCELLATION_STORE, SHADOW_CANCELLATION_HEAD_STORE, SHADOW_QUARANTINE_STORE];
 const exact = (left: unknown, right: unknown) => canonicalSerialize(left) === canonicalSerialize(right);
 const requestResult = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
@@ -77,7 +88,10 @@ export const openShadowOrchestrationDb = () => new Promise<IDBDatabase>((resolve
       [SHADOW_PROJECTION_STORE]: "projectionId",
       [SHADOW_HEAD_STORE]: "logicalJobId",
       [SHADOW_LEASE_STORE]: "leaseId",
-      [SHADOW_LEASE_HEAD_STORE]: "logicalJobId"
+      [SHADOW_LEASE_HEAD_STORE]: "logicalJobId",
+      [SHADOW_CANCELLATION_STORE]: "cancellationId",
+      [SHADOW_CANCELLATION_HEAD_STORE]: "logicalJobId",
+      [SHADOW_QUARANTINE_STORE]: "quarantineId"
     };
     for (const store of stores) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: keyPaths[store] });
   };
@@ -129,6 +143,8 @@ export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<Shad
     if (leaseGuard) {
       const leaseHead = await requestResult<ShadowOrchestrationLease | undefined>(tx.objectStore(SHADOW_LEASE_HEAD_STORE).get(snapshot.job.logicalJobId));
       await assertCurrentShadowLease({ ...leaseGuard, current: leaseHead });
+      const cancellation = await requestResult<ShadowOrchestrationCancellation | undefined>(tx.objectStore(SHADOW_CANCELLATION_HEAD_STORE).get(snapshot.job.logicalJobId));
+      if (cancellation) throw new Error("Shadow orchestration snapshot advancement rejects a cancelled job.");
     }
     const existingJob = await requestResult<ShadowResearchJob | undefined>(jobStore.get(snapshot.job.logicalJobId));
     const existingArtifacts = await Promise.all(snapshot.artifacts.map((artifact) =>
@@ -164,6 +180,123 @@ export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<Shad
   } finally {
     db.close();
   }
+}
+
+const quarantineBlocker = async (error: unknown, proof: Readonly<ShadowOrchestrationLease>, ownerId: string, at: string) => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/cancelled job/i.test(message)) return "shadow_job_cancelled";
+  const current = await loadShadowOrchestrationLease(proof.logicalJobId);
+  if (current && current.leaseId !== proof.leaseId) {
+    return current.ownerId !== ownerId ? "shadow_lease_foreign_owner" : "shadow_lease_stale_epoch";
+  }
+  if (proof.status === "released") return "shadow_lease_released";
+  if (Date.parse(at) > Date.parse(proof.expiresAt)) return "shadow_lease_expired";
+  if (current?.ownerId !== ownerId) return "shadow_lease_foreign_owner";
+  return "shadow_lease_guard_rejected";
+};
+
+export async function persistGuardedShadowOrchestrationSnapshot(
+  snapshot: Readonly<ShadowOrchestrationSnapshot>,
+  leaseGuard: Readonly<{
+    proof: Readonly<ShadowOrchestrationLease>;
+    ownerId: string;
+    at: string;
+    attemptedAction: "checkpoint_advance" | "terminal_seal";
+  }>
+) {
+  try {
+    const result = await persistShadowOrchestrationSnapshot(snapshot, leaseGuard);
+    return Object.freeze({ status: "persisted" as const, result });
+  } catch (error) {
+    const quarantine = await persistShadowOrchestrationQuarantine({
+      proof: leaseGuard.proof,
+      ownerId: leaseGuard.ownerId,
+      attemptedAction: leaseGuard.attemptedAction,
+      blocker: await quarantineBlocker(error, leaseGuard.proof, leaseGuard.ownerId, leaseGuard.at),
+      quarantinedAt: leaseGuard.at
+    });
+    return Object.freeze({ status: "quarantined" as const, blocker: quarantine.evidence.blocker, quarantine: quarantine.evidence });
+  }
+}
+
+export async function loadShadowOrchestrationCancellation(logicalJobId: string) {
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_CANCELLATION_HEAD_STORE], "readonly");
+    const value = await requestResult<ShadowOrchestrationCancellation | undefined>(tx.objectStore(SHADOW_CANCELLATION_HEAD_STORE).get(logicalJobId));
+    await transactionDone(tx);
+    if (value && !await validateShadowOrchestrationCancellation(value)) throw new Error("Shadow persisted cancellation head is invalid.");
+    return value;
+  } finally { db.close(); }
+}
+
+export async function requestPersistedShadowOrchestrationCancellation(input: Readonly<{
+  logicalJobId: string;
+  proof: Readonly<ShadowOrchestrationLease>;
+  ownerId: string;
+  requestedAt: string;
+  reason: string;
+}>) {
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_LEASE_HEAD_STORE, SHADOW_CANCELLATION_STORE, SHADOW_CANCELLATION_HEAD_STORE], "readwrite");
+    const current = await requestResult<ShadowOrchestrationLease | undefined>(tx.objectStore(SHADOW_LEASE_HEAD_STORE).get(input.logicalJobId));
+    if (!current) throw new Error("Shadow cancellation requires a current lease.");
+    const cancellation = await buildShadowOrchestrationCancellation({ current, proof: input.proof, ownerId: input.ownerId, requestedAt: input.requestedAt, reason: input.reason });
+    const headStore = tx.objectStore(SHADOW_CANCELLATION_HEAD_STORE);
+    const existing = await requestResult<ShadowOrchestrationCancellation | undefined>(headStore.get(input.logicalJobId));
+    if (existing && !exact(existing, cancellation)) throw new Error("Shadow cancellation conflict.");
+    if (!existing) {
+      tx.objectStore(SHADOW_CANCELLATION_STORE).add(cancellation);
+      headStore.add(cancellation);
+    }
+    await transactionDone(tx);
+    return Object.freeze({ status: existing ? "coalesced" as const : "persisted" as const, cancellation: existing ?? cancellation });
+  } finally { db.close(); }
+}
+
+export async function requestGuardedShadowOrchestrationCancellation(input: Readonly<{
+  logicalJobId: string;
+  proof: Readonly<ShadowOrchestrationLease>;
+  ownerId: string;
+  requestedAt: string;
+  reason: string;
+}>) {
+  try {
+    const result = await requestPersistedShadowOrchestrationCancellation(input);
+    return Object.freeze({ status: result.status, cancellation: result.cancellation });
+  } catch (error) {
+    const quarantine = await persistShadowOrchestrationQuarantine({
+      proof: input.proof,
+      ownerId: input.ownerId,
+      attemptedAction: "cancellation",
+      blocker: await quarantineBlocker(error, input.proof, input.ownerId, input.requestedAt),
+      quarantinedAt: input.requestedAt
+    });
+    return Object.freeze({ status: "quarantined" as const, blocker: quarantine.evidence.blocker, quarantine: quarantine.evidence });
+  }
+}
+
+export async function persistShadowOrchestrationQuarantine(input: Readonly<{
+  proof: Readonly<ShadowOrchestrationLease>;
+  ownerId: string;
+  attemptedAction: ShadowOrchestrationQuarantine["attemptedAction"];
+  blocker: string;
+  quarantinedAt: string;
+}>) {
+  const current = await loadShadowOrchestrationLease(input.proof.logicalJobId);
+  const evidence = await buildShadowOrchestrationQuarantine({ ...input, current });
+  if (!await validateShadowOrchestrationQuarantine(evidence)) throw new Error("Shadow quarantine evidence identity rejected.");
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_QUARANTINE_STORE], "readwrite");
+    const store = tx.objectStore(SHADOW_QUARANTINE_STORE);
+    const existing = await requestResult<ShadowOrchestrationQuarantine | undefined>(store.get(evidence.quarantineId));
+    if (existing && !exact(existing, evidence)) throw new Error("Shadow quarantine conflict.");
+    if (!existing) store.add(evidence);
+    await transactionDone(tx);
+    return Object.freeze({ status: existing ? "coalesced" as const : "persisted" as const, evidence: existing ?? evidence });
+  } finally { db.close(); }
 }
 
 export async function loadShadowOrchestrationLease(logicalJobId: string) {

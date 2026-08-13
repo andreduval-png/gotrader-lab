@@ -35,7 +35,7 @@ try {
       request.onerror = () => reject(request.error);
     });
     const mutate = (stores, operation) => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 2);
+      const request = indexedDB.open(dbName, 3);
       request.onsuccess = () => {
         const db = request.result;
         const transaction = db.transaction(stores, "readwrite");
@@ -47,10 +47,10 @@ try {
       request.onerror = () => reject(request.error);
     });
     const counts = () => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 2);
+      const request = indexedDB.open(dbName, 3);
       request.onsuccess = () => {
         const db = request.result;
-        const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads"];
+        const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads", "cancellations", "cancellation_heads", "quarantines"];
         const transaction = db.transaction(names, "readonly");
         const values = {};
         names.forEach((name) => {
@@ -105,7 +105,7 @@ try {
       brokenInterruptedRejected,
       rollback,
       countsAfterRollback,
-      stores: ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads"]
+      stores: ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads", "cancellations", "cancellation_heads", "quarantines"]
     };
   }, { job, interrupted: { checkpoint: interrupted.checkpoint, artifacts: interrupted.artifacts }, terminal });
 
@@ -127,9 +127,12 @@ try {
     operator_projections: 0,
     job_heads: 0,
     leases: 0,
-    lease_heads: 0
+    lease_heads: 0,
+    cancellations: 0,
+    cancellation_heads: 0,
+    quarantines: 0
   });
-  assert.equal(result.stores.length, 8);
+  assert.equal(result.stores.length, 11);
   const report = {
     schemaVersion: "gotrader-bt3-shadow-orchestration-indexeddb-report-v1",
     status: "passed",
