@@ -3,6 +3,7 @@
   "hashes": {
     "ifvg-v3-positive-canary.snapshot.json": "1661113c11dccbb53516a5b42ba1dc70a9dbb4f5e7d33f4f03fb01e79116951a",
     "ifvg-v2-negative-control.snapshot.json": "3dcf4a0a0be9689031d42f4ec11ea6813b26c2314f830ea9f5a6f29001479224",
-    "strategy-catalog-behavior.snapshot.json": "43e146df111166e8ab508288ce42afae22aca4ca18e1be07320f374b0a3fa1de"
+    "strategy-catalog-behavior.snapshot.json": "43e146df111166e8ab508288ce42afae22aca4ca18e1be07320f374b0a3fa1de",
+    "strategy-catalog-behavior-v2.snapshot.json": "a1b364ff81c9a983b677c9c7cb5827e7374ef2e3395ae21ac9c8b506899b0d0b"
   }
 }

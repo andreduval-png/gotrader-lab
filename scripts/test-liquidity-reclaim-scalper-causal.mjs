@@ -5,7 +5,7 @@ import { compileTypescriptModules } from "./v2-baseline/compile-typescript-modul
 const root=process.cwd(), src=path.join(root,"src","lib"), out=path.join(root,".gotrader","lrs-causal-test");
 compileTypescriptModules({outRoot:out,files:["canonical/canonicalValueSerialization.ts","backtestSimulation/simulationAuthority.ts","backtestSimulation/simulationTypes.ts",
 "strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes.ts","strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts",
-"strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine.ts","strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"].map(f=>path.join(src,f))});
+"strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine.ts","v2/strategyAdapters/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"].map(f=>path.join(src,f))});
 const mod=await import(`${pathToFileURL(path.join(out,"liquidityReclaimScalperDetector.mjs")).href}?t=${Date.now()}`);
 const authority={executionAuthority:"none",brokerAuthority:"none",readinessOverrideAuthority:"none"}; const t="2026-01-02T15:00:00.000Z";
 const env=(kind,payload,id,time=t)=>({factId:id,kind,identityRef:"sha256:"+"1".repeat(64),payload,timeframe:kind==="liquidity_pool"?"15m":kind==="liquidity_sweep"?"1m":"5m",observedMarketTime:time,causalClosedCandleTime:time,validFrom:time,quality:{status:"eligible",confidenceClass:"exact",warnings:[],blockers:[]},derivation:{policyId:"fixture",policyVersion:"v1",inputWindowIdentityHashes:[],inputFactIds:[]},authority});
@@ -20,4 +20,12 @@ const future=env("fair_value_gap",facts[3].payload,"future-ifvg","2026-01-02T15:
 const withoutRaid=await mod.detectLiquidityReclaimScalper(request([facts[0],facts[2],facts[3]])); assert.ok(withoutRaid.blockers.includes("raid_missing")); assert.notEqual(withoutRaid.state,"ENTRY_ELIGIBLE");
 const futureTarget=env("liquidity_pool",facts[0].payload,"future-target","2026-01-02T15:05:00.000Z"); const noTarget=await mod.detectLiquidityReclaimScalper(request([futureTarget,...facts.slice(1)])); assert.ok(noTarget.blockers.includes("external_liquidity_missing"));
 const stable=await mod.detectLiquidityReclaimScalper(request(facts)); assert.equal(stable.candidateId,valid.candidateId);
-console.log(JSON.stringify({status:"passed",causal:true,lookaheadBlocked:true,candidateId:valid.candidateId},null,2));
+const bearishFacts=[env("liquidity_pool",{side:"sell_side",poolType:"session_low",price:90,formedAt:t,confirmedAt:t,tolerancePolicy:"strict",state:"active"},"short-target"),
+env("liquidity_sweep",{liquidityPoolFactId:"short-raid-pool",side:"buy_side",poolPrice:111,extremePrice:112,sweepCandleTime:t,closedBackInside:true,confirmationState:"confirmed"},"short-raid"),
+env("displacement",{direction:"bearish",candleTime:t,bodySize:3,fullRange:4,bodyToRangeRatio:.75,comparisonBaseline:"fixture",baselineValue:111,displacementMultiple:2,closesThroughStructure:true,leavesFvg:true,policyId:"canonical",policyVersion:"v1"},"short-disp"),
+env("fair_value_gap",{direction:"bearish",gapType:"ifvg",lowerBound:109,upperBound:110,midpoint:109.5,formedAt:t,confirmationCandleTime:t,state:"fresh",preInversionUsage:"unused",policyId:"canonical",policyVersion:"v1"},"short-ifvg")];
+const bearish=await mod.detectLiquidityReclaimScalper(request(bearishFacts)); assert.equal(bearish.direction,"short"); assert.equal(bearish.state,"ENTRY_ELIGIBLE"); assert.deepEqual([bearish.targetPrice,bearish.entryPrice,bearish.stopPrice],[90,109,112]);
+const unverified=await mod.detectLiquidityReclaimScalper({...request(facts),datasetCertificateId:"missing"}); assert.ok(unverified.blockers.includes("dataset_unverified"));
+const blockedContext={...context(facts),diagnostics:{...context(facts).diagnostics,status:"blocked",blockers:["fixture_source_blocked"]}};
+const blocked=await mod.detectLiquidityReclaimScalper({...request(facts),context:blockedContext}); assert.equal(blocked.state,"SOURCE_BLOCKED"); assert.ok(blocked.blockers.includes("source_blocked"));
+console.log(JSON.stringify({status:"passed",causal:true,lookaheadBlocked:true,longGeometry:true,shortGeometry:true,sourceFailClosed:true,candidateId:valid.candidateId},null,2));

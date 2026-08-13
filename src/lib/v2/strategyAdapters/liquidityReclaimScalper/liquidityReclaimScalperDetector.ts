@@ -1,11 +1,11 @@
-import { canonicalHash } from "../../canonical/canonicalValueSerialization";
-import { SIMULATION_AUTHORITY_NONE, SIMULATION_CAPABILITIES_DISABLED } from "../../backtestSimulation/simulationAuthority";
+import { canonicalHash } from "../../../canonical/canonicalValueSerialization";
+import { SIMULATION_AUTHORITY_NONE, SIMULATION_CAPABILITIES_DISABLED } from "../../../backtestSimulation/simulationAuthority";
 import type { V2CanonicalMarketState, V2DealingRangeFactPayload, V2DisplacementFactPayload, V2FactEnvelope,
-  V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "../../v2/context/v2ContextTypes";
-import { buildLrsBaseProfile } from "./liquidityReclaimScalperParameters";
-import { buildLrsTransition } from "./liquidityReclaimScalperStateMachine";
+  V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "../../context/v2ContextTypes";
+import { buildLrsBaseProfile } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters";
+import { buildLrsTransition } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine";
 import { LRS_CANDIDATE_SCHEMA_VERSION, LRS_PROFILE_ID, LRS_STRATEGY_ID, LRS_STRATEGY_VERSION,
-  type LrsBlocker, type LrsCandidate, type LrsDirection, type LrsParameters, type LrsSetupState, type LrsTransition } from "./liquidityReclaimScalperTypes";
+  type LrsBlocker, type LrsCandidate, type LrsDirection, type LrsParameters, type LrsSetupState, type LrsTransition } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes";
 
 type PoolFact = Readonly<V2FactEnvelope<"liquidity_pool", V2LiquidityPoolFactPayload>>;
 type SweepFact = Readonly<V2FactEnvelope<"liquidity_sweep", V2LiquiditySweepFactPayload>>;

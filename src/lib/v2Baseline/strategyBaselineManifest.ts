@@ -39,7 +39,7 @@ const supplements: Record<string, StrategyBaselineSupplement> = {
     profileVersion: "v1",
     classification: "experimental",
     detectorStatus: "experimental",
-    detectorPaths: ["src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"],
+    detectorPaths: ["src/lib/v2/strategyAdapters/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"],
     typePaths: ["src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes.ts", "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts"],
     tradeConstructionPaths: ["src/lib/backtestStrategyAdapters/liquidityReclaimScalperCanonicalAdapter.ts"],
     validationProfilePaths: [registryPath],

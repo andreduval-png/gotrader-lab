@@ -12,6 +12,11 @@ Focused parameter, state, causal/lookahead, long/short BT2, and conservative
 intrabar tests pass. The initial full two-year descriptive baseline is deferred
 and no profitability or validation claim is made.
 
+The frozen v1 catalog snapshot remains byte-identical. The intentional additive
+catalog is sealed separately as `strategy-catalog-behavior-v2.snapshot.json`.
+The detector resides in the shadow-only V2 strategy-adapter namespace, so the
+Phase 1 production-consumer count remains zero.
+
 ```text
 researchValidated: false
 productionAdoptionAllowed: false

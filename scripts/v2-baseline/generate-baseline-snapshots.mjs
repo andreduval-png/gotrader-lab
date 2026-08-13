@@ -244,25 +244,35 @@ async function buildSnapshots() {
     })
   ];
 
+  const catalogEntries = manifestModule.STRATEGY_BASELINE_MANIFEST.map((entry) => ({
+    strategyId: entry.strategyId,
+    profileVersion: entry.profileVersion,
+    classification: entry.classification,
+    detectorStatus: entry.detectorStatus,
+    currentResearchStatus: entry.currentResearchStatus,
+    baselineFixtureIds: entry.baselineFixtureIds,
+    authority: entry.authority
+  }));
   const catalogSnapshot = {
     schemaVersion: "gotrader-v2-strategy-catalog-baseline-v1",
     sourceCommit,
-    entries: manifestModule.STRATEGY_BASELINE_MANIFEST.map((entry) => ({
-      strategyId: entry.strategyId,
-      profileVersion: entry.profileVersion,
-      classification: entry.classification,
-      detectorStatus: entry.detectorStatus,
-      currentResearchStatus: entry.currentResearchStatus,
-      baselineFixtureIds: entry.baselineFixtureIds,
-      authority: entry.authority
-    })),
+    entries: catalogEntries.filter((entry) => entry.strategyId !== "liquidity_reclaim_scalper_v1"),
+    authority
+  };
+  const additiveCatalogSnapshot = {
+    schemaVersion: "gotrader-v2-strategy-catalog-baseline-v2",
+    sourceCommit,
+    supersedesSnapshot: "strategy-catalog-behavior.snapshot.json",
+    additiveStrategyIds: ["liquidity_reclaim_scalper_v1"],
+    entries: catalogEntries,
     authority
   };
 
   const snapshots = {
     "ifvg-v3-positive-canary.snapshot.json": v3Fixtures,
     "ifvg-v2-negative-control.snapshot.json": v2Fixtures,
-    "strategy-catalog-behavior.snapshot.json": catalogSnapshot
+    "strategy-catalog-behavior.snapshot.json": catalogSnapshot,
+    "strategy-catalog-behavior-v2.snapshot.json": additiveCatalogSnapshot
   };
 
   const serialized = {};
