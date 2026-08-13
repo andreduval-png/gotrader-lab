@@ -7,7 +7,7 @@ import process from "node:process";
 import { chromium } from "playwright";
 import { compileTypescriptModules } from "./v2-baseline/compile-typescript-modules.mjs";
 import { buildShadowOrchestrationScenario } from "./bt3/generate-shadow-orchestration-fixtures.mjs";
-import { buildCanaryConfig, canonicalHash, sealCheckpoint, sealFinalReport } from "./bt3/phase8-operational-canary-core.mjs";
+import { buildCanaryConfig, canonicalHash, nextSampleDelayMs, sealCheckpoint, sealFinalReport } from "./bt3/phase8-operational-canary-core.mjs";
 
 const root = process.cwd();
 const arg = (name) => { const index = process.argv.indexOf(name); return index < 0 ? "" : process.argv[index + 1] ?? ""; };
@@ -124,7 +124,12 @@ try {
     }
     if (!state.browserRestartObserved && state.sequence >= 2) { await context.close(); page = await launch(); state.browserRestartObserved = true; checkpoint(); }
     if (state.monotonicElapsedMs >= config.durationMs) break;
-    await new Promise((resolve) => setTimeout(resolve, config.sampleIntervalMs));
+    const delayMs = nextSampleDelayMs({
+      sequence: state.sequence,
+      sampleIntervalMs: config.sampleIntervalMs,
+      monotonicElapsedMs: state.monotonicElapsedMs,
+    });
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   if (preflightOnly) process.exitCode = 0;
   else {

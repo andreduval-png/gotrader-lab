@@ -14,6 +14,14 @@ const sortValue = (value) => {
 export const canonicalJson = (value) => JSON.stringify(sortValue(value));
 export const canonicalHash = (value) => `sha256:${crypto.createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 
+export function nextSampleDelayMs({ sequence, sampleIntervalMs, monotonicElapsedMs }) {
+  if (!Number.isInteger(sequence) || sequence < 0 || !Number.isFinite(sampleIntervalMs) || sampleIntervalMs <= 0 || !Number.isFinite(monotonicElapsedMs) || monotonicElapsedMs < 0) {
+    throw new Error("sample cadence input is invalid");
+  }
+  const nextDeadlineMs = sequence * sampleIntervalMs;
+  return Math.max(0, Math.ceil(nextDeadlineMs - monotonicElapsedMs));
+}
+
 export function buildCanaryConfig(input) {
   const config = Object.freeze({
     schemaVersion: `${CANARY_SCHEMA}-config`,

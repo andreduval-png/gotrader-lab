@@ -2,11 +2,27 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { MINIMUM_DURATION_MS, assessCanary, buildCanaryConfig, canonicalHash, sealCheckpoint, sealFinalReport, validateCheckpoint } from "./bt3/phase8-operational-canary-core.mjs";
+import { MINIMUM_DURATION_MS, assessCanary, buildCanaryConfig, canonicalHash, nextSampleDelayMs, sealCheckpoint, sealFinalReport, validateCheckpoint } from "./bt3/phase8-operational-canary-core.mjs";
 
 const candidateHead = "249631e36fde497892b42242b03c0edbbd86a290";
 assert.throws(() => buildCanaryConfig({ candidateHead, durationMs: MINIMUM_DURATION_MS - 1 }), /four hours/);
 const config = buildCanaryConfig({ candidateHead });
+assert.equal(nextSampleDelayMs({ sequence: 1, sampleIntervalMs: 300_000, monotonicElapsedMs: 60_000 }), 240_000);
+assert.equal(nextSampleDelayMs({ sequence: 2, sampleIntervalMs: 300_000, monotonicElapsedMs: 360_000 }), 240_000);
+assert.equal(nextSampleDelayMs({ sequence: 2, sampleIntervalMs: 300_000, monotonicElapsedMs: 610_000 }), 0);
+assert.throws(() => nextSampleDelayMs({ sequence: -1, sampleIntervalMs: 300_000, monotonicElapsedMs: 0 }), /invalid/);
+let simulatedElapsedMs = 0;
+let simulatedSequence = 0;
+while (simulatedSequence < 48) {
+  simulatedElapsedMs += 60_000;
+  simulatedSequence += 1;
+  simulatedElapsedMs += nextSampleDelayMs({
+    sequence: simulatedSequence,
+    sampleIntervalMs: config.sampleIntervalMs,
+    monotonicElapsedMs: simulatedElapsedMs,
+  });
+}
+assert.equal(simulatedElapsedMs, MINIMUM_DURATION_MS);
 const startedAt = "2026-08-13T04:00:00.000Z";
 const base = {
   runId: canonicalHash({ candidateHead, startedAt }), candidateHead, configId: config.configId,
@@ -39,5 +55,5 @@ assert.equal(resumedReport.assessment.status, "passed");
 assert.equal(resumedReport.reportId, canonicalHash(Object.fromEntries(Object.entries(resumedReport).filter(([key]) => key !== "reportId"))));
 const output = path.join(process.cwd(), ".gotrader/bt3-phase8-operational-canary/focused-report.json");
 fs.mkdirSync(path.dirname(output), { recursive: true });
-fs.writeFileSync(output, `${JSON.stringify({ schemaVersion: "gotrader-bt3-phase8-operational-canary-focused-report-v1", status: "passed", minimumDurationEnforced: true, injectedTimeCannotBypassMonotonicDuration: true, checkpointIntegrityValidated: true, consecutiveCheckpointIntegrityValidated: true, diskRoundtripValidated: true, browserRestartStateValidated: true, resumeIdentityBound: true, finalReportBindingValidated: true, unexpectedMetadataRejected: true, failClosedAssessment: true, operationalAcceptanceClaimed: false, authority: config.authority }, null, 2)}\n`);
+fs.writeFileSync(output, `${JSON.stringify({ schemaVersion: "gotrader-bt3-phase8-operational-canary-focused-report-v1", status: "passed", minimumDurationEnforced: true, injectedTimeCannotBypassMonotonicDuration: true, fixedDeadlineCadenceValidated: true, boundedOverrunRecoveryValidated: true, fortyEightSamplesWithinMinimumDurationValidated: true, checkpointIntegrityValidated: true, consecutiveCheckpointIntegrityValidated: true, diskRoundtripValidated: true, browserRestartStateValidated: true, resumeIdentityBound: true, finalReportBindingValidated: true, unexpectedMetadataRejected: true, failClosedAssessment: true, operationalAcceptanceClaimed: false, authority: config.authority }, null, 2)}\n`);
 console.log(fs.readFileSync(output, "utf8"));
