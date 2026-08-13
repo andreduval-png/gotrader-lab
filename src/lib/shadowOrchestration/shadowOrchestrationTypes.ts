@@ -163,7 +163,7 @@ export interface ShadowOrchestrationQuarantine {
   rejectedLeaseId: string;
   currentLeaseId: string;
   ownerId: string;
-  attemptedAction: "checkpoint_advance" | "terminal_seal" | "cancellation";
+  attemptedAction: "checkpoint_advance" | "terminal_seal" | "cancellation" | "rollback";
   blocker: string;
   quarantinedAt: string;
   shadowOnly: true;

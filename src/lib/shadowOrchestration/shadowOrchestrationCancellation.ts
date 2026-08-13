@@ -85,7 +85,7 @@ export async function validateShadowOrchestrationQuarantine(value: Readonly<Shad
   if (value.schemaVersion !== SHADOW_QUARANTINE_SCHEMA || value.quarantineVersion !== "v1" ||
       value.hashVersion !== V2_CANONICAL_HASH_VERSION || !HASH.test(value.logicalJobId) || !HASH.test(value.rejectedLeaseId) ||
       !HASH.test(value.currentLeaseId) || !HASH.test(value.quarantineId) || !OWNER.test(value.ownerId) ||
-      !["checkpoint_advance", "terminal_seal", "cancellation"].includes(value.attemptedAction) || !REASON.test(value.blocker) ||
+      !["checkpoint_advance", "terminal_seal", "cancellation", "rollback"].includes(value.attemptedAction) || !REASON.test(value.blocker) ||
       !canonicalTime(value.quarantinedAt) || value.shadowOnly !== true || value.runtimeAdoptionAllowed !== false ||
       value.authority.executionAuthority !== "none" || value.authority.brokerAuthority !== "none" ||
       value.authority.readinessOverrideAuthority !== "none") return false;

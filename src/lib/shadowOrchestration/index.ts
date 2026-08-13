@@ -8,6 +8,7 @@ export * from "./shadowScheduler";
 export * from "./shadowSchedulerIndexedDb";
 export * from "./shadowOperatorControls";
 export * from "./shadowOperatorControlsIndexedDb";
+export * from "./shadowFallbackRollback";
 export * from "./researchCycleShadowAdapter";
 export * from "./researchCycleTerminalShadowMirror";
 export * from "./researchCycleCheckpointRecovery";

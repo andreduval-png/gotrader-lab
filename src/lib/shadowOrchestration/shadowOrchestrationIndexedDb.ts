@@ -32,9 +32,10 @@ import type {
   ShadowStageArtifact,
   ShadowTerminalSeal
 } from "./shadowOrchestrationTypes";
+import { buildShadowRollbackPreview, buildShadowRollbackReceipt, validateShadowRollbackPreview, validateShadowRollbackReceipt, type ShadowRollbackPreview, type ShadowRollbackReceipt } from "./shadowFallbackRollback";
 
 export const SHADOW_ORCHESTRATION_DB_NAME = "gotrader-v2-shadow-orchestration";
-export const SHADOW_ORCHESTRATION_DB_VERSION = 3;
+export const SHADOW_ORCHESTRATION_DB_VERSION = 4;
 export const SHADOW_JOB_STORE = "jobs";
 export const SHADOW_STAGE_STORE = "stage_artifacts";
 export const SHADOW_CHECKPOINT_STORE = "checkpoints";
@@ -46,8 +47,10 @@ export const SHADOW_LEASE_HEAD_STORE = "lease_heads";
 export const SHADOW_CANCELLATION_STORE = "cancellations";
 export const SHADOW_CANCELLATION_HEAD_STORE = "cancellation_heads";
 export const SHADOW_QUARANTINE_STORE = "quarantines";
+export const SHADOW_ROLLBACK_PREVIEW_STORE = "rollback_previews";
+export const SHADOW_ROLLBACK_RECEIPT_STORE = "rollback_receipts";
 
-const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE, SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE, SHADOW_CANCELLATION_STORE, SHADOW_CANCELLATION_HEAD_STORE, SHADOW_QUARANTINE_STORE];
+const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE, SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE, SHADOW_CANCELLATION_STORE, SHADOW_CANCELLATION_HEAD_STORE, SHADOW_QUARANTINE_STORE, SHADOW_ROLLBACK_PREVIEW_STORE, SHADOW_ROLLBACK_RECEIPT_STORE];
 const exact = (left: unknown, right: unknown) => canonicalSerialize(left) === canonicalSerialize(right);
 const requestResult = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
@@ -91,7 +94,9 @@ export const openShadowOrchestrationDb = () => new Promise<IDBDatabase>((resolve
       [SHADOW_LEASE_HEAD_STORE]: "logicalJobId",
       [SHADOW_CANCELLATION_STORE]: "cancellationId",
       [SHADOW_CANCELLATION_HEAD_STORE]: "logicalJobId",
-      [SHADOW_QUARANTINE_STORE]: "quarantineId"
+      [SHADOW_QUARANTINE_STORE]: "quarantineId",
+      [SHADOW_ROLLBACK_PREVIEW_STORE]: "previewId",
+      [SHADOW_ROLLBACK_RECEIPT_STORE]: "previewId"
     };
     for (const store of stores) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: keyPaths[store] });
   };
@@ -407,6 +412,36 @@ export async function rebuildShadowOperatorProjection(logicalJobId: string) {
   const rebuilt = await materializeShadowOperatorProjection(snapshot.job, snapshot.seal, snapshot.artifacts);
   if (!exact(rebuilt, snapshot.projection)) throw new Error("Shadow persisted projection reproduction mismatch.");
   return rebuilt;
+}
+
+export async function previewShadowOrchestrationRollback(input: Readonly<{ logicalJobId: string; expectedCurrentCheckpointId: string; targetCheckpointId: string; ownerId: string; expectedLeaseId: string; observedAt: string; maxDepth: number }>) {
+  const db = await openShadowOrchestrationDb(); try {
+    const tx = db.transaction([SHADOW_HEAD_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_STAGE_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_ROLLBACK_PREVIEW_STORE], "readwrite");
+    const head = await requestResult<ShadowJobHead | undefined>(tx.objectStore(SHADOW_HEAD_STORE).get(input.logicalJobId)); if (!head || head.checkpointId !== input.expectedCurrentCheckpointId) throw new Error("Shadow rollback expected head is not current.");
+    const checkpoints = (await requestResult<ShadowOrchestrationCheckpoint[]>(tx.objectStore(SHADOW_CHECKPOINT_STORE).getAll())).filter((value) => value.logicalJobId === input.logicalJobId);
+    const artifacts = (await requestResult<ShadowStageArtifact[]>(tx.objectStore(SHADOW_STAGE_STORE).getAll())).filter((value) => value.logicalJobId === input.logicalJobId);
+    const seals = await requestResult<ShadowTerminalSeal[]>(tx.objectStore(SHADOW_SEAL_STORE).getAll()); const projections = await requestResult<ShadowOperatorProjection[]>(tx.objectStore(SHADOW_PROJECTION_STORE).getAll());
+    const targetSeal = seals.find((value) => value.logicalJobId === input.logicalJobId && value.terminalCheckpointId === input.targetCheckpointId); const targetProjection = targetSeal ? projections.find((value) => value.terminalSealId === targetSeal.terminalSealId) : undefined;
+    const preview = await buildShadowRollbackPreview({ logicalJobId: input.logicalJobId, currentCheckpointId: head.checkpointId, targetCheckpointId: input.targetCheckpointId, checkpoints, ownerId: input.ownerId, expectedLeaseId: input.expectedLeaseId, observedAt: input.observedAt, maxDepth: input.maxDepth, preservedArtifactCount: artifacts.length, targetTerminalSealId: targetSeal?.terminalSealId, targetProjectionId: targetProjection?.projectionId });
+    const existing = await requestResult<ShadowRollbackPreview | undefined>(tx.objectStore(SHADOW_ROLLBACK_PREVIEW_STORE).get(preview.previewId)); if (existing && !exact(existing, preview)) throw new Error("Shadow rollback preview conflict."); if (!existing) tx.objectStore(SHADOW_ROLLBACK_PREVIEW_STORE).add(preview); await transactionDone(tx); return existing ?? preview;
+  } finally { db.close(); }
+}
+
+export async function applyShadowOrchestrationRollback(preview: Readonly<ShadowRollbackPreview>, confirmationToken: string, appliedAt: string, proof: Readonly<ShadowOrchestrationLease>) {
+  if (!await validateShadowRollbackPreview(preview) || confirmationToken !== preview.confirmationToken || !await validateShadowOrchestrationLease(proof) || proof.leaseId !== preview.expectedLeaseId || proof.logicalJobId !== preview.logicalJobId) throw new Error("Shadow rollback confirmation, preview, or lease proof is invalid.");
+  const receipt = await buildShadowRollbackReceipt(preview, appliedAt); const db = await openShadowOrchestrationDb(); try {
+    const tx = db.transaction([SHADOW_HEAD_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_LEASE_HEAD_STORE, SHADOW_ROLLBACK_PREVIEW_STORE, SHADOW_ROLLBACK_RECEIPT_STORE], "readwrite"); const receipts = tx.objectStore(SHADOW_ROLLBACK_RECEIPT_STORE);
+    const existingReceipt = await requestResult<ShadowRollbackReceipt | undefined>(receipts.get(preview.previewId)); if (existingReceipt) { if (!await validateShadowRollbackReceipt(existingReceipt) || !exact(existingReceipt, receipt)) throw new Error("Shadow rollback receipt conflict."); await transactionDone(tx); return Object.freeze({ status: "coalesced" as const, receipt: existingReceipt }); }
+    const persistedPreview = await requestResult<ShadowRollbackPreview | undefined>(tx.objectStore(SHADOW_ROLLBACK_PREVIEW_STORE).get(preview.previewId)); if (!persistedPreview || !exact(persistedPreview, preview)) throw new Error("Shadow rollback preview is not persisted.");
+    const headStore = tx.objectStore(SHADOW_HEAD_STORE); const head = await requestResult<ShadowJobHead | undefined>(headStore.get(preview.logicalJobId)); if (!head || head.checkpointId !== preview.expectedCurrentCheckpointId) throw new Error("Shadow rollback compare-and-set rejected a changed head.");
+    const lease = await requestResult<ShadowOrchestrationLease | undefined>(tx.objectStore(SHADOW_LEASE_HEAD_STORE).get(preview.logicalJobId)); await assertCurrentShadowLease({ proof, current: lease, ownerId: preview.ownerId, at: appliedAt });
+    const target = await requestResult<ShadowOrchestrationCheckpoint | undefined>(tx.objectStore(SHADOW_CHECKPOINT_STORE).get(preview.targetCheckpointId)); if (!target || !await validateShadowCheckpoint(target)) throw new Error("Shadow rollback target evidence is unavailable.");
+    headStore.put({ logicalJobId: preview.logicalJobId, checkpointId: target.checkpointId, heartbeatSequence: target.heartbeatSequence, ...(preview.targetTerminalSealId ? { terminalSealId: preview.targetTerminalSealId, projectionId: preview.targetProjectionId } : {}) }); receipts.add(receipt); await transactionDone(tx); return Object.freeze({ status: "applied" as const, receipt });
+  } catch (error) {
+    db.close();
+    const quarantine = await persistShadowOrchestrationQuarantine({ proof, ownerId: preview.ownerId, attemptedAction: "rollback", blocker: await quarantineBlocker(error, proof, preview.ownerId, appliedAt), quarantinedAt: appliedAt });
+    return Object.freeze({ status: "quarantined" as const, blocker: quarantine.evidence.blocker, quarantine: quarantine.evidence });
+  } finally { db.close(); }
 }
 
 export async function rollbackShadowOrchestrationSnapshot(logicalJobId: string) {
