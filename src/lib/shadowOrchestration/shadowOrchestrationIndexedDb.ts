@@ -1,5 +1,12 @@
 import { canonicalSerialize } from "../canonical/canonicalValueSerialization";
 import {
+  acquireShadowOrchestrationLease,
+  assertCurrentShadowLease,
+  releaseShadowOrchestrationLease,
+  renewShadowOrchestrationLease,
+  validateShadowOrchestrationLease
+} from "./shadowOrchestrationLease";
+import {
   buildShadowTerminalSeal,
   materializeShadowOperatorProjection,
   validateShadowCheckpoint,
@@ -13,20 +20,23 @@ import type {
   ShadowOperatorProjection,
   ShadowOrchestrationCheckpoint,
   ShadowResearchJob,
+  ShadowOrchestrationLease,
   ShadowStageArtifact,
   ShadowTerminalSeal
 } from "./shadowOrchestrationTypes";
 
 export const SHADOW_ORCHESTRATION_DB_NAME = "gotrader-v2-shadow-orchestration";
-export const SHADOW_ORCHESTRATION_DB_VERSION = 1;
+export const SHADOW_ORCHESTRATION_DB_VERSION = 2;
 export const SHADOW_JOB_STORE = "jobs";
 export const SHADOW_STAGE_STORE = "stage_artifacts";
 export const SHADOW_CHECKPOINT_STORE = "checkpoints";
 export const SHADOW_SEAL_STORE = "terminal_seals";
 export const SHADOW_PROJECTION_STORE = "operator_projections";
 export const SHADOW_HEAD_STORE = "job_heads";
+export const SHADOW_LEASE_STORE = "leases";
+export const SHADOW_LEASE_HEAD_STORE = "lease_heads";
 
-const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE];
+const stores = [SHADOW_JOB_STORE, SHADOW_STAGE_STORE, SHADOW_CHECKPOINT_STORE, SHADOW_SEAL_STORE, SHADOW_PROJECTION_STORE, SHADOW_HEAD_STORE, SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE];
 const exact = (left: unknown, right: unknown) => canonicalSerialize(left) === canonicalSerialize(right);
 const requestResult = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
@@ -65,7 +75,9 @@ export const openShadowOrchestrationDb = () => new Promise<IDBDatabase>((resolve
       [SHADOW_CHECKPOINT_STORE]: "checkpointId",
       [SHADOW_SEAL_STORE]: "terminalSealId",
       [SHADOW_PROJECTION_STORE]: "projectionId",
-      [SHADOW_HEAD_STORE]: "logicalJobId"
+      [SHADOW_HEAD_STORE]: "logicalJobId",
+      [SHADOW_LEASE_STORE]: "leaseId",
+      [SHADOW_LEASE_HEAD_STORE]: "logicalJobId"
     };
     for (const store of stores) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: keyPaths[store] });
   };
@@ -98,8 +110,13 @@ async function validateSnapshot(snapshot: Readonly<ShadowOrchestrationSnapshot>)
   }
 }
 
-export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<ShadowOrchestrationSnapshot>) {
+export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<ShadowOrchestrationSnapshot>, leaseGuard?: Readonly<{
+  proof: Readonly<ShadowOrchestrationLease>;
+  ownerId: string;
+  at: string;
+}>) {
   await validateSnapshot(snapshot);
+  if (leaseGuard && leaseGuard.proof.logicalJobId !== snapshot.job.logicalJobId) throw new Error("Shadow lease proof job mismatch.");
   const db = await openShadowOrchestrationDb();
   try {
     const tx = db.transaction(stores, "readwrite");
@@ -109,6 +126,10 @@ export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<Shad
     const sealStore = tx.objectStore(SHADOW_SEAL_STORE);
     const projectionStore = tx.objectStore(SHADOW_PROJECTION_STORE);
     const headStore = tx.objectStore(SHADOW_HEAD_STORE);
+    if (leaseGuard) {
+      const leaseHead = await requestResult<ShadowOrchestrationLease | undefined>(tx.objectStore(SHADOW_LEASE_HEAD_STORE).get(snapshot.job.logicalJobId));
+      await assertCurrentShadowLease({ ...leaseGuard, current: leaseHead });
+    }
     const existingJob = await requestResult<ShadowResearchJob | undefined>(jobStore.get(snapshot.job.logicalJobId));
     const existingArtifacts = await Promise.all(snapshot.artifacts.map((artifact) =>
       requestResult<ShadowStageArtifact | undefined>(stageStore.get(artifact.stageArtifactId))));
@@ -143,6 +164,71 @@ export async function persistShadowOrchestrationSnapshot(snapshot: Readonly<Shad
   } finally {
     db.close();
   }
+}
+
+export async function loadShadowOrchestrationLease(logicalJobId: string) {
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_LEASE_HEAD_STORE], "readonly");
+    const lease = await requestResult<ShadowOrchestrationLease | undefined>(tx.objectStore(SHADOW_LEASE_HEAD_STORE).get(logicalJobId));
+    await transactionDone(tx);
+    if (lease && !await validateShadowOrchestrationLease(lease)) throw new Error("Shadow persisted lease head is invalid.");
+    return lease;
+  } finally { db.close(); }
+}
+
+async function commitLeaseCandidate(expected: Readonly<ShadowOrchestrationLease> | undefined, candidate: Readonly<ShadowOrchestrationLease>) {
+  const db = await openShadowOrchestrationDb();
+  try {
+    const tx = db.transaction([SHADOW_LEASE_STORE, SHADOW_LEASE_HEAD_STORE], "readwrite");
+    const headStore = tx.objectStore(SHADOW_LEASE_HEAD_STORE);
+    const current = await requestResult<ShadowOrchestrationLease | undefined>(headStore.get(candidate.logicalJobId));
+    if ((current?.leaseId ?? undefined) !== (expected?.leaseId ?? undefined)) {
+      tx.abort();
+      return false;
+    }
+    tx.objectStore(SHADOW_LEASE_STORE).add(candidate);
+    headStore.put(candidate);
+    await transactionDone(tx);
+    return true;
+  } finally { db.close(); }
+}
+
+export async function acquirePersistedShadowOrchestrationLease(input: Readonly<{
+  logicalJobId: string;
+  ownerId: string;
+  acquiredAt: string;
+  durationMs: number;
+}>) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = await loadShadowOrchestrationLease(input.logicalJobId);
+    const result = await acquireShadowOrchestrationLease({ ...input, current });
+    if (result.status === "blocked" || result.status === "coalesced") return result;
+    if (await commitLeaseCandidate(current, result.lease)) return result;
+  }
+  throw new Error("Shadow lease acquisition lost bounded compare-and-set contention.");
+}
+
+export async function renewPersistedShadowOrchestrationLease(input: Readonly<{
+  logicalJobId: string;
+  ownerId: string;
+  renewedAt: string;
+  durationMs: number;
+}>) {
+  const current = await loadShadowOrchestrationLease(input.logicalJobId);
+  if (!current) throw new Error("Shadow lease renewal requires a current lease.");
+  const lease = await renewShadowOrchestrationLease({ current, ownerId: input.ownerId, renewedAt: input.renewedAt, durationMs: input.durationMs });
+  if (!await commitLeaseCandidate(current, lease)) throw new Error("Shadow lease renewal lost compare-and-set ownership.");
+  return lease;
+}
+
+export async function releasePersistedShadowOrchestrationLease(logicalJobId: string, ownerId: string, releasedAt: string) {
+  const current = await loadShadowOrchestrationLease(logicalJobId);
+  if (!current) throw new Error("Shadow lease release requires a current lease.");
+  const lease = await releaseShadowOrchestrationLease(current, ownerId, releasedAt);
+  if (lease.leaseId === current.leaseId) return lease;
+  if (!await commitLeaseCandidate(current, lease)) throw new Error("Shadow lease release lost compare-and-set ownership.");
+  return lease;
 }
 
 export async function loadShadowOrchestrationSnapshot(logicalJobId: string) {

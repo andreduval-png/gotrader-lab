@@ -5,6 +5,7 @@ export const SHADOW_STAGE_SCHEMA = "gotrader-v2-shadow-stage-artifact-v1" as con
 export const SHADOW_CHECKPOINT_SCHEMA = "gotrader-v2-shadow-orchestration-checkpoint-v1" as const;
 export const SHADOW_SEAL_SCHEMA = "gotrader-v2-shadow-terminal-seal-v1" as const;
 export const SHADOW_PROJECTION_SCHEMA = "gotrader-v2-shadow-operator-projection-v1" as const;
+export const SHADOW_LEASE_SCHEMA = "gotrader-v2-shadow-orchestration-lease-v1" as const;
 
 export const SHADOW_ORCHESTRATION_AUTHORITY = Object.freeze({
   executionAuthority: "none" as const,
@@ -116,6 +117,24 @@ export interface ShadowStageHandlerResult {
   outputSummary?: Readonly<Record<string, string | number | boolean | null>>;
   blockers?: readonly string[];
   warnings?: readonly string[];
+}
+
+export interface ShadowOrchestrationLease {
+  schemaVersion: typeof SHADOW_LEASE_SCHEMA;
+  leaseVersion: "v1";
+  hashVersion: typeof V2_CANONICAL_HASH_VERSION;
+  logicalJobId: string;
+  ownerId: string;
+  epoch: number;
+  acquiredAt: string;
+  expiresAt: string;
+  previousLeaseId: string;
+  status: "active" | "released";
+  releasedAt?: string;
+  shadowOnly: true;
+  runtimeAdoptionAllowed: false;
+  authority: typeof SHADOW_ORCHESTRATION_AUTHORITY;
+  leaseId: string;
 }
 
 export type ShadowStageHandler = (context: Readonly<{

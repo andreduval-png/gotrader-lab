@@ -35,7 +35,7 @@ try {
       request.onerror = () => reject(request.error);
     });
     const counts = () => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+      const request = indexedDB.open(dbName, 2);
       request.onsuccess = () => {
         const db = request.result;
         const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads"];

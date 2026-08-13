@@ -35,7 +35,7 @@ try {
       request.onerror = () => reject(request.error);
     });
     const mutate = (stores, operation) => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+      const request = indexedDB.open(dbName, 2);
       request.onsuccess = () => {
         const db = request.result;
         const transaction = db.transaction(stores, "readwrite");
@@ -47,10 +47,10 @@ try {
       request.onerror = () => reject(request.error);
     });
     const counts = () => new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+      const request = indexedDB.open(dbName, 2);
       request.onsuccess = () => {
         const db = request.result;
-        const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads"];
+        const names = ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads"];
         const transaction = db.transaction(names, "readonly");
         const values = {};
         names.forEach((name) => {
@@ -105,7 +105,7 @@ try {
       brokenInterruptedRejected,
       rollback,
       countsAfterRollback,
-      stores: ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads"]
+      stores: ["jobs", "stage_artifacts", "checkpoints", "terminal_seals", "operator_projections", "job_heads", "leases", "lease_heads"]
     };
   }, { job, interrupted: { checkpoint: interrupted.checkpoint, artifacts: interrupted.artifacts }, terminal });
 
@@ -125,9 +125,11 @@ try {
     checkpoints: 0,
     terminal_seals: 0,
     operator_projections: 0,
-    job_heads: 0
+    job_heads: 0,
+    leases: 0,
+    lease_heads: 0
   });
-  assert.equal(result.stores.length, 6);
+  assert.equal(result.stores.length, 8);
   const report = {
     schemaVersion: "gotrader-bt3-shadow-orchestration-indexeddb-report-v1",
     status: "passed",
