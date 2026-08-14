@@ -84,7 +84,7 @@ export async function buildLrsR1TrialDefinitions(): Promise<readonly Readonly<Lr
   return Object.freeze(definitions);
 }
 
-export type LrsR1TrialDisposition = "attempted" | "rejected" | "canceled" | "failed" | "completed";
+export type LrsR1TrialDisposition = "attempted" | "rejected" | "canceled" | "failed" | "completed" | "coalesced";
 export interface LrsR1TrialEventInput {
   readonly trialId: string; readonly sequence: number; readonly disposition: LrsR1TrialDisposition;
   readonly recordedAtUtc: string; readonly reasonCodes: readonly string[]; readonly evidenceIds: readonly string[];

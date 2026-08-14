@@ -29,6 +29,7 @@ export async function loadLrsBaselineModules(outRoot) {
     "src/lib/v2/context/v2ContextBuilder.ts",
     "src/lib/v2/strategyAdapters/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts",
     "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts",
+    "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperR1TrialControls.ts",
     "src/lib/backtestStrategyAdapters/liquidityReclaimScalperCanonicalAdapter.ts",
     "src/lib/backtestSimulation/index.ts",
     "src/lib/historicalData/historicalDatasetRepository.ts"
@@ -36,7 +37,8 @@ export async function loadLrsBaselineModules(outRoot) {
   const load = (name) => import(`${pathToFileURL(path.join(outRoot, `${name}.mjs`)).href}?v=${Date.now()}`);
   return bounded({ identity: await load("v2Identity"), candle: await load("v2CandleWindowBuilder"), context: await load("v2ContextBuilder"),
     detector: await load("liquidityReclaimScalperDetector"), parameters: await load("liquidityReclaimScalperParameters"), adapter: await load("liquidityReclaimScalperCanonicalAdapter"),
-    simulation: await load("index"), historical: await load("historicalDatasetRepository"), canonical: await load("canonicalValueSerialization") });
+    simulation: await load("index"), historical: await load("historicalDatasetRepository"), canonical: await load("canonicalValueSerialization"),
+    trialControls: await load("liquidityReclaimScalperR1TrialControls") });
 }
 
 const readPartition = (repositoryRoot, id, expectedTimeframe) => {
@@ -127,7 +129,7 @@ export const compactLegacyScanCheckpoint = (checkpoint) => {
     seenCandidateIds: unique.map((item) => item.candidateId), seenFactIds: checkpoint.seenFactIds ?? [] });
 };
 
-export async function discoverCandidates({ modules, qualified, m5, m15, checkpoint, writeCheckpoint, interruptAfterSegments, maximumSegmentsThisProcess }) {
+export async function discoverCandidates({ modules, qualified, m5, m15, parameters, checkpoint, writeCheckpoint, interruptAfterSegments, maximumSegmentsThisProcess }) {
   const source = modules.identity.createV2SourceIdentity({ sourceId: `certified:${qualified.certificate.datasetId}`,
     provider: qualified.certificate.provider, requestedSymbol: qualified.certificate.requestedSymbol, brokerSymbol: qualified.certificate.brokerSymbol,
     sourceFingerprint: qualified.certificate.sourceFingerprint, sourceKind: "imported_historical" });
@@ -157,7 +159,7 @@ export async function discoverCandidates({ modules, qualified, m5, m15, checkpoi
       const expiresAt = new Date(Date.parse(event.causalClosedCandleTime) + 12 * 60_000).toISOString();
       const candidate = await modules.detector.detectLiquidityReclaimScalper({ context: exact,
         datasetCertificateId: qualified.certificate.certificateId, triggerCandleId: `${qualified.certificate.datasetId}:5m:${trigger.openTimeUtc}`,
-        setupCreatedAt: event.causalClosedCandleTime, expiresAt });
+        setupCreatedAt: event.causalClosedCandleTime, expiresAt, parameters });
       if (seenCandidates.has(candidate.candidateId)) { duplicateCandidateCount += 1; continue; }
       seenCandidates.add(candidate.candidateId);
       candidateCount += 1;
@@ -224,7 +226,11 @@ export async function runCertifiedBaseline(input) {
   const qualified = await verifyQualifiedInput(input);
   if (qualified.blockers.length) throw new Error(`Certified input rejected: ${qualified.blockers.join(", ")}`);
   const profile = await input.modules.parameters.buildLrsBaseProfile();
-  if (profile.parameterHash !== input.expectedParameterHash || profile.researchValidated !== false || profile.productionAdoptionAllowed !== false) {
+  const parameters = input.parameters
+    ? input.modules.parameters.validateLrsParameters(input.parameters)
+    : profile.parameters;
+  const parameterHash = await input.modules.parameters.buildLrsParameterHash(parameters);
+  if (parameterHash !== input.expectedParameterHash || profile.researchValidated !== false || profile.productionAdoptionAllowed !== false) {
     throw new Error("Frozen LRS profile identity or authority mismatch.");
   }
   if (qualified.certificate.certificateId !== input.expectedCertificateId || qualified.certificate.datasetId !== input.expectedDatasetId ||
@@ -249,7 +255,7 @@ export async function runCertifiedBaseline(input) {
   const m15 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "15m" });
   const m1Index = buildCertifiedPartitionIndex({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "1m" });
   const discovery = await discoverCandidates({ modules: input.modules, qualified, m5, m15, checkpoint: scan, writeCheckpoint,
-    interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess });
+    parameters, interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess });
   if (discovery.interrupted) return discovery;
   const eligible = discovery.checkpoint.eligibleCandidates;
   if (new Set(eligible.map((item) => item.candidateId)).size !== eligible.length) throw new Error("LRS eligible candidate identities are not unique.");
@@ -301,7 +307,7 @@ export async function runCertifiedBaseline(input) {
     metrics: bounded({ ...buildDescriptiveMetrics(records), averageHoldMinutes: averageHoldMinutes(records), tradesPerYear: records.length / 2 }),
     breakdowns: buildBaselineBreakdowns(paired), outcomeCounts: counts, experimentId, ledgerSealId: seal.ledgerSealId, costModelId: costModel.modelId,
     intrabarPolicy: "conservative_stop_first_v1", maximumForwardCandles: LRS_BASELINE_MAX_FORWARD_CANDLES,
-    entryModel: profile.parameters.entryModel, stopModel: profile.parameters.stopModel, targetModel: profile.parameters.targetModel,
+    entryModel: parameters.entryModel, stopModel: parameters.stopModel, targetModel: parameters.targetModel,
     researchValidated: false, productionAdoptionAllowed: false, rawCandlesSerialized: false, mt5Contacted: false,
     authority: LRS_BASELINE_AUTHORITY, peakRssBytes: process.memoryUsage().rss });
   const report = bounded({ ...reportCore, reportId: await input.modules.canonical.canonicalHash(reportCore) });
