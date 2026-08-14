@@ -4,7 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildBaselineBreakdowns, buildCertifiedPartitionIndex, buildDescriptiveMetrics, buildScanCheckpointCore, compactLegacyScanCheckpoint, LRS_BASELINE_AUTHORITY, loadCertifiedTimeframe, loadLrsBaselineModules, readCertifiedForwardCandles } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
+import { buildBaselineBreakdowns, buildCertifiedPartitionIndex, buildDescriptiveMetrics, buildScanCheckpointCore,
+  classifyLrsMemoryPressure, compactLegacyScanCheckpoint, discoverCandidates, LRS_BASELINE_AUTHORITY,
+  LRS_BASELINE_MAX_RSS_BYTES, LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES, loadCertifiedTimeframe, loadLrsBaselineModules,
+  migrateV3ScanCheckpoint, readCertifiedForwardCandles } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "gotrader-lrs-baseline-"));
 try {
@@ -47,19 +50,70 @@ try {
       { candidateId: "eligible", state: "ENTRY_ELIGIBLE", blockers: [] },
       { candidateId: "eligible", state: "ENTRY_ELIGIBLE", blockers: [] },
       { candidateId: "expired", state: "SETUP_EXPIRED", blockers: ["expired"] }], seenFactIds: ["z"] });
-  assert.equal(compacted.schemaVersion, "gotrader-lrs-baseline-scan-checkpoint-v3");
+  assert.equal(compacted.schemaVersion, "gotrader-lrs-baseline-scan-checkpoint-v4");
   assert.equal(compacted.candidateCount, 3); assert.equal(compacted.duplicateCandidateCount, 1);
   assert.equal(compacted.setupCount, 2); assert.equal(compacted.expiredSetupCount, 1);
   assert.deepEqual(compacted.eligibleCandidates.map((item) => item.candidateId), ["eligible"]); assert.equal("candidates" in compacted, false);
   assert.deepEqual(compacted.seenCandidateIds, ["eligible", "expired", "search"]);
+  const migrated = migrateV3ScanCheckpoint({ ...checkpoint, schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v3" });
+  assert.equal(migrated.schemaVersion, "gotrader-lrs-baseline-scan-checkpoint-v4");
+  assert.deepEqual(migrated.seenFactIds, checkpoint.seenFactIds);
+  assert.equal(classifyLrsMemoryPressure(LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES - 1), "continue");
+  assert.equal(classifyLrsMemoryPressure(LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES), "controlled_recycle");
+  assert.equal(classifyLrsMemoryPressure(LRS_BASELINE_MAX_RSS_BYTES + 1), "hard_limit_exceeded");
+  assert.throws(() => classifyLrsMemoryPressure(-1), /Invalid/);
+
+  const event = (suffix, causalClosedCandleTime) => ({ kind: "fair_value_gap", causalClosedCandleTime,
+    payload: { direction: "bullish", confirmationCandleTime: causalClosedCandleTime, lowerBound: 100,
+      upperBound: 101 + suffix, inversionTime: causalClosedCandleTime, preInversionUsage: "unused",
+      inversionBarsAfterConfirmation: 1, gapType: "fvg", state: "inverted" } });
+  const events = [event(1, "2025-01-02T14:35:00.000Z"), event(2, "2025-01-02T14:40:00.000Z")];
+  const discoveryModules = {
+    identity: { createV2SourceIdentity: (value) => value },
+    candle: { buildV2CanonicalCandleWindow: async (value) => value },
+    context: { buildV2CanonicalMarketContext: async (value) => ({ ...value, diagnostics: { status: "passed", blockers: [] },
+      facts: value.asOfMarketTime === "2025-01-03T00:00:00.000Z" ? events : [] }) },
+    detector: { detectLiquidityReclaimScalper: async ({ setupCreatedAt }) => ({ candidateId: `candidate:${setupCreatedAt}`,
+      state: "ENTRY_ELIGIBLE", blockers: [], entryEligibleAt: setupCreatedAt }) }
+  };
+  const qualified = { certificate: { datasetId: "sha256:dataset", provider: "fixture", requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH", sourceFingerprint: "sha256:source", startUtc: "2025-01-02T00:00:00.000Z",
+    endUtc: "2025-01-03T00:00:00.000Z", certificateId: "sha256:certificate" } };
+  const discoveryCandles = [{ openTimeUtc: "2025-01-02T14:30:00.000Z", closeTimeUtc: "2025-01-03T00:00:00.000Z",
+    open: 100, high: 102, low: 99, close: 101, volume: 1 }];
+  const interruptedWrites = [];
+  let releaseCount = 0;
+  const interrupted = await discoverCandidates({ modules: discoveryModules, qualified, m5: discoveryCandles,
+    m15: discoveryCandles, parameters: {}, writeCheckpoint: async (value) => interruptedWrites.push(value),
+    readRssBytes: () => LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES, releaseTransientMemory: () => { releaseCount += 1; } });
+  assert.equal(interrupted.reason, "controlled_memory_recycle");
+  assert.equal(interrupted.checkpoint.nextSegment, 0);
+  assert.equal(interrupted.checkpoint.candidateCount, 1);
+  assert.equal(interrupted.checkpoint.seenFactIds.length, 1);
+  assert.equal(releaseCount, 1);
+  const resumedWrites = [];
+  const resumed = await discoverCandidates({ modules: discoveryModules, qualified, m5: discoveryCandles,
+    m15: discoveryCandles, parameters: {}, checkpoint: interrupted.checkpoint,
+    writeCheckpoint: async (value) => resumedWrites.push(value), readRssBytes: () => 0 });
+  assert.equal(resumed.interrupted, false);
+  assert.equal(resumed.checkpoint.nextSegment, 1);
+  assert.equal(resumed.checkpoint.candidateCount, 2);
+  assert.equal(resumed.checkpoint.seenFactIds.length, 2);
+  const uninterrupted = await discoverCandidates({ modules: discoveryModules, qualified, m5: discoveryCandles,
+    m15: discoveryCandles, parameters: {}, writeCheckpoint: async () => {}, readRssBytes: () => 0 });
+  assert.deepEqual(resumed.checkpoint, uninterrupted.checkpoint);
   const modules = await loadLrsBaselineModules(path.join(root, "compiled"));
   const profile = await (await import(pathToFileURL(path.join(root, "compiled", "liquidityReclaimScalperParameters.mjs")).href)).buildLrsBaseProfile();
   assert.equal(profile.parameterHash, "sha256:c58d3a0aaff9ba61ece6ea0df2d76145059be36cab9f2347a66a0e6da642f748");
   assert.equal(typeof modules.simulation.simulateTrade, "function");
   const boundedSource = fs.readFileSync(path.join(process.cwd(), "scripts/run-liquidity-reclaim-scalper-baseline-bounded.mjs"), "utf8");
   assert.match(boundedSource, /segmentsPerChild < 1 \|\| segmentsPerChild > 10/);
+  const runnerSource = fs.readFileSync(path.join(process.cwd(), "scripts/support/liquidity-reclaim-scalper-baseline-runner.mjs"), "utf8");
+  assert.ok(runnerSource.indexOf("if (discovery.interrupted) return withResources(discovery)") <
+    runnerSource.indexOf("const m1Index = buildCertifiedPartitionIndex"));
   console.log(JSON.stringify({ status: "passed", partitionFailClosed: true, zeroEventHonest: true, descriptiveMetrics: true,
-    parameterIdentityBound: true, authority: "none/none/none" }, null, 2));
+    parameterIdentityBound: true, eventCheckpointRestartParity: true, controlledMemoryRecycle: true,
+    authority: "none/none/none" }, null, 2));
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

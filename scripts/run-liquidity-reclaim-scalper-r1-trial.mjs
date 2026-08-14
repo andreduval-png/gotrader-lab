@@ -25,5 +25,6 @@ const result = await runCertifiedBaseline({ modules, repositoryRoot, outputRoot,
   maximumSegmentsThisProcess: Number(process.env.GOTRADER_LRS_MAX_SEGMENTS) || 10,
   maximumRecordsThisProcess: Number(process.env.GOTRADER_LRS_MAX_RECORDS) || 5 });
 console.log(`R1_RESULT ${JSON.stringify({ interrupted: result.interrupted, reason: result.reason,
-  reportId: result.report?.reportId, ledgerSealId: result.report?.ledgerSealId, rssBytes: process.memoryUsage().rss })}`);
+  reportId: result.report?.reportId, ledgerSealId: result.report?.ledgerSealId,
+  rssBytes: result.maximumObservedRssBytes ?? process.memoryUsage().rss })}`);
 process.exit(result.interrupted ? 75 : 0);

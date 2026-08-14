@@ -56,7 +56,7 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
   const trialRoot = path.join(outputRoot, "trials", trial.trialId.replace(":", "_"));
   let completed = fs.existsSync(path.join(trialRoot, "baseline-report.json"));
   for (let childOrdinal = 0; !completed && childOrdinal < 200; childOrdinal += 1) {
-    const child = spawnSync(process.execPath, ["scripts/run-liquidity-reclaim-scalper-r1-trial.mjs"], { cwd: root, encoding: "utf8",
+    const child = spawnSync(process.execPath, ["--expose-gc", "scripts/run-liquidity-reclaim-scalper-r1-trial.mjs"], { cwd: root, encoding: "utf8",
       env: { ...process.env, GOTRADER_LRS_R1_TRIAL_ROOT: trialRoot, GOTRADER_LRS_R1_TRIAL_ORDINAL: String(trial.ordinal),
         GOTRADER_LRS_R1_PARAMETER_HASH: trial.parameterHash, GOTRADER_LRS_R1_CONTROLLER_COMMIT: controllerCommit,
         GOTRADER_LRS_MAX_SEGMENTS: "10", GOTRADER_LRS_MAX_RECORDS: "5" }, maxBuffer: 4 * 1024 * 1024 });

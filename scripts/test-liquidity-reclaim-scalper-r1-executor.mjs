@@ -131,6 +131,12 @@ assert.throws(
   /RSS/,
 );
 
+const boundedControllerSource = fs.readFileSync(
+  path.join(root, "scripts/run-liquidity-reclaim-scalper-r1-bounded.mjs"),
+  "utf8",
+);
+assert.match(boundedControllerSource, /\["--expose-gc", "scripts\/run-liquidity-reclaim-scalper-r1-trial\.mjs"\]/);
+
 const duplicateTrial = accepted.definitions.find(
   (item) => item.initialDisposition === "coalesced_duplicate",
 );

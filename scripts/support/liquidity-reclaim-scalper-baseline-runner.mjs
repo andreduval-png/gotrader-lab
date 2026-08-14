@@ -7,6 +7,7 @@ import { verifyQualifiedInput } from "./bt2-stage2-shadow-runner.mjs";
 
 export const LRS_BASELINE_SCHEMA_VERSION = "gotrader-lrs-certified-descriptive-baseline-v1";
 export const LRS_BASELINE_MAX_RSS_BYTES = 1_073_741_824;
+export const LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES = 805_306_368;
 export const LRS_BASELINE_MAX_STORAGE_BYTES = 134_217_728;
 export const LRS_BASELINE_MAX_FORWARD_CANDLES = 50_000;
 export const LRS_BASELINE_AUTHORITY = Object.freeze({ executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" });
@@ -112,9 +113,18 @@ export async function buildCertifiedContext({ modules, source, m5, m15, asOf }) 
     requestedFactFamilies: ["session", "opening_price", "dealing_range", "liquidity", "displacement", "fair_value_gap"], builtAt: asOf });
 }
 
+export const classifyLrsMemoryPressure = (rssBytes, {
+  softLimitBytes = LRS_BASELINE_SOFT_RECYCLE_RSS_BYTES,
+  hardLimitBytes = LRS_BASELINE_MAX_RSS_BYTES
+} = {}) => {
+  if (!Number.isFinite(rssBytes) || rssBytes < 0 || !Number.isFinite(softLimitBytes) || !Number.isFinite(hardLimitBytes) ||
+      softLimitBytes <= 0 || hardLimitBytes <= softLimitBytes) throw new Error("Invalid LRS memory-pressure sample or limits.");
+  return rssBytes > hardLimitBytes ? "hard_limit_exceeded" : rssBytes >= softLimitBytes ? "controlled_recycle" : "continue";
+};
+
 export const buildScanCheckpointCore = ({ nextSegment, candidateCount, duplicateCandidateCount, setupCount, expiredSetupCount,
   eligibleCandidates, seenCandidateIds, seenFactIds }) => bounded({
-  schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v3", nextSegment, candidateCount, duplicateCandidateCount, setupCount, expiredSetupCount,
+  schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v4", nextSegment, candidateCount, duplicateCandidateCount, setupCount, expiredSetupCount,
   eligibleCandidates: bounded([...eligibleCandidates]), seenCandidateIds: bounded([...seenCandidateIds].sort()),
   seenFactIds: bounded([...seenFactIds].sort()), authority: LRS_BASELINE_AUTHORITY
 });
@@ -129,7 +139,17 @@ export const compactLegacyScanCheckpoint = (checkpoint) => {
     seenCandidateIds: unique.map((item) => item.candidateId), seenFactIds: checkpoint.seenFactIds ?? [] });
 };
 
-export async function discoverCandidates({ modules, qualified, m5, m15, parameters, checkpoint, writeCheckpoint, interruptAfterSegments, maximumSegmentsThisProcess }) {
+export const migrateV3ScanCheckpoint = (checkpoint) => {
+  if (checkpoint?.schemaVersion !== "gotrader-lrs-baseline-scan-checkpoint-v3") return checkpoint;
+  return buildScanCheckpointCore({ nextSegment: checkpoint.nextSegment, candidateCount: checkpoint.candidateCount,
+    duplicateCandidateCount: checkpoint.duplicateCandidateCount, setupCount: checkpoint.setupCount,
+    expiredSetupCount: checkpoint.expiredSetupCount, eligibleCandidates: checkpoint.eligibleCandidates ?? [],
+    seenCandidateIds: checkpoint.seenCandidateIds ?? [], seenFactIds: checkpoint.seenFactIds ?? [] });
+};
+
+export async function discoverCandidates({ modules, qualified, m5, m15, parameters, checkpoint, writeCheckpoint, interruptAfterSegments,
+  maximumSegmentsThisProcess, readRssBytes = () => process.memoryUsage().rss,
+  releaseTransientMemory = () => globalThis.gc?.() }) {
   const source = modules.identity.createV2SourceIdentity({ sourceId: `certified:${qualified.certificate.datasetId}`,
     provider: qualified.certificate.provider, requestedSymbol: qualified.certificate.requestedSymbol, brokerSymbol: qualified.certificate.brokerSymbol,
     sourceFingerprint: qualified.certificate.sourceFingerprint, sourceKind: "imported_historical" });
@@ -141,40 +161,67 @@ export async function discoverCandidates({ modules, qualified, m5, m15, paramete
   const seenFacts = new Set(checkpoint?.seenFactIds ?? []);
   let nextSegment = checkpoint?.nextSegment ?? 0;
   let processedThisProcess = 0;
+  let processedEventsThisProcess = 0;
+  const checkpointState = (segment) => buildScanCheckpointCore({ nextSegment: segment, candidateCount, duplicateCandidateCount,
+    setupCount, expiredSetupCount, eligibleCandidates, seenCandidateIds: [...seenCandidates], seenFactIds: [...seenFacts] });
+  const memoryDecision = () => {
+    const decision = classifyLrsMemoryPressure(readRssBytes());
+    if (decision === "hard_limit_exceeded") throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
+    return decision;
+  };
   const segmentCount = Math.ceil((end - start) / day);
   for (; nextSegment < segmentCount; nextSegment += 1) {
     const segmentEnd = new Date(Math.min(end, start + (nextSegment + 1) * day)).toISOString();
     const segmentCandle = m5[Math.max(0, before(m5, segmentEnd) - 1)];
     if (!segmentCandle || segmentCandle.closeTimeUtc < qualified.certificate.startUtc) continue;
-    const context = await buildCertifiedContext({ modules, source, m5, m15, asOf: segmentCandle.closeTimeUtc });
+    let context = await buildCertifiedContext({ modules, source, m5, m15, asOf: segmentCandle.closeTimeUtc });
     if (context.diagnostics.status === "blocked") throw new Error(`Certified context blocked: ${context.diagnostics.blockers.join(", ")}`);
-    const events = context.facts.filter((fact) => fact.kind === "fair_value_gap" && fact.payload.gapType === "fvg" &&
+    let events = context.facts.filter((fact) => fact.kind === "fair_value_gap" && fact.payload.gapType === "fvg" &&
       fact.payload.state === "inverted" && fact.payload.inversionTime && fact.payload.preInversionUsage === "unused" &&
       fact.payload.inversionBarsAfterConfirmation <= 36 && !seenFacts.has(inversionEventKey(fact)));
     for (const event of events) {
+      if (processedEventsThisProcess > 0 && memoryDecision() === "controlled_recycle") {
+        const next = checkpointState(nextSegment);
+        await writeCheckpoint(next);
+        return bounded({ interrupted: true, reason: "controlled_memory_recycle", checkpoint: next });
+      }
       seenFacts.add(inversionEventKey(event));
-      const exact = await buildCertifiedContext({ modules, source, m5, m15, asOf: event.causalClosedCandleTime });
+      let exact = await buildCertifiedContext({ modules, source, m5, m15, asOf: event.causalClosedCandleTime });
       const triggerIndex = Math.max(0, before(m5, event.causalClosedCandleTime) - 1);
       const trigger = m5[triggerIndex];
       const expiresAt = new Date(Date.parse(event.causalClosedCandleTime) + 12 * 60_000).toISOString();
       const candidate = await modules.detector.detectLiquidityReclaimScalper({ context: exact,
         datasetCertificateId: qualified.certificate.certificateId, triggerCandleId: `${qualified.certificate.datasetId}:5m:${trigger.openTimeUtc}`,
         setupCreatedAt: event.causalClosedCandleTime, expiresAt, parameters });
-      if (seenCandidates.has(candidate.candidateId)) { duplicateCandidateCount += 1; continue; }
-      seenCandidates.add(candidate.candidateId);
-      candidateCount += 1;
-      if (candidate.state !== "SEARCHING") setupCount += 1;
-      if (["SETUP_EXPIRED", "SESSION_EXPIRED"].includes(candidate.state)) expiredSetupCount += 1;
-      if (candidate.state === "ENTRY_ELIGIBLE" && candidate.blockers.length === 0) eligibleCandidates.push(candidate);
+      if (seenCandidates.has(candidate.candidateId)) duplicateCandidateCount += 1;
+      else {
+        seenCandidates.add(candidate.candidateId);
+        candidateCount += 1;
+        if (candidate.state !== "SEARCHING") setupCount += 1;
+        if (["SETUP_EXPIRED", "SESSION_EXPIRED"].includes(candidate.state)) expiredSetupCount += 1;
+        if (candidate.state === "ENTRY_ELIGIBLE" && candidate.blockers.length === 0) eligibleCandidates.push(candidate);
+      }
+      const eventCheckpoint = checkpointState(nextSegment);
+      await writeCheckpoint(eventCheckpoint);
+      processedEventsThisProcess += 1;
+      exact = undefined;
+      releaseTransientMemory();
+      if (memoryDecision() === "controlled_recycle") {
+        return bounded({ interrupted: true, reason: "controlled_memory_recycle", checkpoint: eventCheckpoint });
+      }
     }
-    const next = buildScanCheckpointCore({ nextSegment: nextSegment + 1, candidateCount, duplicateCandidateCount, setupCount, expiredSetupCount,
-      eligibleCandidates, seenCandidateIds: [...seenCandidates], seenFactIds: [...seenFacts] });
+    context = undefined;
+    events = undefined;
+    releaseTransientMemory();
+    const next = checkpointState(nextSegment + 1);
     await writeCheckpoint(next);
     processedThisProcess += 1;
     if (interruptAfterSegments === nextSegment + 1 || processedThisProcess === maximumSegmentsThisProcess) {
       return bounded({ interrupted: true, reason: processedThisProcess === maximumSegmentsThisProcess ? "controlled_process_recycle" : "injected_interruption", checkpoint: next });
     }
-    if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
+    if (memoryDecision() === "controlled_recycle") {
+      return bounded({ interrupted: true, reason: "controlled_memory_recycle", checkpoint: next });
+    }
   }
   return bounded({ interrupted: false, checkpoint: buildScanCheckpointCore({ nextSegment, candidateCount, duplicateCandidateCount, setupCount,
     expiredSetupCount, eligibleCandidates, seenCandidateIds: [...seenCandidates], seenFactIds: [...seenFacts] }) });
@@ -223,6 +270,13 @@ const directoryBytes = (root) => fs.existsSync(root) ? fs.readdirSync(root, { wi
 }, 0) : 0;
 
 export async function runCertifiedBaseline(input) {
+  let maximumObservedRssBytes = process.memoryUsage().rss;
+  const readRssBytes = () => {
+    const rssBytes = process.memoryUsage().rss;
+    maximumObservedRssBytes = Math.max(maximumObservedRssBytes, rssBytes);
+    return rssBytes;
+  };
+  const withResources = (value) => bounded({ ...value, maximumObservedRssBytes });
   const qualified = await verifyQualifiedInput(input);
   if (qualified.blockers.length) throw new Error(`Certified input rejected: ${qualified.blockers.join(", ")}`);
   const profile = await input.modules.parameters.buildLrsBaseProfile();
@@ -246,19 +300,25 @@ export async function runCertifiedBaseline(input) {
   if (scan?.schemaVersion === "gotrader-lrs-baseline-scan-checkpoint-v2") {
     throw new Error("LRS v2 scan checkpoint cannot prove uniqueness for discarded candidates; use an empty corrected run root.");
   }
-  const compacted = compactLegacyScanCheckpoint(scan);
-  if (compacted !== scan) {
-    await writeCheckpoint(compacted);
-    return bounded({ interrupted: true, reason: "checkpoint_compacted", checkpoint: compacted });
+  const upgraded = migrateV3ScanCheckpoint(compactLegacyScanCheckpoint(scan));
+  if (upgraded !== scan) {
+    await writeCheckpoint(upgraded);
+    return bounded({ interrupted: true, reason: "checkpoint_upgraded", checkpoint: upgraded });
   }
   const m5 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "5m" });
-  const m15 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "15m" });
-  const m1Index = buildCertifiedPartitionIndex({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "1m" });
+  let m15 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "15m" });
   const discovery = await discoverCandidates({ modules: input.modules, qualified, m5, m15, checkpoint: scan, writeCheckpoint,
-    parameters, interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess });
-  if (discovery.interrupted) return discovery;
+    parameters, interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess,
+    readRssBytes });
+  if (discovery.interrupted) return withResources(discovery);
+  m15 = undefined;
+  globalThis.gc?.();
+  readRssBytes();
   const eligible = discovery.checkpoint.eligibleCandidates;
   if (new Set(eligible.map((item) => item.candidateId)).size !== eligible.length) throw new Error("LRS eligible candidate identities are not unique.");
+  const m1Index = buildCertifiedPartitionIndex({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "1m" });
+  globalThis.gc?.();
+  if (classifyLrsMemoryPressure(readRssBytes()) === "hard_limit_exceeded") throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   const simulationStorage = createHistoricalDatasetNodeStorage({ root: path.join(input.outputRoot, "bt2") });
   const repository = new input.modules.simulation.SimulationRepository(simulationStorage.adapter);
   const experimentId = await input.modules.canonical.canonicalHash({ schemaVersion: LRS_BASELINE_SCHEMA_VERSION,
@@ -279,12 +339,13 @@ export async function runCertifiedBaseline(input) {
     const record = await input.modules.simulation.simulateTrade({ opportunity, candles, intrabarPolicy: "conservative_stop_first_v1", costModel });
     await repository.writeOpportunity(opportunity); await repository.writeRecord(record); recordIds.push(record.recordId);
     await repository.writeCheckpoint({ experimentId, nextOpportunityOrdinal: ordinal + 1, committedRecordIds: recordIds });
-    if (input.interruptAfterRecords === ordinal + 1) return bounded({ interrupted: true, experimentId });
+    if (input.interruptAfterRecords === ordinal + 1) return withResources({ interrupted: true, experimentId });
     processedRecordsThisProcess += 1;
     if (processedRecordsThisProcess === input.maximumRecordsThisProcess && ordinal + 1 < eligible.length) {
-      return bounded({ interrupted: true, reason: "controlled_simulation_recycle", experimentId, nextRecordOrdinal: ordinal + 1 });
+      return withResources({ interrupted: true, reason: "controlled_simulation_recycle", experimentId, nextRecordOrdinal: ordinal + 1 });
     }
-    if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
+    globalThis.gc?.();
+    if (classifyLrsMemoryPressure(readRssBytes()) === "hard_limit_exceeded") throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   }
   const records = recordIds.map((id) => readJson(simulationStorage.resolveSafe(`records/${safeId(id)}.json`)));
   if (new Set(recordIds).size !== recordIds.length) throw new Error("LRS committed BT2 record identities are not unique.");
@@ -309,10 +370,10 @@ export async function runCertifiedBaseline(input) {
     intrabarPolicy: "conservative_stop_first_v1", maximumForwardCandles: LRS_BASELINE_MAX_FORWARD_CANDLES,
     entryModel: parameters.entryModel, stopModel: parameters.stopModel, targetModel: parameters.targetModel,
     researchValidated: false, productionAdoptionAllowed: false, rawCandlesSerialized: false, mt5Contacted: false,
-    authority: LRS_BASELINE_AUTHORITY, peakRssBytes: process.memoryUsage().rss });
+    authority: LRS_BASELINE_AUTHORITY, peakRssBytes: Math.max(maximumObservedRssBytes, readRssBytes()) });
   const report = bounded({ ...reportCore, reportId: await input.modules.canonical.canonicalHash(reportCore) });
   await storage.adapter.writeTextAtomic("baseline-report.json", `${input.modules.canonical.canonicalSerialize(report)}\n`);
   const storageBytes = directoryBytes(input.outputRoot);
   if (storageBytes > LRS_BASELINE_MAX_STORAGE_BYTES) throw new Error("LRS baseline exceeded the fixed 128 MiB governed-storage bound.");
-  return bounded({ interrupted: false, report, seal });
+  return withResources({ interrupted: false, report, seal });
 }
