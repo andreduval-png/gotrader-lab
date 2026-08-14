@@ -110,17 +110,28 @@ export async function buildCertifiedContext({ modules, source, m5, m15, asOf }) 
     requestedFactFamilies: ["session", "opening_price", "dealing_range", "liquidity", "displacement", "fair_value_gap"], builtAt: asOf });
 }
 
-export const buildScanCheckpointCore = ({ nextSegment, candidates, seenFactIds }) => bounded({
-  schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v1", nextSegment,
-  candidates: bounded([...candidates]), seenFactIds: bounded([...seenFactIds].sort()), authority: LRS_BASELINE_AUTHORITY
+export const buildScanCheckpointCore = ({ nextSegment, candidateCount, setupCount, expiredSetupCount, eligibleCandidates, seenFactIds }) => bounded({
+  schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v2", nextSegment, candidateCount, setupCount, expiredSetupCount,
+  eligibleCandidates: bounded([...eligibleCandidates]), seenFactIds: bounded([...seenFactIds].sort()), authority: LRS_BASELINE_AUTHORITY
 });
+
+export const compactLegacyScanCheckpoint = (checkpoint) => {
+  if (checkpoint?.schemaVersion !== "gotrader-lrs-baseline-scan-checkpoint-v1" || !Array.isArray(checkpoint.candidates)) return checkpoint;
+  return buildScanCheckpointCore({ nextSegment: checkpoint.nextSegment, candidateCount: checkpoint.candidates.length,
+    setupCount: checkpoint.candidates.filter((item) => item.state !== "SEARCHING").length,
+    expiredSetupCount: checkpoint.candidates.filter((item) => ["SETUP_EXPIRED", "SESSION_EXPIRED"].includes(item.state)).length,
+    eligibleCandidates: checkpoint.candidates.filter((item) => item.state === "ENTRY_ELIGIBLE" && item.blockers.length === 0),
+    seenFactIds: checkpoint.seenFactIds ?? [] });
+};
 
 export async function discoverCandidates({ modules, qualified, m5, m15, checkpoint, writeCheckpoint, interruptAfterSegments, maximumSegmentsThisProcess }) {
   const source = modules.identity.createV2SourceIdentity({ sourceId: `certified:${qualified.certificate.datasetId}`,
     provider: qualified.certificate.provider, requestedSymbol: qualified.certificate.requestedSymbol, brokerSymbol: qualified.certificate.brokerSymbol,
     sourceFingerprint: qualified.certificate.sourceFingerprint, sourceKind: "imported_historical" });
   const start = Date.parse(qualified.certificate.startUtc), end = Date.parse(qualified.certificate.endUtc), day = 86_400_000;
-  const candidates = [...(checkpoint?.candidates ?? [])], seenFacts = new Set(checkpoint?.seenFactIds ?? []);
+  let candidateCount = checkpoint?.candidateCount ?? 0, setupCount = checkpoint?.setupCount ?? 0;
+  let expiredSetupCount = checkpoint?.expiredSetupCount ?? 0;
+  const eligibleCandidates = [...(checkpoint?.eligibleCandidates ?? [])], seenFacts = new Set(checkpoint?.seenFactIds ?? []);
   let nextSegment = checkpoint?.nextSegment ?? 0;
   let processedThisProcess = 0;
   const segmentCount = Math.ceil((end - start) / day);
@@ -142,9 +153,13 @@ export async function discoverCandidates({ modules, qualified, m5, m15, checkpoi
       const candidate = await modules.detector.detectLiquidityReclaimScalper({ context: exact,
         datasetCertificateId: qualified.certificate.certificateId, triggerCandleId: `${qualified.certificate.datasetId}:5m:${trigger.openTimeUtc}`,
         setupCreatedAt: event.causalClosedCandleTime, expiresAt });
-      candidates.push(candidate);
+      candidateCount += 1;
+      if (candidate.state !== "SEARCHING") setupCount += 1;
+      if (["SETUP_EXPIRED", "SESSION_EXPIRED"].includes(candidate.state)) expiredSetupCount += 1;
+      if (candidate.state === "ENTRY_ELIGIBLE" && candidate.blockers.length === 0) eligibleCandidates.push(candidate);
     }
-    const next = buildScanCheckpointCore({ nextSegment: nextSegment + 1, candidates, seenFactIds: [...seenFacts] });
+    const next = buildScanCheckpointCore({ nextSegment: nextSegment + 1, candidateCount, setupCount, expiredSetupCount,
+      eligibleCandidates, seenFactIds: [...seenFacts] });
     await writeCheckpoint(next);
     processedThisProcess += 1;
     if (interruptAfterSegments === nextSegment + 1 || processedThisProcess === maximumSegmentsThisProcess) {
@@ -152,7 +167,8 @@ export async function discoverCandidates({ modules, qualified, m5, m15, checkpoi
     }
     if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   }
-  return bounded({ interrupted: false, checkpoint: buildScanCheckpointCore({ nextSegment, candidates, seenFactIds: [...seenFacts] }) });
+  return bounded({ interrupted: false, checkpoint: buildScanCheckpointCore({ nextSegment, candidateCount, setupCount, expiredSetupCount,
+    eligibleCandidates, seenFactIds: [...seenFacts] }) });
 }
 
 export const buildDescriptiveMetrics = (records) => {
@@ -207,9 +223,6 @@ export async function runCertifiedBaseline(input) {
   if (qualified.certificate.certificateId !== input.expectedCertificateId || qualified.certificate.datasetId !== input.expectedDatasetId ||
       qualified.certificate.startUtc !== "2024-08-01T00:00:00.000Z" || qualified.certificate.endUtc !== "2026-08-01T00:00:00.000Z") throw new Error("Frozen LRS baseline identity or coverage mismatch.");
   const manifest = qualified.manifest;
-  const m5 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "5m" });
-  const m15 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "15m" });
-  const m1Index = buildCertifiedPartitionIndex({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "1m" });
   const storage = createHistoricalDatasetNodeStorage({ root: input.outputRoot });
   const scanPath = "checkpoints/scan.json";
   const existingText = await storage.adapter.readText(scanPath);
@@ -217,10 +230,18 @@ export async function runCertifiedBaseline(input) {
   let scan;
   if (existingText) { scan = JSON.parse(existingText); const { checkpointId, ...core } = scan;
     if (await input.modules.canonical.canonicalHash(core) !== checkpointId) throw new Error("LRS scan checkpoint integrity failure."); }
+  const compacted = compactLegacyScanCheckpoint(scan);
+  if (compacted !== scan) {
+    await writeCheckpoint(compacted);
+    return bounded({ interrupted: true, reason: "checkpoint_compacted", checkpoint: compacted });
+  }
+  const m5 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "5m" });
+  const m15 = loadCertifiedTimeframe({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "15m" });
+  const m1Index = buildCertifiedPartitionIndex({ repositoryRoot: input.repositoryRoot, manifest, timeframe: "1m" });
   const discovery = await discoverCandidates({ modules: input.modules, qualified, m5, m15, checkpoint: scan, writeCheckpoint,
     interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess });
   if (discovery.interrupted) return discovery;
-  const eligible = discovery.checkpoint.candidates.filter((item) => item.state === "ENTRY_ELIGIBLE" && item.blockers.length === 0);
+  const eligible = discovery.checkpoint.eligibleCandidates;
   const simulationStorage = createHistoricalDatasetNodeStorage({ root: path.join(input.outputRoot, "bt2") });
   const repository = new input.modules.simulation.SimulationRepository(simulationStorage.adapter);
   const experimentId = await input.modules.canonical.canonicalHash({ schemaVersion: LRS_BASELINE_SCHEMA_VERSION,
@@ -229,6 +250,7 @@ export async function runCertifiedBaseline(input) {
   const costModel = await input.modules.simulation.buildSimulationCostModel({ version: "bt2-stage2-observed-spread-v1", pointSize: .01,
     spreadMode: "candle", slippagePoints: 0, commissionR: 0, swapR: 0 });
   const existing = await repository.readCheckpoint(experimentId), recordIds = [...(existing?.committedRecordIds ?? [])];
+  let processedRecordsThisProcess = 0;
   for (let ordinal = existing?.nextOpportunityOrdinal ?? 0; ordinal < eligible.length; ordinal += 1) {
     const candidate = eligible[ordinal];
     const candles = readCertifiedForwardCandles({ repositoryRoot: input.repositoryRoot, index: m1Index,
@@ -241,6 +263,10 @@ export async function runCertifiedBaseline(input) {
     await repository.writeOpportunity(opportunity); await repository.writeRecord(record); recordIds.push(record.recordId);
     await repository.writeCheckpoint({ experimentId, nextOpportunityOrdinal: ordinal + 1, committedRecordIds: recordIds });
     if (input.interruptAfterRecords === ordinal + 1) return bounded({ interrupted: true, experimentId });
+    processedRecordsThisProcess += 1;
+    if (processedRecordsThisProcess === input.maximumRecordsThisProcess && ordinal + 1 < eligible.length) {
+      return bounded({ interrupted: true, reason: "controlled_simulation_recycle", experimentId, nextRecordOrdinal: ordinal + 1 });
+    }
     if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   }
   const records = recordIds.map((id) => readJson(simulationStorage.resolveSafe(`records/${safeId(id)}.json`)));
@@ -253,9 +279,9 @@ export async function runCertifiedBaseline(input) {
   const reportCore = bounded({ schemaVersion: LRS_BASELINE_SCHEMA_VERSION, status: counts.blocked ? "blocked" : "passed",
     strategyId: "liquidity_reclaim_scalper_v1", profileId: "liquidity_reclaim_scalper_v1_base_research", parameterHash: input.expectedParameterHash,
     certificateId: qualified.certificate.certificateId, datasetId: qualified.certificate.datasetId, startUtc: qualified.certificate.startUtc,
-    endUtc: qualified.certificate.endUtc, setupCount: discovery.checkpoint.candidates.filter((item) => item.state !== "SEARCHING").length,
-    candidateCount: discovery.checkpoint.candidates.length, eligibleCandidateCount: eligible.length,
-    expiredSetupCount: discovery.checkpoint.candidates.filter((item) => ["SETUP_EXPIRED", "SESSION_EXPIRED"].includes(item.state)).length,
+    endUtc: qualified.certificate.endUtc, setupCount: discovery.checkpoint.setupCount,
+    candidateCount: discovery.checkpoint.candidateCount, eligibleCandidateCount: eligible.length,
+    expiredSetupCount: discovery.checkpoint.expiredSetupCount,
     tradeCount: records.length, filledTradeCount: records.filter((item) => item.fillPrice !== undefined).length,
     noFillCount: counts.expired_unfilled, ambiguousBarCount: counts.ambiguous,
     eligibleTradingDays: new Set(m5.map((candle) => candle.openTimeUtc.slice(0, 10))).size,
