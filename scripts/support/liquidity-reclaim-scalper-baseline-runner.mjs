@@ -53,7 +53,7 @@ export function loadCertifiedTimeframe({ repositoryRoot, manifest, timeframe }) 
   if (!seal) throw new Error(`Certified dataset has no ${timeframe} seal.`);
   const candles = seal.partitionIds.flatMap((id) => readPartition(repositoryRoot, id, timeframe));
   candles.sort((a, b) => a.openTimeUtc.localeCompare(b.openTimeUtc));
-  if (candles.length !== seal.candleCount || candles[0]?.openTimeUtc !== seal.firstCandleTimeUtc || candles.at(-1)?.openTimeUtc !== seal.lastCandleTimeUtc) {
+  if (candles.length !== seal.candleCount || candles[0]?.openTimeUtc !== seal.firstCandleTimeUtc || candles.at(-1)?.closeTimeUtc !== seal.lastCandleTimeUtc) {
     throw new Error(`Certified ${timeframe} coverage mismatch.`);
   }
   return bounded(candles);
@@ -69,7 +69,7 @@ export function buildCertifiedPartitionIndex({ repositoryRoot, manifest, timefra
   }).sort((a, b) => a.firstOpenTimeUtc.localeCompare(b.firstOpenTimeUtc));
   const count = partitions.reduce((sum, item) => sum + item.candleCount, 0);
   if (count !== seal.candleCount || partitions[0]?.firstOpenTimeUtc !== seal.firstCandleTimeUtc ||
-      partitions.at(-1)?.firstOpenTimeUtc > seal.lastCandleTimeUtc || partitions.at(-1)?.lastCloseTimeUtc <= seal.lastCandleTimeUtc) {
+      partitions.at(-1)?.firstOpenTimeUtc > seal.lastCandleTimeUtc || partitions.at(-1)?.lastCloseTimeUtc !== seal.lastCandleTimeUtc) {
     throw new Error(`Certified ${timeframe} partition index mismatch.`);
   }
   return bounded({ timeframe, partitions: bounded(partitions), candleCount: count });

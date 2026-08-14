@@ -16,7 +16,7 @@ try {
       { openTimeUtc: "2025-01-02T14:35:00.000Z", closeTimeUtc: "2025-01-02T14:40:00.000Z", open: 101, high: 103, low: 100, close: 102, spreadPoints: 10 }
     ] } }));
   const manifest = { timeframes: [{ timeframe: "5m", partitionIds: [partitionId], candleCount: 2,
-    firstCandleTimeUtc: "2025-01-02T14:30:00.000Z", lastCandleTimeUtc: "2025-01-02T14:35:00.000Z" }] };
+    firstCandleTimeUtc: "2025-01-02T14:30:00.000Z", lastCandleTimeUtc: "2025-01-02T14:40:00.000Z" }] };
   const candles = loadCertifiedTimeframe({ repositoryRoot: root, manifest, timeframe: "5m" });
   assert.equal(candles.length, 2);
   assert.throws(() => loadCertifiedTimeframe({ repositoryRoot: root, manifest: { timeframes: [{ ...manifest.timeframes[0], candleCount: 3 }] }, timeframe: "5m" }), /coverage mismatch/);
