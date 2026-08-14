@@ -119,6 +119,7 @@ const makeFixture = ({ identity, resultType, detectionState, lifecycleState, blo
 });
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
+const normalizeTextEol = (value) => value.replace(/\r\n/g, "\n");
 
 async function buildSnapshots() {
   compileTypescriptModules({ files: sourceFiles, outRoot });
@@ -284,7 +285,11 @@ for (const [name, value] of Object.entries(first)) {
   if (writeMode) {
     fs.writeFileSync(fixturePath, value, "utf8");
   } else {
-    assert.equal(fs.readFileSync(fixturePath, "utf8"), value, `${name} drifted from the preserved baseline.`);
+    assert.equal(
+      normalizeTextEol(fs.readFileSync(fixturePath, "utf8")),
+      value,
+      `${name} drifted from the preserved baseline.`
+    );
   }
 }
 
@@ -294,7 +299,11 @@ const hashPath = path.join(fixtureRoot, "baseline-snapshot-hashes.json");
 if (writeMode) {
   fs.writeFileSync(hashPath, hashPayload, "utf8");
 } else {
-  assert.equal(fs.readFileSync(hashPath, "utf8"), hashPayload, "Baseline snapshot hash manifest drifted.");
+  assert.equal(
+    normalizeTextEol(fs.readFileSync(hashPath, "utf8")),
+    hashPayload,
+    "Baseline snapshot hash manifest drifted."
+  );
 }
 
 console.log(JSON.stringify({
