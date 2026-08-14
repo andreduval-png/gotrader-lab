@@ -3,7 +3,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { compileTypescriptModules } from "../v2-baseline/compile-typescript-modules.mjs";
 import { createHistoricalDatasetNodeStorage } from "./historical-dataset-node-storage.mjs";
-import { verifyQualifiedInput } from "./bt2-stage2-shadow-runner.mjs";
 
 export const LRS_BASELINE_SCHEMA_VERSION = "gotrader-lrs-certified-descriptive-baseline-v1";
 export const LRS_BASELINE_MAX_RSS_BYTES = 1_073_741_824;
@@ -33,13 +32,95 @@ export async function loadLrsBaselineModules(outRoot) {
     "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperR1TrialControls.ts",
     "src/lib/backtestStrategyAdapters/liquidityReclaimScalperCanonicalAdapter.ts",
     "src/lib/backtestSimulation/index.ts",
-    "src/lib/historicalData/historicalDatasetRepository.ts"
+    "src/lib/historicalData/historicalDatasetRepository.ts",
+    "src/lib/historicalData/historicalDatasetIdentity.ts"
   ].map((file) => path.join(process.cwd(), file)) });
   const load = (name) => import(`${pathToFileURL(path.join(outRoot, `${name}.mjs`)).href}?v=${Date.now()}`);
   return bounded({ identity: await load("v2Identity"), candle: await load("v2CandleWindowBuilder"), context: await load("v2ContextBuilder"),
     detector: await load("liquidityReclaimScalperDetector"), parameters: await load("liquidityReclaimScalperParameters"), adapter: await load("liquidityReclaimScalperCanonicalAdapter"),
     simulation: await load("index"), historical: await load("historicalDatasetRepository"), canonical: await load("canonicalValueSerialization"),
-    trialControls: await load("liquidityReclaimScalperR1TrialControls") });
+    historicalIdentity: await load("historicalDatasetIdentity"), trialControls: await load("liquidityReclaimScalperR1TrialControls") });
+}
+
+const HASH = /^sha256:[0-9a-f]{64}$/;
+const STORAGE_SCHEMA = "gotrader-historical-storage-envelope-bt1-v1";
+const coreWithout = (value, key) => Object.fromEntries(Object.entries(value).filter(([name]) => name !== key));
+const authorityIsNone = (value) => value?.executionAuthority === "none" && value?.brokerAuthority === "none" &&
+  value?.readinessOverrideAuthority === "none";
+
+const readVerifiedEnvelope = async ({ modules, repositoryRoot, directory, identity, artifactKind }) => {
+  if (!HASH.test(identity)) throw new Error(`Certified ${artifactKind} identity is invalid.`);
+  const root = path.resolve(repositoryRoot);
+  const file = path.resolve(root, directory, `${identity.replace(":", "_")}.json`);
+  if (!file.startsWith(`${root}${path.sep}`)) throw new Error(`Certified ${artifactKind} path escaped the repository.`);
+  const envelope = readJson(file);
+  if (envelope.schemaVersion !== STORAGE_SCHEMA || envelope.artifactKind !== artifactKind ||
+      !HASH.test(envelope.integrityHash) || await modules.canonical.canonicalHash(envelope.payload) !== envelope.integrityHash) {
+    throw new Error(`Certified ${artifactKind} envelope integrity failure.`);
+  }
+  return envelope.payload;
+};
+
+export async function verifyQualifiedInputBounded({ modules, certificatePath, registryPath, repositoryRoot,
+  onMemorySample = () => undefined, releaseTransientMemory = () => globalThis.gc?.() }) {
+  const certificate = readJson(certificatePath);
+  const registry = readJson(registryPath);
+  const blockers = [];
+  if (await modules.canonical.canonicalHash(coreWithout(certificate, "certificateId")) !== certificate.certificateId) blockers.push("bt2_certificate_hash_invalid");
+  if (await modules.canonical.canonicalHash(coreWithout(registry, "registryId")) !== registry.registryId) blockers.push("bt2_registry_hash_invalid");
+  const entry = registry.entries?.find((item) => item.certificateId === certificate.certificateId);
+  if (!entry || entry.status !== "qualified" || entry.datasetId !== certificate.datasetId) blockers.push("bt2_registry_qualification_missing");
+  if (!certificate.readOnlySafetyVerified || !certificate.strategyNeutral || certificate.providerDriftStatus !== "not_detected") blockers.push("bt2_certificate_scope_invalid");
+  if (!authorityIsNone(certificate.authority) || !authorityIsNone(registry.authority)) blockers.push("bt2_input_authority_invalid");
+  if (!HASH.test(certificate.datasetId) || !HASH.test(certificate.lineageRoot)) blockers.push("bt2_input_identity_invalid");
+  if (blockers.length) return bounded({ certificate, registry, blockers: bounded([...new Set(blockers)].sort()) });
+
+  const manifest = await readVerifiedEnvelope({ modules, repositoryRoot, directory: "manifests",
+    identity: certificate.datasetId, artifactKind: "manifest" });
+  const manifestValidation = await modules.historicalIdentity.validateHistoricalDatasetManifest(manifest);
+  if (manifestValidation.status !== "verified" || manifestValidation.blockers.length ||
+      manifest.datasetId !== certificate.datasetId || manifest.datasetChecksum !== certificate.datasetChecksum ||
+      manifest.sourceFingerprint !== certificate.sourceFingerprint || !authorityIsNone(manifest.authority)) {
+    blockers.push(...manifestValidation.blockers, "bt2_manifest_certificate_mismatch");
+  }
+  onMemorySample(Object.freeze({ stage: "bounded_manifest_verified", rssBytes: process.memoryUsage().rss }));
+
+  for (const timeframe of manifest.timeframes ?? []) {
+    let candleCount = 0;
+    let firstCandleTimeUtc;
+    let lastCandleTimeUtc;
+    let previousCloseTimeUtc;
+    for (const partitionId of timeframe.partitionIds) {
+      let partition = await readVerifiedEnvelope({ modules, repositoryRoot, directory: "partitions", identity: partitionId, artifactKind: "partition" });
+      const { partitionId: storedPartitionId, ...partitionCore } = partition;
+      if (storedPartitionId !== partitionId || await modules.canonical.canonicalHash(partitionCore) !== partitionId ||
+          partition.timeframe !== timeframe.timeframe || partition.requestId !== manifest.requestId ||
+          partition.sourceFingerprint !== manifest.sourceFingerprint || !authorityIsNone(partition.authority) ||
+          !Array.isArray(partition.candles) || !partition.candles.length) {
+        blockers.push(`bt2_${timeframe.timeframe}_partition_identity_invalid`);
+      } else {
+        const first = partition.candles[0];
+        const last = partition.candles.at(-1);
+        if (previousCloseTimeUtc && first.openTimeUtc < previousCloseTimeUtc) blockers.push(`bt2_${timeframe.timeframe}_partition_order_invalid`);
+        firstCandleTimeUtc ??= first.openTimeUtc;
+        lastCandleTimeUtc = last.closeTimeUtc;
+        previousCloseTimeUtc = last.closeTimeUtc;
+        candleCount += partition.candles.length;
+      }
+      partition = undefined;
+      releaseTransientMemory();
+      onMemorySample(Object.freeze({ stage: `bounded_${timeframe.timeframe}_partition_release`, rssBytes: process.memoryUsage().rss }));
+    }
+    if (candleCount !== timeframe.candleCount || firstCandleTimeUtc !== timeframe.firstCandleTimeUtc ||
+        lastCandleTimeUtc !== timeframe.lastCandleTimeUtc) blockers.push(`bt2_${timeframe.timeframe}_coverage_mismatch`);
+    const integrity = await readVerifiedEnvelope({ modules, repositoryRoot, directory: "integrity",
+      identity: timeframe.integrityLedgerId, artifactKind: "integrity" });
+    if (integrity.ledgerId !== timeframe.integrityLedgerId || integrity.timeframe !== timeframe.timeframe ||
+        !authorityIsNone(integrity.authority)) blockers.push(`bt2_${timeframe.timeframe}_integrity_ledger_mismatch`);
+    releaseTransientMemory();
+  }
+  return bounded({ certificate, registry, manifest, verification: bounded({ status: blockers.length ? "blocked" : "verified",
+    blockers: bounded([...new Set(blockers)].sort()), warnings: bounded([]) }), blockers: bounded([...new Set(blockers)].sort()) });
 }
 
 const readPartition = (repositoryRoot, id, expectedTimeframe) => {
@@ -281,9 +362,13 @@ export async function runCertifiedBaseline(input) {
     input.onMemorySample?.(Object.freeze({ stage, rssBytes }));
     return rssBytes;
   };
+  const recordMemorySample = (sample) => {
+    maximumObservedRssBytes = Math.max(maximumObservedRssBytes, sample.rssBytes);
+    input.onMemorySample?.(sample);
+  };
   const withResources = (value) => bounded({ ...value, maximumObservedRssBytes });
   readRssBytes("baseline_start");
-  const qualified = await verifyQualifiedInput(input);
+  const qualified = await verifyQualifiedInputBounded({ ...input, onMemorySample: recordMemorySample });
   readRssBytes("after_qualified_input");
   if (qualified.blockers.length) throw new Error(`Certified input rejected: ${qualified.blockers.join(", ")}`);
   const profile = await input.modules.parameters.buildLrsBaseProfile();
