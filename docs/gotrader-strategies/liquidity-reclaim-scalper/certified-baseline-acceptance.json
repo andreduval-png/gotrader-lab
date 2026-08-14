@@ -1,0 +1,28 @@
+{
+  "acceptanceId": "sha256:db9c6d1be37a3e77ef0003bfab035ab1fe0b02b9e996bfbb9347af9ab396d7ef",
+  "authority": {
+    "brokerAuthority": "none",
+    "executionAuthority": "none",
+    "readinessOverrideAuthority": "none"
+  },
+  "baselineReportId": "sha256:8ea97cbf2d8cceb328f0a1a0855c907814fe813fd70e6873a6b1de40d1476b46",
+  "bt2CheckpointId": "sha256:52dcabaae6e21b3a94fe227ca3ec3cdfbacde255c199c1bb7d9b8e801b08683f",
+  "certificateId": "sha256:7ffa32b773a0f3d347997d20dc9796f8bd27a48fbbfd4315cafec23d28bcb193",
+  "datasetId": "sha256:aee24dc3d7e95759c0a58039c9a97985a63dd8014dd3ab9d9e843badeb09640d",
+  "duplicateCandidateCount": 603,
+  "eligibleCandidateCount": 521,
+  "experimentId": "sha256:57a082e7362325578eb1b941494e078e1989af44bf28e7819b93ac890812704c",
+  "implementationHead": "fd1f7c4f3047e71aa0390702e823abf65387293a",
+  "ledgerSealId": "sha256:97a4b5978ca9c87f6d0ee92e6da8d352001237acd007f1bb1192712fe47319c4",
+  "parameterHash": "sha256:c58d3a0aaff9ba61ece6ea0df2d76145059be36cab9f2347a66a0e6da642f748",
+  "productionAdoptionAllowed": false,
+  "profileId": "liquidity_reclaim_scalper_v1_base_research",
+  "r1Decision": "recommend_separate_bounded_authorization_not_started",
+  "researchValidated": false,
+  "scanCheckpointId": "sha256:60a70b2c799dd2e19219e5d7cb2d76be3926f15df31444aec523502117742d83",
+  "schemaVersion": "gotrader-lrs-certified-baseline-acceptance-v1",
+  "status": "accepted_descriptive_baseline",
+  "strategyId": "liquidity_reclaim_scalper_v1",
+  "tradeCount": 521,
+  "validationStatus": "passed_complete_matrix"
+}
