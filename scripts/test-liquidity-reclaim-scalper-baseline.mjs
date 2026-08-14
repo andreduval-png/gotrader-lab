@@ -45,6 +45,8 @@ try {
   const profile = await (await import(pathToFileURL(path.join(root, "compiled", "liquidityReclaimScalperParameters.mjs")).href)).buildLrsBaseProfile();
   assert.equal(profile.parameterHash, "sha256:c58d3a0aaff9ba61ece6ea0df2d76145059be36cab9f2347a66a0e6da642f748");
   assert.equal(typeof modules.simulation.simulateTrade, "function");
+  const boundedSource = fs.readFileSync(path.join(process.cwd(), "scripts/run-liquidity-reclaim-scalper-baseline-bounded.mjs"), "utf8");
+  assert.match(boundedSource, /segmentsPerChild < 1 \|\| segmentsPerChild > 10/);
   console.log(JSON.stringify({ status: "passed", partitionFailClosed: true, zeroEventHonest: true, descriptiveMetrics: true,
     parameterIdentityBound: true, authority: "none/none/none" }, null, 2));
 } finally {

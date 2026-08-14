@@ -5,10 +5,14 @@ import path from "node:path";
 
 const outputRoot = process.env.GOTRADER_LRS_BASELINE_ROOT;
 if (!outputRoot) throw new Error("GOTRADER_LRS_BASELINE_ROOT is required.");
-const maximumChildren = 40;
+const segmentsPerChild = Number(process.env.GOTRADER_LRS_SEGMENTS_PER_CHILD) || 10;
+if (!Number.isSafeInteger(segmentsPerChild) || segmentsPerChild < 1 || segmentsPerChild > 10) {
+  throw new Error("GOTRADER_LRS_SEGMENTS_PER_CHILD must remain within [1, 10].");
+}
+const maximumChildren = 100;
 for (let ordinal = 0; ordinal < maximumChildren; ordinal += 1) {
   const child = spawnSync(process.execPath, ["scripts/run-liquidity-reclaim-scalper-baseline.mjs"], {
-    cwd: process.cwd(), encoding: "utf8", env: { ...process.env, GOTRADER_LRS_MAX_SEGMENTS: "25" }, maxBuffer: 4 * 1024 * 1024
+    cwd: process.cwd(), encoding: "utf8", env: { ...process.env, GOTRADER_LRS_MAX_SEGMENTS: String(segmentsPerChild) }, maxBuffer: 4 * 1024 * 1024
   });
   if (child.stdout) process.stdout.write(child.stdout);
   if (child.stderr) process.stderr.write(child.stderr);
