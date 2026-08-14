@@ -8,6 +8,7 @@ const files = [
   "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes.ts",
   "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts",
   "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperR1.ts",
+  "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperR1TrialControls.ts",
   "src/lib/strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine.ts",
   "src/lib/v2/strategyAdapters/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts",
   "src/lib/backtestStrategyAdapters/liquidityReclaimScalperCanonicalAdapter.ts"
