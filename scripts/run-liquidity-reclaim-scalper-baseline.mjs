@@ -16,5 +16,8 @@ const result = await runCertifiedBaseline({ modules, repositoryRoot, outputRoot,
   expectedParameterHash: "sha256:c58d3a0aaff9ba61ece6ea0df2d76145059be36cab9f2347a66a0e6da642f748",
   codeCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   interruptAfterSegments: Number(process.env.GOTRADER_LRS_INTERRUPT_AFTER_SEGMENTS) || undefined,
+  maximumSegmentsThisProcess: Number(process.env.GOTRADER_LRS_MAX_SEGMENTS) || undefined,
   interruptAfterRecords: Number(process.env.GOTRADER_LRS_INTERRUPT_AFTER_RECORDS) || undefined });
-console.log(JSON.stringify(result, null, 2));
+console.log(JSON.stringify(result.interrupted ? { interrupted: true, reason: result.reason,
+  nextSegment: result.checkpoint?.nextSegment, candidateCount: result.checkpoint?.candidates?.length,
+  experimentId: result.experimentId } : result, null, 2));

@@ -115,13 +115,14 @@ export const buildScanCheckpointCore = ({ nextSegment, candidates, seenFactIds }
   candidates: bounded([...candidates]), seenFactIds: bounded([...seenFactIds].sort()), authority: LRS_BASELINE_AUTHORITY
 });
 
-export async function discoverCandidates({ modules, qualified, m5, m15, checkpoint, writeCheckpoint, interruptAfterSegments }) {
+export async function discoverCandidates({ modules, qualified, m5, m15, checkpoint, writeCheckpoint, interruptAfterSegments, maximumSegmentsThisProcess }) {
   const source = modules.identity.createV2SourceIdentity({ sourceId: `certified:${qualified.certificate.datasetId}`,
     provider: qualified.certificate.provider, requestedSymbol: qualified.certificate.requestedSymbol, brokerSymbol: qualified.certificate.brokerSymbol,
     sourceFingerprint: qualified.certificate.sourceFingerprint, sourceKind: "imported_historical" });
   const start = Date.parse(qualified.certificate.startUtc), end = Date.parse(qualified.certificate.endUtc), day = 86_400_000;
   const candidates = [...(checkpoint?.candidates ?? [])], seenFacts = new Set(checkpoint?.seenFactIds ?? []);
   let nextSegment = checkpoint?.nextSegment ?? 0;
+  let processedThisProcess = 0;
   const segmentCount = Math.ceil((end - start) / day);
   for (; nextSegment < segmentCount; nextSegment += 1) {
     const segmentEnd = new Date(Math.min(end, start + (nextSegment + 1) * day)).toISOString();
@@ -145,7 +146,10 @@ export async function discoverCandidates({ modules, qualified, m5, m15, checkpoi
     }
     const next = buildScanCheckpointCore({ nextSegment: nextSegment + 1, candidates, seenFactIds: [...seenFacts] });
     await writeCheckpoint(next);
-    if (interruptAfterSegments === nextSegment + 1) return bounded({ interrupted: true, checkpoint: next });
+    processedThisProcess += 1;
+    if (interruptAfterSegments === nextSegment + 1 || processedThisProcess === maximumSegmentsThisProcess) {
+      return bounded({ interrupted: true, reason: processedThisProcess === maximumSegmentsThisProcess ? "controlled_process_recycle" : "injected_interruption", checkpoint: next });
+    }
     if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   }
   return bounded({ interrupted: false, checkpoint: buildScanCheckpointCore({ nextSegment, candidates, seenFactIds: [...seenFacts] }) });
@@ -213,7 +217,8 @@ export async function runCertifiedBaseline(input) {
   let scan;
   if (existingText) { scan = JSON.parse(existingText); const { checkpointId, ...core } = scan;
     if (await input.modules.canonical.canonicalHash(core) !== checkpointId) throw new Error("LRS scan checkpoint integrity failure."); }
-  const discovery = await discoverCandidates({ modules: input.modules, qualified, m5, m15, checkpoint: scan, writeCheckpoint, interruptAfterSegments: input.interruptAfterSegments });
+  const discovery = await discoverCandidates({ modules: input.modules, qualified, m5, m15, checkpoint: scan, writeCheckpoint,
+    interruptAfterSegments: input.interruptAfterSegments, maximumSegmentsThisProcess: input.maximumSegmentsThisProcess });
   if (discovery.interrupted) return discovery;
   const eligible = discovery.checkpoint.candidates.filter((item) => item.state === "ENTRY_ELIGIBLE" && item.blockers.length === 0);
   const simulationStorage = createHistoricalDatasetNodeStorage({ root: path.join(input.outputRoot, "bt2") });
