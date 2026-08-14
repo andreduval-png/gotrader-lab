@@ -50,6 +50,9 @@ const ifvgFor = (facts: readonly Readonly<V2MarketFact>[], direction: LrsDirecti
   .filter((fact) => !displacement || Date.parse(fact.causalClosedCandleTime) >= Date.parse(displacement.causalClosedCandleTime))
   .sort((a, b) => Date.parse(a.causalClosedCandleTime) - Date.parse(b.causalClosedCandleTime))[0];
 
+const executionBarMs = (timeframe: string) => ({ "1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000,
+  "4h": 14_400_000, "1d": 86_400_000, "1w": 604_800_000 }[timeframe]);
+
 const entryFor = (direction: LrsDirection, fvg: FvgFact, displacement: DisplacementFact, parameters: Readonly<LrsParameters>) => {
   if (parameters.entryModel === "IFVG_MIDPOINT") return fvg.payload.midpoint;
   if (parameters.entryModel === "DISPLACEMENT_RETRACE") {
@@ -74,6 +77,42 @@ const targetFor = (direction: LrsDirection, objective: PoolFact, entry: number, 
   return objective.payload.price;
 };
 
+const completeSequenceFor = (facts: readonly Readonly<V2MarketFact>[], direction: LrsDirection, parameters: Readonly<LrsParameters>) => {
+  const ifvgs = facts.filter((fact): fact is FvgFact => fact.kind === "fair_value_gap" && ifvgTradeDirection(fact) === direction)
+    .filter((fact) => ["fresh", "touched", "partially_filled", "inverted"].includes(fact.payload.state))
+    .sort((a, b) => Date.parse(b.causalClosedCandleTime) - Date.parse(a.causalClosedCandleTime) || a.factId.localeCompare(b.factId));
+  const maximumAgeMs = (executionBarMs(parameters.executionTimeframe) ?? 0) * parameters.maximumSetupAgeBars;
+  for (const ifvg of ifvgs) {
+    const displacements = facts.filter((fact): fact is DisplacementFact => fact.kind === "displacement" &&
+      fact.payload.direction === (direction === "long" ? "bullish" : "bearish") &&
+      Date.parse(fact.causalClosedCandleTime) <= Date.parse(ifvg.causalClosedCandleTime))
+      .sort((a, b) => Date.parse(b.causalClosedCandleTime) - Date.parse(a.causalClosedCandleTime));
+    for (const displacement of displacements) {
+      const raids = facts.filter((fact): fact is SweepFact => fact.kind === "liquidity_sweep" &&
+        fact.payload.side === (direction === "long" ? "sell_side" : "buy_side") &&
+        (fact.payload.confirmationState === "confirmed" || fact.payload.confirmationState === "wick_through") &&
+        Date.parse(fact.causalClosedCandleTime) <= Date.parse(displacement.causalClosedCandleTime) &&
+        Date.parse(ifvg.causalClosedCandleTime) - Date.parse(fact.causalClosedCandleTime) <= maximumAgeMs)
+        .sort((a, b) => Date.parse(b.causalClosedCandleTime) - Date.parse(a.causalClosedCandleTime));
+      for (const raid of raids) {
+        const objectives = facts.filter((fact): fact is PoolFact => fact.kind === "liquidity_pool" &&
+          fact.payload.side === (direction === "long" ? "buy_side" : "sell_side") &&
+          (fact.payload.state === "active" || fact.payload.state === "touched") &&
+          Date.parse(fact.causalClosedCandleTime) <= Date.parse(raid.causalClosedCandleTime))
+          .sort((a, b) => Date.parse(b.payload.confirmedAt) - Date.parse(a.payload.confirmedAt));
+        for (const objective of objectives) {
+          const entryPrice = entryFor(direction, ifvg, displacement, parameters);
+          const stopPrice = stopFor(direction, raid, ifvg, displacement, parameters);
+          const targetPrice = targetFor(direction, objective, entryPrice, stopPrice, parameters);
+          const ordered = direction === "long" ? stopPrice < entryPrice && entryPrice < targetPrice : targetPrice < entryPrice && entryPrice < stopPrice;
+          if (ordered) return { objective, raid, displacement, ifvg, entryPrice, stopPrice, targetPrice };
+        }
+      }
+    }
+  }
+  return undefined;
+};
+
 async function transitionsFor(input: { objective?: PoolFact; raid?: SweepFact; displacement?: DisplacementFact; ifvg?: FvgFact; marketTime: string }) {
   const transitions: Readonly<LrsTransition>[] = []; let state: LrsSetupState = "SEARCHING";
   const move = async (nextState: LrsSetupState, ids: readonly string[]) => { const transition = await buildLrsTransition({ previousState: state, nextState, marketTime: input.marketTime, triggerFactIds: ids, blockers: [] }); transitions.push(transition); state = nextState; };
@@ -92,21 +131,23 @@ export async function detectLiquidityReclaimScalper(request: Readonly<LrsDetecti
   const sourceBlocked = request.context.diagnostics.status === "blocked" || request.context.shadowOnly !== true;
   const datasetVerified = HASH.test(request.datasetCertificateId);
   const attempts = await Promise.all((["long", "short"] as const).map(async (direction) => {
-    const objective = objectiveFor(facts, direction); const raid = raidFor(facts, direction);
-    const displacement = displacementFor(facts, direction, raid); const ifvg = ifvgFor(facts, direction, displacement);
-    const chain = await transitionsFor({ objective, raid, displacement, ifvg, marketTime: request.context.identity.asOfMarketTime });
-    return { direction, objective, raid, displacement, ifvg, chain };
+    const complete = completeSequenceFor(facts, direction, parameters);
+    const objective = complete?.objective ?? objectiveFor(facts, direction); const raid = complete?.raid ?? raidFor(facts, direction);
+    const displacement = complete?.displacement ?? displacementFor(facts, direction, raid);
+    const ifvg = complete?.ifvg ?? ifvgFor(facts, direction, displacement);
+    const chain = await transitionsFor({ objective, raid, displacement, ifvg: complete?.ifvg, marketTime: request.context.identity.asOfMarketTime });
+    return { direction, objective, raid, displacement, ifvg, chain, complete };
   }));
-  const selected = attempts.sort((a, b) => b.chain.transitions.length - a.chain.transitions.length || a.direction.localeCompare(b.direction))[0];
+  const selected = attempts.sort((a, b) => Number(Boolean(b.complete)) - Number(Boolean(a.complete)) ||
+    b.chain.transitions.length - a.chain.transitions.length || a.direction.localeCompare(b.direction))[0];
   const blockers: LrsBlocker[] = [];
   if (sourceBlocked) blockers.push("source_blocked"); if (!datasetVerified) blockers.push("dataset_unverified");
   if (!selected.objective) blockers.push("external_liquidity_missing"); if (!selected.raid) blockers.push("raid_missing");
   if (!selected.displacement) blockers.push("displacement_missing"); if (!selected.ifvg && parameters.ifvgRequired) blockers.push("ifvg_missing");
+  if (selected.objective && selected.raid && selected.displacement && selected.ifvg && !selected.complete) blockers.push("sequence_invalid");
   let entryPrice: number | undefined; let stopPrice: number | undefined; let targetPrice: number | undefined; let theoreticalRR: number | undefined;
-  if (selected.objective && selected.raid && selected.displacement && selected.ifvg) {
-    entryPrice = entryFor(selected.direction, selected.ifvg, selected.displacement, parameters);
-    stopPrice = stopFor(selected.direction, selected.raid, selected.ifvg, selected.displacement, parameters);
-    targetPrice = targetFor(selected.direction, selected.objective, entryPrice, stopPrice, parameters);
+  if (selected.complete) {
+    entryPrice = selected.complete.entryPrice; stopPrice = selected.complete.stopPrice; targetPrice = selected.complete.targetPrice;
     const ordered = selected.direction === "long" ? stopPrice < entryPrice && entryPrice < targetPrice : targetPrice < entryPrice && entryPrice < stopPrice;
     if (!ordered) blockers.push("geometry_invalid"); else { theoreticalRR = Math.abs(targetPrice - entryPrice) / Math.abs(entryPrice - stopPrice);
       if (parameters.minimumTheoreticalRR !== null && theoreticalRR < parameters.minimumTheoreticalRR) blockers.push("minimum_rr_not_met"); }

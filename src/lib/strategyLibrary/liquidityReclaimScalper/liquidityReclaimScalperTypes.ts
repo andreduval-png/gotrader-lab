@@ -16,7 +16,7 @@ export type LrsBlocker = "external_liquidity_missing" | "external_liquidity_cons
   "raid_invalid" | "displacement_missing" | "displacement_wrong_direction" | "ifvg_missing" |
   "ifvg_not_reclaimed" | "ifvg_stale" | "entry_not_reached" | "entry_expired" |
   "structural_invalidation" | "session_expired" | "insufficient_context" | "source_blocked" |
-  "dataset_unverified" | "geometry_invalid" | "minimum_rr_not_met";
+  "dataset_unverified" | "geometry_invalid" | "minimum_rr_not_met" | "sequence_invalid";
 export type LrsEntryModel = "IFVG_PROXIMAL_EDGE" | "IFVG_MIDPOINT" | "DISPLACEMENT_RETRACE" | "CONFIRMATION_CLOSE";
 export type LrsStopModel = "RAID_EXTREME" | "RAID_EXTREME_BUFFER" | "IFVG_INVALIDATION" | "DISPLACEMENT_ORIGIN";
 export type LrsTargetModel = "EXTERNAL_LIQUIDITY" | "INTERNAL_LIQUIDITY" | "STRUCTURE_TARGET" | "STANDARDIZED_R";
