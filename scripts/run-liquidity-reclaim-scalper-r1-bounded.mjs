@@ -4,8 +4,9 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset-node-storage.mjs";
-import { enforceR1ResourceBounds, openR1Controller, verifyAcceptedR1Inputs, verifyR1TrialReport,
-  writeImmutableR1Artifact, writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
+import { buildR1ChildTelemetry, classifyR1ChildRss, enforceR1ResourceBounds, openR1Controller, R1_MAX_RSS_BYTES,
+  summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
+  writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
 
 const root = process.cwd();
 const outputRoot = process.env.GOTRADER_LRS_R1_ROOT;
@@ -27,7 +28,9 @@ const update = async (patch = {}) => {
   checkpoint = await writeR1ControllerCheckpoint({ modules, storage, input: { mode, selectedTrialIds,
     nextPosition: checkpoint.nextPosition, dispositions: checkpoint.dispositions, orderedEventIds: checkpoint.orderedEventIds,
     controllerCommit, startedAtUtc: checkpoint.startedAtUtc, childRuns: checkpoint.childRuns,
-    maximumObservedRssBytes: checkpoint.maximumObservedRssBytes, ...patch } });
+    maximumObservedRssBytes: checkpoint.maximumObservedRssBytes,
+    telemetryStartChildRun: checkpoint.telemetryStartChildRun,
+    orderedChildTelemetryIds: checkpoint.orderedChildTelemetryIds, ...patch } });
 };
 const appendEvent = async (trial, disposition, reasonCodes, evidenceIds, previousEventId) => {
   const event = await modules.trialControls.buildLrsR1TrialEvent({ trialId: trial.trialId,
@@ -56,16 +59,49 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
   const trialRoot = path.join(outputRoot, "trials", trial.trialId.replace(":", "_"));
   let completed = fs.existsSync(path.join(trialRoot, "baseline-report.json"));
   for (let childOrdinal = 0; !completed && childOrdinal < 200; childOrdinal += 1) {
+    const childRun = checkpoint.childRuns + 1;
+    const childStartedAtUtc = new Date().toISOString();
     const child = spawnSync(process.execPath, ["--expose-gc", "scripts/run-liquidity-reclaim-scalper-r1-trial.mjs"], { cwd: root, encoding: "utf8",
       env: { ...process.env, GOTRADER_LRS_R1_TRIAL_ROOT: trialRoot, GOTRADER_LRS_R1_TRIAL_ORDINAL: String(trial.ordinal),
         GOTRADER_LRS_R1_PARAMETER_HASH: trial.parameterHash, GOTRADER_LRS_R1_CONTROLLER_COMMIT: controllerCommit,
         GOTRADER_LRS_MAX_SEGMENTS: "10", GOTRADER_LRS_MAX_RECORDS: "5" }, maxBuffer: 4 * 1024 * 1024 });
     const line = child.stdout?.split(/\r?\n/).findLast((item) => item.startsWith("R1_RESULT "));
     const result = line ? JSON.parse(line.slice(10)) : {};
-    const maximumObservedRssBytes = Math.max(checkpoint.maximumObservedRssBytes, Number(result.rssBytes) || 0);
-    await update({ childRuns: checkpoint.childRuns + 1, maximumObservedRssBytes });
+    const stageSamples = (child.stdout?.split(/\r?\n/) ?? []).filter((item) => item.startsWith("R1_STAGE "))
+      .map((item) => JSON.parse(item.slice(9)));
+    const stageTelemetry = summarizeR1StageSamples(stageSamples);
+    const childRssBytes = Math.max(Number(result.rssBytes) || 0,
+      ...stageTelemetry.map((item) => item.maximumRssBytes), 0);
+    const resourceDecision = classifyR1ChildRss(childRssBytes);
+    const telemetry = await buildR1ChildTelemetry(modules, {
+      childRun,
+      trialId: trial.trialId,
+      trialOrdinal: trial.ordinal,
+      childOrdinal,
+      startedAtUtc: childStartedAtUtc,
+      completedAtUtc: new Date().toISOString(),
+      exitStatus: child.status ?? -1,
+      exitSignal: child.signal,
+      resultReason: result.reason ?? (result.failed ? "child_reported_failure" : "unreported"),
+      maximumObservedRssBytes: childRssBytes,
+      resourceDecision,
+      trialCheckpointId: result.checkpointId,
+      stageTelemetry,
+      previousTelemetryId: checkpoint.orderedChildTelemetryIds.at(-1)
+    });
+    await writeR1ChildTelemetry({ modules, storage, telemetry });
+    const maximumObservedRssBytes = Math.max(checkpoint.maximumObservedRssBytes, childRssBytes);
+    await update({ childRuns: childRun, maximumObservedRssBytes,
+      orderedChildTelemetryIds: [...checkpoint.orderedChildTelemetryIds, telemetry.telemetryId] });
+    if (resourceDecision === "hard_limit_exceeded") {
+      const failed = await appendEvent(trial, "failed", ["child_hard_rss_bound_exceeded"], [telemetry.telemetryId], disposition.eventId);
+      await update({ dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? { ...item, disposition: "failed", eventId: failed.eventId } : item),
+        orderedEventIds: [...checkpoint.orderedEventIds, failed.eventId] });
+      throw new Error(`R1 trial child exceeded the fixed 1 GiB RSS bound for ordinal ${trial.ordinal}: ${childRssBytes} > ${R1_MAX_RSS_BYTES}.`);
+    }
+    enforceR1ResourceBounds(outputRoot, checkpoint.maximumObservedRssBytes);
     if (![0, 75].includes(child.status ?? -1)) {
-      const failed = await appendEvent(trial, "failed", ["bounded_child_failed"], [], disposition.eventId);
+      const failed = await appendEvent(trial, "failed", ["bounded_child_failed"], [telemetry.telemetryId], disposition.eventId);
       await update({ dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? { ...item, disposition: "failed", eventId: failed.eventId } : item),
         orderedEventIds: [...checkpoint.orderedEventIds, failed.eventId] });
       throw new Error(`R1 trial child failed for ordinal ${trial.ordinal}: ${child.stderr || child.stdout}`);

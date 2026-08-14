@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHistoricalDatasetNodeStorage } from "./historical-dataset-node-storage.mjs";
 
-export const R1_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v1";
+export const R1_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v2";
+export const R1_LEGACY_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v1";
+export const R1_CHILD_TELEMETRY_SCHEMA_VERSION = "gotrader-lrs-r1-child-telemetry-v1";
 export const R1_FAMILY_ID = "sha256:e89903741561b76b56adc5feac12b311d7154036e7dff9f4c9cbf75afd405fed";
 export const R1_PLAN_ID = "sha256:2218b36fae572a2411c35da3fae6788090d4b58a452ed1a9a5b2df65edab6476";
 export const R1_SAMPLE_SET_ID = "sha256:e844dab5fb0567e012147877a2414ac656b8bb749d5ce8c8fd16102c089f7004";
@@ -45,13 +47,38 @@ export async function verifyAcceptedR1Inputs({ modules, acceptancePath }) {
 }
 
 const checkpointCore = ({ mode, selectedTrialIds, nextPosition, dispositions, orderedEventIds, controllerCommit, startedAtUtc,
-  childRuns, maximumObservedRssBytes }) => Object.freeze({ schemaVersion: R1_EXECUTOR_SCHEMA_VERSION, mode,
+  childRuns, maximumObservedRssBytes, orderedChildTelemetryIds = [], telemetryStartChildRun = 0 }) => Object.freeze({ schemaVersion: R1_EXECUTOR_SCHEMA_VERSION, mode,
   experimentFamilyId: R1_FAMILY_ID, samplingPlanId: R1_PLAN_ID, sampleSetId: R1_SAMPLE_SET_ID,
   datasetCertificateId: R1_CERTIFICATE_ID, datasetId: R1_DATASET_ID, sourceFingerprint: R1_SOURCE_FINGERPRINT,
   selectedTrialIds: Object.freeze([...selectedTrialIds]), nextPosition, dispositions: Object.freeze([...dispositions]),
   orderedEventIds: Object.freeze([...orderedEventIds]), controllerCommit, startedAtUtc, childRuns,
-  maximumObservedRssBytes, authority: R1_AUTHORITY, researchValidated: false, productionAdoptionAllowed: false,
+  maximumObservedRssBytes, telemetryStartChildRun, orderedChildTelemetryIds: Object.freeze([...orderedChildTelemetryIds]),
+  authority: R1_AUTHORITY, researchValidated: false, productionAdoptionAllowed: false,
   holdoutUsed: false, adaptiveSearchUsed: false });
+
+const legacyCheckpointCore = (checkpoint) => Object.freeze({
+  schemaVersion: R1_LEGACY_EXECUTOR_SCHEMA_VERSION,
+  mode: checkpoint.mode,
+  experimentFamilyId: checkpoint.experimentFamilyId,
+  samplingPlanId: checkpoint.samplingPlanId,
+  sampleSetId: checkpoint.sampleSetId,
+  datasetCertificateId: checkpoint.datasetCertificateId,
+  datasetId: checkpoint.datasetId,
+  sourceFingerprint: checkpoint.sourceFingerprint,
+  selectedTrialIds: checkpoint.selectedTrialIds,
+  nextPosition: checkpoint.nextPosition,
+  dispositions: checkpoint.dispositions,
+  orderedEventIds: checkpoint.orderedEventIds,
+  controllerCommit: checkpoint.controllerCommit,
+  startedAtUtc: checkpoint.startedAtUtc,
+  childRuns: checkpoint.childRuns,
+  maximumObservedRssBytes: checkpoint.maximumObservedRssBytes,
+  authority: checkpoint.authority,
+  researchValidated: checkpoint.researchValidated,
+  productionAdoptionAllowed: checkpoint.productionAdoptionAllowed,
+  holdoutUsed: checkpoint.holdoutUsed,
+  adaptiveSearchUsed: checkpoint.adaptiveSearchUsed
+});
 
 export async function sealR1ControllerCheckpoint(modules, input) {
   const core = checkpointCore(input);
@@ -66,6 +93,10 @@ export async function validateR1ControllerCheckpoint(modules, checkpoint, expect
       checkpoint.experimentFamilyId !== R1_FAMILY_ID || checkpoint.samplingPlanId !== R1_PLAN_ID ||
       checkpoint.sampleSetId !== R1_SAMPLE_SET_ID || checkpoint.datasetCertificateId !== R1_CERTIFICATE_ID ||
       checkpoint.datasetId !== R1_DATASET_ID || checkpoint.sourceFingerprint !== R1_SOURCE_FINGERPRINT ||
+      !Number.isInteger(checkpoint.telemetryStartChildRun) || checkpoint.telemetryStartChildRun < 0 ||
+      !Array.isArray(checkpoint.orderedChildTelemetryIds) ||
+      checkpoint.orderedChildTelemetryIds.length !== checkpoint.childRuns - checkpoint.telemetryStartChildRun ||
+      new Set(checkpoint.orderedChildTelemetryIds).size !== checkpoint.orderedChildTelemetryIds.length ||
       checkpoint.holdoutUsed !== false || checkpoint.adaptiveSearchUsed !== false ||
       await modules.canonical.canonicalHash(core) !== checkpointId) {
     throw new Error("LRS R1 controller checkpoint identity or integrity failure.");
@@ -73,15 +104,136 @@ export async function validateR1ControllerCheckpoint(modules, checkpoint, expect
   return checkpoint;
 }
 
+export async function migrateLegacyR1ControllerCheckpoint(modules, checkpoint, expected) {
+  if (checkpoint.schemaVersion !== R1_LEGACY_EXECUTOR_SCHEMA_VERSION) return checkpoint;
+  if (checkpoint.mode !== expected.mode || checkpoint.controllerCommit !== expected.controllerCommit ||
+      modules.canonical.canonicalSerialize(checkpoint.selectedTrialIds) !== modules.canonical.canonicalSerialize(expected.selectedTrialIds) ||
+      checkpoint.experimentFamilyId !== R1_FAMILY_ID || checkpoint.samplingPlanId !== R1_PLAN_ID ||
+      checkpoint.sampleSetId !== R1_SAMPLE_SET_ID || checkpoint.datasetCertificateId !== R1_CERTIFICATE_ID ||
+      checkpoint.datasetId !== R1_DATASET_ID || checkpoint.sourceFingerprint !== R1_SOURCE_FINGERPRINT ||
+      checkpoint.holdoutUsed !== false || checkpoint.adaptiveSearchUsed !== false ||
+      await modules.canonical.canonicalHash(legacyCheckpointCore(checkpoint)) !== checkpoint.checkpointId) {
+    throw new Error("LRS R1 legacy controller checkpoint identity or integrity failure.");
+  }
+  return sealR1ControllerCheckpoint(modules, {
+    mode: checkpoint.mode,
+    selectedTrialIds: checkpoint.selectedTrialIds,
+    nextPosition: checkpoint.nextPosition,
+    dispositions: checkpoint.dispositions,
+    orderedEventIds: checkpoint.orderedEventIds,
+    controllerCommit: checkpoint.controllerCommit,
+    startedAtUtc: checkpoint.startedAtUtc,
+    childRuns: checkpoint.childRuns,
+    maximumObservedRssBytes: checkpoint.maximumObservedRssBytes,
+    telemetryStartChildRun: checkpoint.childRuns,
+    orderedChildTelemetryIds: []
+  });
+}
+
 export async function openR1Controller({ modules, outputRoot, mode, selectedTrialIds, controllerCommit }) {
   const storage = createHistoricalDatasetNodeStorage({ root: outputRoot });
   const text = await storage.adapter.readText("checkpoints/controller.json");
-  if (text) return { storage, checkpoint: await validateR1ControllerCheckpoint(modules, JSON.parse(text), { mode, selectedTrialIds, controllerCommit }) };
+  if (text) {
+    const parsed = JSON.parse(text);
+    const migrated = await migrateLegacyR1ControllerCheckpoint(modules, parsed, { mode, selectedTrialIds, controllerCommit });
+    const checkpoint = await validateR1ControllerCheckpoint(modules, migrated, { mode, selectedTrialIds, controllerCommit });
+    if (migrated !== parsed) {
+      await storage.adapter.writeTextAtomic("checkpoints/controller.json", `${modules.canonical.canonicalSerialize(checkpoint)}\n`);
+    }
+    await verifyR1ChildTelemetryLedger({ modules, storage, checkpoint });
+    return { storage, checkpoint };
+  }
   const checkpoint = await sealR1ControllerCheckpoint(modules, { mode, selectedTrialIds, nextPosition: 0, dispositions: [], orderedEventIds: [],
-    controllerCommit, startedAtUtc: new Date().toISOString(), childRuns: 0, maximumObservedRssBytes: 0 });
+    controllerCommit, startedAtUtc: new Date().toISOString(), childRuns: 0, maximumObservedRssBytes: 0,
+    telemetryStartChildRun: 0, orderedChildTelemetryIds: [] });
   await storage.adapter.writeTextAtomic("checkpoints/controller.json", `${modules.canonical.canonicalSerialize(checkpoint)}\n`);
   return { storage, checkpoint };
 }
+
+export async function buildR1ChildTelemetry(modules, input) {
+  const core = Object.freeze({
+    schemaVersion: R1_CHILD_TELEMETRY_SCHEMA_VERSION,
+    childRun: input.childRun,
+    trialId: input.trialId,
+    trialOrdinal: input.trialOrdinal,
+    childOrdinal: input.childOrdinal,
+    startedAtUtc: input.startedAtUtc,
+    completedAtUtc: input.completedAtUtc,
+    exitStatus: input.exitStatus,
+    exitSignal: input.exitSignal ?? null,
+    resultReason: input.resultReason ?? "unreported",
+    maximumObservedRssBytes: input.maximumObservedRssBytes,
+    resourceDecision: input.resourceDecision,
+    trialCheckpointId: input.trialCheckpointId ?? null,
+    stageTelemetry: Object.freeze([...(input.stageTelemetry ?? [])]),
+    previousTelemetryId: input.previousTelemetryId ?? null,
+    experimentFamilyId: R1_FAMILY_ID,
+    samplingPlanId: R1_PLAN_ID,
+    sampleSetId: R1_SAMPLE_SET_ID,
+    datasetCertificateId: R1_CERTIFICATE_ID,
+    datasetId: R1_DATASET_ID,
+    sourceFingerprint: R1_SOURCE_FINGERPRINT,
+    authority: R1_AUTHORITY,
+    holdoutUsed: false,
+    adaptiveSearchUsed: false
+  });
+  return Object.freeze({ ...core, telemetryId: await modules.canonical.canonicalHash(core) });
+}
+
+export async function writeR1ChildTelemetry({ modules, storage, telemetry }) {
+  const ordinal = String(telemetry.childRun).padStart(6, "0");
+  const identity = telemetry.telemetryId.replace("sha256:", "");
+  await writeImmutableR1Artifact({ modules, storage, relativePath: `telemetry/child-${ordinal}-${identity}.json`, artifact: telemetry });
+  return telemetry;
+}
+
+export async function verifyR1ChildTelemetryLedger({ modules, storage, checkpoint }) {
+  let previousTelemetryId = null;
+  for (let index = 0; index < checkpoint.orderedChildTelemetryIds.length; index += 1) {
+    const telemetryId = checkpoint.orderedChildTelemetryIds[index];
+    const identity = telemetryId.replace("sha256:", "");
+    const childRun = checkpoint.telemetryStartChildRun + index + 1;
+    const file = storage.resolveSafe(`telemetry/child-${String(childRun).padStart(6, "0")}-${identity}.json`);
+    if (!fs.existsSync(file)) throw new Error(`LRS R1 child telemetry is missing for run ${childRun}.`);
+    const telemetry = readJson(file);
+    const { telemetryId: storedId, ...core } = telemetry;
+    if (storedId !== telemetryId || telemetry.schemaVersion !== R1_CHILD_TELEMETRY_SCHEMA_VERSION ||
+        telemetry.childRun !== childRun || telemetry.previousTelemetryId !== previousTelemetryId ||
+        telemetry.experimentFamilyId !== R1_FAMILY_ID || telemetry.samplingPlanId !== R1_PLAN_ID ||
+        telemetry.sampleSetId !== R1_SAMPLE_SET_ID || telemetry.datasetCertificateId !== R1_CERTIFICATE_ID ||
+        telemetry.datasetId !== R1_DATASET_ID || telemetry.sourceFingerprint !== R1_SOURCE_FINGERPRINT ||
+        telemetry.holdoutUsed !== false || telemetry.adaptiveSearchUsed !== false ||
+        telemetry.authority?.executionAuthority !== "none" ||
+        await modules.canonical.canonicalHash(core) !== storedId) {
+      throw new Error(`LRS R1 child telemetry identity or integrity failure for run ${childRun}.`);
+    }
+    previousTelemetryId = telemetryId;
+  }
+  return Object.freeze({ verifiedCount: checkpoint.orderedChildTelemetryIds.length, latestTelemetryId: previousTelemetryId });
+}
+
+export const classifyR1ChildRss = (rssBytes) => {
+  if (!Number.isFinite(rssBytes) || rssBytes < 0) throw new Error("LRS R1 child RSS sample is invalid.");
+  if (rssBytes > R1_MAX_RSS_BYTES) return "hard_limit_exceeded";
+  return rssBytes >= 805_306_368 ? "soft_limit_recycle" : "within_limit";
+};
+
+export const summarizeR1StageSamples = (samples) => {
+  const stages = new Map();
+  for (const sample of samples) {
+    if (!sample || typeof sample.stage !== "string" || !sample.stage || !Number.isFinite(sample.rssBytes) || sample.rssBytes < 0) {
+      throw new Error("LRS R1 child stage telemetry sample is invalid.");
+    }
+    const current = stages.get(sample.stage) ?? { stage: sample.stage, sampleCount: 0, maximumRssBytes: 0, lastRssBytes: 0 };
+    stages.set(sample.stage, {
+      stage: sample.stage,
+      sampleCount: current.sampleCount + 1,
+      maximumRssBytes: Math.max(current.maximumRssBytes, sample.rssBytes),
+      lastRssBytes: sample.rssBytes
+    });
+  }
+  return Object.freeze([...stages.values()].map(Object.freeze));
+};
 
 export async function writeR1ControllerCheckpoint({ modules, storage, input }) {
   const checkpoint = await sealR1ControllerCheckpoint(modules, input);

@@ -77,6 +77,8 @@ const updated = await writeR1ControllerCheckpoint({
     startedAtUtc: opened.checkpoint.startedAtUtc,
     childRuns: 3,
     maximumObservedRssBytes: 400_000_000,
+    telemetryStartChildRun: 3,
+    orderedChildTelemetryIds: [],
   },
 });
 const reopened = await openR1Controller({
