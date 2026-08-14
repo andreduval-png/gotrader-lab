@@ -32,6 +32,7 @@ import {
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
 import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
+import { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -685,6 +686,7 @@ export async function runResearchCycle({
   autoResearchCheckpointPersistence,
   sourceGuard,
   onUpdate,
+  certifiedHistoricalEvidence,
   signal
 }: ResearchCycleRunOptions): Promise<ResearchCycleRun> {
   let steps = initialSteps();
@@ -1639,6 +1641,29 @@ export async function runResearchCycle({
       ];
     }
 
+    const currentCandidateProfile =
+      run.ictAdvisorSignalSummary &&
+      run.ictAdvisorSignalSummary.side !== "flat" &&
+      run.ictAdvisorSignalSummary.setup !== "no_trade"
+        ? run.ictAdvisorSignalSummary.strategyId
+        : undefined;
+    run.historicalEvidenceContract = evaluateCycleHistoricalEvidence({
+      tacticalIdentity: {
+        strategyProfile: currentCandidateProfile,
+        parameterFingerprint:
+          currentCandidateProfile === activeConfig.strategyProfile
+            ? fingerprintValidationParameters(activeFrozenProfile?.frozenParameters ?? activeConfig)
+            : undefined,
+        sourceProvider: activeResearchCandleSource.sourceMode,
+        requestedSymbol: mt5ReadOnlyFeed?.requestedSymbol ?? activeConfig.symbol,
+        brokerSymbol: mt5ReadOnlyFeed?.brokerSymbol ?? activeConfig.symbol,
+        timeframe: activeConfig.timeframe,
+        activeSourceFingerprint: activeResearchCandleSource.canonicalFingerprint
+      },
+      historicalIdentity: validationReport?.provenance,
+      certificate: certifiedHistoricalEvidence
+    });
+
     startStep("research_quality");
     await yieldToBrowser();
     throwIfCanceled();
@@ -1795,13 +1820,13 @@ export async function runResearchCycle({
       validationId: run.validationSummary?.validationId,
       researchQualityId: run.researchQualitySummary?.reviewId,
       readinessState: readinessSnapshot.state,
-      replayOutcomeCount: run.automatedEvidenceSummary?.replayOutcomeCount,
-      walkForwardOosTradeCount: run.automatedEvidenceSummary?.walkForwardOosTrades,
-      walkForwardWindowsPassed: run.automatedEvidenceSummary?.walkForwardWindowsPassed,
-      walkForwardWindowsTested: run.automatedEvidenceSummary?.walkForwardWindowsTested,
-      walkForwardVerdict: run.automatedEvidenceSummary?.walkForwardVerdict,
-      monteCarloUsableOutcomes: run.automatedEvidenceSummary?.monteCarloUsableOutcomes,
-      monteCarloRobustness: run.automatedEvidenceSummary?.monteCarloRobustness
+      replayOutcomeCount: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.replayOutcomeCount : undefined,
+      walkForwardOosTradeCount: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardOosTrades : undefined,
+      walkForwardWindowsPassed: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardWindowsPassed : undefined,
+      walkForwardWindowsTested: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardWindowsTested : undefined,
+      walkForwardVerdict: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardVerdict : undefined,
+      monteCarloUsableOutcomes: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.monteCarloUsableOutcomes : undefined,
+      monteCarloRobustness: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.monteCarloRobustness : undefined
     });
     // Post-validation review: the packet now includes the completed
     // validation report, research-quality review, and readiness snapshot.
@@ -1813,7 +1838,8 @@ export async function runResearchCycle({
       runbook: runbookAfter,
       providerMode: "local_command",
       marketContext: llmMarketContext,
-      evidenceQualitySummary: llmEvidenceQualitySummary
+      evidenceQualitySummary: llmEvidenceQualitySummary,
+      historicalEvidenceContract: run.historicalEvidenceContract
     });
     const contextValidation = validateLLMContextPacket(llmPacket);
 
@@ -1938,13 +1964,13 @@ export async function runResearchCycle({
       readinessState: readinessSnapshot.state,
       proposalId: run.createdProposalId,
       smtState: run.backtestSummary?.grinchSummary?.latestScore?.smtState,
-      replayOutcomeCount: run.automatedEvidenceSummary?.replayOutcomeCount,
-      walkForwardOosTradeCount: run.automatedEvidenceSummary?.walkForwardOosTrades,
-      walkForwardWindowsPassed: run.automatedEvidenceSummary?.walkForwardWindowsPassed,
-      walkForwardWindowsTested: run.automatedEvidenceSummary?.walkForwardWindowsTested,
-      walkForwardVerdict: run.automatedEvidenceSummary?.walkForwardVerdict,
-      monteCarloUsableOutcomes: run.automatedEvidenceSummary?.monteCarloUsableOutcomes,
-      monteCarloRobustness: run.automatedEvidenceSummary?.monteCarloRobustness
+      replayOutcomeCount: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.replayOutcomeCount : undefined,
+      walkForwardOosTradeCount: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardOosTrades : undefined,
+      walkForwardWindowsPassed: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardWindowsPassed : undefined,
+      walkForwardWindowsTested: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardWindowsTested : undefined,
+      walkForwardVerdict: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.walkForwardVerdict : undefined,
+      monteCarloUsableOutcomes: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.monteCarloUsableOutcomes : undefined,
+      monteCarloRobustness: run.historicalEvidenceContract?.supportScope === "candidate_support" ? run.automatedEvidenceSummary?.monteCarloRobustness : undefined
     });
     run.evidenceSummary = {
       evidenceScore: cycleEvidenceSummary.overallScore,

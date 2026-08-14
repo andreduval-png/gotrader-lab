@@ -23,6 +23,7 @@ import { countCompletedRunbookItems, simulationRunbookChecklist } from "@/lib/si
 import type { DebateSession, LabState, TradeThesis } from "@/lib/types";
 import { safeArray, uid } from "@/lib/utils";
 import type { ValidationSuiteReport } from "@/lib/validation";
+import type { CycleHistoricalEvidenceContract } from "@/lib/researchEvidence";
 
 const maxDrawdownFor = (validation?: ValidationSuiteReport) => {
   const scenarios = safeArray(validation?.scenarios);
@@ -47,7 +48,8 @@ export function buildLLMResearchContextPacket({
   runbook,
   providerMode,
   marketContext: suppliedMarketContext,
-  evidenceQualitySummary
+  evidenceQualitySummary,
+  historicalEvidenceContract
 }: {
   state: LabState;
   validation?: ValidationSuiteReport;
@@ -57,6 +59,7 @@ export function buildLLMResearchContextPacket({
   providerMode: LLMProviderMode;
   marketContext?: MarketContext;
   evidenceQualitySummary?: EvidenceLedgerSummary;
+  historicalEvidenceContract?: CycleHistoricalEvidenceContract;
 }): LLMResearchContextPacket {
   const thesis = safeArray(state.tradeTheses)[0];
   const debate = latestDebateFor(state, thesis);
@@ -273,6 +276,7 @@ export function buildLLMResearchContextPacket({
       }
     },
     evidenceQualitySummary: compactEvidenceSummary,
+    historicalEvidenceContract,
     deterministicICTFacts: [
       `Confluence score: ${ictContext?.confluenceScore ?? "missing"}`,
       `Bias: ${ictContext?.bias ?? "missing"}`,
@@ -291,7 +295,9 @@ export function buildLLMResearchContextPacket({
       `Evidence quality score: ${compactEvidenceSummary.overallScore}/100`,
       `Evidence quality labels: ${compactEvidenceSummary.entries
         .map((item) => `${item.category}=${item.sourceType}`)
-        .join("; ")}`
+        .join("; ")}`,
+      `Historical evidence contract: ${historicalEvidenceContract ? `${historicalEvidenceContract.status}/${historicalEvidenceContract.supportScope}` : "unavailable/none"}`,
+      `Historical evidence use: ${historicalEvidenceContract?.summary ?? "No identity-bound historical evidence contract was supplied."}`
     ],
     internalBaselineAgentDebate:
       safeArray(debate?.messages).map((message) => ({
@@ -318,7 +324,8 @@ export function buildLLMResearchContextPacket({
           readinessScore: validation.calibration.readinessScore,
           conservativeScenarioStatus: validationScenarios.find((scenario) => scenario.id === "conservative-confluence")?.readiness,
           maxDrawdownR: maxDrawdownFor(validation),
-          confidenceCalibration: confidenceCalibrationFor(validation)
+          confidenceCalibration: confidenceCalibrationFor(validation),
+          evidenceScope: historicalEvidenceContract?.supportScope ?? "none"
         }
       : undefined,
     researchQualityGrade: quality
@@ -354,7 +361,8 @@ export function buildLLMResearchContextPacket({
       "No order placement.",
       "No readiness gate override.",
       "No API keys in frontend code.",
-      "Calibration suggestions must be simulation-tested and manually approved."
+      "Calibration suggestions must be simulation-tested and manually approved.",
+      "Historical statistics may support the current candidate only when historicalEvidenceContract.supportScope is candidate_support."
     ]
   };
 }

@@ -1,4 +1,5 @@
 import type { MarketBias, Timeframe, FuturesSymbol } from "@/lib/types";
+import type { CycleHistoricalEvidenceContract } from "@/lib/researchEvidence";
 
 export type LLMResearchMode = "llm_required";
 export type GoTraderAdvisoryProviderMode = "local_llm_bridge" | "openclaw" | "disabled";
@@ -147,6 +148,7 @@ export interface LLMValidationSummary {
   conservativeScenarioStatus?: string;
   maxDrawdownR?: number;
   confidenceCalibration?: number;
+  evidenceScope?: "candidate_support" | "profile_context_only" | "none";
 }
 
 export interface LLMResearchQualitySummary {
@@ -251,6 +253,7 @@ export interface LLMResearchContextPacket {
   regimeSummary?: LLMRegimeSummary;
   tradingViewEvidenceSummary?: LLMTradingViewEvidenceSummary;
   evidenceQualitySummary?: LLMEvidenceQualitySummary;
+  historicalEvidenceContract?: CycleHistoricalEvidenceContract;
   deterministicICTFacts: string[];
   internalBaselineAgentDebate: LLMBaselineDebateSummary[];
   cioThesis?: {

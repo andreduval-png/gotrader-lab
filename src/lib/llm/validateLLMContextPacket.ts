@@ -44,6 +44,15 @@ export function validateLLMContextPacket(
   if (!isStringArray(packet.safetyConstraints)) {
     errors.push("safetyConstraints must be an array of strings");
   }
+  if (!packet.historicalEvidenceContract) {
+    warnings.push("historical evidence contract is missing; historical results cannot support the current candidate");
+  } else if (
+    packet.historicalEvidenceContract.authority.executionAuthority !== "none" ||
+    packet.historicalEvidenceContract.authority.brokerAuthority !== "none" ||
+    packet.historicalEvidenceContract.authority.readinessOverrideAuthority !== "none"
+  ) {
+    errors.push("historical evidence contract authority must remain none/none/none");
+  }
   if (!packet.symbol) {
     warnings.push("symbol is missing; generate a thesis before final LLM review");
   }

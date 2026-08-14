@@ -649,6 +649,33 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
                   : ""}
               </span>
             </div>
+            {latestRun?.historicalEvidenceContract ? (
+              <div
+                className="mt-3 border-l-2 border-cyan-300/40 pl-3 text-xs text-slate-300"
+                data-testid="cycle-historical-evidence-contract"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-slate-100">Historical evidence</span>
+                  <Badge
+                    variant={
+                      latestRun.historicalEvidenceContract.status === "matched_certified"
+                        ? "success"
+                        : latestRun.historicalEvidenceContract.status === "matched_uncertified"
+                          ? "warning"
+                          : latestRun.historicalEvidenceContract.status === "mismatched"
+                            ? "danger"
+                            : "secondary"
+                    }
+                  >
+                    {formatStatus(latestRun.historicalEvidenceContract.status)}
+                  </Badge>
+                  <span className="text-slate-400">
+                    {formatStatus(latestRun.historicalEvidenceContract.supportScope)}
+                  </span>
+                </div>
+                <p className="mt-1 text-slate-400">{latestRun.historicalEvidenceContract.summary}</p>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-2 rounded-md border border-white/10 bg-slate-950/45 p-2 text-xs text-slate-300 md:grid-cols-6">
               <div>
                 <p className="uppercase tracking-[0.14em] text-slate-500">Data source</p>

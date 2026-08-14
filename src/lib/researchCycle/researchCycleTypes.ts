@@ -15,6 +15,7 @@ import type { CanonicalPerformanceMetrics } from "@/lib/performance/canonicalMet
 import type { ReadinessGateSnapshot } from "@/lib/readiness";
 import type { RegimeClassification } from "@/lib/regime";
 import type { ResearchQualityReview } from "@/lib/researchQuality";
+import type { CertifiedHistoricalEvidenceBinding, CycleHistoricalEvidenceContract } from "@/lib/researchEvidence";
 import type { CalibrationProposal, CalibrationProposalChanges } from "@/lib/selfImprovement";
 import type { FuturesSymbol, MarketBias, Timeframe } from "@/lib/types";
 import type { ValidationSuiteReport } from "@/lib/validation";
@@ -300,6 +301,8 @@ export interface ResearchCycleRun {
   regimeSummary?: ResearchCycleRegimeSummary;
   evidenceSummary?: ResearchCycleEvidenceSummary;
   automatedEvidenceSummary?: ResearchCycleAutomatedEvidenceSummary;
+  /** Separates the current tactical read from identity-matched historical evidence. */
+  historicalEvidenceContract?: CycleHistoricalEvidenceContract;
   maturitySummary?: ResearchCycleMaturitySummary;
   sourceMetadata?: ResearchCycleSourceMetadata;
   proposalStatus?: string;
@@ -348,5 +351,7 @@ export interface ResearchCycleRunOptions {
     messagePrefix?: string;
   };
   onUpdate?: (run: ResearchCycleRun) => void;
+  /** Optional immutable certificate-bound report identity. Raw candles are forbidden. */
+  certifiedHistoricalEvidence?: CertifiedHistoricalEvidenceBinding;
   signal?: AbortSignal;
 }

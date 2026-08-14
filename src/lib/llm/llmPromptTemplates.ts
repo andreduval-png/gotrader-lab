@@ -151,6 +151,7 @@ export const llmRestrictedContextInstructions = [
   "If grinchConsolidationProfileSummary is present, review it as Phase 3 Consolidation Profile context: tight range around 12AM Open, NY side raid, 12AM support/resistance reaction, expansion direction, targets, and invalidation. It is advisory context only.",
   "If grinchSmtSummary is present, review SMT as optional Phase 4 confluence only: unavailable or insufficient SMT is neutral and must not appear as a blocker, supportive SMT can raise confidence, and explicit opposing SMT may reject a candidate. SMT must never create standalone bias or execution authority.",
   "Respect evidenceQualitySummary labels: real_imported and derived_from_real can support reasoning; mock, planned, and unavailable evidence must be treated as missing or weak evidence.",
+  "Respect historicalEvidenceContract strictly: only candidate_support may be described as evidence for the current tactical candidate; profile_context_only and none must be labeled as separate historical context.",
   "Do not request broker credentials.",
   "Do not emit execution instructions.",
   "Do not use proceedRecommendation text as approval language; paper_demo_candidate_review is review-only.",
