@@ -162,6 +162,7 @@
     "test:paper-demo-strategy-evidence": "node scripts/test-paper-demo-strategy-evidence.mjs",
     "test:validation-chain": "node scripts/test-validation-chain.mjs",
     "test:research-cycle-validation-linkage": "node scripts/test-research-cycle-validation-linkage.mjs",
+    "test:advisor-evidence-consistency": "node scripts/test-advisor-evidence-consistency.mjs",
     "test:cycle-historical-evidence": "node scripts/test-cycle-historical-evidence.mjs",
     "test:walk-forward-preflight": "node scripts/test-walk-forward-preflight.mjs",
     "test:detector-profile-walk-forward": "node scripts/test-detector-profile-walk-forward.mjs",

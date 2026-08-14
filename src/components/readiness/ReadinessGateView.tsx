@@ -20,7 +20,8 @@ import {
   loadManualApprovalRecord,
   pauseReadiness,
   rejectDemoCandidate,
-  resetReadinessApproval
+  resetReadinessApproval,
+  summarizeReadinessCalibration
 } from "@/lib/readiness";
 import type { ManualApprovalRecord, ReadinessRequirementResult, ReadinessState } from "@/lib/readiness";
 import { loadLatestResearchQualityReview } from "@/lib/researchQuality";
@@ -111,9 +112,7 @@ export function ReadinessGateView() {
   const conservative = validation?.scenarios.find((scenario) => scenario.id === "conservative-confluence");
   const maxDrawdown = validation?.scenarios.reduce((max, scenario) => Math.max(max, scenario.maxDrawdown), 0) ?? 0;
   const falsePositiveCount = quality?.falsePositivePatterns.reduce((sum, item) => sum + item.estimatedFalsePositives, 0) ?? 0;
-  const averageCalibration = validation?.scenarios.length
-    ? validation.scenarios.reduce((sum, scenario) => sum + scenario.confidenceCalibration.score, 0) / validation.scenarios.length
-    : 0;
+  const calibration = summarizeReadinessCalibration(validation);
   const sessionConsistency = Boolean(
     quality?.sessionComparison.some((session) => session.readiness !== "red" && session.totalTrades > 0 && session.averageR >= -0.1)
   );
@@ -531,7 +530,7 @@ export function ReadinessGateView() {
               ["Conservative scenario", conservative ? `${conservative.readiness}; ${conservative.averageR.toFixed(2)}R` : "missing"],
               ["Max drawdown", `${maxDrawdown.toFixed(2)}R`],
               ["False positives", String(falsePositiveCount)],
-              ["Confidence calibration", formatPercent(averageCalibration)],
+              ["Confidence calibration", calibration.displayValue],
               ["Session consistency", sessionConsistency ? "pass" : "fail"],
               ["Runbook completion", `${runbookCompletionPercent}%`]
             ].map(([label, value]) => (

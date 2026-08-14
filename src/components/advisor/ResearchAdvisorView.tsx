@@ -129,10 +129,10 @@ import { resolveResearchRuntimeSnapshot, type ResearchRuntimeSnapshot } from "@/
 import { runAdvisorChatWithFallback } from "@/lib/llm/advisorChat";
 import type { Timeframe } from "@/lib/types";
 import {
-  describeValidationChainStage,
   latestValidationChainEntry,
   queueValidationChainEntry,
   recordReplayReviewInValidationChain,
+  resolveAdvisorValidationChainContext,
   saveValidationChainEntry,
   type ValidationChainEntry
 } from "@/lib/validationChain";
@@ -372,25 +372,28 @@ function buildLocalAdvisorReply(
     return `${smtLabel(currentRead.smtStatus)}. ${currentRead.smtReason ?? `Relative strength leader: ${packet.compactSummary.relativeStrengthLeader ?? "n/a"}. Relative weakness: ${packet.compactSummary.relativeWeaknessLeader ?? "n/a"}.`}`;
   }
   if (lower.includes("validation") || lower.includes("chain") || lower.includes("evidence")) {
-    const chainEntry = latestValidationChainEntry();
-    if (!chainEntry) {
+    const chain = packet.validationChain;
+    if (!chain) {
       return "Recognition is not evidence. No recognition has been queued into the validation chain yet. Queue replay validation from a recognition card, then replay creates preliminary evidence and walk-forward/OOS creates stronger evidence.";
     }
-    const replayLine = chainEntry.replayResult
-      ? `Replay ${chainEntry.replayResult.verdict.replace(/_/g, " ")} (${chainEntry.replayResult.reason})`
+    const replayVerdict = chain.replayVerdict ?? chain.historicalReplayVerdict;
+    const walkForwardVerdict = chain.walkForwardVerdict ?? chain.historicalWalkForwardVerdict;
+    const replayLine = replayVerdict
+      ? `Replay ${replayVerdict.replace(/_/g, " ")}`
       : "Replay validation has not produced a result yet";
-    const wfLine = chainEntry.walkForwardResult
-      ? `Walk-forward/OOS ${chainEntry.walkForwardResult.verdict.replace(/_/g, " ")} (${chainEntry.walkForwardResult.reason})`
+    const wfLine = walkForwardVerdict
+      ? `Walk-forward/OOS ${walkForwardVerdict.replace(/_/g, " ")}`
       : "Walk-forward/OOS validation has not run for this recognition";
-    const sampleLine = chainEntry.sourceStatus.isMockOrSample
+    const sampleLine = chain.sampleOnly
       ? " Current result is sample-only and cannot become research evidence."
       : "";
-    return `Recognition is not evidence. ${describeValidationChainStage(chainEntry)} ${replayLine}. ${wfLine}. Next validation action: ${chainEntry.nextAction}${sampleLine} Authority remains none.`;
+    return `Recognition is not evidence. ${chain.evidenceRelationshipLabel}. ${chain.stage}. ${replayLine}. ${wfLine}. Next validation action: ${chain.nextAction}${sampleLine} Authority remains none.`;
   }
   if (lower.includes("replay")) {
-    const chainEntry = latestValidationChainEntry();
-    const chainNote = chainEntry?.replayResult
-      ? ` Latest chain replay verdict: ${chainEntry.replayResult.verdict.replace(/_/g, " ")} - ${chainEntry.replayResult.reason}`
+    const chain = packet.validationChain;
+    const replayVerdict = chain?.replayVerdict ?? chain?.historicalReplayVerdict;
+    const chainNote = replayVerdict
+      ? ` ${chain?.evidenceRelationshipLabel}: replay ${replayVerdict.replace(/_/g, " ")}. ${chain?.nextAction}`
       : "";
     return `Replay status: ${formatToken(manualReplayStatus)}. Replay does not auto-run from page load; use the quick action or lower replay panel when you want a real replay review.${chainNote}`;
   }
@@ -435,25 +438,31 @@ function buildLocalAdvisorReply(
   return `Current GoTrader read: ${formatToken(currentRead.bias)} / opportunity ${formatToken(currentRead.opportunityType)} / ${approvalLabel(currentRead.approvedStatus)} / model lane ${formatToken(currentRead.modelQualityLane)} / ${formatToken(currentRead.riskStatus)}. Paper Sim ${currentRead.paperWatchlistEligible ? "eligible" : "not eligible"}; hypothesis ${currentRead.selfImprovementHypothesisQueued ? "queued" : "not queued"}; execution disabled. Source ${snapshot.marketData.activeResearchSource.provider.replace(/_/g, " ")} remains read-only with authority none.`;
 }
 
-const withValidationChainContext = (packet: IctAdvisorPacket): IctAdvisorPacket => {
+const withValidationChainContext = (
+  packet: IctAdvisorPacket,
+  snapshot: ResearchRuntimeSnapshot
+): IctAdvisorPacket => {
   const chainEntry = latestValidationChainEntry();
   if (!chainEntry) {
     return packet;
   }
+  const latestCycle = snapshot.latestResearchCycle.latestRun;
+  const validationSummary = latestCycle?.validationSummary;
+  const readinessValidationId = snapshot.readiness.readinessSnapshot.validationSnapshot?.id;
+  const currentValidation =
+    validationSummary?.validationId === readinessValidationId
+      ? validationSummary
+      : undefined;
   return {
     ...packet,
-    validationChain: {
-      recognitionId: chainEntry.recognitionId,
-      setupLabel: chainEntry.setupLabel,
-      hypothesisStatus: chainEntry.hypothesisStatus,
-      stage: describeValidationChainStage(chainEntry),
-      replayVerdict: chainEntry.replayResult?.verdict,
-      walkForwardVerdict: chainEntry.walkForwardResult?.verdict,
-      nextAction: chainEntry.nextAction,
-      sampleOnly: chainEntry.sourceStatus.isMockOrSample,
-      recognitionIsEvidence: false,
-      authority: "none"
-    }
+    validationChain: resolveAdvisorValidationChainContext({
+      entry: chainEntry,
+      current: {
+        cycleId: latestCycle?.cycleId,
+        validationId: currentValidation?.validationId,
+        provenance: currentValidation?.provenance
+      }
+    })
   };
 };
 
@@ -603,7 +612,7 @@ export function ResearchAdvisorView() {
     void buildIctAdvisorPacketFromRuntime(snapshot)
       .then((packet) => {
         if (mounted) {
-          setAdvisorPacket(withValidationChainContext(packet));
+          setAdvisorPacket(withValidationChainContext(packet, snapshot));
           setAdvisorPacketError(undefined);
         }
       })
@@ -758,7 +767,7 @@ export function ResearchAdvisorView() {
       setActivateMarketSteps(result.steps);
       setActivateMarketStatus(result.status);
       if (result.advisorPacket) {
-        setAdvisorPacket(withValidationChainContext(result.advisorPacket));
+        setAdvisorPacket(withValidationChainContext(result.advisorPacket, nextSnapshot));
         setAdvisorPacketError(undefined);
       }
     } catch (error) {

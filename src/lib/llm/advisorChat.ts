@@ -2,7 +2,7 @@ import { runLocalBridgeChat } from "@/lib/llm/localBridgeClient";
 import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite";
 import type { IctCurrentRead } from "@/lib/ict-strategy-suite/ictCurrentReadTypes";
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
-import { latestValidationChainEntry } from "@/lib/validationChain";
+import { validateAdvisorValidationChainInvariant } from "@/lib/validationChain";
 
 export interface AdvisorChatContext {
   prompt: string;
@@ -68,7 +68,11 @@ const governedCurrentReadContext = (currentRead: IctCurrentRead) => {
 };
 
 export const buildAdvisorChatPacket = (context: AdvisorChatContext) => {
-  const chain = latestValidationChainEntry();
+  const chain = context.packet?.validationChain;
+  const chainInvariant = validateAdvisorValidationChainInvariant(chain);
+  if (!chainInvariant.ok) {
+    throw new Error(`Advisor packet validation-chain invariant failed: ${chainInvariant.violations.join(" ")}`);
+  }
   const activeSource = context.snapshot.marketData.activeResearchSource;
   const governedRead = governedCurrentReadContext(context.currentRead);
   return {
@@ -136,9 +140,16 @@ export const buildAdvisorChatPacket = (context: AdvisorChatContext) => {
     validationChain: chain
       ? {
           hypothesisStatus: chain.hypothesisStatus,
-          replayVerdict: chain.replayResult?.verdict,
-          walkForwardVerdict: chain.walkForwardResult?.verdict,
-          nextAction: chain.nextAction
+          evidenceRelationship: chain.evidenceRelationship,
+          evidenceRelationshipLabel: chain.evidenceRelationshipLabel,
+          currentValidationAvailable: chain.currentValidationAvailable,
+          identityMatched: chain.identityMatched,
+          replayVerdict: chain.replayVerdict,
+          walkForwardVerdict: chain.walkForwardVerdict,
+          historicalReplayVerdict: chain.historicalReplayVerdict,
+          historicalWalkForwardVerdict: chain.historicalWalkForwardVerdict,
+          nextAction: chain.nextAction,
+          invariantPassed: true
         }
       : undefined,
     readiness: context.snapshot.readiness,

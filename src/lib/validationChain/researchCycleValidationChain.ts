@@ -160,7 +160,10 @@ export function linkResearchCycleValidationChain(input: {
   }
 
   let entry = applyValidationChainReplayResult(
-    queue.entry,
+    {
+      ...queue.entry,
+      sourceCycleId: cycle.cycleId
+    },
     replaySummaryFor(cycle, provenance)
   );
 

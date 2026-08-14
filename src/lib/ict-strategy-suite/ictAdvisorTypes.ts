@@ -1,4 +1,5 @@
 import type { CanonicalCandleProvider } from "../candleSources";
+import type { AdvisorValidationChainContext } from "../validationChain/validationChainTypes";
 import type { IctApprovedSetupDecision, IctHtfAlignmentBreakdown } from "./ictApprovedSetupProfileTypes";
 import type {
   IctOrderBlockClassification,
@@ -311,18 +312,7 @@ export interface IctAdvisorPacket {
    * evidence; this only reports where validation stands and the next safe
    * action. Populated client-side from the validation chain store.
    */
-  validationChain?: {
-    recognitionId: string;
-    setupLabel: string;
-    hypothesisStatus: string;
-    stage: string;
-    replayVerdict?: string;
-    walkForwardVerdict?: string;
-    nextAction: string;
-    sampleOnly: boolean;
-    recognitionIsEvidence: false;
-    authority: "none";
-  };
+  validationChain?: AdvisorValidationChainContext;
   journalEvents: IctAdvisorJournalEvent[];
   indexSmtJournalEvents: IctIndexSmtJournalEvent[];
   newsSessionRisk?: IctNewsSessionRiskDecision;

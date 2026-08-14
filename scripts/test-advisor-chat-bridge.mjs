@@ -33,7 +33,7 @@ function compileForNode() {
   );
   fs.writeFileSync(
     path.join(outRoot, "validationChain.stub.mjs"),
-    "export const latestValidationChainEntry = () => undefined;\n",
+    "export const validateAdvisorValidationChainInvariant = () => ({ ok: true, violations: [] });\n",
     "utf8"
   );
   const outPath = path.join(outRoot, "advisorChat.mjs");

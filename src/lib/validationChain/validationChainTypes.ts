@@ -92,6 +92,7 @@ export interface ValidationChainEvidenceSummary {
  */
 export interface ValidationChainEntry {
   researchOnly: true;
+  sourceCycleId?: string;
   recognitionId: string;
   recognitionType: ValidationChainRecognitionType;
   setupLabel: string;
@@ -126,6 +127,30 @@ export interface ValidationChainEntry {
     positionDataExcluded: true;
     secretsExcluded: true;
   };
+}
+
+export type AdvisorValidationEvidenceRelationship = "current_cycle" | "historical_evidence";
+
+export interface AdvisorValidationChainContext {
+  recognitionId: string;
+  setupLabel: string;
+  hypothesisStatus: string;
+  stage: string;
+  replayVerdict?: string;
+  walkForwardVerdict?: string;
+  historicalReplayVerdict?: string;
+  historicalWalkForwardVerdict?: string;
+  nextAction: string;
+  sampleOnly: boolean;
+  recognitionIsEvidence: false;
+  authority: "none";
+  evidenceRelationship: AdvisorValidationEvidenceRelationship;
+  evidenceRelationshipLabel: string;
+  currentValidationAvailable: boolean;
+  identityMatched: boolean;
+  currentCycleId?: string;
+  sourceCycleId?: string;
+  identityBlockers: string[];
 }
 
 export interface ValidationChainState {

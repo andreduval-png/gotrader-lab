@@ -166,6 +166,7 @@ const { linkResearchCycleValidationChain } = await import(
 const linked = linkResearchCycleValidationChain({ cycle, walkForwardRun, persist: true });
 assert.equal(linked.status, "linked");
 assert.equal(linked.entry.hypothesisStatus, "evidence_updated");
+assert.equal(linked.entry.sourceCycleId, cycle.cycleId);
 assert.equal(linked.entry.replayResult.verdict, "passed");
 assert.equal(linked.entry.walkForwardResult.verdict, "passed");
 assert.equal(linked.entry.walkForwardResult.tradeCount, 64);

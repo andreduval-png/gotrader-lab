@@ -1,5 +1,7 @@
 export { evaluateReadinessGate, summarizeScenarioForGate } from "@/lib/readiness/readinessGate";
 export { prioritizeReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
+export { summarizeReadinessCalibration } from "@/lib/readiness/readinessCalibration";
+export type { ReadinessCalibrationSummary } from "@/lib/readiness/readinessCalibration";
 export type { PrioritizedReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
 export { buildPaperDemoChecklist } from "@/lib/readiness/buildPaperDemoChecklist";
 export {

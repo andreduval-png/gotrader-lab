@@ -11,6 +11,7 @@ import type { SimulationRunbookState } from "@/lib/simulationRunbook";
 import type { ValidationScenarioResult, ValidationSuiteReport } from "@/lib/validation";
 import type { ReadinessGateSnapshot, ReadinessRequirementResult, ReadinessState } from "@/lib/readiness/readinessTypes";
 import { prioritizeReadinessRequirements } from "@/lib/readiness/readinessRequirementPriority";
+import { summarizeReadinessCalibration } from "@/lib/readiness/readinessCalibration";
 import type { WalkForwardRun } from "@/lib/walkForward";
 import {
   MATCHING_OOS_UNAVAILABLE_MESSAGE,
@@ -37,16 +38,6 @@ const requirement = (
 
 const conservativeScenarioFor = (validation?: ValidationSuiteReport) =>
   validation?.scenarios.find((scenario) => scenario.id === "conservative-confluence");
-
-const averageCalibrationFor = (validation?: ValidationSuiteReport) => {
-  if (!validation?.scenarios.length) {
-    return 0;
-  }
-  return (
-    validation.scenarios.reduce((sum, scenario) => sum + scenario.confidenceCalibration.score, 0) /
-    validation.scenarios.length
-  );
-};
 
 const maxDrawdownFor = (validation?: ValidationSuiteReport) =>
   validation?.scenarios.reduce((max, scenario) => Math.max(max, scenario.maxDrawdown), 0) ?? 0;
@@ -225,7 +216,7 @@ export function evaluateReadinessGate({
 }): ReadinessGateSnapshot {
   const conservative = conservativeScenarioFor(validation);
   const maxDrawdown = maxDrawdownFor(validation);
-  const averageCalibration = averageCalibrationFor(validation);
+  const calibration = summarizeReadinessCalibration(validation);
   const validationTrades = totalValidationTrades(validation);
   const falsePositiveControl = falsePositiveControlFor(quality);
   const redClusters = redDrawdownClusters(quality);
@@ -386,18 +377,18 @@ export function evaluateReadinessGate({
     requirement(
       "confidence-calibration",
       "Confidence calibration passed",
-      Boolean(validation) && averageCalibration >= 0.55 && (conservative?.confidenceCalibration.score ?? 0) >= 0.55,
-      `Average calibration ${Math.round(averageCalibration * 100)}%; conservative calibration ${Math.round(
-        (conservative?.confidenceCalibration.score ?? 0) * 100
-      )}%.`,
+      calibration.available && (calibration.average ?? 0) >= 0.55 && (calibration.conservative ?? 0) >= 0.55,
+      calibration.detail,
       "blocker",
       {
-        currentValue: `average ${Math.round(averageCalibration * 100)}%; conservative ${Math.round(
-          (conservative?.confidenceCalibration.score ?? 0) * 100
-        )}%`,
+        currentValue: calibration.displayValue,
         requiredValue: "average >= 55% and conservative >= 55%",
-        explanation: "Confidence must roughly match simulated outcomes; overconfident weak signals stay blocked.",
-        suggestedFix: "Raise confidence/confluence thresholds, rerun validation, and check calibration again.",
+        explanation: calibration.available
+          ? "Confidence must roughly match simulated outcomes; overconfident weak signals stay blocked."
+          : "Missing validation evidence is unavailable, not a measured 0% calibration result.",
+        suggestedFix: calibration.available
+          ? "Review measured calibration before proposing any threshold change, then rerun validation."
+          : "Run the identity-matched validation suite before considering confidence or confluence changes.",
         runPage: "/validation"
       }
     ),
