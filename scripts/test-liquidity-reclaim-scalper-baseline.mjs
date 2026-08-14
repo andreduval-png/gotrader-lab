@@ -38,17 +38,20 @@ try {
   assert.equal(breakdowns.byDirection.long.records, 1); assert.equal(breakdowns.byYear["2025"].wins, 1);
   assert.deepEqual(LRS_BASELINE_AUTHORITY, { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" });
   const mutableCandidates = [{ candidateId: "one", state: "ENTRY_ELIGIBLE", blockers: [] }];
-  const checkpoint = buildScanCheckpointCore({ nextSegment: 1, candidateCount: 2, setupCount: 1, expiredSetupCount: 0,
-    eligibleCandidates: mutableCandidates, seenFactIds: ["b", "a"] });
+  const checkpoint = buildScanCheckpointCore({ nextSegment: 1, candidateCount: 2, duplicateCandidateCount: 0, setupCount: 1, expiredSetupCount: 0,
+    eligibleCandidates: mutableCandidates, seenCandidateIds: ["one"], seenFactIds: ["b", "a"] });
   mutableCandidates.push({ candidateId: "two" });
   assert.equal(mutableCandidates.length, 2); assert.equal(checkpoint.eligibleCandidates.length, 1); assert.deepEqual(checkpoint.seenFactIds, ["a", "b"]);
   const compacted = compactLegacyScanCheckpoint({ schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v1", nextSegment: 3,
     candidates: [{ candidateId: "search", state: "SEARCHING", blockers: ["pending"] },
       { candidateId: "eligible", state: "ENTRY_ELIGIBLE", blockers: [] },
+      { candidateId: "eligible", state: "ENTRY_ELIGIBLE", blockers: [] },
       { candidateId: "expired", state: "SETUP_EXPIRED", blockers: ["expired"] }], seenFactIds: ["z"] });
-  assert.equal(compacted.schemaVersion, "gotrader-lrs-baseline-scan-checkpoint-v2");
-  assert.equal(compacted.candidateCount, 3); assert.equal(compacted.setupCount, 2); assert.equal(compacted.expiredSetupCount, 1);
+  assert.equal(compacted.schemaVersion, "gotrader-lrs-baseline-scan-checkpoint-v3");
+  assert.equal(compacted.candidateCount, 3); assert.equal(compacted.duplicateCandidateCount, 1);
+  assert.equal(compacted.setupCount, 2); assert.equal(compacted.expiredSetupCount, 1);
   assert.deepEqual(compacted.eligibleCandidates.map((item) => item.candidateId), ["eligible"]); assert.equal("candidates" in compacted, false);
+  assert.deepEqual(compacted.seenCandidateIds, ["eligible", "expired", "search"]);
   const modules = await loadLrsBaselineModules(path.join(root, "compiled"));
   const profile = await (await import(pathToFileURL(path.join(root, "compiled", "liquidityReclaimScalperParameters.mjs")).href)).buildLrsBaseProfile();
   assert.equal(profile.parameterHash, "sha256:c58d3a0aaff9ba61ece6ea0df2d76145059be36cab9f2347a66a0e6da642f748");
