@@ -110,6 +110,11 @@ export async function buildCertifiedContext({ modules, source, m5, m15, asOf }) 
     requestedFactFamilies: ["session", "opening_price", "dealing_range", "liquidity", "displacement", "fair_value_gap"], builtAt: asOf });
 }
 
+export const buildScanCheckpointCore = ({ nextSegment, candidates, seenFactIds }) => bounded({
+  schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v1", nextSegment,
+  candidates: bounded([...candidates]), seenFactIds: bounded([...seenFactIds].sort()), authority: LRS_BASELINE_AUTHORITY
+});
+
 export async function discoverCandidates({ modules, qualified, m5, m15, checkpoint, writeCheckpoint, interruptAfterSegments }) {
   const source = modules.identity.createV2SourceIdentity({ sourceId: `certified:${qualified.certificate.datasetId}`,
     provider: qualified.certificate.provider, requestedSymbol: qualified.certificate.requestedSymbol, brokerSymbol: qualified.certificate.brokerSymbol,
@@ -138,13 +143,12 @@ export async function discoverCandidates({ modules, qualified, m5, m15, checkpoi
         setupCreatedAt: event.causalClosedCandleTime, expiresAt });
       candidates.push(candidate);
     }
-    const next = bounded({ schemaVersion: "gotrader-lrs-baseline-scan-checkpoint-v1", nextSegment: nextSegment + 1,
-      candidates: bounded(candidates), seenFactIds: bounded([...seenFacts].sort()), authority: LRS_BASELINE_AUTHORITY });
+    const next = buildScanCheckpointCore({ nextSegment: nextSegment + 1, candidates, seenFactIds: [...seenFacts] });
     await writeCheckpoint(next);
     if (interruptAfterSegments === nextSegment + 1) return bounded({ interrupted: true, checkpoint: next });
     if (process.memoryUsage().rss > LRS_BASELINE_MAX_RSS_BYTES) throw new Error("LRS baseline exceeded the fixed 1 GiB RSS bound.");
   }
-  return bounded({ interrupted: false, checkpoint: bounded({ nextSegment, candidates: bounded(candidates), seenFactIds: bounded([...seenFacts].sort()) }) });
+  return bounded({ interrupted: false, checkpoint: buildScanCheckpointCore({ nextSegment, candidates, seenFactIds: [...seenFacts] }) });
 }
 
 export const buildDescriptiveMetrics = (records) => {
