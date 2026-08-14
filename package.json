@@ -212,6 +212,7 @@
     "run:liquidity-reclaim-scalper-baseline": "node scripts/run-liquidity-reclaim-scalper-baseline.mjs",
     "run:liquidity-reclaim-scalper-baseline-bounded": "node scripts/run-liquidity-reclaim-scalper-baseline-bounded.mjs",
     "test:liquidity-reclaim-scalper-baseline": "node scripts/test-liquidity-reclaim-scalper-baseline.mjs",
+    "test:liquidity-reclaim-scalper-r1-preregistration": "node scripts/test-liquidity-reclaim-scalper-r1-preregistration.mjs",
     "test:strategy-library": "node scripts/test-strategy-library.mjs",
     "test:strategy-detector-blocker-audit": "node scripts/test-strategy-detector-blocker-audit.mjs",
     "test:strategy-confluence-edge": "node scripts/test-strategy-confluence-edge.mjs",

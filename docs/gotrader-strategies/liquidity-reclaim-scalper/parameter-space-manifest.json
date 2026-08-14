@@ -1,9 +1,17 @@
 {
-  "schemaVersion": "gotrader-lrs-parameter-space-v1",
+  "schemaVersion": "gotrader-lrs-r1-parameter-space-preregistration-v1",
   "strategyId": "liquidity_reclaim_scalper_v1",
   "profileId": "liquidity_reclaim_scalper_v1_base_research",
-  "status": "handoff_only",
-  "searchAuthorized": false,
-  "dimensions": ["timeframeCombination", "liquidityTargetType", "raidLiquidityType", "raidConfirmationMode", "minimumRaidPenetration", "displacementMode", "minimumDisplacement", "ifvgFreshnessRequirement", "entryModel", "entryRetracementRatio", "stopModel", "stopBufferPoints", "targetModel", "sessionPolicy", "biasModel", "dealingRangeRequirement", "minimumTheoreticalRR", "maximumSetupAgeBars", "maximumEntryWaitBars"],
+  "status": "preregistered_not_executable",
+  "searchAuthorized": true,
+  "operatorAuthorized": false,
+  "method": "halton_low_discrepancy_v1",
+  "seed": 1729,
+  "sequenceSkip": 64,
+  "trialBudget": 128,
+  "stoppingRule": "exact_fixed_budget_no_adaptive_extension",
+  "authorizedDimensions": ["entryModel", "stopModel", "targetModel", "minimumTheoreticalRR", "maximumSetupAgeBars"],
+  "conditionalDimensions": ["entryRetracementRatio", "stopBufferPoints", "standardizedRR"],
+  "frozenDimensions": ["contextTimeframe", "structureTimeframe", "executionTimeframe", "liquidityTargetType", "raidLiquidityType", "raidConfirmationMode", "minimumRaidPenetration", "displacementMode", "minimumDisplacement", "ifvgRequired", "ifvgFreshnessRequirement", "sessionPolicy", "customSessionStart", "customSessionEnd", "biasModel", "dealingRangeRequirement", "maximumEntryWaitBars"],
   "authority": {"executionAuthority":"none","brokerAuthority":"none","readinessOverrideAuthority":"none"}
 }

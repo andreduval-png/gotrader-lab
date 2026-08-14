@@ -2,7 +2,7 @@ import { canonicalHash } from "../../../canonical/canonicalValueSerialization";
 import { SIMULATION_AUTHORITY_NONE, SIMULATION_CAPABILITIES_DISABLED } from "../../../backtestSimulation/simulationAuthority";
 import type { V2CanonicalMarketState, V2DealingRangeFactPayload, V2DisplacementFactPayload, V2FactEnvelope,
   V2FairValueGapFactPayload, V2LiquidityPoolFactPayload, V2LiquiditySweepFactPayload, V2MarketFact } from "../../context/v2ContextTypes";
-import { buildLrsBaseProfile } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters";
+import { buildLrsBaseProfile, buildLrsParameterHash, validateLrsParameters } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters";
 import { buildLrsTransition } from "../../../strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine";
 import { V2_IFVG_V3_MAX_INVERSION_BARS } from "../ifvg/v2IfvgV3Types";
 import { LRS_CANDIDATE_SCHEMA_VERSION, LRS_PROFILE_ID, LRS_STRATEGY_ID, LRS_STRATEGY_VERSION,
@@ -124,7 +124,9 @@ async function transitionsFor(input: { objective?: PoolFact; raid?: SweepFact; d
 }
 
 export async function detectLiquidityReclaimScalper(request: Readonly<LrsDetectionRequest>): Promise<Readonly<LrsCandidate>> {
-  const profile = await buildLrsBaseProfile(); const parameters = request.parameters ?? profile.parameters;
+  const profile = await buildLrsBaseProfile();
+  const parameters = validateLrsParameters(request.parameters ?? profile.parameters);
+  const parameterHash = await buildLrsParameterHash(parameters);
   const asOfMs = Date.parse(request.context.identity.asOfMarketTime);
   if (!Number.isFinite(asOfMs) || !Number.isFinite(Date.parse(request.setupCreatedAt)) || !Number.isFinite(Date.parse(request.expiresAt))) throw new Error("LRS request times are invalid.");
   const facts = request.context.facts.filter((fact) => factAvailable(fact, asOfMs));
@@ -160,7 +162,7 @@ export async function detectLiquidityReclaimScalper(request: Readonly<LrsDetecti
     ...(selected.raid ? { raidEventId: selected.raid.factId } : {}),
     ...(selected.displacement ? { displacementFactId: selected.displacement.factId } : {}),
     ...(selected.ifvg ? { ifvgId: selected.ifvg.factId } : {}), profileId: LRS_PROFILE_ID,
-    parameterHash: profile.parameterHash, ...(entryPrice !== undefined ? { entryPrice } : {}),
+    parameterHash, ...(entryPrice !== undefined ? { entryPrice } : {}),
     ...(stopPrice !== undefined ? { stopPrice } : {}), ...(targetPrice !== undefined ? { targetPrice } : {}) };
   const achieved = selected.chain.state; const explanation = `${selected.direction === "long" ? "Bullish" : "Bearish"} Liquidity Reclaim Scalper ${achieved === "ENTRY_ELIGIBLE" ? "entry eligible" : "forming"}. ` +
     `${selected.objective ? "External liquidity remains available." : "External liquidity objective is missing."} ` +
@@ -180,7 +182,7 @@ export async function detectLiquidityReclaimScalper(request: Readonly<LrsDetecti
     ...(theoreticalRR !== undefined ? { theoreticalRR } : {}), setupCreatedAt: request.setupCreatedAt,
     ...(achieved === "ENTRY_ELIGIBLE" ? { entryEligibleAt: request.context.identity.asOfMarketTime } : {}), expiresAt: request.expiresAt,
     supportingFactIds: factIds, blockers: unique(blockers), transitions: selected.chain.transitions, explanation,
-    profileId: LRS_PROFILE_ID, profileVersion: "v1", parameterHash: profile.parameterHash,
+    profileId: LRS_PROFILE_ID, profileVersion: "v1", parameterHash,
     sourceFingerprint: request.context.identity.source.sourceFingerprint, datasetCertificateId: request.datasetCertificateId,
     authority: SIMULATION_AUTHORITY_NONE, capabilities: SIMULATION_CAPABILITIES_DISABLED });
   return candidate;

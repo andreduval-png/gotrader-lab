@@ -7,6 +7,7 @@ compileTypescriptModules({outRoot:out,files:["canonical/canonicalValueSerializat
 "strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperTypes.ts","strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperParameters.ts",
 "strategyLibrary/liquidityReclaimScalper/liquidityReclaimScalperStateMachine.ts","v2/strategyAdapters/liquidityReclaimScalper/liquidityReclaimScalperDetector.ts"].map(f=>path.join(src,f))});
 const mod=await import(`${pathToFileURL(path.join(out,"liquidityReclaimScalperDetector.mjs")).href}?t=${Date.now()}`);
+const parameterMod=await import(`${pathToFileURL(path.join(out,"liquidityReclaimScalperParameters.mjs")).href}?t=${Date.now()}`);
 const authority={executionAuthority:"none",brokerAuthority:"none",readinessOverrideAuthority:"none"}; const t="2026-01-02T15:00:00.000Z";
 const env=(kind,payload,id,time=t)=>({factId:id,kind,identityRef:"sha256:"+"1".repeat(64),payload,timeframe:kind==="liquidity_pool"?"15m":kind==="liquidity_sweep"?"1m":"5m",observedMarketTime:time,causalClosedCandleTime:time,validFrom:time,quality:{status:"eligible",confidenceClass:"exact",warnings:[],blockers:[]},derivation:{policyId:"fixture",policyVersion:"v1",inputWindowIdentityHashes:[],inputFactIds:[]},authority});
 const facts=[env("liquidity_pool",{side:"buy_side",poolType:"session_high",price:110,formedAt:t,confirmedAt:t,tolerancePolicy:"strict",state:"active"},"target"),
@@ -20,6 +21,10 @@ const future=env("fair_value_gap",facts[3].payload,"future-ifvg","2026-01-02T15:
 const withoutRaid=await mod.detectLiquidityReclaimScalper(request([facts[0],facts[2],facts[3]])); assert.ok(withoutRaid.blockers.includes("raid_missing")); assert.notEqual(withoutRaid.state,"ENTRY_ELIGIBLE");
 const futureTarget=env("liquidity_pool",facts[0].payload,"future-target","2026-01-02T15:05:00.000Z"); const noTarget=await mod.detectLiquidityReclaimScalper(request([futureTarget,...facts.slice(1)])); assert.ok(noTarget.blockers.includes("external_liquidity_missing"));
 const stable=await mod.detectLiquidityReclaimScalper(request(facts)); assert.equal(stable.candidateId,valid.candidateId);
+const profile=await parameterMod.buildLrsBaseProfile(); const midpointParameters={...profile.parameters,entryModel:"IFVG_MIDPOINT"};
+const midpoint=await mod.detectLiquidityReclaimScalper({...request(facts),parameters:midpointParameters});
+assert.equal(midpoint.entryPrice,100.5); assert.equal(midpoint.parameterHash,await parameterMod.buildLrsParameterHash(midpointParameters));
+assert.notEqual(midpoint.parameterHash,valid.parameterHash); assert.notEqual(midpoint.candidateId,valid.candidateId);
 const canonicalInverted={...facts[3],factId:"canonical-inverted-fvg",payload:{...facts[3].payload,direction:"bearish",gapType:"fvg",state:"inverted",inversionTime:t,inversionBarsAfterConfirmation:2,preInversionUsage:"unused"}};
 const canonicalIfvg=await mod.detectLiquidityReclaimScalper(request([...facts.slice(0,3),canonicalInverted])); assert.equal(canonicalIfvg.state,"ENTRY_ELIGIBLE"); assert.equal(canonicalIfvg.ifvgId,"canonical-inverted-fvg");
 const reusedCanonical={...canonicalInverted,factId:"canonical-reused-fvg",payload:{...canonicalInverted.payload,preInversionUsage:"used"}};
