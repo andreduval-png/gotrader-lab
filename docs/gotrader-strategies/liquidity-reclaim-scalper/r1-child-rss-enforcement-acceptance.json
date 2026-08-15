@@ -1,0 +1,52 @@
+{
+  "acceptanceId": "sha256:259ad1138c01e957a767e5857508a0c20fb404851513aa3ee1fdb84cfe002ea4",
+  "authority": {"brokerAuthority":"none","executionAuthority":"none","readinessOverrideAuthority":"none"},
+  "authorizationCommit": "aee42d5e5dc1e2e19d13b164df9b909d6aa53a70",
+  "capacityDecision": {
+    "fixedStorageLimitBytes": 134217728,
+    "fullFamilyAuthorized": false,
+    "projectedDurationMs": 577186390,
+    "projectedStorageBytes": 432451438,
+    "reasonCodes": ["projected_governed_evidence_exceeds_fixed_storage_limit"],
+    "status": "blocked"
+  },
+  "datasetCertificateId": "sha256:7ffa32b773a0f3d347997d20dc9796f8bd27a48fbbfd4315cafec23d28bcb193",
+  "datasetId": "sha256:aee24dc3d7e95759c0a58039c9a97985a63dd8014dd3ab9d9e843badeb09640d",
+  "failedPilotEvidence": [
+    {"controllerCheckpointId":"sha256:f9b80a95b37f6864f0e0f152517a759383836be74b0594435bac381e99b9b51b","maximumObservedRssBytes":1231532032,"pilot":"v3","reason":"hard_rss_limit_exceeded","telemetryId":"sha256:6318d599c7c98e8b76f82ff0bf1b1fd76f3136c2ef9ee7004034dff63fd60bd8"},
+    {"controllerCheckpointId":"sha256:e5aec0340f9b4350f73329d22acf1eb763b1c675837c4668654cee1760c47070","maximumObservedRssBytes":308293632,"pilot":"v4","reason":"dataset_contract_mismatch","telemetryId":"sha256:f2ac76ff124705bff48f6b6e6c2803fb7aebab941bd0ab07454b889ae1401bc1"}
+  ],
+  "implementationCommits": [
+    "b63cc0c2c83c32ae5a928ecce0912de68e676fc6",
+    "d73bc6e0e8303c015ca65bec8b1cc43ee3db38bd",
+    "f574a029253d1a2c6c83ea3270531313f265aff1"
+  ],
+  "pilot": {
+    "childRuns": 245,
+    "completedTrialCount": 2,
+    "controllerCheckpointId": "sha256:f76b964ee9bb452a54379e4095e4ed7eb59b2c71efe78057a48daec006382664",
+    "maximumObservedRssBytes": 369848320,
+    "pilotReportId": "sha256:a83182530258ffc5b9337a6721ca0cf3f57f284887bfa53ad936c686e3cd565d",
+    "restartProofObserved": true,
+    "storageBytes": 6919223,
+    "telemetryCount": 245,
+    "trialEvidence": [
+      {"ledgerSealId":"sha256:9e8269a11b1df61f785373fd8f4494f93c61f19a97f7470daa9f156d23e19bf3","ordinal":0,"reportId":"sha256:e4e3a7edee3899e769f904d1867377e8b6f16611f93d920537ebb690f59978b0","trialId":"sha256:a33876dcec34121da7f5c97a135518c817e1bc1220a21a38833a0813d63e517b"},
+      {"ledgerSealId":"sha256:9e1d175c5db9c67be70c631db0c29ef937b07a88572fd891588aed03affdf24f","ordinal":1,"reportId":"sha256:7a339bc585791e25a14b8b299482a86263f16a1e47958515c33bb2de4117a294","trialId":"sha256:af701c6360666193fd2a85c94510a22c8323512eec77bf3b0e778a07b52c1e88"}
+    ]
+  },
+  "productionAdoptionAllowed": false,
+  "researchValidated": false,
+  "sampleSetId": "sha256:e844dab5fb0567e012147877a2414ac656b8bb749d5ce8c8fd16102c089f7004",
+  "samplingPlanId": "sha256:2218b36fae572a2411c35da3fae6788090d4b58a452ed1a9a5b2df65edab6476",
+  "schemaVersion": "gotrader-lrs-r1-child-rss-enforcement-acceptance-v1",
+  "sourceFingerprint": "sha256:e164236affb51072322ce78bf297c03b3c403243e206a685b917792ac6db07bd",
+  "status": "accepted_correction_family_capacity_blocked",
+  "validation": {
+    "browserSmoke": "44_passed",
+    "build": "passed_with_existing_chunk_warning",
+    "completeSemanticMatrix": "passed",
+    "focusedChildRss": "passed",
+    "typecheck": "passed"
+  }
+}
