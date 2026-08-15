@@ -145,11 +145,14 @@ assert.doesNotMatch(JSON.stringify(longPassed), /"candles"\s*:/);
 
 const view = fs.readFileSync(path.join(root, "src/components/performance/PerformanceView.tsx"), "utf8");
 const cycleRunner = fs.readFileSync(path.join(root, "src/lib/researchCycle/runResearchCycle.ts"), "utf8");
+const storage = fs.readFileSync(path.join(root, "src/lib/tradePlanOutcomes/tradePlanOutcomeStorage.ts"), "utf8");
 for (const marker of ["results-tab-trade-plans", "trade-plan-outcome-list", "trade-plan-daily-results", "trade-plan-calibration-suggestions", "refresh-trade-plan-outcomes"]) {
   assert.match(view, new RegExp(marker));
 }
 assert.match(cycleRunner, /persistTradePlanCycleSafely/);
 assert.match(cycleRunner, /scalpStatus:\s*advisorPacket\.compactSummary\.scalpStatus/);
+assert.match(storage, /INDEXED_DB_LIMIT\s*=\s*2_000/);
+assert.match(storage, /index\("completedAt"\)\.getAllKeys/);
 
 console.log(JSON.stringify({
   status: "passed",

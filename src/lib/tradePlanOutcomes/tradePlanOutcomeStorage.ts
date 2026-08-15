@@ -8,6 +8,7 @@ const DB_VERSION = 1;
 const STORE = "cycle_results";
 const FALLBACK_KEY = "gotrader.trade-plan-results.fallback.v1";
 const FALLBACK_LIMIT = 500;
+const INDEXED_DB_LIMIT = 2_000;
 export const TRADE_PLAN_RESULTS_UPDATED_EVENT = "gotrader-trade-plan-results-updated";
 const sessionRecords = new Map<string, TradePlanCycleResultRecord>();
 
@@ -93,7 +94,14 @@ export async function saveTradePlanCycleResult(record: TradePlanCycleResultRecor
     try {
       const db = await openDb();
       const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(record);
+      const store = tx.objectStore(STORE);
+      store.put(record);
+      const count = await idbRequest(store.count());
+      const overflow = Math.max(0, count - INDEXED_DB_LIMIT);
+      if (overflow) {
+        const oldestKeys = await idbRequest(store.index("completedAt").getAllKeys(undefined, overflow));
+        oldestKeys.forEach((key) => store.delete(key));
+      }
       await txDone(tx);
       db.close();
       publish();
