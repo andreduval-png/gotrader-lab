@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset-node-storage.mjs";
+import { finalizeR1EvidenceArchive, prepareR1CompletedTrialEvidenceArchive } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
 import { buildR1ChildTelemetry, classifyR1ChildRss, enforceR1ResourceBounds, openR1Controller, R1_MAX_RSS_BYTES,
   summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
   writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
@@ -111,10 +112,15 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
   }
   if (!completed) throw new Error(`R1 trial ${trial.ordinal} exhausted its bounded child limit.`);
   const report = await verifyR1TrialReport({ modules, reportPath: path.join(trialRoot, "baseline-report.json"), trial });
-  const completedEvent = await appendEvent(trial, "completed", ["verified_trial_report_and_bt2_ledger"], [report.reportId, report.ledgerSealId], disposition.eventId);
+  const archive = await prepareR1CompletedTrialEvidenceArchive({ modules, storage, outputRoot, trial,
+    orderedChildTelemetryIds: checkpoint.orderedChildTelemetryIds });
+  const completedEvent = await appendEvent(trial, "completed", ["verified_trial_report_bt2_ledger_and_evidence_archive"],
+    [report.reportId, report.ledgerSealId, archive.archiveId], disposition.eventId);
   await update({ nextPosition: position + 1,
     dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? { ...item, disposition: "completed", eventId: completedEvent.eventId,
-      reportId: report.reportId, ledgerSealId: report.ledgerSealId } : item), orderedEventIds: [...checkpoint.orderedEventIds, completedEvent.eventId] });
+      reportId: report.reportId, ledgerSealId: report.ledgerSealId, evidenceArchiveId: archive.archiveId } : item),
+    orderedEventIds: [...checkpoint.orderedEventIds, completedEvent.eventId] });
+  await finalizeR1EvidenceArchive({ storage, manifest: archive });
   enforceR1ResourceBounds(outputRoot, checkpoint.maximumObservedRssBytes);
 }
 

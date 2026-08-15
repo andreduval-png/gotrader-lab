@@ -70,7 +70,7 @@ const updated = await writeR1ControllerCheckpoint({
     selectedTrialIds,
     nextPosition: 1,
     dispositions: [
-      { trialId: selectedTrialIds[0], disposition: "completed" },
+      { trialId: selectedTrialIds[0], disposition: "failed" },
     ],
     orderedEventIds: [`sha256:${"1".repeat(64)}`],
     controllerCommit,

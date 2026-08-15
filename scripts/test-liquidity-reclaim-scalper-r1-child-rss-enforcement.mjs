@@ -16,6 +16,7 @@ import {
   R1_LEGACY_EXECUTOR_SCHEMA_VERSION,
   R1_MAX_RSS_BYTES,
   R1_PLAN_ID,
+  R1_PREVIOUS_EXECUTOR_SCHEMA_VERSION,
   R1_SAMPLE_SET_ID,
   R1_SOURCE_FINGERPRINT,
   summarizeR1StageSamples,
@@ -26,8 +27,10 @@ import {
 const root = process.cwd();
 const outputRoot = path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/r1-child-rss-enforcement-test");
 const legacyRoot = path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/r1-child-rss-legacy-test");
+const previousRoot = path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/r1-child-rss-previous-test");
 fs.rmSync(outputRoot, { recursive: true, force: true });
 fs.rmSync(legacyRoot, { recursive: true, force: true });
+fs.rmSync(previousRoot, { recursive: true, force: true });
 
 const modules = await loadLrsBaselineModules(path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/compiled-r1-child-rss-test"));
 const selectedTrialIds = ["lrs-r1-trial:000"];
@@ -126,6 +129,17 @@ fs.writeFileSync(path.join(legacyRoot, "checkpoints/controller.json"), `${module
 const migrated = await openR1Controller({ modules, outputRoot: legacyRoot, mode: "pilot", selectedTrialIds, controllerCommit });
 assert.equal(migrated.checkpoint.schemaVersion, R1_EXECUTOR_SCHEMA_VERSION);
 assert.deepEqual(migrated.checkpoint.orderedChildTelemetryIds, []);
+
+const { checkpointId: ignoredCheckpointId, ...currentCore } = checkpoint;
+const previousCore = { ...currentCore, schemaVersion: R1_PREVIOUS_EXECUTOR_SCHEMA_VERSION };
+const previousCheckpoint = { ...previousCore, checkpointId: await modules.canonical.canonicalHash(previousCore) };
+fs.mkdirSync(path.join(previousRoot, "checkpoints"), { recursive: true });
+fs.mkdirSync(path.join(previousRoot, "telemetry"), { recursive: true });
+fs.writeFileSync(path.join(previousRoot, "checkpoints/controller.json"), `${modules.canonical.canonicalSerialize(previousCheckpoint)}\n`);
+fs.copyFileSync(path.join(outputRoot, "telemetry", telemetryFiles[0]), path.join(previousRoot, "telemetry", telemetryFiles[0]));
+const migratedPrevious = await openR1Controller({ modules, outputRoot: previousRoot, mode: "pilot", selectedTrialIds, controllerCommit });
+assert.equal(migratedPrevious.checkpoint.schemaVersion, R1_EXECUTOR_SCHEMA_VERSION);
+assert.deepEqual(migratedPrevious.checkpoint.orderedChildTelemetryIds, [telemetry.telemetryId]);
 
 const controllerSource = fs.readFileSync(path.join(root, "scripts/run-liquidity-reclaim-scalper-r1-bounded.mjs"), "utf8");
 const immediateGate = controllerSource.indexOf("if (resourceDecision === \"hard_limit_exceeded\")");

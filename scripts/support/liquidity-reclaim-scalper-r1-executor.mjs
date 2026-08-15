@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHistoricalDatasetNodeStorage } from "./historical-dataset-node-storage.mjs";
+import { verifyAndFinalizeCommittedR1EvidenceArchives } from "./liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
 
-export const R1_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v2";
+export const R1_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v3";
+export const R1_PREVIOUS_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v2";
 export const R1_LEGACY_EXECUTOR_SCHEMA_VERSION = "gotrader-lrs-r1-bounded-executor-v1";
 export const R1_CHILD_TELEMETRY_SCHEMA_VERSION = "gotrader-lrs-r1-child-telemetry-v1";
 export const R1_FAMILY_ID = "sha256:e89903741561b76b56adc5feac12b311d7154036e7dff9f4c9cbf75afd405fed";
@@ -105,7 +107,20 @@ export async function validateR1ControllerCheckpoint(modules, checkpoint, expect
 }
 
 export async function migrateLegacyR1ControllerCheckpoint(modules, checkpoint, expected) {
-  if (checkpoint.schemaVersion !== R1_LEGACY_EXECUTOR_SCHEMA_VERSION) return checkpoint;
+  if (![R1_LEGACY_EXECUTOR_SCHEMA_VERSION, R1_PREVIOUS_EXECUTOR_SCHEMA_VERSION].includes(checkpoint.schemaVersion)) return checkpoint;
+  if (checkpoint.schemaVersion === R1_PREVIOUS_EXECUTOR_SCHEMA_VERSION) {
+    const { checkpointId, ...core } = checkpoint;
+    if (checkpoint.mode !== expected.mode || checkpoint.controllerCommit !== expected.controllerCommit ||
+        modules.canonical.canonicalSerialize(checkpoint.selectedTrialIds) !== modules.canonical.canonicalSerialize(expected.selectedTrialIds) ||
+        checkpoint.experimentFamilyId !== R1_FAMILY_ID || checkpoint.samplingPlanId !== R1_PLAN_ID ||
+        checkpoint.sampleSetId !== R1_SAMPLE_SET_ID || checkpoint.datasetCertificateId !== R1_CERTIFICATE_ID ||
+        checkpoint.datasetId !== R1_DATASET_ID || checkpoint.sourceFingerprint !== R1_SOURCE_FINGERPRINT ||
+        checkpoint.holdoutUsed !== false || checkpoint.adaptiveSearchUsed !== false ||
+        await modules.canonical.canonicalHash(core) !== checkpointId) {
+      throw new Error("LRS R1 previous controller checkpoint identity or integrity failure.");
+    }
+    return sealR1ControllerCheckpoint(modules, checkpoint);
+  }
   if (checkpoint.mode !== expected.mode || checkpoint.controllerCommit !== expected.controllerCommit ||
       modules.canonical.canonicalSerialize(checkpoint.selectedTrialIds) !== modules.canonical.canonicalSerialize(expected.selectedTrialIds) ||
       checkpoint.experimentFamilyId !== R1_FAMILY_ID || checkpoint.samplingPlanId !== R1_PLAN_ID ||
@@ -141,6 +156,7 @@ export async function openR1Controller({ modules, outputRoot, mode, selectedTria
       await storage.adapter.writeTextAtomic("checkpoints/controller.json", `${modules.canonical.canonicalSerialize(checkpoint)}\n`);
     }
     await verifyR1ChildTelemetryLedger({ modules, storage, checkpoint });
+    await verifyAndFinalizeCommittedR1EvidenceArchives({ modules, storage, checkpoint });
     return { storage, checkpoint };
   }
   const checkpoint = await sealR1ControllerCheckpoint(modules, { mode, selectedTrialIds, nextPosition: 0, dispositions: [], orderedEventIds: [],
@@ -193,9 +209,10 @@ export async function verifyR1ChildTelemetryLedger({ modules, storage, checkpoin
     const telemetryId = checkpoint.orderedChildTelemetryIds[index];
     const identity = telemetryId.replace("sha256:", "");
     const childRun = checkpoint.telemetryStartChildRun + index + 1;
-    const file = storage.resolveSafe(`telemetry/child-${String(childRun).padStart(6, "0")}-${identity}.json`);
-    if (!fs.existsSync(file)) throw new Error(`LRS R1 child telemetry is missing for run ${childRun}.`);
-    const telemetry = readJson(file);
+    const relativePath = `telemetry/child-${String(childRun).padStart(6, "0")}-${identity}.json`;
+    const text = await storage.adapter.readText(relativePath);
+    if (!text) throw new Error(`LRS R1 child telemetry is missing for run ${childRun}.`);
+    const telemetry = JSON.parse(text);
     const { telemetryId: storedId, ...core } = telemetry;
     if (storedId !== telemetryId || telemetry.schemaVersion !== R1_CHILD_TELEMETRY_SCHEMA_VERSION ||
         telemetry.childRun !== childRun || telemetry.previousTelemetryId !== previousTelemetryId ||
