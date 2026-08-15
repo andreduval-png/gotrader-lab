@@ -16,7 +16,7 @@ export const GBRAIN_SIDECAR_STATUS_UPDATED_EVENT = "gotrader-gbrain-sidecar-stat
 
 export interface GbrainSidecarStatus {
   provider: "gbrain_local";
-  service: "gotrader_gbrain_sidecar";
+  service: "gotrader_research_memory_sidecar";
   status: "ready" | "degraded_spool_only" | "degraded_index_pending" | "offline";
   sidecarStatus: "running" | "offline";
   storageBackend: "atomic_markdown_spool" | "unavailable";
@@ -86,7 +86,7 @@ const authorityNone = Object.freeze({
 
 const offlineStatus = (warning?: string): GbrainSidecarStatus => ({
   provider: "gbrain_local",
-  service: "gotrader_gbrain_sidecar",
+  service: "gotrader_research_memory_sidecar",
   status: "offline",
   sidecarStatus: "offline",
   storageBackend: "unavailable",
@@ -137,16 +137,16 @@ export function loadCachedGbrainSidecarStatus(): GbrainSidecarStatus {
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(GBRAIN_SIDECAR_STATUS_STORAGE_KEY) ?? "null"
-    ) as GbrainSidecarStatus | null;
+    ) as (GbrainSidecarStatus & { service?: string }) | null;
     if (
       parsed?.provider === "gbrain_local" &&
-      parsed.service === "gotrader_gbrain_sidecar" &&
+      ["gotrader_research_memory_sidecar", "gotrader_gbrain_sidecar"].includes(parsed.service ?? "") &&
       parsed.advisoryOnly === true &&
       parsed.nativeEvidenceAuthoritative === true &&
       parsed.productionAdoptionAllowed === false &&
       authorityIsNone(parsed.authority)
     ) {
-      return parsed;
+      return { ...parsed, service: "gotrader_research_memory_sidecar" };
     }
   } catch {
     // Fall through to the fail-closed offline snapshot.
@@ -166,10 +166,10 @@ export async function fetchGbrainSidecarStatus(options: {
       signal: AbortSignal.timeout(3_000)
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = (await response.json()) as GbrainSidecarStatus;
+    const payload = (await response.json()) as GbrainSidecarStatus & { service?: string };
     if (
       payload.provider !== "gbrain_local" ||
-      payload.service !== "gotrader_gbrain_sidecar" ||
+      !["gotrader_research_memory_sidecar", "gotrader_gbrain_sidecar"].includes(payload.service ?? "") ||
       payload.sidecarStatus !== "running" ||
       payload.advisoryOnly !== true ||
       payload.nativeEvidenceAuthoritative !== true ||
@@ -184,7 +184,7 @@ export async function fetchGbrainSidecarStatus(options: {
       blocked.status = "offline";
       return publishStatus(blocked);
     }
-    return publishStatus(payload);
+    return publishStatus({ ...payload, service: "gotrader_research_memory_sidecar" });
   } catch (error) {
     return publishStatus(
       offlineStatus(

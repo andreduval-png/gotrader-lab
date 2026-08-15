@@ -26,6 +26,12 @@ import {
   findAuthoritativeProfile,
   loadAuthoritativeMcpContext
 } from "./gotrader-mcp-context-core.mjs";
+import { createAgentProjectionReader } from "./gotrader-agent-projection-core.mjs";
+import { discoverCertifiedProfiles } from "./gotrader-certified-profile-core.mjs";
+import {
+  GOTRADER_AGENT_INTERFACE,
+  withAgentProvenance
+} from "./gotrader-agent-provenance-core.mjs";
 
 const scriptRepoRoot = fileURLToPath(new URL("../", import.meta.url));
 const repoRoot = path.resolve(process.env.GOTRADER_REPO_ROOT || scriptRepoRoot);
@@ -36,17 +42,118 @@ const loadContext = () =>
     allowedProfiles: TRADE_PROPOSAL_MCP_ALLOWED_PROFILES,
     repoRoot
   });
+const projectionReader = createAgentProjectionReader();
 
 const server = new McpServer({
-  name: "gotrader-trade-proposal-control-plane",
-  version: "1.0.0"
+  name: "gotrader-canonical-agent-interface",
+  version: "2.0.0"
 });
 
-const asToolResult = (structuredContent, isError = false) => ({
-  content: [{ type: "text", text: JSON.stringify(structuredContent, null, 2) }],
-  structuredContent,
+const asToolResult = (structuredContent, isError = false, toolName = "gotrader_compatibility_tool") => {
+  const contentWithProvenance = structuredContent?.provenance
+    ? structuredContent
+    : withAgentProvenance(structuredContent, {
+        toolName,
+        evidenceClass: "historical_certified_evidence",
+        source: "gotrader_server_owned_context",
+        sourceUpdatedAt: structuredContent?.generatedAt,
+        freshness: structuredContent?.freshness ?? { status: "not_applicable", fresh: false }
+      });
+  return {
+  content: [{ type: "text", text: JSON.stringify(contentWithProvenance, null, 2) }],
+  structuredContent: contentWithProvenance,
   isError
-});
+  };
+};
+
+server.registerTool(
+  "gotrader_agent_interface_status",
+  {
+    description:
+      "Read the canonical, client-agnostic GoTrader agent interface status and immutable authority boundary.",
+    inputSchema: {}
+  },
+  async () => {
+    const [context, currentCycle, results, certified] = await Promise.all([
+      loadContext(),
+      projectionReader.readCurrentCycle(),
+      projectionReader.readResults(),
+      discoverCertifiedProfiles()
+    ]);
+    return asToolResult(withAgentProvenance({
+      status: "available",
+      interface: GOTRADER_AGENT_INTERFACE,
+      clientAgnostic: true,
+      capabilities: {
+        currentCycleRead: currentCycle.status,
+        resultsRead: results.status,
+        certifiedProfileDiscovery: certified.status,
+        validationContext: context.status,
+        proposalEvaluation: "fail_closed",
+        researchMemory: "separate_advisory_mcp"
+      },
+      blockers: [...(currentCycle.blockers ?? []), ...(results.blockers ?? [])]
+    }, {
+      toolName: "gotrader_agent_interface_status",
+      evidenceClass: "fresh_operational_projection",
+      source: "gotrader_canonical_agent_interface",
+      freshness: { status: "mixed", fresh: currentCycle.status === "available" && results.status === "available" }
+    }));
+  }
+);
+
+server.registerTool(
+  "gotrader_get_current_cycle",
+  {
+    description:
+      "Read the latest compact browser-published research cycle. Stale, future-dated, absent, or unsafe projections fail closed.",
+    inputSchema: {}
+  },
+  async () => {
+    const result = await projectionReader.readCurrentCycle();
+    return asToolResult(result, result.status !== "available", "gotrader_get_current_cycle");
+  }
+);
+
+server.registerTool(
+  "gotrader_get_results",
+  {
+    description:
+      "Read the latest compact Results workspace projection from GoTrader's browser source of truth. Raw candles and broker state are excluded.",
+    inputSchema: {}
+  },
+  async () => {
+    const result = await projectionReader.readResults();
+    return asToolResult(result, result.status !== "available", "gotrader_get_results");
+  }
+);
+
+server.registerTool(
+  "gotrader_list_certified_profiles",
+  {
+    description:
+      "Discover compact certificate-bound historical strategy profiles, including Liquidity Reclaim Scalper. Discovery never grants proposal, readiness, or execution authority.",
+    inputSchema: {}
+  },
+  async () => {
+    const [discovered, context] = await Promise.all([discoverCertifiedProfiles(), loadContext()]);
+    const ifvgProfiles = context.profiles.map((profile) => ({
+      ...profile,
+      evidenceClass: "historical_certified_evidence",
+      proposalAllowed: context.status === "available",
+      researchValidated: false,
+      productionAdoptionAllowed: false
+    }));
+    const result = {
+      ...discovered,
+      status: discovered.profiles.length || ifvgProfiles.length ? "available" : "unavailable",
+      profiles: [...ifvgProfiles, ...discovered.profiles],
+      count: ifvgProfiles.length + discovered.profiles.length,
+      blockers: discovered.profiles.length || ifvgProfiles.length ? [] : discovered.blockers
+    };
+    return asToolResult(result, result.status !== "available", "gotrader_list_certified_profiles");
+  }
+);
 
 server.registerTool(
   "gotrader_control_plane_status",
@@ -242,7 +349,7 @@ server.registerTool(
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("GoTrader trade-proposal MCP running on stdio; execution authority none.");
+console.error("GoTrader canonical agent interface running on stdio; client agnostic; authority none/none/none.");
 
 const shutdown = async () => {
   await server.close();

@@ -410,7 +410,7 @@ if (mode === "status" || mode === "sync") {
     assert.match(localStack, /port:\s*8799/);
     assert.match(startStack, /"gbrain-sidecar"/);
     assert.match(cycleSource, /syncGbrainResearchMemory/);
-    assert.match(operatorSource, /operator-gbrain-memory-status/);
+    assert.match(operatorSource, /operator-research-memory-status/);
     assert.match(selfImprovementSource, /gbrain-memory-search-results/);
 
     console.log(JSON.stringify({

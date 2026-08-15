@@ -23,6 +23,7 @@ import {
 } from "@/lib/backtesting";
 import type { BacktestResult, ResolvedBacktestConfig } from "@/lib/backtesting";
 import { recordResearchCycleCommunication } from "@/lib/communications/communicationSpec";
+import { publishCurrentCycleProjection } from "@/lib/agentInterface";
 import { createCandleSourceFingerprint } from "@/lib/candleSources";
 import { buildEvidenceLedger } from "@/lib/evidence";
 import type { EvidenceLedgerInput } from "@/lib/evidence";
@@ -31,7 +32,9 @@ import {
   buildResearchEvidenceMemoryPacket,
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
-import { queueGbrainMemoryPacket, syncGbrainResearchMemory } from "@/lib/researchMemory";`r`nimport { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";`r`nimport { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
+import { queueGbrainMemoryPacket, syncGbrainResearchMemory } from "@/lib/researchMemory";
+import { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";
+import { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -668,11 +671,15 @@ export function loadResearchCycleState(): ResearchCycleState {
 export function saveResearchCycleRun(run: ResearchCycleRun): ResearchCycleState {
   const state = loadResearchCycleState();
   const compactRun = compactResearchCycleRun(run);
-  return publish({
+  const nextState = publish({
     ...state,
     latestRunId: compactRun.cycleId,
     runs: safeTopN([compactRun, ...safeArray(state.runs).filter((item) => item.cycleId !== compactRun.cycleId)], 5)
   });
+  void publishCurrentCycleProjection(compactRun).catch((error) => {
+    console.warn("Current-cycle agent projection failed closed.", error);
+  });
+  return nextState;
 }
 
 export function latestResearchCycleRun(state = loadResearchCycleState()) {

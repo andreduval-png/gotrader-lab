@@ -357,7 +357,7 @@ try {
 
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [path.join(repoRoot, "scripts", "gotrader-trade-proposal-mcp.mjs")],
+    args: [path.join(repoRoot, "scripts", "gotrader-research-memory-mcp.mjs")],
     cwd: repoRoot,
     env: {
       ...process.env,

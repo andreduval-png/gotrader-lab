@@ -7,6 +7,11 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  GOTRADER_AGENT_PROJECTION_CONTRACT,
+  GOTRADER_AGENT_PROJECTION_VERSION,
+  validateAgentProjection
+} from "./gotrader-agent-projection-core.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
@@ -18,6 +23,7 @@ const sidecarRoot = path.resolve(
 const documentsRoot = path.join(sidecarRoot, "documents");
 const statePath = path.join(sidecarRoot, "index.json");
 const receiptsPath = path.join(sidecarRoot, "receipts.jsonl");
+const projectionsRoot = path.join(sidecarRoot, "projections");
 const gbrainHome = path.resolve(process.env.GBRAIN_HOME || path.join(sidecarRoot, "gbrain-home"));
 const gbrainConfigPath = path.join(gbrainHome, ".gbrain", "config.json");
 const localGbrainBin = path.join(
@@ -303,6 +309,46 @@ async function loadState() {
 async function saveState() {
   state.updatedAt = nowIso();
   await atomicWrite(statePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
+const projectionPath = (projectionType) => path.join(
+  projectionsRoot,
+  projectionType === "current_cycle" ? "current-cycle.json" : "results.json"
+);
+
+async function persistProjection(projectionType, payload) {
+  const projection = {
+    ...payload,
+    contract: GOTRADER_AGENT_PROJECTION_CONTRACT,
+    version: GOTRADER_AGENT_PROJECTION_VERSION,
+    projectionType
+  };
+  const validation = validateAgentProjection(projection, projectionType);
+  if (!validation.valid) {
+    return { accepted: false, status: "blocked", blockers: validation.blockers };
+  }
+  await atomicWrite(projectionPath(projectionType), `${JSON.stringify(projection)}\n`);
+  return {
+    accepted: true,
+    status: "stored",
+    projectionType,
+    generatedAt: projection.generatedAt,
+    authority
+  };
+}
+
+async function readProjection(projectionType) {
+  try {
+    const projection = JSON.parse(await fs.readFile(projectionPath(projectionType), "utf8"));
+    const validation = validateAgentProjection(projection, projectionType);
+    if (!validation.valid) {
+      return { status: "blocked", blockers: validation.blockers };
+    }
+    return projection;
+  } catch (error) {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  }
 }
 
 function candidateGbrainCommands() {
@@ -610,7 +656,8 @@ function compactStatus() {
       : "degraded_spool_only";
   return {
     provider: "gbrain_local",
-    service: "gotrader_gbrain_sidecar",
+    backend: "gbrain_local",
+    service: "gotrader_research_memory_sidecar",
     status,
     sidecarStatus: "running",
     endpoint: `http://${host}:${port}`,
@@ -843,6 +890,25 @@ async function handleRequest(request, response) {
     sendJson(response, 200, compactStatus());
     return;
   }
+  const projectionType = url.pathname === "/v1/projections/current-cycle"
+    ? "current_cycle"
+    : url.pathname === "/v1/projections/results"
+      ? "results"
+      : undefined;
+  if (projectionType && request.method === "GET") {
+    const projection = await readProjection(projectionType);
+    if (!projection) {
+      sendJson(response, 404, { status: "unavailable", blocker: "agent_projection_not_published" });
+      return;
+    }
+    sendJson(response, projection.status === "blocked" ? 422 : 200, projection);
+    return;
+  }
+  if (projectionType && request.method === "POST") {
+    const result = await persistProjection(projectionType, await readJson(request));
+    sendJson(response, result.accepted ? 200 : 422, result);
+    return;
+  }
   const summaryMatch = request.method === "GET"
     ? url.pathname.match(/^\/v1\/memory\/(gbrain_document_[a-z0-9._-]+)$/i)
     : null;
@@ -930,6 +996,7 @@ async function handleRequest(request, response) {
 }
 
 await fs.mkdir(documentsRoot, { recursive: true });
+await fs.mkdir(projectionsRoot, { recursive: true });
 await fs.mkdir(gbrainHome, { recursive: true });
 await loadState();
 await detectGbrainCapability();
@@ -948,7 +1015,7 @@ const server = http.createServer((request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`GoTrader gbrain sidecar listening on http://${host}:${port}`);
+  console.log(`GoTrader research-memory sidecar listening on http://${host}:${port}`);
   console.log(`Durable research memory: ${sidecarRoot}`);
   console.log(`gbrain home: ${gbrainHome}`);
   console.log(safetyNotice);

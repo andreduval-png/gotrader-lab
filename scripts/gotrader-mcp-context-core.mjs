@@ -12,6 +12,7 @@ export const GOTRADER_MCP_CONTEXT_AUTHORITY = Object.freeze({
 
 const DEFAULT_VALIDATION_REPORT = ".gotrader/ifvg-v3-profile-oos.json";
 const DEFAULT_FORWARD_REPORT = ".gotrader/ifvg-v3-forward-evidence.json";
+const DEFAULT_VALIDATION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const stableValue = (value) => {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -148,17 +149,34 @@ export const loadAuthoritativeMcpContext = async ({
     .filter((candidate) => allowedProfiles.includes(candidate?.candidateFamily))
     .map((candidate) => summarizeProfile({ candidate, report, source }));
   const unsafe = Boolean(report) && !authorityIsNone(reportAuthority);
+  const validationMaxAgeMs = Math.max(
+    60_000,
+    Number(env.GOTRADER_MCP_VALIDATION_MAX_AGE_MS || DEFAULT_VALIDATION_MAX_AGE_MS)
+  );
+  const validationAgeMs = validationFile
+    ? Date.parse(now) - Date.parse(validationFile.updatedAt)
+    : null;
+  const freshness = validationAgeMs === null || !Number.isFinite(validationAgeMs)
+    ? { status: "unavailable", fresh: false, ageMs: null, maxAgeMs: validationMaxAgeMs }
+    : validationAgeMs < -30_000
+      ? { status: "future", fresh: false, ageMs: validationAgeMs, maxAgeMs: validationMaxAgeMs }
+      : validationAgeMs > validationMaxAgeMs
+        ? { status: "stale", fresh: false, ageMs: validationAgeMs, maxAgeMs: validationMaxAgeMs }
+        : { status: "fresh", fresh: true, ageMs: Math.max(0, validationAgeMs), maxAgeMs: validationMaxAgeMs };
   const available =
     report?.status === "completed" &&
     sourceComplete &&
     profiles.length > 0 &&
-    !unsafe;
+    !unsafe &&
+    freshness.fresh;
 
   return {
     contract: GOTRADER_MCP_CONTEXT_CONTRACT,
     version: GOTRADER_MCP_CONTEXT_VERSION,
     generatedAt: now,
-    status: unsafe ? "unsafe_evidence" : available ? "available" : "unavailable",
+    status: unsafe ? "unsafe_evidence" : available ? "available" : freshness.status === "stale" ? "stale" : "unavailable",
+    evidenceClass: "historical_certified_evidence",
+    freshness,
     validationReportUpdatedAt: validationFile?.updatedAt,
     forwardEvidenceUpdatedAt: forwardFile?.updatedAt,
     source: sourceComplete ? source : undefined,
@@ -179,6 +197,7 @@ export const loadAuthoritativeMcpContext = async ({
       report && report.status !== "completed" ? "authoritative_validation_incomplete" : undefined,
       !sourceComplete ? "authoritative_source_identity_incomplete" : undefined,
       !profiles.length ? "allowlisted_profile_evidence_missing" : undefined,
+      validationFile && !freshness.fresh ? `authoritative_validation_${freshness.status}` : undefined,
       unsafe ? "authoritative_evidence_authority_not_none" : undefined
     ].filter(Boolean),
     safety: {

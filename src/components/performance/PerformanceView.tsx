@@ -57,6 +57,7 @@ import { loadPredictionLedger } from "@/lib/predictionLedger";
 import { loadForwardEvidenceLedger } from "@/lib/forwardEvidence";
 import { latestValidationChainEntry, readValidationChainState } from "@/lib/validationChain";
 import { buildResultsWorkspaceSnapshot } from "@/lib/results";
+import { publishResultsProjection } from "@/lib/agentInterface";
 import {
   buildTradePlanResultsSnapshot,
   listTradePlanCycleResults,
@@ -174,6 +175,12 @@ export function PerformanceView({ state }: { state: LabState }) {
   const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
   const avgWinLoss = averageWinLossRatio(canonicalMetrics);
   const hasDatedOutcomes = state.outcomes.length > 0;
+
+  useEffect(() => {
+    void publishResultsProjection(resultsSnapshot).catch((error) => {
+      console.warn("Results agent projection failed closed.", error);
+    });
+  }, [resultsSnapshot]);
 
   useEffect(() => {
     let mounted = true;

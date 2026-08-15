@@ -5,10 +5,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { createGbrainResearchMemoryFacade } from "./gotrader-research-memory-core.mjs";
+import { withAgentProvenance } from "./gotrader-agent-provenance-core.mjs";
 
 const server = new McpServer({
-  name: "gotrader-research-memory",
-  version: "1.0.0"
+  name: "gotrader-canonical-agent-memory",
+  version: "2.0.0"
 });
 const agentId = String(process.env.GOTRADER_MCP_AGENT_ID || "local_stdio_agent")
   .replace(/[^a-z0-9._-]+/gi, "_")
@@ -31,7 +32,20 @@ const execute = async (toolName, input) => {
     sessionId,
     requestId: crypto.randomUUID()
   });
-  return asToolResult(result, result.status === "blocked");
+  const envelope = withAgentProvenance({
+    ...result,
+    memoryBackendProvenance: result.provenance
+  }, {
+    toolName,
+    evidenceClass: "advisory_memory",
+    source: "gotrader_research_memory_sidecar",
+    sourceUpdatedAt: result.lastSuccessfulSyncUtc,
+    freshness: {
+      status: result.status === "healthy" || result.status === "complete" ? "available" : result.status,
+      fresh: false
+    }
+  });
+  return asToolResult(envelope, ["blocked", "offline"].includes(result.status));
 };
 
 server.registerTool(
@@ -86,7 +100,7 @@ server.registerTool(
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error(
-  "GoTrader research-memory MCP running on stdio; advisory only; authority none/none/none."
+  "GoTrader canonical agent memory running on stdio; client agnostic; advisory only; authority none/none/none."
 );
 
 const shutdown = async () => {

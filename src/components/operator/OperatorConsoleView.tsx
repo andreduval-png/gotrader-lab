@@ -27,6 +27,15 @@ import {
   stopOperatorResearchCycle,
   type OperatorCycleStage
 } from "@/lib/operatorConsole";
+import {
+  GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT,
+  GBRAIN_SIDECAR_STATUS_UPDATED_EVENT,
+  fetchGbrainSidecarStatus,
+  loadCachedGbrainSidecarStatus,
+  loadGbrainMemoryOutbox,
+  syncGbrainResearchMemory,
+  type GbrainSidecarStatus
+} from "@/lib/researchMemory";
 import type { LabState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -118,6 +127,11 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const { snapshot, refresh } = useOperatorConsole();
   const [commandError, setCommandError] = useState<string>();
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [memoryStatus, setMemoryStatus] = useState<GbrainSidecarStatus>(() => loadCachedGbrainSidecarStatus());
+  const [memoryQueued, setMemoryQueued] = useState(
+    () => loadGbrainMemoryOutbox().entries.filter((entry) => entry.status !== "delivered").length
+  );
+  const [memorySyncing, setMemorySyncing] = useState(false);
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
   const cycleElapsed = elapsedTime(snapshot.cycle.startedAt, snapshot.cycle.completedAt, clockNow);
   const probability = probabilityPresentation(snapshot.insight.confidence);
@@ -132,6 +146,26 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [cycleActive, snapshot.cycle.cycleId, snapshot.cycle.startedAt]);
+
+  useEffect(() => {
+    void fetchGbrainSidecarStatus().then(setMemoryStatus);
+    const refreshMemoryStatus = (event: Event) => {
+      setMemoryStatus(
+        (event as CustomEvent<GbrainSidecarStatus>).detail ?? loadCachedGbrainSidecarStatus()
+      );
+    };
+    const refreshQueued = () => {
+      setMemoryQueued(
+        loadGbrainMemoryOutbox().entries.filter((entry) => entry.status !== "delivered").length
+      );
+    };
+    window.addEventListener(GBRAIN_SIDECAR_STATUS_UPDATED_EVENT, refreshMemoryStatus);
+    window.addEventListener(GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT, refreshQueued);
+    return () => {
+      window.removeEventListener(GBRAIN_SIDECAR_STATUS_UPDATED_EVENT, refreshMemoryStatus);
+      window.removeEventListener(GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT, refreshQueued);
+    };
+  }, []);
 
   const start = async () => {
     setCommandError(undefined);
@@ -392,6 +426,61 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           </div>
         </section>
       </div>
+
+      <section
+        className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#0d1420] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+        data-testid="operator-research-memory-status"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <BrainCircuit
+            className={cn(
+              "mt-0.5 h-5 w-5 shrink-0",
+              memoryStatus.status === "ready"
+                ? "text-emerald-300"
+                : memoryStatus.sidecarStatus === "running"
+                  ? "text-amber-300"
+                  : "text-slate-500"
+            )}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-slate-100">Agent research memory</p>
+              <Badge variant={memoryStatus.status === "ready" ? "success" : memoryStatus.sidecarStatus === "running" ? "warning" : "muted"}>
+                {memoryStatus.status.replace(/_/g, " ")}
+              </Badge>
+              <Badge variant="muted">advisory only</Badge>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {memoryStatus.durableDocumentCount} durable / {memoryStatus.indexedDocumentCount} indexed / {memoryQueued} queued
+            </p>
+            <p className="truncate text-xs text-slate-600" title={memoryStatus.lastError ?? undefined}>
+              {memoryStatus.gbrainInitialized
+                ? "Local retrieval active for compact historical research evidence."
+                : memoryStatus.lastError ?? "Waiting for the local research-memory sidecar."}
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={memorySyncing}
+          onClick={() => {
+            setMemorySyncing(true);
+            void syncGbrainResearchMemory()
+              .then((result) => {
+                setMemoryStatus(result.statusSnapshot);
+                setMemoryQueued(
+                  loadGbrainMemoryOutbox().entries.filter((entry) => entry.status !== "delivered").length
+                );
+              })
+              .finally(() => setMemorySyncing(false));
+          }}
+        >
+          <RefreshCw className={cn("mr-2 h-4 w-4", memorySyncing && "animate-spin")} aria-hidden="true" />
+          Sync memory
+        </Button>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-2xl border border-white/10 bg-[#0d1420] p-5 sm:p-6" data-testid="operator-market-brief">

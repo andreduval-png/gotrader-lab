@@ -84,6 +84,14 @@ assert.equal(authoritativeContext.source.fingerprint, fingerprint);
 assert.match(authoritativeContext.profiles[0].validationChainId, /^validation_binding_v1_/);
 assert.deepEqual(authoritativeContext.authority, authorityNone);
 assert.equal(JSON.stringify(authoritativeContext).includes('"candles"'), false);
+const staleContext = await loadAuthoritativeMcpContext({
+  allowedProfiles: TRADE_PROPOSAL_MCP_ALLOWED_PROFILES,
+  repoRoot: tempRoot,
+  now: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()
+});
+assert.equal(staleContext.status, "stale");
+assert.equal(staleContext.freshness.fresh, false);
+assert(staleContext.blockers.includes("authoritative_validation_stale"));
 
 const safeProposal = {
   requestedSymbol: "MNQ",
@@ -234,9 +242,13 @@ try {
   const listed = await client.listTools();
   const toolNames = listed.tools.map((tool) => tool.name).sort();
   assert.deepEqual(toolNames, [
+    "gotrader_agent_interface_status",
     "gotrader_control_plane_status",
+    "gotrader_get_current_cycle",
     "gotrader_get_current_research_context",
+    "gotrader_get_results",
     "gotrader_get_validation_chain",
+    "gotrader_list_certified_profiles",
     "gotrader_list_eligible_profiles",
     "gotrader_list_mt5_demo_receipts",
     "gotrader_list_paper_demo_receipts",
@@ -293,7 +305,7 @@ console.log(
       status: "passed",
       authoritativeIdentityBound: true,
       concurrentAuditWrites: ledgerLines.length,
-      tools: 10,
+      tools: 14,
       safeProposalStatus: safe.status,
       brokerSubmissionAttempted: false,
       authority: authorityNone
