@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 
-export const R1_EVIDENCE_ARCHIVE_SCHEMA_VERSION = "gotrader-lrs-r1-evidence-archive-v1";
+export const R1_EVIDENCE_ARCHIVE_SCHEMA_VERSION = "gotrader-lrs-r1-evidence-archive-v2";
+export const R1_LEGACY_EVIDENCE_ARCHIVE_SCHEMA_VERSION = "gotrader-lrs-r1-evidence-archive-v1";
+const R1_EVIDENCE_BUNDLE_SCHEMA_VERSION = "gotrader-lrs-r1-evidence-bundle-v1";
 
 const sha256 = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 const toRelative = (root, file) => path.relative(root, file).split(path.sep).join("/");
@@ -18,6 +20,7 @@ const listJsonFiles = (root) => {
 };
 
 const manifestPathFor = (archiveId) => `archives/manifests/${archiveId.replace("sha256:", "")}.json`;
+export const r1EvidenceBundlePathFor = (archiveId) => `archives/bundles/${archiveId.replace("sha256:", "")}.json.gz`;
 
 const assertArchivePath = (relativePath, trialDirectory, telemetryIdSet) => {
   const trialPrefix = `trials/${trialDirectory}/`;
@@ -51,27 +54,23 @@ export async function prepareR1CompletedTrialEvidenceArchive({ modules, storage,
   if (!files.length) throw new Error(`R1 completed trial has no terminal evidence to archive: ${trial.trialId}`);
 
   const entries = [];
+  const bundledEntries = [];
   for (const file of files) {
     const relativePath = toRelative(outputRoot, file);
     assertArchivePath(relativePath, trialDirectory, telemetryIdSet);
     const original = fs.readFileSync(file);
     const text = original.toString("utf8");
     if (text.includes('"candles":[')) throw new Error(`R1 archive refused raw candle evidence: ${relativePath}`);
-    const compressed = gzipSync(original, { level: 9, mtime: 0 });
-    const compressedPath = `${relativePath}.gz`;
-    const existing = await storage.adapter.readBuffer(compressedPath);
-    if (existing && !existing.equals(compressed)) throw new Error(`R1 compressed evidence conflict: ${compressedPath}`);
-    if (!existing) await storage.adapter.writeBufferAtomic(compressedPath, compressed);
     entries.push(Object.freeze({
       relativePath,
-      compressedPath,
       originalSha256: sha256(original),
-      compressedSha256: sha256(compressed),
-      originalBytes: original.length,
-      compressedBytes: compressed.length
+      originalBytes: original.length
     }));
+    bundledEntries.push(Object.freeze({ relativePath, text }));
   }
 
+  const bundleCore = Object.freeze({ schemaVersion: R1_EVIDENCE_BUNDLE_SCHEMA_VERSION, entries: Object.freeze(bundledEntries) });
+  const bundle = gzipSync(Buffer.from(`${modules.canonical.canonicalSerialize(bundleCore)}\n`, "utf8"), { level: 9, mtime: 0 });
   const core = Object.freeze({
     schemaVersion: R1_EVIDENCE_ARCHIVE_SCHEMA_VERSION,
     trialId: trial.trialId,
@@ -79,7 +78,8 @@ export async function prepareR1CompletedTrialEvidenceArchive({ modules, storage,
     parameterHash: trial.parameterHash,
     entryCount: entries.length,
     originalBytes: entries.reduce((sum, entry) => sum + entry.originalBytes, 0),
-    compressedBytes: entries.reduce((sum, entry) => sum + entry.compressedBytes, 0),
+    compressedBytes: bundle.length,
+    bundleSha256: sha256(bundle),
     entries: Object.freeze(entries),
     authority: Object.freeze({ executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" }),
     rawCandlesSerialized: false,
@@ -87,6 +87,10 @@ export async function prepareR1CompletedTrialEvidenceArchive({ modules, storage,
     adaptiveSearchUsed: false
   });
   const manifest = Object.freeze({ ...core, archiveId: await modules.canonical.canonicalHash(core) });
+  const bundlePath = r1EvidenceBundlePathFor(manifest.archiveId);
+  const existingBundle = await storage.adapter.readBuffer(bundlePath);
+  if (existingBundle && !existingBundle.equals(bundle)) throw new Error(`R1 evidence bundle conflict: ${bundlePath}`);
+  if (!existingBundle) await storage.adapter.writeBufferAtomic(bundlePath, bundle);
   const manifestPath = manifestPathFor(manifest.archiveId);
   const serialized = `${modules.canonical.canonicalSerialize(manifest)}\n`;
   const existingManifest = await storage.adapter.readText(manifestPath);
@@ -95,15 +99,15 @@ export async function prepareR1CompletedTrialEvidenceArchive({ modules, storage,
   return manifest;
 }
 
-export async function verifyR1EvidenceArchive({ modules, storage, archiveId, expectedTrialId }) {
-  const manifest = await readManifest({ storage, archiveId });
+const verifyManifestCore = async ({ modules, manifest, archiveId, expectedTrialId }) => {
   const { archiveId: storedId, ...core } = manifest;
-  if (storedId !== archiveId || manifest.schemaVersion !== R1_EVIDENCE_ARCHIVE_SCHEMA_VERSION ||
-      manifest.trialId !== expectedTrialId || manifest.entryCount !== manifest.entries?.length ||
-      manifest.rawCandlesSerialized !== false || manifest.holdoutUsed !== false || manifest.adaptiveSearchUsed !== false ||
-      manifest.authority?.executionAuthority !== "none" || await modules.canonical.canonicalHash(core) !== storedId) {
-    throw new Error(`R1 evidence archive manifest integrity failure: ${archiveId}`);
-  }
+  if (storedId !== archiveId || ![R1_EVIDENCE_ARCHIVE_SCHEMA_VERSION, R1_LEGACY_EVIDENCE_ARCHIVE_SCHEMA_VERSION].includes(manifest.schemaVersion) ||
+      manifest.trialId !== expectedTrialId || manifest.entryCount !== manifest.entries?.length || manifest.rawCandlesSerialized !== false ||
+      manifest.holdoutUsed !== false || manifest.adaptiveSearchUsed !== false || manifest.authority?.executionAuthority !== "none" ||
+      await modules.canonical.canonicalHash(core) !== storedId) throw new Error(`R1 evidence archive manifest integrity failure: ${archiveId}`);
+};
+
+const verifyLegacyArchive = async ({ storage, manifest, expectedTrialId }) => {
   const trialDirectory = expectedTrialId.replace("sha256:", "sha256_");
   const relativePaths = new Set();
   const compressedPaths = new Set();
@@ -142,6 +146,59 @@ export async function verifyR1EvidenceArchive({ modules, storage, archiveId, exp
     compressedBytes += compressed.length;
   }
   if (originalBytes !== manifest.originalBytes || compressedBytes !== manifest.compressedBytes) {
+    throw new Error(`R1 evidence archive byte accounting failure: ${manifest.archiveId}`);
+  }
+  return manifest;
+};
+
+export async function verifyR1EvidenceArchive({ modules, storage, archiveId, expectedTrialId }) {
+  const manifest = await readManifest({ storage, archiveId });
+  await verifyManifestCore({ modules, manifest, archiveId, expectedTrialId });
+  if (manifest.schemaVersion === R1_LEGACY_EVIDENCE_ARCHIVE_SCHEMA_VERSION) {
+    return verifyLegacyArchive({ storage, manifest, expectedTrialId });
+  }
+  const bundlePath = r1EvidenceBundlePathFor(archiveId);
+  const bundle = await storage.adapter.readBuffer(bundlePath);
+  if (!bundle || bundle.length !== manifest.compressedBytes || sha256(bundle) !== manifest.bundleSha256) {
+    throw new Error(`R1 evidence bundle integrity failure: ${bundlePath}`);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(gunzipSync(bundle).toString("utf8"));
+  } catch {
+    throw new Error(`R1 evidence bundle roundtrip failure: ${bundlePath}`);
+  }
+  if (payload.schemaVersion !== R1_EVIDENCE_BUNDLE_SCHEMA_VERSION || payload.entries?.length !== manifest.entryCount) {
+    throw new Error(`R1 evidence bundle schema failure: ${bundlePath}`);
+  }
+  const trialDirectory = expectedTrialId.replace("sha256:", "sha256_");
+  const metadataByPath = new Map(manifest.entries.map((entry) => [entry.relativePath, entry]));
+  if (metadataByPath.size !== manifest.entryCount) throw new Error(`R1 evidence archive path integrity failure: ${archiveId}`);
+  let originalBytes = 0;
+  const seen = new Set();
+  for (const bundled of payload.entries) {
+    const entry = metadataByPath.get(bundled.relativePath);
+    const isTrialEvidence = bundled.relativePath.startsWith(`trials/${trialDirectory}/`) &&
+      bundled.relativePath !== `trials/${trialDirectory}/baseline-report.json`;
+    const telemetryMatch = /^telemetry\/child-\d{6}-([a-f0-9]{64})\.json$/.exec(bundled.relativePath);
+    if (!entry || (!isTrialEvidence && !telemetryMatch) || seen.has(bundled.relativePath) || typeof bundled.text !== "string") {
+      throw new Error(`R1 evidence archive path integrity failure: ${bundled.relativePath}`);
+    }
+    seen.add(bundled.relativePath);
+    const original = Buffer.from(bundled.text, "utf8");
+    if (original.length !== entry.originalBytes || sha256(original) !== entry.originalSha256 || bundled.text.includes('"candles":[')) {
+      throw new Error(`R1 evidence roundtrip integrity failure: ${bundled.relativePath}`);
+    }
+    if (telemetryMatch) {
+      const telemetry = JSON.parse(bundled.text);
+      if (telemetry.trialId !== expectedTrialId || telemetry.telemetryId !== `sha256:${telemetryMatch[1]}`) {
+        throw new Error(`R1 archived telemetry scope failure: ${bundled.relativePath}`);
+      }
+    }
+    storage.adapter.mountReadText(bundled.relativePath, bundled.text);
+    originalBytes += original.length;
+  }
+  if (seen.size !== manifest.entryCount || originalBytes !== manifest.originalBytes) {
     throw new Error(`R1 evidence archive byte accounting failure: ${archiveId}`);
   }
   return manifest;

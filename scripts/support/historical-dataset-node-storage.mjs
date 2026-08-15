@@ -11,6 +11,7 @@ const delay = (milliseconds) =>
 export function createHistoricalDatasetNodeStorage({ root }) {
   const absoluteRoot = path.resolve(root);
   let writesToFail = 0;
+  const mountedText = new Map();
 
   const resolveSafe = (relativePath) => {
     if (
@@ -72,7 +73,7 @@ export function createHistoricalDatasetNodeStorage({ root }) {
           const compressed = await fs.readFile(resolveSafe(`${relativePath}.gz`));
           return gunzipSync(compressed).toString("utf8");
         } catch (compressedError) {
-          if (compressedError?.code === "ENOENT") return undefined;
+          if (compressedError?.code === "ENOENT") return mountedText.get(relativePath);
           throw compressedError;
         }
       }
@@ -96,6 +97,7 @@ export function createHistoricalDatasetNodeStorage({ root }) {
       await fs.rm(resolveSafe(relativePath), { force: true });
     },
     async fileExists(relativePath) {
+      if (mountedText.has(relativePath)) return true;
       try {
         await fs.access(resolveSafe(relativePath));
         return true;
@@ -103,6 +105,13 @@ export function createHistoricalDatasetNodeStorage({ root }) {
         if (error?.code === "ENOENT") return false;
         throw error;
       }
+    },
+    mountReadText(relativePath, value) {
+      resolveSafe(relativePath);
+      if (typeof value !== "string") throw new Error("Historical dataset mounted text must be a string.");
+      const existing = mountedText.get(relativePath);
+      if (existing !== undefined && existing !== value) throw new Error(`Historical dataset mounted text conflict: ${relativePath}`);
+      mountedText.set(relativePath, value);
     },
     async listFiles(relativePath) {
       const directory = resolveSafe(relativePath);

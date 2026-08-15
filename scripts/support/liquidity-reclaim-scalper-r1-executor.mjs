@@ -155,8 +155,8 @@ export async function openR1Controller({ modules, outputRoot, mode, selectedTria
     if (migrated !== parsed) {
       await storage.adapter.writeTextAtomic("checkpoints/controller.json", `${modules.canonical.canonicalSerialize(checkpoint)}\n`);
     }
-    await verifyR1ChildTelemetryLedger({ modules, storage, checkpoint });
     await verifyAndFinalizeCommittedR1EvidenceArchives({ modules, storage, checkpoint });
+    await verifyR1ChildTelemetryLedger({ modules, storage, checkpoint });
     return { storage, checkpoint };
   }
   const checkpoint = await sealR1ControllerCheckpoint(modules, { mode, selectedTrialIds, nextPosition: 0, dispositions: [], orderedEventIds: [],

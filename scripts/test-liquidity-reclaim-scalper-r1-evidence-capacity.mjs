@@ -7,6 +7,7 @@ import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-base
 import {
   finalizeR1EvidenceArchive,
   prepareR1CompletedTrialEvidenceArchive,
+  r1EvidenceBundlePathFor,
   verifyR1EvidenceArchive
 } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
 import {
@@ -84,18 +85,18 @@ const reopened = await openR1Controller({ modules, outputRoot, mode: "pilot", se
 assert.equal(reopened.checkpoint.checkpointId, checkpoint.checkpointId);
 for (const entry of manifest.entries) {
   assert.equal(fs.existsSync(opened.storage.resolveSafe(entry.relativePath)), false);
-  assert.equal(fs.existsSync(opened.storage.resolveSafe(entry.compressedPath)), true);
   assert.ok(await opened.storage.adapter.readText(entry.relativePath));
 }
+const bundleRelativePath = r1EvidenceBundlePathFor(manifest.archiveId);
+assert.equal(fs.existsSync(opened.storage.resolveSafe(bundleRelativePath)), true);
 assert.equal(fs.existsSync(opened.storage.resolveSafe(`trials/${trialDirectory}/baseline-report.json`)), true);
 
-const corruptEntry = manifest.entries[0];
-const compressedPath = opened.storage.resolveSafe(corruptEntry.compressedPath);
+const compressedPath = opened.storage.resolveSafe(bundleRelativePath);
 const originalCompressed = fs.readFileSync(compressedPath);
 fs.writeFileSync(compressedPath, Buffer.from("corrupt"));
 await assert.rejects(
   verifyR1EvidenceArchive({ modules, storage: opened.storage, archiveId: manifest.archiveId, expectedTrialId: trial.trialId }),
-  /compressed evidence integrity/
+  /bundle integrity/
 );
 fs.writeFileSync(compressedPath, originalCompressed);
 await verifyR1EvidenceArchive({ modules, storage: opened.storage, archiveId: manifest.archiveId, expectedTrialId: trial.trialId });
