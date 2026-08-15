@@ -89,7 +89,7 @@ export async function verifyQualifiedInputBounded({ modules, certificatePath, re
     let candleCount = 0;
     let firstCandleTimeUtc;
     let lastCandleTimeUtc;
-    let previousCloseTimeUtc;
+    const seenOpenTimes = new Set();
     for (const partitionId of timeframe.partitionIds) {
       let partition = await readVerifiedEnvelope({ modules, repositoryRoot, directory: "partitions", identity: partitionId, artifactKind: "partition" });
       const { partitionId: storedPartitionId, ...partitionCore } = partition;
@@ -99,13 +99,13 @@ export async function verifyQualifiedInputBounded({ modules, certificatePath, re
           !Array.isArray(partition.candles) || !partition.candles.length) {
         blockers.push(`bt2_${timeframe.timeframe}_partition_identity_invalid`);
       } else {
-        const first = partition.candles[0];
-        const last = partition.candles.at(-1);
-        if (previousCloseTimeUtc && first.openTimeUtc < previousCloseTimeUtc) blockers.push(`bt2_${timeframe.timeframe}_partition_order_invalid`);
-        firstCandleTimeUtc ??= first.openTimeUtc;
-        lastCandleTimeUtc = last.closeTimeUtc;
-        previousCloseTimeUtc = last.closeTimeUtc;
-        candleCount += partition.candles.length;
+        for (const candle of partition.candles) {
+          if (seenOpenTimes.has(candle.openTimeUtc)) continue;
+          seenOpenTimes.add(candle.openTimeUtc);
+          candleCount += 1;
+          if (!firstCandleTimeUtc || candle.openTimeUtc < firstCandleTimeUtc) firstCandleTimeUtc = candle.openTimeUtc;
+          if (!lastCandleTimeUtc || candle.closeTimeUtc > lastCandleTimeUtc) lastCandleTimeUtc = candle.closeTimeUtc;
+        }
       }
       partition = undefined;
       releaseTransientMemory();
@@ -115,8 +115,11 @@ export async function verifyQualifiedInputBounded({ modules, certificatePath, re
         lastCandleTimeUtc !== timeframe.lastCandleTimeUtc) blockers.push(`bt2_${timeframe.timeframe}_coverage_mismatch`);
     const integrity = await readVerifiedEnvelope({ modules, repositoryRoot, directory: "integrity",
       identity: timeframe.integrityLedgerId, artifactKind: "integrity" });
-    if (integrity.ledgerId !== timeframe.integrityLedgerId || integrity.timeframe !== timeframe.timeframe ||
-        !authorityIsNone(integrity.authority)) blockers.push(`bt2_${timeframe.timeframe}_integrity_ledger_mismatch`);
+    if (integrity.ledgerId !== timeframe.integrityLedgerId || integrity.requestId !== manifest.requestId ||
+        integrity.summary?.canonicalCandleCount !== timeframe.candleCount || !authorityIsNone(integrity.authority)) {
+      blockers.push(`bt2_${timeframe.timeframe}_integrity_ledger_mismatch`);
+    }
+    seenOpenTimes.clear();
     releaseTransientMemory();
   }
   return bounded({ certificate, registry, manifest, verification: bounded({ status: blockers.length ? "blocked" : "verified",
