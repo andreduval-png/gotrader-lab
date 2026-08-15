@@ -85,7 +85,8 @@ const reopened = await openR1Controller({ modules, outputRoot, mode: "pilot", se
 assert.equal(reopened.checkpoint.checkpointId, checkpoint.checkpointId);
 for (const entry of manifest.entries) {
   assert.equal(fs.existsSync(opened.storage.resolveSafe(entry.relativePath)), false);
-  assert.ok(await opened.storage.adapter.readText(entry.relativePath));
+  if (entry.relativePath.startsWith("telemetry/")) assert.ok(await opened.storage.adapter.readText(entry.relativePath));
+  else assert.equal(await opened.storage.adapter.readText(entry.relativePath), undefined);
 }
 const bundleRelativePath = r1EvidenceBundlePathFor(manifest.archiveId);
 assert.equal(fs.existsSync(opened.storage.resolveSafe(bundleRelativePath)), true);

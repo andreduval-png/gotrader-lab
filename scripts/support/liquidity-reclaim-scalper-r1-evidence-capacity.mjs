@@ -195,7 +195,7 @@ export async function verifyR1EvidenceArchive({ modules, storage, archiveId, exp
         throw new Error(`R1 archived telemetry scope failure: ${bundled.relativePath}`);
       }
     }
-    storage.adapter.mountReadText(bundled.relativePath, bundled.text);
+    if (telemetryMatch) storage.adapter.mountReadText(bundled.relativePath, bundled.text);
     originalBytes += original.length;
   }
   if (seen.size !== manifest.entryCount || originalBytes !== manifest.originalBytes) {
