@@ -14,6 +14,7 @@ const builder = read("src/lib/results/buildResultsWorkspaceSnapshot.ts");
 for (const marker of [
   "results-calendar",
   "results-tab-overview",
+  "results-tab-trade-plans",
   "results-tab-replay",
   "results-tab-walk-forward",
   "results-tab-paper-forward",
@@ -36,6 +37,9 @@ assert.match(view, /Latest saved simulation and frozen profile evidence remain d
 assert.match(view, /readableProfile\(resultsSnapshot\.frozenProfile\.profileId\)/);
 assert.doesNotMatch(view, /Frozen IFVG v3/);
 assert.match(builder, /getFrozenResearchProfile\(activeFrozenProfileId/);
+assert.match(view, /listTradePlanCycleResults/);
+assert.match(view, /Plan versus observed outcome/);
+assert.match(view, /Four-week trade-management review/);
 
 for (const section of [
   "backtest:",

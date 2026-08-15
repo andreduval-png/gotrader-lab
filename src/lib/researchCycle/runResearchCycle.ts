@@ -33,6 +33,7 @@ import {
 } from "@/lib/researchEvidenceLedger";
 import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
 import { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";
+import { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -227,6 +228,17 @@ const readinessBlockerLabel = (requirement: { id?: string; label: string; passed
 
 const uniqueText = (items: Array<string | undefined>) =>
   items.filter((item): item is string => Boolean(item?.trim())).filter((item, index, array) => array.indexOf(item) === index);
+
+const persistTradePlanCycleSafely = async (run: ResearchCycleRun, candles: import("@/lib/types").Candle[]) => {
+  try {
+    await persistAndReconcileTradePlanCycle(run, candles, run.completedAt ?? new Date().toISOString());
+  } catch (error) {
+    run.candleWindowWarnings = uniqueText([
+      ...(run.candleWindowWarnings ?? []),
+      `Trade-plan result persistence failed safely: ${error instanceof Error ? error.message : "unknown error"}. No readiness or authority changed.`
+    ]);
+  }
+};
 
 const evidenceDataModeFor = (
   sourceMode: ResearchCycleRun["dataSourceMode"],
@@ -917,6 +929,7 @@ export async function runResearchCycle({
     run.completedAt = now();
     run.nextRecommendedAction = "Select and verify an eligible canonical research source, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     return snapshot();
   }
@@ -940,6 +953,7 @@ export async function runResearchCycle({
     run.completedAt = now();
     run.nextRecommendedAction = "Reactivate an imported dataset on Market Data, or re-import MNQ historical data, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     return snapshot();
   }
@@ -964,6 +978,7 @@ export async function runResearchCycle({
     run.nextRecommendedAction =
       "Use the dashboard Safe preset or enable Advanced full research mode only when intentionally stress-testing large imported datasets.";
     run.resultSummary = resultSummaryFor(run);
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     return snapshot();
   }
@@ -986,6 +1001,7 @@ export async function runResearchCycle({
     run.nextRecommendedAction =
       "Activate MT5 read-only research mode (Advisor > Activate Market) or import historical candles on Market Data, then rerun the research cycle.";
     run.resultSummary = resultSummaryFor(run);
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     return snapshot();
   }
@@ -1064,6 +1080,7 @@ export async function runResearchCycle({
             target: recommended.target,
             invalidation: recommended.invalidation,
             rrEstimate: recommended.rrEstimate,
+            scalpStatus: advisorPacket.compactSummary.scalpStatus,
             summary: recommended.summary,
             noTradeReasons: safeTopN(recommended.noTradeReasons, 6),
             universalRecognitionLabel: advisorPacket.universalRecognition
@@ -1113,6 +1130,7 @@ export async function runResearchCycle({
       run.completedAt = now();
       run.nextRecommendedAction = nextActionFor(run);
       run.resultSummary = resultSummaryFor(run);
+      await persistTradePlanCycleSafely(run, researchCandles);
       saveResearchCycleRun(snapshot());
       return snapshot();
     }
@@ -1183,6 +1201,7 @@ export async function runResearchCycle({
       run.completedAt = now();
       run.nextRecommendedAction = nextActionFor(run);
       run.resultSummary = resultSummaryFor(run);
+      await persistTradePlanCycleSafely(run, researchCandles);
       saveResearchCycleRun(snapshot());
       return snapshot();
     }
@@ -2107,6 +2126,7 @@ export async function runResearchCycle({
         `Persistent research evidence failed safely: ${error instanceof Error ? error.message : "unknown error"}. Readiness and execution authority were not changed.`
       ]);
     }
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     notify();
     return snapshot();
@@ -2139,6 +2159,7 @@ export async function runResearchCycle({
     } catch {
       // Keep the failed research-cycle result available even if audit logging storage is full.
     }
+    await persistTradePlanCycleSafely(run, researchCandles);
     saveResearchCycleRun(snapshot());
     return snapshot();
   }

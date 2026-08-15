@@ -13,11 +13,13 @@ import {
 import {
   Activity,
   CalendarDays,
+  ClipboardCheck,
   ChevronLeft,
   ChevronRight,
   FlaskConical,
   Layers3,
   LockKeyhole,
+  RefreshCw,
   ShieldAlert,
   ShieldCheck,
   Target,
@@ -55,9 +57,20 @@ import { loadPredictionLedger } from "@/lib/predictionLedger";
 import { loadForwardEvidenceLedger } from "@/lib/forwardEvidence";
 import { latestValidationChainEntry, readValidationChainState } from "@/lib/validationChain";
 import { buildResultsWorkspaceSnapshot } from "@/lib/results";
+import {
+  buildTradePlanResultsSnapshot,
+  listTradePlanCycleResults,
+  reconcileSavedTradePlanOutcomes,
+  TRADE_PLAN_RESULTS_UPDATED_EVENT,
+  type TradePlanCycleResultRecord
+} from "@/lib/tradePlanOutcomes";
+import {
+  hydrateActiveMt5ReadOnlyCandleFeed,
+  mt5ReadOnlyCandlesToGoTraderCandles
+} from "@/lib/integrations/mt5";
 import { WORKSPACE_PAGE, WORKSPACE_SECTION_LABEL } from "@/components/common/workspaceStyles";
 
-type ResultsTab = "overview" | "backtest" | "replay" | "walk_forward" | "paper_forward" | "robustness";
+type ResultsTab = "overview" | "trade_plans" | "backtest" | "replay" | "walk_forward" | "paper_forward" | "robustness";
 
 const money = new Intl.NumberFormat(undefined, {
   currency: "USD",
@@ -79,7 +92,18 @@ const pct = (value?: number, digits = 1) =>
   typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "n/a";
 const rValue = (value?: number | null, digits = 2) =>
   typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(digits)}R` : "n/a";
+const pointsValue = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)} pts` : "n/a";
 const readableProfile = (profileId: string) => profileId.replace(/_/g, " ");
+const readableOutcome = (value: string) => value.replace(/_/g, " ");
+const outcomeBadgeVariant = (record: TradePlanCycleResultRecord) =>
+  record.outcome.status === "passed_target_first"
+    ? "success" as const
+    : record.outcome.status === "failed_stop_first" || record.outcome.status === "ambiguous_stop_first"
+      ? "danger" as const
+      : record.outcome.status === "pending_entry" || record.outcome.status === "active"
+        ? "warning" as const
+        : "secondary" as const;
 
 interface CalendarCell {
   date: Date;
@@ -96,6 +120,9 @@ interface CalendarCell {
 
 export function PerformanceView({ state }: { state: LabState }) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
+  const [tradePlanRecords, setTradePlanRecords] = useState<TradePlanCycleResultRecord[]>([]);
+  const [tradePlanRefreshState, setTradePlanRefreshState] = useState<"idle" | "refreshing">("idle");
+  const [tradePlanRefreshMessage, setTradePlanRefreshMessage] = useState("Uses only cached, closed candles from the active MT5 read-only source.");
   const [resultsTab, setResultsTab] = useState<ResultsTab>("overview");
   const [monthOffset, setMonthOffset] = useState(0);
 
@@ -139,6 +166,10 @@ export function PerformanceView({ state }: { state: LabState }) {
     }),
     [canonicalMetrics, runtimeSnapshot, walkForward]
   );
+  const tradePlanSnapshot = useMemo(
+    () => buildTradePlanResultsSnapshot(tradePlanRecords),
+    [tradePlanRecords]
+  );
   const sourceWarnings = selectRuntimeProvenanceWarnings(runtimeSnapshot);
   const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
   const avgWinLoss = averageWinLossRatio(canonicalMetrics);
@@ -157,6 +188,47 @@ export function PerformanceView({ state }: { state: LabState }) {
       mounted = false;
     };
   }, [state]);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => {
+      listTradePlanCycleResults().then((records) => {
+        if (mounted) setTradePlanRecords(records);
+      }).catch((error) => {
+        console.error("Trade-plan result ledger failed to load.", error);
+      });
+    };
+    refresh();
+    window.addEventListener(TRADE_PLAN_RESULTS_UPDATED_EVENT, refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener(TRADE_PLAN_RESULTS_UPDATED_EVENT, refresh);
+    };
+  }, []);
+
+  const refreshTradePlanOutcomes = async () => {
+    setTradePlanRefreshState("refreshing");
+    try {
+      const feed = await hydrateActiveMt5ReadOnlyCandleFeed();
+      const candles = mt5ReadOnlyCandlesToGoTraderCandles(feed);
+      if (!candles.length) {
+        setTradePlanRefreshMessage("No cached MT5 candles are available. Run a new research cycle after market data is restored.");
+        return;
+      }
+      const result = await reconcileSavedTradePlanOutcomes(candles);
+      const records = await listTradePlanCycleResults();
+      setTradePlanRecords(records);
+      setTradePlanRefreshMessage(
+        result.updated
+          ? `${result.updated} saved trade-plan outcome${result.updated === 1 ? "" : "s"} updated from identity-matched closed candles.`
+          : `No outcome changed across ${result.inspected} identity-matched saved plan${result.inspected === 1 ? "" : "s"}.`
+      );
+    } catch (error) {
+      setTradePlanRefreshMessage(`Cached outcome refresh failed: ${error instanceof Error ? error.message : "unknown error"}.`);
+    } finally {
+      setTradePlanRefreshState("idle");
+    }
+  };
 
   return (
     <div data-testid="performance-results-page" className={`${WORKSPACE_PAGE} text-slate-100`}>
@@ -189,6 +261,7 @@ export function PerformanceView({ state }: { state: LabState }) {
         {(
           [
             ["overview", "Overview"],
+            ["trade_plans", "Trade Plans"],
             ["backtest", "Backtest"],
             ["replay", "Replay"],
             ["walk_forward", "Walk-Forward OOS"],
@@ -269,6 +342,126 @@ export function PerformanceView({ state }: { state: LabState }) {
               </p>
               <p className="mt-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
                 {resultsSnapshot.validation.nextAction}
+              </p>
+            </ResultPanel>
+          </div>
+        </section>
+      ) : null}
+
+      {resultsTab === "trade_plans" ? (
+        <section className="space-y-4" data-testid="results-tab-trade-plans">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <ResultMetricCard
+              label="Cycles this month"
+              value={String(tradePlanSnapshot.cycleCount)}
+              detail={`${tradePlanSnapshot.daily.length} active research dates in the bounded four-week view`}
+            />
+            <ResultMetricCard
+              label="Saved trade plans"
+              value={String(tradePlanSnapshot.planCount)}
+              detail={`${tradePlanSnapshot.evaluatedCount} resolved / ${tradePlanSnapshot.pendingCount} pending`}
+            />
+            <ResultMetricCard
+              label="Plan pass rate"
+              value={pct(tradePlanSnapshot.passRate ?? undefined)}
+              detail={`${tradePlanSnapshot.passedCount} target-first / ${tradePlanSnapshot.failedCount} stop-first / ${tradePlanSnapshot.ambiguousCount} ambiguous`}
+              tone={tradePlanSnapshot.passRate !== null && tradePlanSnapshot.passRate >= 0.5 ? "positive" : undefined}
+            />
+            <ResultMetricCard
+              label="Observed points"
+              value={pointsValue(tradePlanSnapshot.realizedPoints)}
+              detail={`${tradePlanSnapshot.plannedTargetPoints.toFixed(2)} planned target points / ${rValue(tradePlanSnapshot.averageRealizedR)}`}
+              tone={tradePlanSnapshot.realizedPoints > 0 ? "positive" : undefined}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-white/[0.025] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm leading-6 text-slate-400" aria-live="polite">{tradePlanRefreshMessage}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              disabled={tradePlanRefreshState === "refreshing"}
+              onClick={() => void refreshTradePlanOutcomes()}
+              data-testid="refresh-trade-plan-outcomes"
+            >
+              <RefreshCw className={cn("mr-2 h-4 w-4", tradePlanRefreshState === "refreshing" && "animate-spin")} />
+              {tradePlanRefreshState === "refreshing" ? "Refreshing" : "Refresh outcomes"}
+            </Button>
+          </div>
+
+          <ResultPanel>
+            <PanelHeading
+              icon={<ClipboardCheck className="h-4 w-4" />}
+              title="Plan versus observed outcome"
+              subtitle="Saved geometry evaluated only on later identity-matched closed candles"
+            />
+            <div className="mt-4 space-y-2" data-testid="trade-plan-outcome-list">
+              {tradePlanSnapshot.records.length ? tradePlanSnapshot.records.slice(0, 40).map((record) => (
+                <div key={record.cycleId} className="grid gap-3 border-b border-white/10 py-3 last:border-b-0 lg:grid-cols-[1.2fr_1fr_1fr]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={outcomeBadgeVariant(record)}>{readableOutcome(record.outcome.status)}</Badge>
+                      <span className="text-sm font-semibold text-slate-100">
+                        {record.plan?.tradeModel?.replace(/_/g, " ") ?? "No evaluable trade plan"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {new Date(record.completedAt).toLocaleString()} / cycle {record.cycleId}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">{record.outcome.resultReason}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                    <span className="text-slate-500">Model</span><span className="text-right text-slate-200">{record.plan?.strategyId.replace(/_/g, " ") ?? "n/a"}</span>
+                    <span className="text-slate-500">Horizon</span><span className="text-right text-slate-200">{record.plan?.horizon ?? "n/a"}</span>
+                    <span className="text-slate-500">Signal</span><span className={cn("text-right font-semibold", record.plan?.signal === "BUY" ? "text-emerald-300" : record.plan?.signal === "SELL" ? "text-rose-300" : "text-slate-400")}>{record.plan?.signal ?? "NO_TRADE"}</span>
+                    <span className="text-slate-500">Confidence</span><span className="text-right text-slate-200">{record.plan ? pct(record.plan.confidence) : "n/a"}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                    <span className="text-slate-500">Entry</span><span className="text-right text-slate-200">{record.plan?.entryPrice?.toFixed(2) ?? "n/a"}</span>
+                    <span className="text-slate-500">Stop</span><span className="text-right text-rose-300">{record.plan?.stopLoss?.toFixed(2) ?? "n/a"}</span>
+                    <span className="text-slate-500">Target</span><span className="text-right text-emerald-300">{record.plan?.takeProfit?.toFixed(2) ?? "n/a"}</span>
+                    <span className="text-slate-500">Planned points</span><span className="text-right text-slate-200">{pointsValue(record.plan?.plannedTargetPoints)}</span>
+                    <span className="text-slate-500">Observed points</span><span className={cn("text-right font-semibold", (record.outcome.realizedPoints ?? 0) > 0 ? "text-emerald-300" : (record.outcome.realizedPoints ?? 0) < 0 ? "text-rose-300" : "text-slate-300")}>{pointsValue(record.outcome.realizedPoints)}</span>
+                  </div>
+                </div>
+              )) : (
+                <p className="py-5 text-sm text-slate-400">Run a research cycle to create the first compact trade-plan result record.</p>
+              )}
+            </div>
+          </ResultPanel>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <ResultPanel>
+              <PanelHeading icon={<CalendarDays className="h-4 w-4" />} title="Daily cycle results" subtitle="Every terminal cycle is counted, including no-plan and failed cycles" />
+              <div className="mt-4 space-y-2" data-testid="trade-plan-daily-results">
+                {tradePlanSnapshot.daily.length ? tradePlanSnapshot.daily.map((day) => (
+                  <div key={day.date} className="grid grid-cols-[1fr_auto] gap-3 border-b border-white/10 py-2 last:border-b-0">
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{day.date}</p>
+                      <p className="text-xs text-slate-500">{day.cycleCount} cycles / {day.planCount} plans / {day.pendingCount} pending / {day.notTriggeredCount} not triggered</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-sm font-semibold", day.realizedPoints > 0 ? "text-emerald-300" : day.realizedPoints < 0 ? "text-rose-300" : "text-slate-300")}>{pointsValue(day.realizedPoints)}</p>
+                      <p className="text-xs text-slate-500">{day.passedCount} pass / {day.failedCount} fail / {day.ambiguousCount} ambiguous</p>
+                    </div>
+                  </div>
+                )) : <p className="py-5 text-sm text-slate-400">No cycle results are saved for this month.</p>}
+              </div>
+            </ResultPanel>
+
+            <ResultPanel>
+              <PanelHeading icon={<Activity className="h-4 w-4" />} title="Four-week trade-management review" subtitle="Descriptive calibration only; settings never change automatically" />
+              <p className="mt-3 text-xs text-slate-500">
+                {tradePlanSnapshot.windowStart.slice(0, 10)} through {tradePlanSnapshot.windowEnd.slice(0, 10)} / identity-bound plan observations
+              </p>
+              <div className="mt-4 space-y-2" data-testid="trade-plan-calibration-suggestions">
+                {tradePlanSnapshot.calibrationSuggestions.map((suggestion) => (
+                  <p key={suggestion} className="border-l-2 border-amber-300/50 pl-3 text-sm leading-6 text-slate-300">{suggestion}</p>
+                ))}
+              </div>
+              <p className="mt-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">
+                These observations cannot promote readiness, alter risk, or authorize execution. Ambiguous bars remain conservative until finer closed-candle evidence exists.
               </p>
             </ResultPanel>
           </div>

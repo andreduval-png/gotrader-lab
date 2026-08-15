@@ -213,6 +213,7 @@ export interface ResearchCycleAdvisorSignalSummary {
   target?: number;
   invalidation?: number;
   rrEstimate?: number;
+  scalpStatus?: string;
   summary: string;
   noTradeReasons: string[];
   universalRecognitionLabel?: string;
