@@ -37,7 +37,7 @@ import { evidenceScoreVariant, selectEvidenceReadinessImpact } from "@/lib/evide
 import { maturityGradeLabel, maturityGradeVariant, selectMaturityReadinessWarning } from "@/lib/maturity";
 import { latestAutoResearchCycle, loadAutoResearchState } from "@/lib/autoResearch";
 import { loadSelfImprovementState } from "@/lib/selfImprovement";
-import { countCompletedRunbookItems, loadSimulationRunbookState, simulationRunbookChecklist } from "@/lib/simulationRunbook";
+import { countCompletedRunbookItems, hydrateSimulationRunbookState, loadSimulationRunbookState, simulationRunbookChecklist } from "@/lib/simulationRunbook";
 import { loadLatestValidationReport } from "@/lib/validation";
 import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 import { attachMatchingCycleValidationProvenance } from "@/lib/validationProvenance";
@@ -96,6 +96,7 @@ export function ReadinessGateView() {
         validation: readinessValidation,
         quality,
         runbook,
+        currentCycleId: latestCycle?.cycleId,
         provenanceExpectation: readinessValidation?.provenance,
         walkForwardRun: matchingWalkForward,
         edgeStatistics: oosEdge?.provenance === "out_of_sample" ? oosEdge : undefined
@@ -137,9 +138,10 @@ export function ReadinessGateView() {
   const latestAutoResearch = latestAutoResearchCycle(loadAutoResearchState());
 
   const refresh = () => {
+    const latestCycle = latestResearchCycleRun(loadResearchCycleState());
     setValidation(loadLatestValidationReport());
     setQuality(loadLatestResearchQualityReview());
-    setRunbook(loadSimulationRunbookState());
+    void hydrateSimulationRunbookState(latestCycle?.cycleId).then(setRunbook);
     setApproval(loadManualApprovalRecord());
     setSelfImprovement(loadSelfImprovementState());
     void resolveResearchRuntimeSnapshot().then(setRuntimeSnapshot).catch((error) => {

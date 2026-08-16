@@ -32,7 +32,7 @@ import { loadSelfImprovementState } from "@/lib/selfImprovement";
 import { labStorage } from "@/lib/storage";
 import { safeArray, safeTopN } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
-import { loadSimulationRunbookState } from "@/lib/simulationRunbook";
+import { hydrateSimulationRunbookState, loadSimulationRunbookState } from "@/lib/simulationRunbook";
 
 const verdictVariant = (verdict: AgentAuditVerdict) =>
   verdict === "reliable"
@@ -56,12 +56,13 @@ function createTracesFromCurrentState() {
   const latestProposal =
     safeArray(selfImprovement.proposals).find((proposal) => proposal.proposalId === selfImprovement.latestProposalId) ??
     safeArray(selfImprovement.proposals)[0];
+  const latestCycle = latestResearchCycleRun();
   const readiness = evaluateReadinessGate({
     validation: loadLatestValidationReport(),
     quality: loadLatestResearchQualityReview(),
-    runbook: loadSimulationRunbookState()
+    runbook: loadSimulationRunbookState(),
+    currentCycleId: latestCycle?.cycleId
   });
-  const latestCycle = latestResearchCycleRun();
   const autoResearchCycle = latestCycle?.autoResearchCycle ?? latestAutoResearchCycle(loadAutoResearchState());
   const agentDebateSession = latestAgentDebateSession(loadAgentDebateState());
 
@@ -100,7 +101,9 @@ export function AgentAuditView() {
     };
   }, []);
 
-  const runAudit = () => {
+  const runAudit = async () => {
+    const latestCycle = latestResearchCycleRun();
+    await hydrateSimulationRunbookState(latestCycle?.cycleId);
     const nextTraces = createTracesFromCurrentState();
     setState(saveAgentAuditTraces(nextTraces));
     setSelectedTraceId(nextTraces[0]?.traceId);

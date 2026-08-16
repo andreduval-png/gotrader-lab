@@ -88,8 +88,9 @@ import { runDetectorProfileBacktest } from "@/lib/researchCycle/runDetectorProfi
 import { notifyResearchCycleObserver } from "@/lib/researchCycle/safeResearchCycleObserver";
 import { generateThesis } from "@/lib/simulation";
 import {
-  loadSimulationRunbookState,
-  saveSimulationRunbookState
+  appendSimulationRunbookEvidence,
+  digestSimulationRunbookSource,
+  hydrateSimulationRunbookState
 } from "@/lib/simulationRunbook";
 import type { SimulationRunbookSignal } from "@/lib/simulationRunbook";
 import {
@@ -1759,34 +1760,58 @@ export async function runResearchCycle({
     startStep("simulation_verification");
     await yieldToBrowser();
     throwIfCanceled();
-    const runbookBefore = loadSimulationRunbookState();
-    const runbookAfter = {
-      ...runbookBefore,
-      latestResearchPipelineAt: now(),
-      latestResearchCycleId: run.cycleId,
-      latestResearchPipelineStatus: "completed" as const,
-      symbol: generatedThesis.thesis.symbol,
-      timeframe: generatedThesis.thesis.timeframe,
-      signal: signalFor(generatedThesis.thesis),
-      mode: "simulation",
-      platform: runbookBefore.platform || "ai_lab_handoff",
-      notes: [
-        runbookBefore.notes,
-        `AI Research Cycle ${run.cycleId} completed thesis/backtest/validation pipeline at ${new Date().toISOString()}. Scheduler verification checks were not changed by this automated pipeline.`
-      ].filter(Boolean).join("\n"),
-      checklist: {
-        ...runbookBefore.checklist,
-        aiLabThesisGenerated: true,
-        schedulerOneCycleCompleted: true,
-        signalLogged: true,
-        brokerExecutionSkipped: true
-      }
+    let runbookAfter = await hydrateSimulationRunbookState(run.cycleId);
+    const runbookIdentity = {
+      profileId: validationReport?.provenance?.strategyProfile,
+      parameterFingerprint: validationReport?.provenance?.parameterFingerprint,
+      sourceFingerprint: run.sourceMetadata?.activeSourceFingerprint
     };
-    saveSimulationRunbookState(runbookAfter);
-    passStep("simulation_verification", {
-      summary: "Simulation runbook recorded research pipeline completion.",
-      detail: "Marked research-safe checklist items (thesis generated, one cycle completed, signal logged, broker execution skipped). Positions/trades/shutdown remain operator-verified."
-    });
+    const observedAt = now();
+    const evidenceInputs = [
+      {
+        checkId: "aiLabThesisGenerated" as const,
+        sourceKind: "research_cycle_artifact" as const,
+        sourceId: `${run.cycleId}:thesis`,
+        sourceDigest: await digestSimulationRunbookSource(generatedThesis.thesis)
+      },
+      {
+        checkId: "signalLogged" as const,
+        sourceKind: "signal_receipt" as const,
+        sourceId: `${run.cycleId}:signal`,
+        sourceDigest: await digestSimulationRunbookSource({ signal: signalFor(generatedThesis.thesis), cycleId: run.cycleId })
+      },
+      {
+        checkId: "brokerExecutionSkipped" as const,
+        sourceKind: "authority_snapshot" as const,
+        sourceId: `${run.cycleId}:authority`,
+        sourceDigest: await digestSimulationRunbookSource({
+          cycleId: run.cycleId,
+          executionAuthority: "none",
+          brokerAuthority: "none",
+          readinessOverrideAuthority: "none"
+        })
+      }
+    ];
+    for (const evidence of evidenceInputs) {
+      runbookAfter = await appendSimulationRunbookEvidence({
+        cycleId: run.cycleId,
+        observedAt,
+        ...runbookIdentity,
+        ...evidence
+      });
+      if (runbookAfter.storageStatus !== "current_cycle") break;
+    }
+    if (runbookAfter.storageStatus === "current_cycle") {
+      passStep("simulation_verification", {
+        summary: "Current-cycle simulation evidence was recorded durably.",
+        detail: "Thesis, signal, and authority receipts are immutable. Scheduler, handoff, reader, zero-state, and shutdown checks remain missing until their own receipts exist."
+      });
+    } else {
+      warnStep("simulation_verification", {
+        summary: "Simulation evidence storage is unavailable.",
+        warning: `Runbook failed closed: ${runbookAfter.blocker ?? "sidecar unavailable"}.`
+      });
+    }
 
     startStep("readiness_gate");
     await yieldToBrowser();
@@ -1804,6 +1829,7 @@ export async function runResearchCycle({
       validation: validationReport,
       quality: researchQualityReview,
       runbook: runbookAfter,
+      currentCycleId: run.cycleId,
       edgeStatistics: readinessEdgeStatistics,
       provenanceExpectation: validationReport?.provenance,
       walkForwardRun: matchedCycleWalkForward
@@ -1952,6 +1978,7 @@ export async function runResearchCycle({
       validation: validationReport,
       quality: researchQualityReview,
       runbook: runbookAfter,
+      currentCycleId: run.cycleId,
       edgeStatistics: readinessEdgeStatistics,
       provenanceExpectation: validationReport?.provenance,
       walkForwardRun: matchedCycleWalkForward

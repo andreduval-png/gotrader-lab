@@ -87,8 +87,10 @@ import {
   RESEARCH_QUALITY_UPDATED_EVENT
 } from "@/lib/researchQuality";
 import { resolveResearchRuntimeSnapshot, type ResearchRuntimeSnapshot } from "@/lib/runtime";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 import {
   countCompletedRunbookItems,
+  hydrateSimulationRunbookState,
   loadSimulationRunbookState,
   SIMULATION_RUNBOOK_UPDATED_EVENT,
   simulationRunbookChecklist
@@ -170,14 +172,16 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
   const communicationSummary = getCommunicationSummary(loadCommunicationMessages());
   const runbookCompleted = countCompletedRunbookItems(simulationRunbook);
   const runbookTotal = simulationRunbookChecklist.length;
+  const currentResearchCycle = latestResearchCycleRun(loadResearchCycleState());
   const readinessGate = useMemo(
     () =>
       evaluateReadinessGate({
         validation: latestValidationReport,
         quality: latestQualityReview,
-        runbook: simulationRunbook
+        runbook: simulationRunbook,
+        currentCycleId: currentResearchCycle?.cycleId
       }),
-    [latestValidationReport, latestQualityReview, simulationRunbook]
+    [currentResearchCycle?.cycleId, latestValidationReport, latestQualityReview, simulationRunbook]
   );
   const activeMt5CanonicalSource =
     runtimeSnapshot?.marketData.activeChartSource.provider === "mt5_read_only"
@@ -231,13 +235,14 @@ export function SettingsView({ state, onReset }: { state: LabState; onReset: () 
 
   useEffect(() => {
     const refreshRunbook = () => setSimulationRunbook(loadSimulationRunbookState());
+    void hydrateSimulationRunbookState(currentResearchCycle?.cycleId).then(setSimulationRunbook);
     window.addEventListener(SIMULATION_RUNBOOK_UPDATED_EVENT, refreshRunbook);
     window.addEventListener("storage", refreshRunbook);
     return () => {
       window.removeEventListener(SIMULATION_RUNBOOK_UPDATED_EVENT, refreshRunbook);
       window.removeEventListener("storage", refreshRunbook);
     };
-  }, []);
+  }, [currentResearchCycle?.cycleId]);
 
   useEffect(() => {
     const refreshApproval = () => setReadinessApproval(loadManualApprovalRecord());

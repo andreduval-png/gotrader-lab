@@ -49,10 +49,11 @@ import {
   createCalibrationProposal,
   upsertCalibrationProposal
 } from "@/lib/selfImprovement";
-import { loadSimulationRunbookState } from "@/lib/simulationRunbook";
+import { useSimulationRunbookEvidence } from "@/lib/simulationRunbook";
 import type { LabState } from "@/lib/types";
 import { safeArray, safeTopN } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 
 const formatValue = (value: string) => value.replace(/_/g, " ");
 const statusVariant = (status?: string) =>
@@ -123,11 +124,13 @@ export function LLMAgentsView({ state }: { state: LabState }) {
   const [busy, setBusy] = useState(false);
   const latestValidation = loadLatestValidationReport();
   const latestQuality = loadLatestResearchQualityReview();
-  const runbook = loadSimulationRunbookState();
+  const latestCycle = latestResearchCycleRun(loadResearchCycleState());
+  const runbook = useSimulationRunbookEvidence(latestCycle?.cycleId);
   const readiness = evaluateReadinessGate({
     validation: latestValidation,
     quality: latestQuality,
-    runbook
+    runbook,
+    currentCycleId: latestCycle?.cycleId
   });
   const llmRuns = safeArray(llmState.runs);
   const latestRun = llmRuns.find((run) => run.runId === llmState.latestRunId) ?? llmRuns[0];

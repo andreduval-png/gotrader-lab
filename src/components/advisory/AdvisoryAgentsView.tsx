@@ -21,8 +21,9 @@ import type {
 import { validateAdvisoryRequestPacket } from "@/lib/integrations/validateAdvisoryRequestPacket";
 import { evaluateReadinessGate } from "@/lib/readiness";
 import { loadLatestResearchQualityReview } from "@/lib/researchQuality";
-import { loadSimulationRunbookState } from "@/lib/simulationRunbook";
+import { useSimulationRunbookEvidence } from "@/lib/simulationRunbook";
 import { loadLatestValidationReport } from "@/lib/validation";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 
 interface AdvisoryActions {
   recordAdvisoryPacket(entry: Omit<AdvisoryPacketAuditEntry, "id">): void;
@@ -44,11 +45,13 @@ export function AdvisoryAgentsView({ state, actions }: { state: LabState; action
   const responseJson = JSON.stringify(openClawHermesAdvisorySpec.exampleResponse, null, 2);
   const latestValidationReport = loadLatestValidationReport();
   const latestQualityReview = loadLatestResearchQualityReview();
-  const latestRunbookState = loadSimulationRunbookState();
+  const latestCycle = latestResearchCycleRun(loadResearchCycleState());
+  const latestRunbookState = useSimulationRunbookEvidence(latestCycle?.cycleId);
   const readinessSnapshot = evaluateReadinessGate({
     validation: latestValidationReport,
     quality: latestQualityReview,
-    runbook: latestRunbookState
+    runbook: latestRunbookState,
+    currentCycleId: latestCycle?.cycleId
   });
   const activeThesis = state.tradeTheses[0];
   const activeDebate = useMemo(

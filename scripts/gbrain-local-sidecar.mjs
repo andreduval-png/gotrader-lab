@@ -12,6 +12,7 @@ import {
   GOTRADER_AGENT_PROJECTION_VERSION,
   validateAgentProjection
 } from "./gotrader-agent-projection-core.mjs";
+import { createRunbookEvidenceStore } from "./gotrader-runbook-evidence-core.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
@@ -24,6 +25,7 @@ const documentsRoot = path.join(sidecarRoot, "documents");
 const statePath = path.join(sidecarRoot, "index.json");
 const receiptsPath = path.join(sidecarRoot, "receipts.jsonl");
 const projectionsRoot = path.join(sidecarRoot, "projections");
+const runbookRoot = path.join(sidecarRoot, "simulation-runbook");
 const gbrainHome = path.resolve(process.env.GBRAIN_HOME || path.join(sidecarRoot, "gbrain-home"));
 const gbrainConfigPath = path.join(gbrainHome, ".gbrain", "config.json");
 const localGbrainBin = path.join(
@@ -53,12 +55,7 @@ const maximumBatchSize = 100;
 const maximumMarkdownSize = 32_000;
 const maximumSearchResults = 25;
 const maximumSummaryText = 1_200;
-const allowedOrigins = new Set([
-  "http://127.0.0.1:5173",
-  "http://localhost:5173",
-  "http://127.0.0.1:4173",
-  "http://localhost:4173"
-]);
+const allowedOriginPattern = /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/;
 const authority = Object.freeze({
   executionAuthority: "none",
   brokerAuthority: "none",
@@ -96,6 +93,7 @@ let gbrainCapability = {
   error: null
 };
 let indexingQueue = Promise.resolve();
+const runbookStore = createRunbookEvidenceStore({ root: runbookRoot });
 
 const nowIso = () => new Date().toISOString();
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
@@ -844,7 +842,7 @@ function normalizeSearchFilters(payload) {
 
 function applyCors(request, response) {
   const origin = request.headers.origin;
-  if (origin && allowedOrigins.has(origin)) {
+  if (origin && allowedOriginPattern.test(origin)) {
     response.setHeader("Access-Control-Allow-Origin", origin);
     response.setHeader("Vary", "Origin");
   }
@@ -888,6 +886,22 @@ async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   if (request.method === "GET" && ["/health", "/v1/status"].includes(url.pathname)) {
     sendJson(response, 200, compactStatus());
+    return;
+  }
+  const runbookCycleMatch = url.pathname.match(/^\/v1\/runbook\/cycles\/([^/]+)$/);
+  if (request.method === "GET" && runbookCycleMatch) {
+    const cycleId = decodeURIComponent(runbookCycleMatch[1]);
+    sendJson(response, 200, runbookStore.projectCycle(cycleId));
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/runbook/evidence") {
+    const result = await runbookStore.appendEvidence(await readJson(request));
+    sendJson(response, 200, result);
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/runbook/legacy-archive") {
+    const result = await runbookStore.archiveLegacy(await readJson(request));
+    sendJson(response, 200, result);
     return;
   }
   const projectionType = url.pathname === "/v1/projections/current-cycle"
@@ -999,6 +1013,7 @@ await fs.mkdir(documentsRoot, { recursive: true });
 await fs.mkdir(projectionsRoot, { recursive: true });
 await fs.mkdir(gbrainHome, { recursive: true });
 await loadState();
+await runbookStore.initialize();
 await detectGbrainCapability();
 void queueIndexRetry();
 

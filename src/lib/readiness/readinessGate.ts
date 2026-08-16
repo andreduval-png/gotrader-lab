@@ -87,9 +87,13 @@ const redDrawdownClusters = (quality?: ResearchQualityReview) =>
 const totalValidationTrades = (validation?: ValidationSuiteReport) =>
   validation?.scenarios.reduce((sum, scenario) => sum + scenario.totalTrades, 0) ?? 0;
 
-const runbookComplete = (runbook?: SimulationRunbookState) =>
+const runbookComplete = (runbook?: SimulationRunbookState, currentCycleId?: string) =>
   Boolean(
-    runbook?.verifiedAt &&
+    currentCycleId &&
+      runbook?.storageStatus === "current_cycle" &&
+      runbook.evidenceChainValid &&
+      runbook.currentCycleId === currentCycleId &&
+      runbook.verifiedAt &&
       countCompletedRunbookItems(runbook) === simulationRunbookChecklist.length &&
       runbook.checklist.brokerExecutionSkipped &&
       runbook.checklist.positionsZero &&
@@ -166,6 +170,9 @@ const runbookSnapshotFor = (runbook?: SimulationRunbookState) =>
   runbook
     ? {
         verifiedAt: runbook.verifiedAt,
+        currentCycleId: runbook.currentCycleId,
+        storageStatus: runbook.storageStatus,
+        evidenceChainValid: runbook.evidenceChainValid,
         completedChecks: countCompletedRunbookItems(runbook),
         totalChecks: simulationRunbookChecklist.length,
         brokerExecutionSkipped: runbook.checklist.brokerExecutionSkipped,
@@ -205,7 +212,8 @@ export function evaluateReadinessGate({
   runbook,
   edgeStatistics,
   provenanceExpectation,
-  walkForwardRun
+  walkForwardRun,
+  currentCycleId
 }: {
   validation?: ValidationSuiteReport;
   quality?: ResearchQualityReview;
@@ -213,6 +221,7 @@ export function evaluateReadinessGate({
   edgeStatistics?: EdgeStatistics;
   provenanceExpectation?: ValidationProvenanceIdentity;
   walkForwardRun?: WalkForwardRun;
+  currentCycleId?: string;
 }): ReadinessGateSnapshot {
   const conservative = conservativeScenarioFor(validation);
   const maxDrawdown = maxDrawdownFor(validation);
@@ -345,17 +354,17 @@ export function evaluateReadinessGate({
     requirement(
       "runbook-complete",
       "Simulation runbook passed with broker execution skipped",
-      runbookComplete(runbook),
+      runbookComplete(runbook, currentCycleId),
       runbook
-        ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length} checks complete; broker skipped=${runbook.checklist.brokerExecutionSkipped}.`
+        ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length} checks complete; cycle match=${Boolean(currentCycleId && runbook.currentCycleId === currentCycleId)}; chain valid=${runbook.evidenceChainValid}; broker skipped=${runbook.checklist.brokerExecutionSkipped}.`
         : "Simulation runbook is missing.",
       "blocker",
       {
         currentValue: runbook
-          ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length}; broker skipped=${runbook.checklist.brokerExecutionSkipped}`
+          ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length}; cycle=${runbook.currentCycleId ?? "missing"}; expected=${currentCycleId ?? "missing"}; chain=${runbook.evidenceChainValid}; broker skipped=${runbook.checklist.brokerExecutionSkipped}`
           : "missing",
         requiredValue: `${simulationRunbookChecklist.length}/${simulationRunbookChecklist.length}; broker skipped=true; positions=0; trades=0`,
-        explanation: "The app must prove the AI Lab to go-trader bridge was simulation-only and produced zero executed trades.",
+        explanation: "The app must prove the exact current cycle's AI Lab to go-trader bridge was simulation-only and produced zero executed trades using an integrity-valid immutable evidence chain.",
         suggestedFix: "Complete every item in /simulation-runbook after a scheduler one-cycle simulation run.",
         runPage: "/simulation-runbook"
       }

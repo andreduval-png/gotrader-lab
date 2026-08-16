@@ -365,6 +365,25 @@ if (mode === "status" || mode === "sync") {
     assert.equal(JSON.stringify(searchPayload.results).includes("rawCandles"), false);
     assert.deepEqual(searchPayload.authority, authorityNone);
 
+    const runbookEvidence = await fetch(`${endpoint}/v1/runbook/evidence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cycleId: "test_cycle_001",
+        checkId: "brokerExecutionSkipped",
+        observedAt: "2026-08-16T01:00:00.000Z",
+        sourceKind: "authority_snapshot",
+        sourceId: "test_cycle_001:authority",
+        sourceDigest: `sha256:${"a".repeat(64)}`
+      })
+    });
+    assert.equal(runbookEvidence.ok, true);
+    const runbookProjection = await (await fetch(`${endpoint}/v1/runbook/cycles/test_cycle_001`)).json();
+    assert.equal(runbookProjection.completedChecks, 1);
+    assert.equal(runbookProjection.checklist.brokerExecutionSkipped, true);
+    assert.equal(runbookProjection.evidenceChainValid, true);
+    assert.deepEqual(runbookProjection.authority, authorityNone);
+
     const status = await (await fetch(`${endpoint}/v1/status`)).json();
     assert.equal(status.durableDocumentCount, 1);
     assert.equal(status.indexedDocumentCount, 0);
@@ -421,6 +440,7 @@ if (mode === "status" || mode === "sync") {
         "duplicate documents remain deduplicated",
         "unsafe authority and raw candle fields are blocked",
         "keyword retrieval works from the durable spool",
+        "cycle-bound runbook evidence is durable and hash-chained",
         "research cycles, unified startup, Operator Console, and Self-Improvement are wired",
         "execution/account/order/position routes do not exist",
         "authority remains none/none/none"

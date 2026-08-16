@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, ClipboardCheck, RotateCcw, Save, TerminalSquare } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, RefreshCw, TerminalSquare } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,21 +8,14 @@ import { TechnicalDetails } from "@/components/common/TechnicalDetails";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
-  completeSimulationRunbookVerification,
   countCompletedRunbookItems,
+  hydrateSimulationRunbookState,
   loadSimulationRunbookState,
-  resetSimulationRunbookState,
-  saveSimulationRunbookState,
   simulationRunbookChecklist
 } from "@/lib/simulationRunbook";
-import type {
-  SimulationRunbookChecklistId,
-  SimulationRunbookSignal,
-  SimulationRunbookState
-} from "@/lib/simulationRunbook";
+import type { SimulationRunbookState } from "@/lib/simulationRunbook";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 
 const readerCommand =
   "python shared_scripts/check_ict_ai_lab.py --handoff-file ../gotrader/exports/latest-gotrader-handoff.json";
@@ -30,55 +23,22 @@ const readerCommand =
 const schedulerCommand = `$env:GOTRADER_PYTHON = "C:\\Python314\\python.exe"
 go run . -config ../docs/ai-lab-scheduler-simulation.config.json -once`;
 
-const signalOptions = [
-  { label: "Select signal", value: "" },
-  { label: "BUY", value: "BUY" },
-  { label: "SELL", value: "SELL" },
-  { label: "NEUTRAL", value: "NEUTRAL" }
-];
-
 const completionLabel = (completed: number, total: number) =>
   completed === total ? "Verification complete" : `${completed}/${total} checks complete`;
 
 export function SimulationRunbookView() {
   const [runbook, setRunbook] = useState<SimulationRunbookState>(() => loadSimulationRunbookState());
+  const currentCycle = latestResearchCycleRun(loadResearchCycleState());
   const completed = countCompletedRunbookItems(runbook);
   const total = simulationRunbookChecklist.length;
   const progress = (completed / total) * 100;
   const failedItems = simulationRunbookChecklist.filter((item) => !runbook.checklist[item.id]);
 
-  const persist = (next: SimulationRunbookState) => {
-    setRunbook(next);
-    saveSimulationRunbookState(next);
-  };
+  const refresh = () => void hydrateSimulationRunbookState(currentCycle?.cycleId).then(setRunbook);
 
-  const updateField = (field: keyof SimulationRunbookState, value: string) => {
-    persist({
-      ...runbook,
-      [field]: value
-    });
-  };
-
-  const toggleChecklist = (id: SimulationRunbookChecklistId, checked: boolean) => {
-    persist({
-      ...runbook,
-      checklist: {
-        ...runbook.checklist,
-        [id]: checked
-      }
-    });
-  };
-
-  const saveVerification = () => {
-    setRunbook(completeSimulationRunbookVerification(runbook));
-  };
-
-  const resetRunbook = () => {
-    const approved = window.confirm("Reset the local simulation verification runbook?");
-    if (approved) {
-      setRunbook(resetSimulationRunbookState());
-    }
-  };
+  useEffect(() => {
+    refresh();
+  }, [currentCycle?.cycleId]);
 
   return (
     <div className="space-y-5">
@@ -92,13 +52,9 @@ export function SimulationRunbookView() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={saveVerification}>
-            <Save className="h-4 w-4" aria-hidden="true" />
-            Save Verification
-          </Button>
-          <Button variant="outline" onClick={resetRunbook}>
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            Reset
+          <Button variant="outline" onClick={refresh}>
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Refresh evidence
           </Button>
         </div>
       </div>
@@ -108,7 +64,7 @@ export function SimulationRunbookView() {
       {failedItems.length ? (
         <Card className="border-amber-300/25 bg-amber-300/10">
           <CardContent className="space-y-2 p-4 text-sm text-amber-100">
-            <div className="font-medium">Failed checklist items</div>
+            <div className="font-medium">Missing evidence checks</div>
             <div className="flex flex-wrap gap-2">
               {failedItems.slice(0, 5).map((item) => (
                 <Badge key={item.id} variant="warning">{item.label}</Badge>
@@ -122,7 +78,7 @@ export function SimulationRunbookView() {
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <TechnicalDetails
           title="View full verification checklist"
-          description="Open to mark each simulation bridge verification item."
+          description="Open to inspect the immutable receipt status for each simulation bridge check."
         >
         <Card>
           <CardHeader>
@@ -130,7 +86,7 @@ export function SimulationRunbookView() {
               <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" />
               <CardTitle>Verification Checklist</CardTitle>
             </div>
-            <CardDescription>Use this as the local audit trail for the safe simulation handoff loop.</CardDescription>
+            <CardDescription>Checks are derived from immutable receipts for the exact current cycle. They cannot be toggled here.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-background/45 p-3">
@@ -143,19 +99,17 @@ export function SimulationRunbookView() {
 
             <div className="grid gap-2 md:grid-cols-2">
               {simulationRunbookChecklist.map((item, index) => (
-                <label
+                <div
                   key={item.id}
-                  className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-background/45 p-3 text-sm transition-colors hover:bg-secondary/45"
+                  className="flex min-h-12 items-center gap-3 rounded-lg border border-border bg-background/45 p-3 text-sm"
                 >
-                  <input
-                    type="checkbox"
-                    checked={runbook.checklist[item.id]}
-                    onChange={(event) => toggleChecklist(item.id, event.target.checked)}
-                    className="h-4 w-4 accent-primary"
-                  />
+                  {runbook.checklist[item.id] ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <AlertTriangle className="h-4 w-4 text-amber-300" />}
                   <span className="font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-                  <span>{item.label}</span>
-                </label>
+                  <span className="min-w-0 flex-1">{item.label}</span>
+                  <Badge variant={runbook.checklist[item.id] ? "success" : "muted"}>
+                    {runbook.checklist[item.id] ? "evidence bound" : "missing"}
+                  </Badge>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -168,40 +122,40 @@ export function SimulationRunbookView() {
               <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
               <CardTitle>Latest Verification</CardTitle>
             </div>
-            <CardDescription>Stored locally in this browser.</CardDescription>
+            <CardDescription>Stored by the origin-independent local research-memory sidecar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-background/45 p-3 text-sm">
               <div className="text-xs text-muted-foreground">Latest verification timestamp</div>
               <div className="mt-1 font-mono">{runbook.verifiedAt ?? "not saved"}</div>
             </div>
+            <div className="rounded-lg border border-border bg-background/45 p-3 text-sm">
+              <div className="text-xs text-muted-foreground">Current cycle / evidence chain</div>
+              <div className="mt-1 break-all font-mono">{runbook.currentCycleId ?? "current cycle unavailable"}</div>
+              <div className="mt-1 break-all font-mono text-xs">{runbook.evidenceChainHead ?? runbook.blocker ?? "no evidence"}</div>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="runbook-symbol">Symbol</Label>
                 <Input
                   id="runbook-symbol"
-                  value={runbook.symbol}
+                  value={currentCycle?.thesisSummary?.symbol ?? runbook.symbol}
                   placeholder="MES"
-                  onChange={(event) => updateField("symbol", event.target.value.toUpperCase())}
+                  readOnly
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="runbook-timeframe">Timeframe</Label>
                 <Input
                   id="runbook-timeframe"
-                  value={runbook.timeframe}
+                  value={currentCycle?.researchTimeframe ?? runbook.timeframe}
                   placeholder="5m"
-                  onChange={(event) => updateField("timeframe", event.target.value)}
+                  readOnly
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="runbook-signal">Signal</Label>
-                <Select
-                  id="runbook-signal"
-                  value={runbook.signal}
-                  options={signalOptions}
-                  onChange={(event) => updateField("signal", event.target.value as SimulationRunbookSignal)}
-                />
+                <Input id="runbook-signal" value={runbook.signal || "unavailable"} readOnly />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="runbook-mode">Mode</Label>
@@ -212,19 +166,10 @@ export function SimulationRunbookView() {
                 <Input
                   id="runbook-platform"
                   value={runbook.platform}
-                  onChange={(event) => updateField("platform", event.target.value)}
+                  readOnly
                   className="font-mono"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="runbook-notes">Notes</Label>
-              <Textarea
-                id="runbook-notes"
-                value={runbook.notes}
-                placeholder="Paste scheduler evidence or notes from the simulation cycle."
-                onChange={(event) => updateField("notes", event.target.value)}
-              />
             </div>
           </CardContent>
         </Card>

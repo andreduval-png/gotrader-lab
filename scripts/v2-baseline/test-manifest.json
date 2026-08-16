@@ -10,7 +10,7 @@
     "walk_forward_oos": ["test:detector-profile-walk-forward", "test:ict-out-of-sample-validation"],
     "research_quality": ["test:regime-classifier", "test:research-quality-failure-attribution"],
     "evidence_provenance": ["test:source-status", "test:validation-chain", "test:research-cycle-validation-linkage", "test:results-source-truth"],
-    "readiness": ["test:paper-demo-operations", "test:readiness-blocker-priority"],
+    "readiness": ["test:paper-demo-operations", "test:readiness-blocker-priority", "test:simulation-runbook-evidence"],
     "storage": ["test:local-journal", "test:forward-evidence-ledger", "test:trade-plan-outcomes"],
     "safety_authority": ["test:v2-baseline-authority", "test:mt5-readonly-safety", "test:openclaw-pilot-dry-run", "test:autonomous-calibration-auto-apply"],
     "browser_smoke": ["smoke:browser"]
@@ -25,6 +25,7 @@
       "test:source-status",
       "test:validation-chain",
       "test:results-source-truth",
+      "test:simulation-runbook-evidence",
       "test:trade-plan-outcomes",
       "test:mt5-push-feed",
       "test:v2-baseline-authority"

@@ -54,6 +54,9 @@ export interface ReadinessGateSnapshot {
   };
   runbookSnapshot?: {
     verifiedAt?: string;
+    currentCycleId?: string;
+    storageStatus: "unavailable" | "loading" | "current_cycle";
+    evidenceChainValid: boolean;
     completedChecks: number;
     totalChecks: number;
     brokerExecutionSkipped: boolean;

@@ -188,6 +188,7 @@
     "test:auto-research-lifetime-memory": "node scripts/test-auto-research-lifetime-memory.mjs",
     "test:results-workspace": "node scripts/test-results-workspace.mjs",
     "test:results-source-truth": "node scripts/test-results-source-truth.mjs",
+    "test:simulation-runbook-evidence": "node scripts/test-simulation-runbook-evidence.mjs",
     "test:trade-plan-outcomes": "node scripts/test-trade-plan-outcomes.mjs",
     "test:market-episode-reconstruction-90d": "node scripts/test-market-episode-reconstruction-90d.mjs",
     "test:cmd-london-long-frozen-validation": "node scripts/test-cmd-london-long-frozen-validation.mjs",

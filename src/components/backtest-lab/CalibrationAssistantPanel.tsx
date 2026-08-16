@@ -5,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { BacktestResult, ResolvedBacktestConfig } from "@/lib/backtesting";
 import { evaluateReadinessGate, loadManualApprovalRecord } from "@/lib/readiness";
 import { loadLatestResearchQualityReview } from "@/lib/researchQuality";
-import { countCompletedRunbookItems, loadSimulationRunbookState, simulationRunbookChecklist } from "@/lib/simulationRunbook";
+import { countCompletedRunbookItems, simulationRunbookChecklist, useSimulationRunbookEvidence } from "@/lib/simulationRunbook";
 import { loadLatestValidationReport } from "@/lib/validation";
+import { latestResearchCycleRun, loadResearchCycleState } from "@/lib/researchCycle";
 
 const routeLinks = [
   { label: "Backtest Lab", href: "/backtest-lab" },
@@ -64,9 +65,10 @@ function suggestedNextAdjustment(result: BacktestResult, config: ResolvedBacktes
 export function CalibrationAssistantPanel({ result, config }: { result: BacktestResult; config: ResolvedBacktestConfig }) {
   const validation = loadLatestValidationReport();
   const quality = loadLatestResearchQualityReview();
-  const runbook = loadSimulationRunbookState();
+  const latestCycle = latestResearchCycleRun(loadResearchCycleState());
+  const runbook = useSimulationRunbookEvidence(latestCycle?.cycleId);
   const approval = loadManualApprovalRecord();
-  const gate = evaluateReadinessGate({ validation, quality, runbook });
+  const gate = evaluateReadinessGate({ validation, quality, runbook, currentCycleId: latestCycle?.cycleId });
   const conservative = validation?.scenarios.find((scenario) => scenario.id === "conservative-confluence");
   const runbookComplete = countCompletedRunbookItems(runbook) === simulationRunbookChecklist.length;
   const pathChecks = [

@@ -75,8 +75,7 @@ import {
 } from "@/lib/strategyLibrary";
 import {
   countCompletedRunbookItems,
-  loadSimulationRunbookState,
-  SIMULATION_RUNBOOK_STORAGE_KEY,
+  hydrateSimulationRunbookState,
   simulationRunbookChecklist
 } from "@/lib/simulationRunbook";
 import { labStorage } from "@/lib/storage";
@@ -632,7 +631,7 @@ export async function resolveResearchRuntimeSnapshot(
   const latestProposal = runtimeProposalFrom(selfImprovement, latestCycle);
   const validation = loadLatestValidationReport();
   const researchQuality = loadLatestResearchQualityReview();
-  const runbook = loadSimulationRunbookState();
+  const runbook = await hydrateSimulationRunbookState(latestCycle?.cycleId);
   const activeConfig = resolveActiveBacktestConfig();
   const savedConfig = loadBacktestConfig();
   const llmState = loadLLMResearchState();
@@ -952,6 +951,7 @@ export async function resolveResearchRuntimeSnapshot(
     validation: matchingReadinessValidation,
     quality: matchingResearchQuality,
     runbook,
+    currentCycleId: latestCycle?.cycleId,
     edgeStatistics: readinessEdgeStatistics,
     provenanceExpectation: activeValidationIdentityReview.matched
       ? matchingReadinessValidation?.provenance
@@ -1390,7 +1390,6 @@ export async function resolveResearchRuntimeSnapshot(
         AUTO_RESEARCH_STORAGE_KEY,
         VALIDATION_REPORT_STORAGE_KEY,
         RESEARCH_QUALITY_STORAGE_KEY,
-        SIMULATION_RUNBOOK_STORAGE_KEY,
         LLM_RESEARCH_STORAGE_KEY,
         SELF_IMPROVEMENT_STORAGE_KEY,
         ACTIVE_RESEARCH_CALIBRATION_STORAGE_KEY,

@@ -1,10 +1,10 @@
 export {
-  completeSimulationRunbookVerification,
+  appendSimulationRunbookEvidence,
   countCompletedRunbookItems,
   defaultSimulationRunbookState,
+  digestSimulationRunbookSource,
+  hydrateSimulationRunbookState,
   loadSimulationRunbookState,
-  resetSimulationRunbookState,
-  saveSimulationRunbookState,
   SIMULATION_RUNBOOK_STORAGE_KEY,
   SIMULATION_RUNBOOK_UPDATED_EVENT,
   simulationRunbookChecklist
@@ -12,6 +12,10 @@ export {
 export type {
   SimulationRunbookChecklistDefinition,
   SimulationRunbookChecklistId,
+  SimulationRunbookEvidenceReceipt,
+  SimulationRunbookEvidenceSourceKind,
   SimulationRunbookSignal,
-  SimulationRunbookState
+  SimulationRunbookState,
+  AppendSimulationRunbookEvidenceInput
 } from "@/lib/simulationRunbook/simulationRunbookTypes";
+export { useSimulationRunbookEvidence } from "@/lib/simulationRunbook/useSimulationRunbookEvidence";
