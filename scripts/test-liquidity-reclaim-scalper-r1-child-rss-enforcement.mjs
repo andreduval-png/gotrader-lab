@@ -63,6 +63,8 @@ const telemetry = await buildR1ChildTelemetry(modules, {
   maximumObservedRssBytes: 640_000_000,
   resourceDecision: "within_limit",
   trialCheckpointId: `sha256:${"3".repeat(64)}`,
+  completionProgress: { stage: "scan", remainingChildren: 73 },
+  completionBudget: { stage: "scan", maximumChildren: 75, stageChildRun: 1 },
   stageTelemetry
 });
 await writeR1ChildTelemetry({ modules, storage: opened.storage, telemetry });
@@ -72,6 +74,7 @@ assert.match(telemetryFiles[0], /^child-000001-[a-f0-9]{64}\.json$/);
 const telemetryOnDisk = JSON.parse(fs.readFileSync(path.join(outputRoot, "telemetry", telemetryFiles[0]), "utf8"));
 assert.equal(telemetryOnDisk.telemetryId, telemetry.telemetryId);
 assert.equal(telemetryOnDisk.authority.executionAuthority, "none");
+assert.equal(telemetryOnDisk.completionBudget.maximumChildren, 75);
 
 const checkpoint = await writeR1ControllerCheckpoint({
   modules,

@@ -16,6 +16,10 @@ export const R1_SOURCE_FINGERPRINT = "sha256:e164236affb51072322ce78bf297c03b3c4
 export const R1_ACCEPTANCE_ID = "sha256:7b6c1fb6a0896f496895eb30d6dc091f08ee804b0d75c10248e17a5fa65a11ae";
 export const R1_MAX_RSS_BYTES = 1_073_741_824;
 export const R1_MAX_STORAGE_BYTES = 134_217_728;
+export const R1_CERTIFIED_SCAN_SEGMENT_COUNT = 730;
+export const R1_SCAN_SEGMENTS_PER_CHILD = 10;
+export const R1_BT2_RECORDS_PER_CHILD = 5;
+export const R1_COMPLETION_TRANSITION_ALLOWANCE = 2;
 export const R1_AUTHORITY = Object.freeze({ executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" });
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
@@ -23,6 +27,67 @@ const directoryBytes = (root) => fs.existsSync(root) ? fs.readdirSync(root, { wi
   const file = path.join(root, entry.name);
   return sum + (entry.isDirectory() ? directoryBytes(file) : fs.statSync(file).size);
 }, 0) : 0;
+
+const readOptionalJson = (file) => fs.existsSync(file) ? readJson(file) : null;
+
+export function readR1TrialProgress(trialRoot) {
+  if (fs.existsSync(path.join(trialRoot, "baseline-report.json"))) {
+    return Object.freeze({ stage: "completed", completed: true, nextSegment: R1_CERTIFIED_SCAN_SEGMENT_COUNT,
+      eligibleCandidateCount: null, nextOpportunityOrdinal: null, remainingChildren: 0 });
+  }
+  const scan = readOptionalJson(path.join(trialRoot, "checkpoints", "scan.json"));
+  const nextSegment = scan?.nextSegment ?? 0;
+  const seenFactCount = scan?.seenFactIds?.length ?? 0;
+  const candidateCount = scan?.candidateCount ?? 0;
+  if (!Number.isInteger(nextSegment) || nextSegment < 0 || nextSegment > R1_CERTIFIED_SCAN_SEGMENT_COUNT) {
+    throw new Error("LRS R1 scan checkpoint progress is invalid.");
+  }
+  if (!Number.isInteger(seenFactCount) || seenFactCount < 0 || !Number.isInteger(candidateCount) || candidateCount < 0) {
+    throw new Error("LRS R1 scan checkpoint counters are invalid.");
+  }
+  if (nextSegment < R1_CERTIFIED_SCAN_SEGMENT_COUNT) {
+    return Object.freeze({ stage: "scan", completed: false, nextSegment, seenFactCount, candidateCount, eligibleCandidateCount: null,
+      nextOpportunityOrdinal: null,
+      remainingChildren: Math.ceil((R1_CERTIFIED_SCAN_SEGMENT_COUNT - nextSegment) / R1_SCAN_SEGMENTS_PER_CHILD) });
+  }
+  const eligibleCandidateCount = scan?.eligibleCandidates?.length;
+  if (!Number.isInteger(eligibleCandidateCount) || eligibleCandidateCount < 0) {
+    throw new Error("LRS R1 completed scan checkpoint is missing eligible candidates.");
+  }
+  const checkpointRoot = path.join(trialRoot, "bt2", "checkpoints");
+  const checkpointFiles = fs.existsSync(checkpointRoot) ? fs.readdirSync(checkpointRoot).filter((file) => file.endsWith(".json")) : [];
+  if (checkpointFiles.length > 1) throw new Error("LRS R1 trial has multiple BT2 checkpoints.");
+  const bt2 = checkpointFiles.length === 1 ? readJson(path.join(checkpointRoot, checkpointFiles[0])) : null;
+  const nextOpportunityOrdinal = bt2?.nextOpportunityOrdinal ?? 0;
+  if (!Number.isInteger(nextOpportunityOrdinal) || nextOpportunityOrdinal < 0 || nextOpportunityOrdinal > eligibleCandidateCount) {
+    throw new Error("LRS R1 BT2 checkpoint progress is invalid.");
+  }
+  return Object.freeze({ stage: "simulation", completed: false, nextSegment, seenFactCount, candidateCount, eligibleCandidateCount,
+    nextOpportunityOrdinal,
+    remainingChildren: Math.ceil((eligibleCandidateCount - nextOpportunityOrdinal) / R1_BT2_RECORDS_PER_CHILD) + 1 });
+}
+
+export function createR1CompletionBudget(progress) {
+  if (progress.completed) return Object.freeze({ stage: "completed", maximumChildren: 0 });
+  return Object.freeze({ stage: progress.stage,
+    maximumChildren: progress.remainingChildren + R1_COMPLETION_TRANSITION_ALLOWANCE });
+}
+
+export function assertR1TrialProgress(before, after) {
+  if (after.completed) return after;
+  const scanAdvanced = after.nextSegment > before.nextSegment;
+  const eventAdvanced = before.stage === "scan" && after.stage === "scan" &&
+    (after.seenFactCount > before.seenFactCount || after.candidateCount > before.candidateCount);
+  const simulationAdvanced = before.stage === "simulation" && after.stage === "simulation" &&
+    after.nextOpportunityOrdinal > before.nextOpportunityOrdinal;
+  const stageAdvanced = before.stage === "scan" && after.stage === "simulation";
+  if (after.nextSegment < before.nextSegment ||
+      (before.stage === "simulation" && after.stage === "simulation" && after.nextOpportunityOrdinal < before.nextOpportunityOrdinal) ||
+      (!scanAdvanced && !eventAdvanced && !simulationAdvanced && !stageAdvanced)) {
+    throw new Error("LRS R1 controlled child made no monotonic checkpoint progress.");
+  }
+  return after;
+}
 
 export async function verifyAcceptedR1Inputs({ modules, acceptancePath }) {
   const acceptance = readJson(acceptancePath);
@@ -181,6 +246,8 @@ export async function buildR1ChildTelemetry(modules, input) {
     maximumObservedRssBytes: input.maximumObservedRssBytes,
     resourceDecision: input.resourceDecision,
     trialCheckpointId: input.trialCheckpointId ?? null,
+    completionProgress: input.completionProgress ?? null,
+    completionBudget: input.completionBudget ?? null,
     stageTelemetry: Object.freeze([...(input.stageTelemetry ?? [])]),
     previousTelemetryId: input.previousTelemetryId ?? null,
     experimentFamilyId: R1_FAMILY_ID,

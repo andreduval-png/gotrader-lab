@@ -5,7 +5,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset-node-storage.mjs";
 import { finalizeR1EvidenceArchive, prepareR1CompletedTrialEvidenceArchive } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
-import { buildR1ChildTelemetry, classifyR1ChildRss, enforceR1ResourceBounds, openR1Controller, R1_MAX_RSS_BYTES,
+import { assertR1TrialProgress, buildR1ChildTelemetry, classifyR1ChildRss, createR1CompletionBudget,
+  enforceR1ResourceBounds, openR1Controller, readR1TrialProgress, R1_MAX_RSS_BYTES,
   summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
   writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
 
@@ -59,7 +60,14 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
   }
   const trialRoot = path.join(outputRoot, "trials", trial.trialId.replace(":", "_"));
   let completed = fs.existsSync(path.join(trialRoot, "baseline-report.json"));
-  for (let childOrdinal = 0; !completed && childOrdinal < 200; childOrdinal += 1) {
+  let progress = readR1TrialProgress(trialRoot);
+  let completionBudget = createR1CompletionBudget(progress);
+  let stageChildRuns = 0;
+  for (let childOrdinal = 0; !completed; childOrdinal += 1) {
+    if (stageChildRuns >= completionBudget.maximumChildren) {
+      throw new Error(`R1 trial ${trial.ordinal} exhausted its progress-derived ${completionBudget.stage} completion bound.`);
+    }
+    const beforeProgress = progress;
     const childRun = checkpoint.childRuns + 1;
     const childStartedAtUtc = new Date().toISOString();
     const child = spawnSync(process.execPath, ["--expose-gc", "scripts/run-liquidity-reclaim-scalper-r1-trial.mjs"], { cwd: root, encoding: "utf8",
@@ -87,6 +95,8 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
       maximumObservedRssBytes: childRssBytes,
       resourceDecision,
       trialCheckpointId: result.checkpointId,
+      completionProgress: beforeProgress,
+      completionBudget: { ...completionBudget, stageChildRun: stageChildRuns + 1 },
       stageTelemetry,
       previousTelemetryId: checkpoint.orderedChildTelemetryIds.at(-1)
     });
@@ -108,9 +118,14 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
       throw new Error(`R1 trial child failed for ordinal ${trial.ordinal}: ${child.stderr || child.stdout}`);
     }
     completed = fs.existsSync(path.join(trialRoot, "baseline-report.json"));
+    progress = assertR1TrialProgress(beforeProgress, readR1TrialProgress(trialRoot));
+    stageChildRuns += 1;
+    if (!completed && progress.stage !== completionBudget.stage) {
+      completionBudget = createR1CompletionBudget(progress);
+      stageChildRuns = 0;
+    }
     if (Number(process.env.GOTRADER_LRS_R1_INTERRUPT_AFTER_CHILDREN) === checkpoint.childRuns) process.exit(75);
   }
-  if (!completed) throw new Error(`R1 trial ${trial.ordinal} exhausted its bounded child limit.`);
   const report = await verifyR1TrialReport({ modules, reportPath: path.join(trialRoot, "baseline-report.json"), trial });
   const archive = await prepareR1CompletedTrialEvidenceArchive({ modules, storage, outputRoot, trial,
     orderedChildTelemetryIds: checkpoint.orderedChildTelemetryIds });
