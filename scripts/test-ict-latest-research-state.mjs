@@ -345,6 +345,11 @@ async function main() {
   assert.equal(replaySnapshot.researchOnly, true);
   assert.doesNotMatch(JSON.stringify(replaySnapshot), /candles|monteCarloOutcomes|rawSnapshot/i);
 
+  const cycleReplaySnapshot = suite.buildLatestReplaySnapshot(manualReplayFixture(), {
+    sourceCycleId: "cycle-source-truth-fixture"
+  });
+  assert.equal(cycleReplaySnapshot.sourceCycleId, "cycle-source-truth-fixture");
+
   const monteCarloSnapshot = suite.buildLatestMonteCarloSnapshot(monteCarloFixture());
   assert.equal(monteCarloSnapshot.robustnessRating, "moderate");
   assert.equal(monteCarloSnapshot.usableOutcomes, 24);
@@ -356,8 +361,9 @@ async function main() {
   assert.equal(scorecardSnapshot.bestApprovedTargetFirstSymbol, "MNQ");
   assert.doesNotMatch(JSON.stringify(scorecardSnapshot), /monteCarloOutcomes|accountData|candles/i);
 
-  const replayState = suite.saveLatestResearchStatePatch({ latestReplay: replaySnapshot }, "manual_replay_review");
+  const replayState = suite.saveLatestResearchStatePatch({ latestReplay: cycleReplaySnapshot }, "research_cycle");
   assert.ok(replayState.latestReplay);
+  assert.equal(replayState.latestReplay.sourceCycleId, "cycle-source-truth-fixture");
   assert.ok(!replayState.latestMonteCarlo);
   const monteCarloState = suite.saveLatestResearchStatePatch({ latestMonteCarlo: monteCarloSnapshot }, "monte_carlo");
   assert.ok(monteCarloState.latestReplay, "latest state should merge patches without losing replay");

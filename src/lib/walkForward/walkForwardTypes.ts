@@ -310,6 +310,7 @@ export interface WalkForwardProgress {
 
 export interface WalkForwardRun {
   runId: string;
+  sourceCycleId?: string;
   startedAt: string;
   completedAt?: string;
   status: WalkForwardRunStatus;
@@ -358,6 +359,7 @@ export interface WalkForwardState {
 }
 
 export interface WalkForwardRunOptions {
+  sourceCycleId?: string;
   mode?: WalkForwardMode;
   splitRatioPreset?: WalkForwardSplitRatioPreset;
   customRatio?: Pick<WalkForwardSplitRatio, "inSample" | "validation" | "outOfSample">;

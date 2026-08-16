@@ -10,6 +10,7 @@ export type IctLatestResearchSource =
   | "market_scorecard";
 
 export interface IctLatestResearchIdentity {
+  sourceCycleId?: string;
   activeSourceFingerprint?: string;
   provenance?: ValidationProvenanceIdentity;
 }

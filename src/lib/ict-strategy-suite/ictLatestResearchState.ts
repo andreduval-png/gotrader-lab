@@ -56,6 +56,7 @@ const publish = (state: IctLatestResearchState, source?: IctLatestResearchSource
 };
 
 const compactIdentity = (identity: IctLatestResearchIdentity = {}): IctLatestResearchIdentity => ({
+  sourceCycleId: compactString(identity.sourceCycleId),
   activeSourceFingerprint: typeof identity.activeSourceFingerprint === "string"
     ? identity.activeSourceFingerprint
     : undefined,

@@ -109,6 +109,7 @@ export const buildAndSaveAutomatedCycleEvidence = (input: BuildAutomatedCycleEvi
     researchOnly: true
   });
   const identity = {
+    sourceCycleId: input.cycleId,
     activeSourceFingerprint: input.activeSourceFingerprint,
     provenance: input.provenance
   };

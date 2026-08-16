@@ -165,9 +165,11 @@ export function PerformanceView({ state }: { state: LabState }) {
       validationChainEntry: latestValidationChainEntry(readValidationChainState()),
       paperDemoState: loadPaperDemoOperationsState(),
       predictionLedger: loadPredictionLedger(),
-      forwardEvidenceEntries: loadForwardEvidenceLedger()
+      forwardEvidenceEntries: loadForwardEvidenceLedger(),
+      datedOutcomeCount: state.outcomes.length,
+      tradePlanRecordCount: tradePlanRecords.length
     }),
-    [canonicalMetrics, runtimeSnapshot, walkForward]
+    [canonicalMetrics, runtimeSnapshot, state.outcomes.length, tradePlanRecords.length, walkForward]
   );
   const displayedCanonicalMetrics = resultsSnapshot.provenance.backtest.relationship === "current_cycle"
     ? canonicalMetrics
@@ -254,7 +256,7 @@ export function PerformanceView({ state }: { state: LabState }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant={resultsSnapshot.source.provider === "mt5_read_only" ? "success" : "warning"}>
+          <Badge variant={resultsSnapshot.provenance.source.relationship === "current_cycle" ? "success" : "warning"}>
             {resultsSnapshot.source.provider.replace(/_/g, " ")}
           </Badge>
           <Badge variant="secondary">{resultsSnapshot.source.brokerSymbol} -&gt; {resultsSnapshot.source.requestedSymbol} / {resultsSnapshot.source.timeframe}</Badge>
@@ -501,7 +503,7 @@ export function PerformanceView({ state }: { state: LabState }) {
         <section className="premium-surface space-y-4 rounded-lg p-4 sm:p-5" data-testid="results-tab-replay">
           <PanelHeading icon={<Activity className="h-4 w-4" />} title="Replay evidence" subtitle="Compact manual replay outcomes; no candles are stored here" />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="Signals" value={String(resultsSnapshot.replay.totalSignals)} detail={resultsSnapshot.replay.runId ?? "no saved replay"} />
+            <ResultMetricCard label="Signals" value={countValue(resultsSnapshot.replay.totalSignals)} detail={resultsSnapshot.replay.runId ?? "no saved replay"} />
             <ResultMetricCard label="Target-first" value={pct(resultsSnapshot.replay.targetFirstRate ?? undefined)} detail="all replay signals" />
             <ResultMetricCard label="Approved target-first" value={pct(resultsSnapshot.replay.approvedTargetFirstRate ?? undefined)} detail={`Approved RR ${rValue(resultsSnapshot.replay.approvedAverageRr)}`} />
             <ResultMetricCard label="Replay verdict" value={resultsSnapshot.replay.verdict.replace(/_/g, " ")} detail="Recognition alone is not evidence" />
@@ -522,11 +524,11 @@ export function PerformanceView({ state }: { state: LabState }) {
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Latest active validation run</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="OOS expectancy" value={rValue(resultsSnapshot.walkForward.oosAverageR)} detail={`${resultsSnapshot.walkForward.oosTrades} OOS trades`} />
+            <ResultMetricCard label="OOS expectancy" value={rValue(resultsSnapshot.walkForward.oosAverageR)} detail={`${countValue(resultsSnapshot.walkForward.oosTrades)} OOS trades`} />
             <ResultMetricCard label="Lower 95% expectancy" value={rValue(resultsSnapshot.walkForward.oosLower95)} detail="Must remain positive for stronger evidence" />
             <ResultMetricCard
               label="Windows passed"
-              value={`${resultsSnapshot.walkForward.windowsPassed}/${resultsSnapshot.walkForward.windows}`}
+              value={`${countValue(resultsSnapshot.walkForward.windowsPassed)}/${countValue(resultsSnapshot.walkForward.windows)}`}
               detail={`Stability ${walkForward?.stability?.stabilityScore ?? "n/a"} / use expectancy CI`}
             />
             <ResultMetricCard label="Verdict" value={resultsSnapshot.walkForward.verdict.replace(/_/g, " ")} detail={resultsSnapshot.walkForward.runId ?? "no saved WF run"} />
@@ -546,7 +548,7 @@ export function PerformanceView({ state }: { state: LabState }) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <ResultMetricCard label="Paper candidates" value={String(resultsSnapshot.paperDemo.candidateCount)} detail={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / ${resultsSnapshot.paperDemo.blockedCount} blocked`} />
             <ResultMetricCard label="Daily checklist" value={`${resultsSnapshot.paperDemo.checklistCompleted}/${resultsSnapshot.paperDemo.checklistTotal}`} detail={`${resultsSnapshot.paperDemo.journalEntries} compact journal entries`} />
-            <ResultMetricCard label="Forward outcomes" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} independent dates`} />
+            <ResultMetricCard label="Forward outcomes" value={`${countValue(resultsSnapshot.frozenProfile.forwardCompleted)}/${resultsSnapshot.frozenProfile.forwardRequired}`} detail={`${countValue(resultsSnapshot.frozenProfile.forwardIndependentDates)} independent dates`} />
             <ResultMetricCard label="Forecast calibration" value={resultsSnapshot.predictions.classification.replace(/_/g, " ")} detail={`${resultsSnapshot.predictions.completedForecasts} completed / ${resultsSnapshot.predictions.pendingForecasts} pending`} />
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
@@ -580,7 +582,7 @@ export function PerformanceView({ state }: { state: LabState }) {
             subtitle="Latest saved simulation and frozen profile evidence remain distinct"
           />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} detail={`${resultsSnapshot.monteCarlo.usableOutcomes} usable outcomes`} />
+            <ResultMetricCard label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} detail={`${countValue(resultsSnapshot.monteCarlo.usableOutcomes)} usable outcomes`} />
             <ResultMetricCard label="5th percentile ending R" value={rValue(resultsSnapshot.monteCarlo.fifthPercentileEndingR)} detail={`Median ${rValue(resultsSnapshot.monteCarlo.medianEndingR)}`} />
             <ResultMetricCard label="Worst drawdown" value={resultsSnapshot.monteCarlo.worstMaxDrawdownPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.worstMaxDrawdownPct.toFixed(2)}%`} detail={`Median ${resultsSnapshot.monteCarlo.medianMaxDrawdownPct?.toFixed(2) ?? "n/a"}%`} />
             <ResultMetricCard label="Risk of ruin" value={resultsSnapshot.monteCarlo.riskOfRuinPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.riskOfRuinPct.toFixed(2)}%`} detail="Research simulation only" />
@@ -685,15 +687,12 @@ export function PerformanceView({ state }: { state: LabState }) {
             <StatRow label="Worst trade" value={rValue(displayedCanonicalMetrics?.worstTradeR)} negative />
             <StatRow label="Expectancy" value={rValue(displayedCanonicalMetrics?.averageR)} />
             <StatRow label="Profit factor" value={displayedCanonicalMetrics?.profitFactor === null || displayedCanonicalMetrics?.profitFactor === undefined ? "n/a" : displayedCanonicalMetrics.profitFactor.toFixed(2)} />
-            <StatRow label="Attributed avoidable losses" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.falsePositiveCount) : "n/a"} negative />
+            <StatRow label="Estimated validation losses" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.falsePositiveCount) : "n/a"} negative />
             <StatRow label="Skipped signals" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.skippedSignals) : "n/a"} />
             <StatRow
               label="Readiness"
               value={String(
-                displayedCanonicalMetrics?.readinessScore ??
-                  runtimeSnapshot?.readiness.readinessSnapshot.validationSnapshot?.readinessScore ??
-                  runtimeSnapshot?.readiness.readinessSnapshot.researchQualitySnapshot?.readinessScore ??
-                  "n/a"
+                displayedCanonicalMetrics?.readinessScore ?? "n/a"
               )}
             />
             <StatRow label="Stability" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.stabilityScore) : "n/a"} />
@@ -756,7 +755,7 @@ export function PerformanceView({ state }: { state: LabState }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{state.outcomes.length} stored outcomes</Badge>
-            <Badge variant="warning">Local memory</Badge>
+            <Badge variant="warning">Global local simulation ledger</Badge>
           </div>
         </div>
         <div className="mt-4 overflow-x-auto">

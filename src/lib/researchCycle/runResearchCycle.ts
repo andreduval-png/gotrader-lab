@@ -1560,19 +1560,23 @@ export async function runResearchCycle({
           const openedAt = Date.parse(trade.openedAt);
           return Number.isFinite(openedAt) && openedAt >= developmentStart && openedAt <= historicalEnd;
         });
-        cycleWalkForwardRun = adaptDetectorProfileWalkForwardRun({
-          result: detectorWalkForward,
-          config: applyFrozenResearchProfileConfig(activeConfig),
-          oosTrades,
-          sourceLabel: detectorEvidenceContext.sourceLabel,
-          rawCandleCount: detectorEvidenceContext.rawCandleCount,
-          processedCandleCount: detectorEvidenceContext.processedCandleCount,
-          availableLookbackDays: detectorEvidenceContext.availableLookbackDays,
-          requestedLookbackDays: detectorEvidenceContext.requestedLookbackDays
-        });
+        cycleWalkForwardRun = {
+          ...adaptDetectorProfileWalkForwardRun({
+            result: detectorWalkForward,
+            config: applyFrozenResearchProfileConfig(activeConfig),
+            oosTrades,
+            sourceLabel: detectorEvidenceContext.sourceLabel,
+            rawCandleCount: detectorEvidenceContext.rawCandleCount,
+            processedCandleCount: detectorEvidenceContext.processedCandleCount,
+            availableLookbackDays: detectorEvidenceContext.availableLookbackDays,
+            requestedLookbackDays: detectorEvidenceContext.requestedLookbackDays
+          }),
+          sourceCycleId: run.cycleId
+        };
         saveWalkForwardRun(cycleWalkForwardRun);
       } else {
       cycleWalkForwardRun = await runWalkForwardValidation({
+        sourceCycleId: run.cycleId,
         mode: advancedFullResearchMode ? "standard" : "safe",
         maxWindows: advancedFullResearchMode ? 5 : 3,
         proposalId: run.createdProposalId,

@@ -279,6 +279,7 @@ export async function runWalkForwardValidation(options: WalkForwardRunOptions = 
   const evidenceQualityScore = evidenceQualityScoreFor(source.mode, source.processedCandleCount, windows.length);
   let run: WalkForwardRun = {
     runId,
+    sourceCycleId: options.sourceCycleId,
     startedAt: now(),
     status: "running",
     mode,

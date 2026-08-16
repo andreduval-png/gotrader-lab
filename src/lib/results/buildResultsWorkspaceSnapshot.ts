@@ -44,13 +44,34 @@ const currentEvidence = ({
   currentCycleId?: string;
 }): ResultsSectionProvenance => {
   if (!currentCycleId) return unavailable(sourceType, "No completed current research cycle is available.", sourceId);
-  if (sourceCycleId && sourceCycleId !== currentCycleId) {
-    return unavailable(sourceType, `Evidence belongs to historical cycle ${sourceCycleId}, not current cycle ${currentCycleId}.`, sourceId);
-  }
   if (!identity || !currentIdentity) return unavailable(sourceType, "Exact current-cycle provenance is unavailable.", sourceId);
   const review = matchValidationProvenance(currentIdentity, identity);
   if (!review.matched) return unavailable(sourceType, review.summary, sourceId);
-  return { relationship: "current_cycle", sourceType, sourceId, generatedAt, identity, identityMatched: true, reason: `Identity matches current cycle ${currentCycleId}.` };
+  if (!sourceCycleId) {
+    return {
+      relationship: "historical_evidence",
+      sourceType,
+      sourceId,
+      sourceCycleId,
+      generatedAt,
+      identity,
+      identityMatched: true,
+      reason: `Identity matches, but the evidence has no immutable binding to current cycle ${currentCycleId}.`
+    };
+  }
+  if (sourceCycleId !== currentCycleId) {
+    return {
+      relationship: "historical_evidence",
+      sourceType,
+      sourceId,
+      sourceCycleId,
+      generatedAt,
+      identity,
+      identityMatched: true,
+      reason: `Identity matches, but the evidence belongs to historical cycle ${sourceCycleId}, not current cycle ${currentCycleId}.`
+    };
+  }
+  return { relationship: "current_cycle", sourceType, sourceId, sourceCycleId, generatedAt, identity, identityMatched: true, reason: `Identity matches current cycle ${currentCycleId}.` };
 };
 
 const historicalEvidence = (sourceType: string, sourceId: string, identity: ValidationProvenanceIdentity, reason: string): ResultsSectionProvenance => ({
@@ -77,6 +98,16 @@ export function buildResultsWorkspaceSnapshot(
   const latestChecklist = input.paperDemoState.dailyChecklists[0];
   const currentCycleId = runtime?.latestResearchCycle.latestCycleId;
   const currentIdentity = runtime?.researchIdentity.active;
+  const activeSourceMatchesCurrentCycle = Boolean(
+    source &&
+    currentCycleId &&
+    currentIdentity &&
+    source.provider === currentIdentity.sourceProvider &&
+    source.timeframe === currentIdentity.timeframe &&
+    source.fingerprint === currentIdentity.sourceFingerprint &&
+    (runtime?.marketData.symbol ?? "") === currentIdentity.requestedSymbol &&
+    (runtime?.mt5ReadOnly.brokerSymbol ?? source.provenance.providerSymbol ?? "") === currentIdentity.brokerSymbol
+  );
   const activeFrozenProfileId =
     runtime?.researchIdentity?.active.strategyProfile ??
     runtime?.latestResearchCycle.latestValidationSummary?.provenance?.strategyProfile ??
@@ -86,11 +117,11 @@ export function buildResultsWorkspaceSnapshot(
   const predictions = evaluatePredictionCalibration(input.predictionLedger.entries);
   const currentMetrics = metrics?.sourceCycleId === currentCycleId && currentCycleId ? metrics : undefined;
   const backtestProvenance = currentMetrics
-    ? { relationship: "current_cycle", sourceType: "canonical_cycle_metrics", sourceId: currentMetrics.sourceCycleId, generatedAt: currentMetrics.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical metrics are attached to current cycle ${currentCycleId}.` } satisfies ResultsSectionProvenance
+    ? { relationship: "current_cycle", sourceType: "canonical_cycle_metrics", sourceId: currentMetrics.sourceCycleId, sourceCycleId: currentMetrics.sourceCycleId, generatedAt: currentMetrics.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical metrics are attached to current cycle ${currentCycleId}.` } satisfies ResultsSectionProvenance
     : unavailable("canonical_cycle_metrics", metrics?.sourceCycleId ? `Metrics belong to cycle ${metrics.sourceCycleId}, not the current cycle.` : "Current-cycle canonical metrics are missing.", metrics?.sourceCycleId);
-  const replayProvenance = currentEvidence({ sourceType: "ict_replay_snapshot", sourceId: replay?.runId, generatedAt: replay?.generatedAt, identity: replay?.provenance, currentIdentity, currentCycleId });
-  const walkForwardProvenance = currentEvidence({ sourceType: "walk_forward_run", sourceId: walkForward?.runId, generatedAt: walkForward?.completedAt ?? walkForward?.startedAt, identity: walkForward?.provenance, currentIdentity, currentCycleId });
-  const monteCarloProvenance = currentEvidence({ sourceType: "ict_monte_carlo_snapshot", generatedAt: monteCarlo?.generatedAt, identity: monteCarlo?.provenance, currentIdentity, currentCycleId });
+  const replayProvenance = currentEvidence({ sourceType: "ict_replay_snapshot", sourceId: replay?.runId, generatedAt: replay?.generatedAt, identity: replay?.provenance, currentIdentity, sourceCycleId: replay?.sourceCycleId ?? (replay?.runId === currentCycleId ? replay?.runId : undefined), currentCycleId });
+  const walkForwardProvenance = currentEvidence({ sourceType: "walk_forward_run", sourceId: walkForward?.runId, generatedAt: walkForward?.completedAt ?? walkForward?.startedAt, identity: walkForward?.provenance, currentIdentity, sourceCycleId: walkForward?.sourceCycleId, currentCycleId });
+  const monteCarloProvenance = currentEvidence({ sourceType: "ict_monte_carlo_snapshot", generatedAt: monteCarlo?.generatedAt, identity: monteCarlo?.provenance, currentIdentity, sourceCycleId: monteCarlo?.sourceCycleId, currentCycleId });
   const chainProvenance = currentEvidence({ sourceType: "validation_chain", sourceId: chain?.recognitionId, generatedAt: chain?.updatedAt, identity: chain?.provenance, currentIdentity, sourceCycleId: chain?.sourceCycleId, currentCycleId });
   const replayCurrent = replayProvenance.relationship === "current_cycle" ? replay : undefined;
   const walkForwardCurrent = walkForwardProvenance.relationship === "current_cycle" ? walkForward : undefined;
@@ -106,9 +137,9 @@ export function buildResultsWorkspaceSnapshot(
     currentCycleId,
     currentIdentity,
     provenance: {
-      source: source && currentCycleId && currentIdentity
-        ? { relationship: "current_cycle", sourceType: "canonical_research_source", sourceId: source.fingerprint, generatedAt: runtime?.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical active research source for current cycle ${currentCycleId}.` }
-        : unavailable("canonical_research_source", source ? "An active source exists, but no completed current-cycle identity is available." : "Active canonical research source is unavailable.", source?.fingerprint),
+      source: activeSourceMatchesCurrentCycle
+        ? { relationship: "current_cycle", sourceType: "canonical_research_source", sourceId: source!.fingerprint, sourceCycleId: currentCycleId, generatedAt: runtime?.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical active research source for current cycle ${currentCycleId}.` }
+        : unavailable("canonical_research_source", source ? "The active source does not exactly match the completed current-cycle source identity." : "Active canonical research source is unavailable.", source?.fingerprint),
       backtest: backtestProvenance,
       replay: replayProvenance,
       walkForward: walkForwardProvenance,
@@ -116,7 +147,9 @@ export function buildResultsWorkspaceSnapshot(
       paperDemo: { relationship: "historical_evidence", sourceType: "paper_demo_operations_ledger", generatedAt: input.paperDemoState.updatedAt, identityMatched: true, reason: "Counts come directly from the local research-only Paper Demo operations ledger." },
       frozenProfile: frozen ? historicalEvidence("frozen_profile_registry", frozen.profileId, { strategyProfile: frozen.profileId, strategyProfileVersion: frozen.profileVersion }, "Immutable frozen-profile evidence; historical and separate from the current cycle.") : unavailable("frozen_profile_registry", activeFrozenProfileId ? `No frozen profile is registered for ${activeFrozenProfileId}.` : "No active strategy profile identity is available."),
       predictions: { relationship: "historical_evidence", sourceType: "prediction_ledger", generatedAt: input.predictionLedger.updatedAt, identityMatched: true, reason: "Metrics are computed directly from stored causal prediction-ledger entries." },
-      validation: chainProvenance
+      validation: chainProvenance,
+      datedOutcomes: { relationship: "historical_evidence", sourceType: "lab_state_outcome_ledger", identityMatched: true, reason: `${input.datedOutcomeCount ?? 0} stored simulation outcome record(s); global ledger evidence, not current-cycle metrics.` },
+      tradePlans: { relationship: "historical_evidence", sourceType: "browser_trade_plan_ledger", identityMatched: true, reason: `${input.tradePlanRecordCount ?? 0} identity-bearing trade-plan record(s) in the current browser-origin ledger; mutable local evidence, not certified evidence.` }
     },
     source: {
       provider: source?.provider ?? "unavailable",
@@ -233,9 +266,9 @@ export function buildResultsWorkspaceSnapshot(
       walkForwardVerdict: chainCurrent?.walkForwardResult?.verdict ?? "unavailable",
       evidenceScore: chainCurrent ? finiteOrNull(runtime?.evidence.evidenceQualityScore ?? chainCurrent.evidenceQuality?.evidenceQualityScore) : null,
       maturityScore: chainCurrent ? finiteOrNull(runtime?.maturity.maturityScore ?? chainCurrent.evidenceQuality?.maturityScore) : null,
-      readinessState: runtime?.readiness.readinessState ?? "not_evaluated",
+      readinessState: chainCurrent ? runtime?.readiness.readinessState ?? "not_evaluated" : "unavailable",
       blockers: uniqueStrings([...runtimeBlockers, ...(chainCurrent?.blockers ?? []), ...(forward?.blockers ?? []), chainProvenance.relationship === "unavailable" ? chainProvenance.reason : undefined]),
-      nextAction: chainCurrent?.nextAction ?? runtime?.readiness.nextAction ?? forward?.blockers[0] ?? "Activate Market and run identity-matched deterministic validation."
+      nextAction: chainCurrent?.nextAction ?? forward?.blockers[0] ?? "Activate Market and run identity-matched deterministic validation."
     },
     authority: RESULTS_WORKSPACE_AUTHORITY,
     safety: {
@@ -258,6 +291,9 @@ export const assertResultsWorkspaceSourceTruth = (snapshot: ResultsWorkspaceSnap
   const currentSections = Object.values(snapshot.provenance).filter((item) => item.relationship === "current_cycle");
   if (currentSections.length && !snapshot.currentCycleId) {
     throw new Error("Results current-cycle evidence is missing the current cycle identity.");
+  }
+  if (currentSections.some((item) => item.sourceCycleId !== snapshot.currentCycleId)) {
+    throw new Error("Results current-cycle evidence is not immutably bound to the exact current cycle.");
   }
   if (snapshot.provenance.backtest.relationship !== "current_cycle" && (
     snapshot.backtest.status !== "missing" ||

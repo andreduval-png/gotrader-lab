@@ -21,6 +21,7 @@ export interface ResultsSectionProvenance {
   relationship: ResultsEvidenceRelationship;
   sourceType: string;
   sourceId?: string;
+  sourceCycleId?: string;
   generatedAt?: string;
   identity?: ValidationProvenanceIdentity;
   identityMatched: boolean;
@@ -37,6 +38,8 @@ export interface ResultsWorkspaceBuildInput {
   paperDemoState: PaperDemoOperationsState;
   predictionLedger: PredictionLedgerState;
   forwardEvidenceEntries: ForwardEvidenceEntry[];
+  datedOutcomeCount?: number;
+  tradePlanRecordCount?: number;
 }
 
 export interface ResultsWorkspaceSnapshot {
@@ -53,6 +56,8 @@ export interface ResultsWorkspaceSnapshot {
     frozenProfile: ResultsSectionProvenance;
     predictions: ResultsSectionProvenance;
     validation: ResultsSectionProvenance;
+    datedOutcomes: ResultsSectionProvenance;
+    tradePlans: ResultsSectionProvenance;
   };
   source: {
     provider: string;

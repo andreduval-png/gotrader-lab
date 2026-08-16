@@ -683,6 +683,12 @@ async function expectUpgradedResultsPage(page: Page) {
   await expect(page.getByTestId("results-calendar")).toContainText(/Monthly dated outcome/i);
   await expect(main).toContainText(/Research Results/i);
   await expect(page.getByTestId("results-tab-overview")).toContainText(/Frozen research profile/i);
+  await expect(page.getByTestId("results-evidence-source-map")).toContainText(/Dated outcomes/i);
+  await expect(page.getByTestId("results-evidence-source-map")).toContainText(/Trade plans/i);
+  for (const tab of ["Overview", "Trade Plans", "Backtest", "Replay", "Walk-Forward OOS", "Paper & Forward", "Robustness"]) {
+    await page.getByRole("tab", { name: tab, exact: true }).click();
+    await expect(main).not.toContainText(/\b(?:null|undefined|NaN)\b/);
+  }
   await page.getByRole("tab", { name: "Backtest" }).click();
   await expect(main).toContainText(/Performance Curve/i);
   await expect(main).toContainText(/Outcome Log/i);
