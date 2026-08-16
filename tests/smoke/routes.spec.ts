@@ -103,6 +103,13 @@ const expectedHeadings: Record<string, RegExp> = {
 
 test.describe("GoTrader browser route smoke", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route(/http:\/\/127\.0\.0\.1:8799\/.*/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "unavailable", authority: "none/none/none" })
+      });
+    });
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     page.on("console", (message) => {
