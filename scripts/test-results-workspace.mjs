@@ -40,6 +40,16 @@ assert.match(builder, /getFrozenResearchProfile\(activeFrozenProfileId/);
 assert.match(view, /listTradePlanCycleResults/);
 assert.match(view, /Plan versus observed outcome/);
 assert.match(view, /Four-week trade-management review/);
+assert.match(view, /results-evidence-source-map/);
+assert.doesNotMatch(view, /aggregatePortfolioMetrics/);
+assert.doesNotMatch(view, /canonicalMetrics\?\.winRate \?\?/);
+assert.match(view, /Attributed avoidable losses/);
+assert.match(view, /Current-cycle metric unavailable/);
+assert.match(builder, /assertResultsWorkspaceSourceTruth/);
+assert.match(builder, /relationship: "current_cycle"/);
+assert.match(builder, /relationship: "historical_evidence"/);
+assert.doesNotMatch(builder, /\?\? ifvgFreshRetestV3FrozenProfile/);
+assert.match(builder, /historicalTrades: frozen\?\.evidence\.completedTrades \?\? null/);
 
 for (const section of [
   "backtest:",
@@ -69,6 +79,7 @@ console.log(JSON.stringify({
   calendar: "dated_outcomes_only",
   aggregateDailyFabrication: false,
   resultSections: ["backtest", "replay", "walk_forward", "paper_forward", "robustness"],
+  sourceTruthMap: true,
   authority: {
     executionAuthority: "none",
     brokerAuthority: "none",

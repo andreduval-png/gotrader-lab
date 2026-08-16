@@ -44,7 +44,7 @@ import {
   selectRuntimeProvenanceWarnings,
   type ResearchRuntimeSnapshot
 } from "@/lib/runtime";
-import { aggregatePortfolioMetrics, identifyWeakestAgent } from "@/lib/scoring";
+import { identifyWeakestAgent } from "@/lib/scoring";
 import type { LabState, MarketOutcome } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
@@ -56,7 +56,7 @@ import { loadPaperDemoOperationsState } from "@/lib/paperDemoOperations";
 import { loadPredictionLedger } from "@/lib/predictionLedger";
 import { loadForwardEvidenceLedger } from "@/lib/forwardEvidence";
 import { latestValidationChainEntry, readValidationChainState } from "@/lib/validationChain";
-import { buildResultsWorkspaceSnapshot } from "@/lib/results";
+import { buildResultsWorkspaceSnapshot, type ResultsSectionProvenance } from "@/lib/results";
 import { publishResultsProjection } from "@/lib/agentInterface";
 import {
   buildTradePlanResultsSnapshot,
@@ -89,13 +89,14 @@ const compactDate = new Intl.DateTimeFormat(undefined, { month: "short", year: "
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const safeNumber = (value?: number | null) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-const pct = (value?: number, digits = 1) =>
+const pct = (value?: number | null, digits = 1) =>
   typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "n/a";
 const rValue = (value?: number | null, digits = 2) =>
   typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(digits)}R` : "n/a";
 const pointsValue = (value?: number | null) =>
   typeof value === "number" && Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)} pts` : "n/a";
-const readableProfile = (profileId: string) => profileId.replace(/_/g, " ");
+const readableProfile = (profileId?: string | null) => profileId ? profileId.replace(/_/g, " ") : "unavailable";
+const countValue = (value?: number | null) => typeof value === "number" ? value.toLocaleString() : "n/a";
 const readableOutcome = (value: string) => value.replace(/_/g, " ");
 const outcomeBadgeVariant = (record: TradePlanCycleResultRecord) =>
   record.outcome.status === "passed_target_first"
@@ -105,6 +106,8 @@ const outcomeBadgeVariant = (record: TradePlanCycleResultRecord) =>
       : record.outcome.status === "pending_entry" || record.outcome.status === "active"
         ? "warning" as const
         : "secondary" as const;
+const evidenceBadgeVariant = (item: ResultsSectionProvenance) =>
+  item.relationship === "current_cycle" ? "success" as const : item.relationship === "historical_evidence" ? "warning" as const : "secondary" as const;
 
 interface CalendarCell {
   date: Date;
@@ -127,7 +130,6 @@ export function PerformanceView({ state }: { state: LabState }) {
   const [resultsTab, setResultsTab] = useState<ResultsTab>("overview");
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const legacyMetrics = aggregatePortfolioMetrics(state);
   const weakest = identifyWeakestAgent(state);
   const latestCycle = latestResearchCycleRun(loadResearchCycleState());
   const latestValidation = loadLatestValidationReport();
@@ -167,13 +169,17 @@ export function PerformanceView({ state }: { state: LabState }) {
     }),
     [canonicalMetrics, runtimeSnapshot, walkForward]
   );
+  const displayedCanonicalMetrics = resultsSnapshot.provenance.backtest.relationship === "current_cycle"
+    ? canonicalMetrics
+    : undefined;
+  const displayedSimulatedAccount = displayedCanonicalMetrics ? simulatedAccount : undefined;
   const tradePlanSnapshot = useMemo(
     () => buildTradePlanResultsSnapshot(tradePlanRecords),
     [tradePlanRecords]
   );
   const sourceWarnings = selectRuntimeProvenanceWarnings(runtimeSnapshot);
-  const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
-  const avgWinLoss = averageWinLossRatio(canonicalMetrics);
+  const winRate = displayedCanonicalMetrics?.winRate;
+  const avgWinLoss = averageWinLossRatio(displayedCanonicalMetrics);
   const hasDatedOutcomes = state.outcomes.length > 0;
 
   useEffect(() => {
@@ -294,27 +300,43 @@ export function PerformanceView({ state }: { state: LabState }) {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <ResultMetricCard
               label="Frozen research profile"
-              value={`${resultsSnapshot.frozenProfile.historicalTrades} trades`}
+              value={`${countValue(resultsSnapshot.frozenProfile.historicalTrades)} trades`}
               detail={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} / ${pct(resultsSnapshot.frozenProfile.historicalTargetFirstRate)} target-first / ${rValue(resultsSnapshot.frozenProfile.historicalAverageR)}`}
-              tone="positive"
+              tone={resultsSnapshot.frozenProfile.status === "unavailable" ? undefined : "positive"}
             />
             <ResultMetricCard
               label="Chronological OOS"
-              value={`${resultsSnapshot.frozenProfile.oosTrades} trades`}
-              detail={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal} rolling windows / ${rValue(resultsSnapshot.frozenProfile.oosAverageR)}`}
-              tone="positive"
+              value={`${countValue(resultsSnapshot.frozenProfile.oosTrades)} trades`}
+              detail={`${countValue(resultsSnapshot.frozenProfile.rollingWindowsPassed)}/${countValue(resultsSnapshot.frozenProfile.rollingWindowsTotal)} rolling windows / ${rValue(resultsSnapshot.frozenProfile.oosAverageR)}`}
+              tone={resultsSnapshot.frozenProfile.status === "unavailable" ? undefined : "positive"}
             />
             <ResultMetricCard
               label="Forward Evidence"
-              value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`}
-              detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} dates / ${resultsSnapshot.frozenProfile.forwardWindows} windows`}
+              value={`${countValue(resultsSnapshot.frozenProfile.forwardCompleted)}/${resultsSnapshot.frozenProfile.forwardRequired}`}
+              detail={`${countValue(resultsSnapshot.frozenProfile.forwardIndependentDates)} dates / ${countValue(resultsSnapshot.frozenProfile.forwardWindows)} windows`}
             />
             <ResultMetricCard
               label="Research Readiness"
               value={resultsSnapshot.validation.readinessState.replace(/_/g, " ")}
-              detail={`Evidence ${resultsSnapshot.validation.evidenceScore} / Maturity ${resultsSnapshot.validation.maturityScore}`}
+              detail={`Evidence ${countValue(resultsSnapshot.validation.evidenceScore)} / Maturity ${countValue(resultsSnapshot.validation.maturityScore)}`}
             />
           </div>
+
+          <ResultPanel>
+            <PanelHeading icon={<LockKeyhole className="h-4 w-4" />} title="Evidence source map" subtitle={`Current cycle ${resultsSnapshot.currentCycleId ?? "unavailable"}; unmatched evidence is not rendered as current`} />
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid="results-evidence-source-map">
+              {Object.entries(resultsSnapshot.provenance).map(([section, item]) => (
+                <div key={section} className="border-b border-border/60 py-3 last:border-b-0 md:border md:border-border/60 md:p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase text-slate-400">{section.replace(/([A-Z])/g, " $1")}</span>
+                    <Badge variant={evidenceBadgeVariant(item)}>{item.relationship.replace(/_/g, " ")}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-slate-400">{item.reason}</p>
+                  {item.sourceId ? <p className="mt-1 truncate font-mono text-[11px] text-slate-500" title={item.sourceId}>{item.sourceId}</p> : null}
+                </div>
+              ))}
+            </div>
+          </ResultPanel>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <ResultPanel>
@@ -511,10 +533,10 @@ export function PerformanceView({ state }: { state: LabState }) {
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frozen profile chronological evidence</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="OOS sample" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} detail={`${resultsSnapshot.frozenProfile.historicalUniqueDates} historical dates`} tone="positive" />
-            <ResultMetricCard label="Rolling windows" value={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal}`} detail="positive chronological windows" tone="positive" />
+            <ResultMetricCard label="OOS sample" value={`${countValue(resultsSnapshot.frozenProfile.oosTrades)} trades`} detail={`${countValue(resultsSnapshot.frozenProfile.historicalUniqueDates)} historical dates`} tone={resultsSnapshot.frozenProfile.status === "unavailable" ? undefined : "positive"} />
+            <ResultMetricCard label="Rolling windows" value={`${countValue(resultsSnapshot.frozenProfile.rollingWindowsPassed)}/${countValue(resultsSnapshot.frozenProfile.rollingWindowsTotal)}`} detail="positive chronological windows" tone={resultsSnapshot.frozenProfile.status === "unavailable" ? undefined : "positive"} />
             <ResultMetricCard label="OOS average" value={rValue(resultsSnapshot.frozenProfile.oosAverageR)} detail="frozen detector profile" tone="positive" />
-            <ResultMetricCard label="OOS profit factor" value={resultsSnapshot.frozenProfile.oosProfitFactor.toFixed(3)} detail="historical evidence; no auto-promotion" tone="positive" />
+            <ResultMetricCard label="OOS profit factor" value={resultsSnapshot.frozenProfile.oosProfitFactor?.toFixed(3) ?? "n/a"} detail="historical evidence; no auto-promotion" tone={resultsSnapshot.frozenProfile.status === "unavailable" ? undefined : "positive"} />
           </div>
         </section>
       ) : null}
@@ -566,10 +588,10 @@ export function PerformanceView({ state }: { state: LabState }) {
           <ResultPanel>
             <PanelHeading icon={<Activity className="h-4 w-4" />} title={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} robustness`} subtitle="Validated historical profile; forward reassessment remains gated" />
             <div className="mt-4 grid gap-2 md:grid-cols-4">
-              <StatTile label="Monte Carlo" value={resultsSnapshot.frozenProfile.monteCarloRobustness.replace(/_/g, " ")} />
-              <StatTile label="Historical outcomes" value={String(resultsSnapshot.frozenProfile.historicalTrades)} />
-              <StatTile label="Chronological OOS" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} />
-              <StatTile label="Forward threshold" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} />
+              <StatTile label="Monte Carlo" value={resultsSnapshot.frozenProfile.monteCarloRobustness?.replace(/_/g, " ") ?? "unavailable"} />
+              <StatTile label="Historical outcomes" value={countValue(resultsSnapshot.frozenProfile.historicalTrades)} />
+              <StatTile label="Chronological OOS" value={`${countValue(resultsSnapshot.frozenProfile.oosTrades)} trades`} />
+              <StatTile label="Forward threshold" value={`${countValue(resultsSnapshot.frozenProfile.forwardCompleted)}/${resultsSnapshot.frozenProfile.forwardRequired}`} />
             </div>
           </ResultPanel>
           <ResultPanel>
@@ -588,37 +610,37 @@ export function PerformanceView({ state }: { state: LabState }) {
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <ResultMetricCard
           label="Aggregate simulated P&L"
-          value={money.format(resultsSnapshot.backtest.realizedPnL ?? 0)}
-          detail={`${resultsSnapshot.backtest.totalTrades.toLocaleString()} canonical research trades`}
-          tone={(resultsSnapshot.backtest.realizedPnL ?? 0) >= 0 ? "positive" : "negative"}
+          value={resultsSnapshot.backtest.realizedPnL === null ? "n/a" : money.format(resultsSnapshot.backtest.realizedPnL)}
+          detail={resultsSnapshot.backtest.totalTrades === null ? "Current-cycle metric unavailable" : `${resultsSnapshot.backtest.totalTrades} canonical research trades`}
+          tone={resultsSnapshot.backtest.realizedPnL === null ? undefined : resultsSnapshot.backtest.realizedPnL >= 0 ? "positive" : "negative"}
         />
         <ResultMetricCard
           label="Win Rate"
-          value={pct(winRate, 2)}
-          detail={`${canonicalMetrics?.winningTrades ?? 0}/${canonicalMetrics?.totalTrades ?? 0} trades`}
-          visual={<SemiGauge value={winRate} />}
+          value={winRate === undefined ? "n/a" : pct(winRate, 2)}
+          detail={displayedCanonicalMetrics ? `${displayedCanonicalMetrics.winningTrades}/${displayedCanonicalMetrics.totalTrades} trades` : "Current-cycle metric unavailable"}
+          visual={winRate === undefined ? undefined : <SemiGauge value={winRate} />}
         />
         <ResultMetricCard
           label="Reward / Risk"
           value={avgWinLoss ? avgWinLoss.toFixed(2) : "n/a"}
-          detail={`Avg R ${rValue(canonicalMetrics?.averageR)}`}
-          visual={<RatioBar value={avgWinLoss ?? 0} />}
+          detail={`Avg R ${rValue(displayedCanonicalMetrics?.averageR)}`}
+          visual={avgWinLoss === null ? undefined : <RatioBar value={avgWinLoss} />}
         />
         <ResultMetricCard
           label="Profit Factor"
-          value={canonicalMetrics?.profitFactor === null || canonicalMetrics?.profitFactor === undefined ? "n/a" : canonicalMetrics.profitFactor.toFixed(2)}
-          detail="Canonical latest-cycle metric · in_sample"
+          value={displayedCanonicalMetrics?.profitFactor === null || displayedCanonicalMetrics?.profitFactor === undefined ? "n/a" : displayedCanonicalMetrics.profitFactor.toFixed(2)}
+          detail={displayedCanonicalMetrics ? "Canonical current-cycle metric / in_sample" : "Current-cycle metric unavailable"}
         />
         <ResultMetricCard
           label="Max Drawdown"
-          value={rValue(canonicalMetrics?.maxDrawdownR)}
-          detail={wholeMoney.format(simulatedAccount?.maxDrawdownDollars ?? 0)}
-          tone="negative"
+          value={rValue(displayedCanonicalMetrics?.maxDrawdownR)}
+          detail={displayedSimulatedAccount ? wholeMoney.format(displayedSimulatedAccount.maxDrawdownDollars) : "Current-cycle metric unavailable"}
+          tone={displayedCanonicalMetrics ? "negative" : undefined}
         />
         <ResultMetricCard
           label="Current Balance"
-          value={wholeMoney.format(simulatedAccount?.currentBalance ?? simulatedAccount?.startingBalance ?? 50000)}
-          detail={`Start ${wholeMoney.format(simulatedAccount?.startingBalance ?? 50000)}`}
+          value={displayedSimulatedAccount ? wholeMoney.format(displayedSimulatedAccount.currentBalance) : "n/a"}
+          detail={displayedSimulatedAccount ? `Start ${wholeMoney.format(displayedSimulatedAccount.startingBalance)}` : "Current-cycle metric unavailable"}
         />
       </section>
 
@@ -630,7 +652,7 @@ export function PerformanceView({ state }: { state: LabState }) {
               <h3 className="mt-1 text-xl font-semibold text-slate-50">Cumulative dated outcome move</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">{canonicalMetrics?.sourceCycleId ?? "no cycle"}</Badge>
+              <Badge variant="secondary">{displayedCanonicalMetrics?.sourceCycleId ?? "no current-cycle evidence"}</Badge>
               <Badge variant="warning">in_sample</Badge>
             </div>
           </div>
@@ -659,22 +681,22 @@ export function PerformanceView({ state }: { state: LabState }) {
             <Badge variant="secondary">Canonical</Badge>
           </div>
           <div className="mt-4 space-y-2">
-            <StatRow label="Biggest trade" value={rValue(canonicalMetrics?.bestTradeR)} />
-            <StatRow label="Worst trade" value={rValue(canonicalMetrics?.worstTradeR)} negative />
-            <StatRow label="Expectancy" value={rValue(canonicalMetrics?.averageR)} />
-            <StatRow label="Profit factor" value={canonicalMetrics?.profitFactor === null || canonicalMetrics?.profitFactor === undefined ? "n/a" : canonicalMetrics.profitFactor.toFixed(2)} />
-            <StatRow label="False positives" value={String(canonicalMetrics?.falsePositiveCount ?? 0)} negative />
-            <StatRow label="Skipped signals" value={String(canonicalMetrics?.skippedSignals ?? 0)} />
+            <StatRow label="Biggest trade" value={rValue(displayedCanonicalMetrics?.bestTradeR)} />
+            <StatRow label="Worst trade" value={rValue(displayedCanonicalMetrics?.worstTradeR)} negative />
+            <StatRow label="Expectancy" value={rValue(displayedCanonicalMetrics?.averageR)} />
+            <StatRow label="Profit factor" value={displayedCanonicalMetrics?.profitFactor === null || displayedCanonicalMetrics?.profitFactor === undefined ? "n/a" : displayedCanonicalMetrics.profitFactor.toFixed(2)} />
+            <StatRow label="Attributed avoidable losses" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.falsePositiveCount) : "n/a"} negative />
+            <StatRow label="Skipped signals" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.skippedSignals) : "n/a"} />
             <StatRow
               label="Readiness"
               value={String(
-                canonicalMetrics?.readinessScore ??
+                displayedCanonicalMetrics?.readinessScore ??
                   runtimeSnapshot?.readiness.readinessSnapshot.validationSnapshot?.readinessScore ??
                   runtimeSnapshot?.readiness.readinessSnapshot.researchQualitySnapshot?.readinessScore ??
-                  0
+                  "n/a"
               )}
             />
-            <StatRow label="Stability" value={String(canonicalMetrics?.stabilityScore ?? 0)} />
+            <StatRow label="Stability" value={displayedCanonicalMetrics ? String(displayedCanonicalMetrics.stabilityScore) : "n/a"} />
           </div>
           <div className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
             <ShieldAlert className="mr-2 inline h-4 w-4" aria-hidden="true" />
@@ -711,9 +733,9 @@ export function PerformanceView({ state }: { state: LabState }) {
             <Badge variant="danger">in_sample · authority gated</Badge>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2">
-            <StatTile label="Metric source" value={canonicalMetrics?.metricSourceLabel ?? "no completed research cycle"} />
-            <StatTile label="Data source" value={canonicalMetrics?.dataSource ?? runtimeSnapshot?.marketData.sourceLabel ?? "n/a"} />
-            <StatTile label="Candle window" value={canonicalMetrics?.candleWindow ?? "n/a"} />
+            <StatTile label="Metric source" value={displayedCanonicalMetrics?.metricSourceLabel ?? "no current-cycle metric"} />
+            <StatTile label="Data source" value={displayedCanonicalMetrics?.dataSource ?? "n/a"} />
+            <StatTile label="Candle window" value={displayedCanonicalMetrics?.candleWindow ?? "n/a"} />
             <StatTile label="Fingerprint" value={selectRuntimeFingerprintLabel(runtimeSnapshot)} />
           </div>
           {sourceWarnings.length || canonicalMismatchWarnings.length ? (

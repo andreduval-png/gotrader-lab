@@ -1,13 +1,14 @@
 import {
   FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS,
   evaluateForwardEvidenceLedger,
-  getFrozenResearchProfile,
-  ifvgFreshRetestV3FrozenProfile
+  getFrozenResearchProfile
 } from "@/lib/forwardEvidence";
 import { evaluatePredictionCalibration } from "@/lib/predictionLedger";
+import { matchValidationProvenance, type ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 import {
   RESULTS_WORKSPACE_AUTHORITY,
   type ResultsWorkspaceBuildInput,
+  type ResultsSectionProvenance,
   type ResultsWorkspaceSnapshot
 } from "./resultsWorkspaceTypes";
 
@@ -16,6 +17,50 @@ const finiteOrNull = (value: unknown) =>
 
 const uniqueStrings = (values: Array<string | undefined>) =>
   [...new Set(values.filter((value): value is string => Boolean(value)))].slice(0, 12);
+
+const unavailable = (sourceType: string, reason: string, sourceId?: string): ResultsSectionProvenance => ({
+  relationship: "unavailable",
+  sourceType,
+  sourceId,
+  identityMatched: false,
+  reason
+});
+
+const currentEvidence = ({
+  sourceType,
+  sourceId,
+  generatedAt,
+  identity,
+  currentIdentity,
+  sourceCycleId,
+  currentCycleId
+}: {
+  sourceType: string;
+  sourceId?: string;
+  generatedAt?: string;
+  identity?: ValidationProvenanceIdentity;
+  currentIdentity?: ValidationProvenanceIdentity;
+  sourceCycleId?: string;
+  currentCycleId?: string;
+}): ResultsSectionProvenance => {
+  if (!currentCycleId) return unavailable(sourceType, "No completed current research cycle is available.", sourceId);
+  if (sourceCycleId && sourceCycleId !== currentCycleId) {
+    return unavailable(sourceType, `Evidence belongs to historical cycle ${sourceCycleId}, not current cycle ${currentCycleId}.`, sourceId);
+  }
+  if (!identity || !currentIdentity) return unavailable(sourceType, "Exact current-cycle provenance is unavailable.", sourceId);
+  const review = matchValidationProvenance(currentIdentity, identity);
+  if (!review.matched) return unavailable(sourceType, review.summary, sourceId);
+  return { relationship: "current_cycle", sourceType, sourceId, generatedAt, identity, identityMatched: true, reason: `Identity matches current cycle ${currentCycleId}.` };
+};
+
+const historicalEvidence = (sourceType: string, sourceId: string, identity: ValidationProvenanceIdentity, reason: string): ResultsSectionProvenance => ({
+  relationship: "historical_evidence",
+  sourceType,
+  sourceId,
+  identity,
+  identityMatched: true,
+  reason
+});
 
 export function buildResultsWorkspaceSnapshot(
   input: ResultsWorkspaceBuildInput
@@ -30,20 +75,49 @@ export function buildResultsWorkspaceSnapshot(
   const chain = input.validationChainEntry;
   const paperCandidates = input.paperDemoState.candidates;
   const latestChecklist = input.paperDemoState.dailyChecklists[0];
+  const currentCycleId = runtime?.latestResearchCycle.latestCycleId;
+  const currentIdentity = runtime?.researchIdentity.active;
   const activeFrozenProfileId =
     runtime?.researchIdentity?.active.strategyProfile ??
     runtime?.latestResearchCycle.latestValidationSummary?.provenance?.strategyProfile ??
     runtime?.activeConfig.resolvedBacktestConfig.strategyProfile;
-  const frozen = getFrozenResearchProfile(activeFrozenProfileId ?? "") ?? ifvgFreshRetestV3FrozenProfile;
-  const forward = evaluateForwardEvidenceLedger(input.forwardEvidenceEntries, frozen.profileId);
+  const frozen = getFrozenResearchProfile(activeFrozenProfileId ?? "");
+  const forward = frozen ? evaluateForwardEvidenceLedger(input.forwardEvidenceEntries, frozen.profileId) : undefined;
   const predictions = evaluatePredictionCalibration(input.predictionLedger.entries);
-  const oos = walkForward?.stability?.edgeStatistics?.provenance === "out_of_sample"
-    ? walkForward.stability.edgeStatistics
+  const currentMetrics = metrics?.sourceCycleId === currentCycleId && currentCycleId ? metrics : undefined;
+  const backtestProvenance = currentMetrics
+    ? { relationship: "current_cycle", sourceType: "canonical_cycle_metrics", sourceId: currentMetrics.sourceCycleId, generatedAt: currentMetrics.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical metrics are attached to current cycle ${currentCycleId}.` } satisfies ResultsSectionProvenance
+    : unavailable("canonical_cycle_metrics", metrics?.sourceCycleId ? `Metrics belong to cycle ${metrics.sourceCycleId}, not the current cycle.` : "Current-cycle canonical metrics are missing.", metrics?.sourceCycleId);
+  const replayProvenance = currentEvidence({ sourceType: "ict_replay_snapshot", sourceId: replay?.runId, generatedAt: replay?.generatedAt, identity: replay?.provenance, currentIdentity, currentCycleId });
+  const walkForwardProvenance = currentEvidence({ sourceType: "walk_forward_run", sourceId: walkForward?.runId, generatedAt: walkForward?.completedAt ?? walkForward?.startedAt, identity: walkForward?.provenance, currentIdentity, currentCycleId });
+  const monteCarloProvenance = currentEvidence({ sourceType: "ict_monte_carlo_snapshot", generatedAt: monteCarlo?.generatedAt, identity: monteCarlo?.provenance, currentIdentity, currentCycleId });
+  const chainProvenance = currentEvidence({ sourceType: "validation_chain", sourceId: chain?.recognitionId, generatedAt: chain?.updatedAt, identity: chain?.provenance, currentIdentity, sourceCycleId: chain?.sourceCycleId, currentCycleId });
+  const replayCurrent = replayProvenance.relationship === "current_cycle" ? replay : undefined;
+  const walkForwardCurrent = walkForwardProvenance.relationship === "current_cycle" ? walkForward : undefined;
+  const monteCarloCurrent = monteCarloProvenance.relationship === "current_cycle" ? monteCarlo : undefined;
+  const chainCurrent = chainProvenance.relationship === "current_cycle" ? chain : undefined;
+  const oos = walkForwardCurrent?.stability?.edgeStatistics?.provenance === "out_of_sample"
+    ? walkForwardCurrent.stability.edgeStatistics
     : undefined;
   const runtimeBlockers = runtime?.readiness.actualBlockers ?? [];
 
-  return {
+  const snapshot: ResultsWorkspaceSnapshot = {
     generatedAt: new Date().toISOString(),
+    currentCycleId,
+    currentIdentity,
+    provenance: {
+      source: source && currentCycleId && currentIdentity
+        ? { relationship: "current_cycle", sourceType: "canonical_research_source", sourceId: source.fingerprint, generatedAt: runtime?.generatedAt, identity: currentIdentity, identityMatched: true, reason: `Canonical active research source for current cycle ${currentCycleId}.` }
+        : unavailable("canonical_research_source", source ? "An active source exists, but no completed current-cycle identity is available." : "Active canonical research source is unavailable.", source?.fingerprint),
+      backtest: backtestProvenance,
+      replay: replayProvenance,
+      walkForward: walkForwardProvenance,
+      monteCarlo: monteCarloProvenance,
+      paperDemo: { relationship: "historical_evidence", sourceType: "paper_demo_operations_ledger", generatedAt: input.paperDemoState.updatedAt, identityMatched: true, reason: "Counts come directly from the local research-only Paper Demo operations ledger." },
+      frozenProfile: frozen ? historicalEvidence("frozen_profile_registry", frozen.profileId, { strategyProfile: frozen.profileId, strategyProfileVersion: frozen.profileVersion }, "Immutable frozen-profile evidence; historical and separate from the current cycle.") : unavailable("frozen_profile_registry", activeFrozenProfileId ? `No frozen profile is registered for ${activeFrozenProfileId}.` : "No active strategy profile identity is available."),
+      predictions: { relationship: "historical_evidence", sourceType: "prediction_ledger", generatedAt: input.predictionLedger.updatedAt, identityMatched: true, reason: "Metrics are computed directly from stored causal prediction-ledger entries." },
+      validation: chainProvenance
+    },
     source: {
       provider: source?.provider ?? "unavailable",
       requestedSymbol: activation?.requestedSymbol ?? runtime?.marketData.symbol ?? "MNQ",
@@ -61,50 +135,50 @@ export function buildResultsWorkspaceSnapshot(
       weeklyBiasDirection: activation?.weeklyBiasDirection ?? "unknown"
     },
     backtest: {
-      status: metrics ? "available" : "missing",
-      cycleId: metrics?.sourceCycleId,
-      totalTrades: metrics?.totalTrades ?? 0,
-      winningTrades: metrics?.winningTrades ?? 0,
-      losingTrades: metrics?.losingTrades ?? 0,
-      winRate: finiteOrNull(metrics?.winRate),
-      averageR: finiteOrNull(metrics?.averageR),
-      profitFactor: finiteOrNull(metrics?.profitFactor),
-      maxDrawdownR: finiteOrNull(metrics?.maxDrawdownR),
-      realizedPnL: finiteOrNull(metrics?.realizedPnL),
-      metricSource: metrics?.metricSourceLabel ?? "No completed canonical research cycle"
+      status: backtestProvenance.relationship === "current_cycle" ? "available" : "missing",
+      cycleId: backtestProvenance.relationship === "current_cycle" ? metrics?.sourceCycleId : undefined,
+      totalTrades: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.totalTrades) : null,
+      winningTrades: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.winningTrades) : null,
+      losingTrades: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.losingTrades) : null,
+      winRate: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.winRate) : null,
+      averageR: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.averageR) : null,
+      profitFactor: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.profitFactor) : null,
+      maxDrawdownR: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.maxDrawdownR) : null,
+      realizedPnL: backtestProvenance.relationship === "current_cycle" ? finiteOrNull(metrics?.realizedPnL) : null,
+      metricSource: backtestProvenance.reason
     },
     replay: {
-      status: replay ? "available" : "missing",
-      runId: replay?.runId,
-      totalSignals: replay?.totalSignals ?? 0,
-      targetFirstRate: finiteOrNull(replay?.targetFirstRate),
-      approvedTargetFirstRate: finiteOrNull(replay?.approvedTargetFirstRate),
-      averageRrAchieved: finiteOrNull(replay?.averageRrAchieved),
-      approvedAverageRr: finiteOrNull(replay?.approvedAverageRr),
-      verdict: chain?.replayResult?.verdict ?? (replay ? "saved" : "not_run")
+      status: replayCurrent ? "available" : "missing",
+      runId: replayCurrent?.runId,
+      totalSignals: finiteOrNull(replayCurrent?.totalSignals),
+      targetFirstRate: finiteOrNull(replayCurrent?.targetFirstRate),
+      approvedTargetFirstRate: finiteOrNull(replayCurrent?.approvedTargetFirstRate),
+      averageRrAchieved: finiteOrNull(replayCurrent?.averageRrAchieved),
+      approvedAverageRr: finiteOrNull(replayCurrent?.approvedAverageRr),
+      verdict: chainCurrent?.replayResult?.verdict ?? (replayCurrent ? "saved" : "unavailable")
     },
     walkForward: {
-      status: walkForward?.status ?? "not_run",
-      runId: walkForward?.runId,
-      verdict: walkForward?.stability?.verdict ?? chain?.walkForwardResult?.verdict ?? "not_run",
-      windows: walkForward?.stability?.windowCount ?? walkForward?.actualWindowsGenerated ?? 0,
-      windowsPassed: walkForward?.stability?.outOfSampleWindowsPassed ?? chain?.walkForwardResult?.oosWindowsPassed ?? 0,
-      oosTrades: oos?.sampleSize ?? chain?.walkForwardResult?.tradeCount ?? 0,
+      status: walkForwardCurrent?.status ?? "unavailable",
+      runId: walkForwardCurrent?.runId,
+      verdict: walkForwardCurrent?.stability?.verdict ?? chainCurrent?.walkForwardResult?.verdict ?? "unavailable",
+      windows: finiteOrNull(walkForwardCurrent?.stability?.windowCount ?? walkForwardCurrent?.actualWindowsGenerated),
+      windowsPassed: finiteOrNull(walkForwardCurrent?.stability?.outOfSampleWindowsPassed ?? chainCurrent?.walkForwardResult?.oosWindowsPassed),
+      oosTrades: finiteOrNull(oos?.sampleSize ?? chainCurrent?.walkForwardResult?.tradeCount),
       oosAverageR: finiteOrNull(oos?.meanR),
       oosLower95: finiteOrNull(oos?.expectancyLower95),
-      overfitRisk: walkForward?.stability?.overfitRisk ?? "not_evaluated",
-      provenanceStatus: chain?.provenanceStatus ?? (walkForward?.sourceFingerprint ? "source_fingerprinted" : "missing")
+      overfitRisk: walkForwardCurrent?.stability?.overfitRisk ?? "unavailable",
+      provenanceStatus: walkForwardProvenance.relationship
     },
     monteCarlo: {
-      status: monteCarlo ? "available" : "missing",
-      robustness: monteCarlo?.robustnessRating ?? "not_run",
-      usableOutcomes: monteCarlo?.usableOutcomes ?? 0,
-      medianEndingR: finiteOrNull(monteCarlo?.medianEndingR),
-      fifthPercentileEndingR: finiteOrNull(monteCarlo?.fifthPercentileEndingR),
-      medianMaxDrawdownPct: finiteOrNull(monteCarlo?.medianMaxDrawdownPct),
-      worstMaxDrawdownPct: finiteOrNull(monteCarlo?.worstMaxDrawdownPct),
-      riskOfRuinPct: finiteOrNull(monteCarlo?.riskOfRuinPct),
-      recommendedMaxRiskPerTradePct: finiteOrNull(monteCarlo?.recommendedMaxRiskPerTradePct)
+      status: monteCarloCurrent ? "available" : "missing",
+      robustness: monteCarloCurrent?.robustnessRating ?? "unavailable",
+      usableOutcomes: finiteOrNull(monteCarloCurrent?.usableOutcomes),
+      medianEndingR: finiteOrNull(monteCarloCurrent?.medianEndingR),
+      fifthPercentileEndingR: finiteOrNull(monteCarloCurrent?.fifthPercentileEndingR),
+      medianMaxDrawdownPct: finiteOrNull(monteCarloCurrent?.medianMaxDrawdownPct),
+      worstMaxDrawdownPct: finiteOrNull(monteCarloCurrent?.worstMaxDrawdownPct),
+      riskOfRuinPct: finiteOrNull(monteCarloCurrent?.riskOfRuinPct),
+      recommendedMaxRiskPerTradePct: finiteOrNull(monteCarloCurrent?.recommendedMaxRiskPerTradePct)
     },
     paperDemo: {
       candidateCount: paperCandidates.length,
@@ -118,27 +192,27 @@ export function buildResultsWorkspaceSnapshot(
       brokerConnected: false
     },
     frozenProfile: {
-      profileId: frozen.profileId,
-      status: "historically_validated_forward_evidence_required",
-      historicalTrades: frozen.evidence.completedTrades,
-      historicalTargetFirstRate: frozen.evidence.targetFirstRate,
-      historicalAverageR: frozen.evidence.averageR,
-      historicalProfitFactor: frozen.evidence.profitFactor,
-      historicalUniqueDates: frozen.evidence.uniqueDates,
-      rollingWindowsPassed: frozen.evidence.positiveRollingWindows,
-      rollingWindowsTotal: frozen.evidence.totalRollingWindows,
-      oosTrades: frozen.evidence.oosTrades,
-      oosAverageR: frozen.evidence.oosAverageR,
-      oosProfitFactor: frozen.evidence.oosProfitFactor,
-      monteCarloRobustness: frozen.evidence.monteCarloRobustness,
-      forwardCompleted: forward.completedForwardOutcomes,
+      profileId: frozen?.profileId ?? null,
+      status: frozen ? "historically_validated_forward_evidence_required" : "unavailable",
+      historicalTrades: frozen?.evidence.completedTrades ?? null,
+      historicalTargetFirstRate: frozen?.evidence.targetFirstRate ?? null,
+      historicalAverageR: frozen?.evidence.averageR ?? null,
+      historicalProfitFactor: frozen?.evidence.profitFactor ?? null,
+      historicalUniqueDates: frozen?.evidence.uniqueDates ?? null,
+      rollingWindowsPassed: frozen?.evidence.positiveRollingWindows ?? null,
+      rollingWindowsTotal: frozen?.evidence.totalRollingWindows ?? null,
+      oosTrades: frozen?.evidence.oosTrades ?? null,
+      oosAverageR: frozen?.evidence.oosAverageR ?? null,
+      oosProfitFactor: frozen?.evidence.oosProfitFactor ?? null,
+      monteCarloRobustness: frozen?.evidence.monteCarloRobustness ?? null,
+      forwardCompleted: forward?.completedForwardOutcomes ?? null,
       forwardRequired: FORWARD_EVIDENCE_REASSESSMENT_THRESHOLDS.completedOutcomes,
-      forwardIndependentDates: forward.independentDates,
-      forwardWindows: forward.forwardWindows,
-      forwardTargetFirstRate: forward.targetFirstRate,
-      forwardAverageR: forward.averageR,
-      reassessmentEligible: forward.reassessmentEligible,
-      recommendation: forward.recommendation
+      forwardIndependentDates: forward?.independentDates ?? null,
+      forwardWindows: forward?.forwardWindows ?? null,
+      forwardTargetFirstRate: forward?.targetFirstRate ?? null,
+      forwardAverageR: forward?.averageR ?? null,
+      reassessmentEligible: forward?.reassessmentEligible ?? false,
+      recommendation: forward?.recommendation ?? "Unavailable until an exact frozen profile identity is registered."
     },
     predictions: {
       totalForecasts: predictions.totalForecasts,
@@ -153,15 +227,15 @@ export function buildResultsWorkspaceSnapshot(
       classification: predictions.classification
     },
     validation: {
-      setupLabel: chain?.setupLabel ?? frozen.profileId,
-      hypothesisStatus: chain?.hypothesisStatus ?? "forward_evidence_required",
-      replayVerdict: chain?.replayResult?.verdict ?? (replay ? "saved" : "not_run"),
-      walkForwardVerdict: chain?.walkForwardResult?.verdict ?? walkForward?.stability?.verdict ?? "not_run",
-      evidenceScore: runtime?.evidence.evidenceQualityScore ?? chain?.evidenceQuality?.evidenceQualityScore ?? 0,
-      maturityScore: runtime?.maturity.maturityScore ?? chain?.evidenceQuality?.maturityScore ?? 0,
+      setupLabel: chainCurrent?.setupLabel ?? activeFrozenProfileId ?? "unavailable",
+      hypothesisStatus: chainCurrent?.hypothesisStatus ?? "unavailable",
+      replayVerdict: chainCurrent?.replayResult?.verdict ?? "unavailable",
+      walkForwardVerdict: chainCurrent?.walkForwardResult?.verdict ?? "unavailable",
+      evidenceScore: chainCurrent ? finiteOrNull(runtime?.evidence.evidenceQualityScore ?? chainCurrent.evidenceQuality?.evidenceQualityScore) : null,
+      maturityScore: chainCurrent ? finiteOrNull(runtime?.maturity.maturityScore ?? chainCurrent.evidenceQuality?.maturityScore) : null,
       readinessState: runtime?.readiness.readinessState ?? "not_evaluated",
-      blockers: uniqueStrings([...runtimeBlockers, ...(chain?.blockers ?? []), ...forward.blockers]),
-      nextAction: chain?.nextAction ?? runtime?.readiness.nextAction ?? forward.blockers[0] ?? "Activate Market and run deterministic validation."
+      blockers: uniqueStrings([...runtimeBlockers, ...(chainCurrent?.blockers ?? []), ...(forward?.blockers ?? []), chainProvenance.relationship === "unavailable" ? chainProvenance.reason : undefined]),
+      nextAction: chainCurrent?.nextAction ?? runtime?.readiness.nextAction ?? forward?.blockers[0] ?? "Activate Market and run identity-matched deterministic validation."
     },
     authority: RESULTS_WORKSPACE_AUTHORITY,
     safety: {
@@ -176,9 +250,52 @@ export function buildResultsWorkspaceSnapshot(
       executionIntentCreated: false
     }
   };
+  assertResultsWorkspaceSourceTruth(snapshot);
+  return snapshot;
 }
 
+export const assertResultsWorkspaceSourceTruth = (snapshot: ResultsWorkspaceSnapshot) => {
+  const currentSections = Object.values(snapshot.provenance).filter((item) => item.relationship === "current_cycle");
+  if (currentSections.length && !snapshot.currentCycleId) {
+    throw new Error("Results current-cycle evidence is missing the current cycle identity.");
+  }
+  if (snapshot.provenance.backtest.relationship !== "current_cycle" && (
+    snapshot.backtest.status !== "missing" ||
+    snapshot.backtest.totalTrades !== null ||
+    snapshot.backtest.realizedPnL !== null
+  )) {
+    throw new Error("Results backtest values must be unavailable when current-cycle identity does not match.");
+  }
+  if (snapshot.provenance.replay.relationship !== "current_cycle" && (
+    snapshot.replay.status !== "missing" || snapshot.replay.totalSignals !== null
+  )) {
+    throw new Error("Results replay values must be unavailable when current-cycle provenance does not match.");
+  }
+  if (snapshot.provenance.walkForward.relationship !== "current_cycle" && (
+    snapshot.walkForward.windows !== null || snapshot.walkForward.oosTrades !== null
+  )) {
+    throw new Error("Results walk-forward values must be unavailable when current-cycle provenance does not match.");
+  }
+  if (snapshot.provenance.monteCarlo.relationship !== "current_cycle" && (
+    snapshot.monteCarlo.status !== "missing" || snapshot.monteCarlo.usableOutcomes !== null
+  )) {
+    throw new Error("Results Monte Carlo values must be unavailable when current-cycle provenance does not match.");
+  }
+  if (snapshot.provenance.validation.relationship !== "current_cycle" && (
+    snapshot.validation.evidenceScore !== null || snapshot.validation.maturityScore !== null
+  )) {
+    throw new Error("Results validation scores must be unavailable when current-cycle provenance does not match.");
+  }
+  if (snapshot.frozenProfile.status === "unavailable" && (
+    snapshot.frozenProfile.profileId !== null || snapshot.frozenProfile.historicalTrades !== null
+  )) {
+    throw new Error("Unknown frozen profiles must not inherit another profile's evidence.");
+  }
+  return true;
+};
+
 export const assertResultsWorkspaceSnapshotIsCompact = (snapshot: ResultsWorkspaceSnapshot) => {
+  assertResultsWorkspaceSourceTruth(snapshot);
   const serialized = JSON.stringify(snapshot);
   if (/"(?:candles|rawCandles|rawRuntimeSnapshot|accountData|orderData|positionData|apiKey|token|password)"\s*:/i.test(serialized)) {
     throw new Error("Results workspace snapshot contains forbidden raw or sensitive fields.");

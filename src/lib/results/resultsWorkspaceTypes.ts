@@ -7,12 +7,25 @@ import type { PredictionLedgerState } from "@/lib/predictionLedger";
 import type { ValidationChainEntry } from "@/lib/validationChain";
 import type { WalkForwardRun } from "@/lib/walkForward";
 import type { ForwardEvidenceEntry } from "@/lib/forwardEvidence";
+import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
 
 export const RESULTS_WORKSPACE_AUTHORITY = {
   executionAuthority: "none",
   brokerAuthority: "none",
   readinessOverrideAuthority: "none"
 } as const;
+
+export type ResultsEvidenceRelationship = "current_cycle" | "historical_evidence" | "unavailable";
+
+export interface ResultsSectionProvenance {
+  relationship: ResultsEvidenceRelationship;
+  sourceType: string;
+  sourceId?: string;
+  generatedAt?: string;
+  identity?: ValidationProvenanceIdentity;
+  identityMatched: boolean;
+  reason: string;
+}
 
 export interface ResultsWorkspaceBuildInput {
   runtimeSnapshot?: ResearchRuntimeSnapshot;
@@ -28,6 +41,19 @@ export interface ResultsWorkspaceBuildInput {
 
 export interface ResultsWorkspaceSnapshot {
   generatedAt: string;
+  currentCycleId?: string;
+  currentIdentity?: ValidationProvenanceIdentity;
+  provenance: {
+    source: ResultsSectionProvenance;
+    backtest: ResultsSectionProvenance;
+    replay: ResultsSectionProvenance;
+    walkForward: ResultsSectionProvenance;
+    monteCarlo: ResultsSectionProvenance;
+    paperDemo: ResultsSectionProvenance;
+    frozenProfile: ResultsSectionProvenance;
+    predictions: ResultsSectionProvenance;
+    validation: ResultsSectionProvenance;
+  };
   source: {
     provider: string;
     requestedSymbol: string;
@@ -47,9 +73,9 @@ export interface ResultsWorkspaceSnapshot {
   backtest: {
     status: "available" | "missing";
     cycleId?: string;
-    totalTrades: number;
-    winningTrades: number;
-    losingTrades: number;
+    totalTrades: number | null;
+    winningTrades: number | null;
+    losingTrades: number | null;
     winRate: number | null;
     averageR: number | null;
     profitFactor: number | null;
@@ -60,7 +86,7 @@ export interface ResultsWorkspaceSnapshot {
   replay: {
     status: "available" | "missing";
     runId?: string;
-    totalSignals: number;
+    totalSignals: number | null;
     targetFirstRate: number | null;
     approvedTargetFirstRate: number | null;
     averageRrAchieved: number | null;
@@ -71,9 +97,9 @@ export interface ResultsWorkspaceSnapshot {
     status: string;
     runId?: string;
     verdict: string;
-    windows: number;
-    windowsPassed: number;
-    oosTrades: number;
+    windows: number | null;
+    windowsPassed: number | null;
+    oosTrades: number | null;
     oosAverageR: number | null;
     oosLower95: number | null;
     overfitRisk: string;
@@ -82,7 +108,7 @@ export interface ResultsWorkspaceSnapshot {
   monteCarlo: {
     status: "available" | "missing";
     robustness: string;
-    usableOutcomes: number;
+    usableOutcomes: number | null;
     medianEndingR: number | null;
     fifthPercentileEndingR: number | null;
     medianMaxDrawdownPct: number | null;
@@ -102,23 +128,23 @@ export interface ResultsWorkspaceSnapshot {
     brokerConnected: false;
   };
   frozenProfile: {
-    profileId: string;
-    status: "historically_validated_forward_evidence_required";
-    historicalTrades: number;
-    historicalTargetFirstRate: number;
-    historicalAverageR: number;
-    historicalProfitFactor: number;
-    historicalUniqueDates: number;
-    rollingWindowsPassed: number;
-    rollingWindowsTotal: number;
-    oosTrades: number;
-    oosAverageR: number;
-    oosProfitFactor: number;
-    monteCarloRobustness: string;
-    forwardCompleted: number;
+    profileId: string | null;
+    status: "historically_validated_forward_evidence_required" | "unavailable";
+    historicalTrades: number | null;
+    historicalTargetFirstRate: number | null;
+    historicalAverageR: number | null;
+    historicalProfitFactor: number | null;
+    historicalUniqueDates: number | null;
+    rollingWindowsPassed: number | null;
+    rollingWindowsTotal: number | null;
+    oosTrades: number | null;
+    oosAverageR: number | null;
+    oosProfitFactor: number | null;
+    monteCarloRobustness: string | null;
+    forwardCompleted: number | null;
     forwardRequired: number;
-    forwardIndependentDates: number;
-    forwardWindows: number;
+    forwardIndependentDates: number | null;
+    forwardWindows: number | null;
     forwardTargetFirstRate: number | null;
     forwardAverageR: number | null;
     reassessmentEligible: boolean;
@@ -141,8 +167,8 @@ export interface ResultsWorkspaceSnapshot {
     hypothesisStatus: string;
     replayVerdict: string;
     walkForwardVerdict: string;
-    evidenceScore: number;
-    maturityScore: number;
+    evidenceScore: number | null;
+    maturityScore: number | null;
     readinessState: string;
     blockers: string[];
     nextAction: string;
