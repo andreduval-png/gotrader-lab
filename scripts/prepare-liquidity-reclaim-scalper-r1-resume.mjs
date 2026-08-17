@@ -67,7 +67,9 @@ if (copiedTree.fileCount !== verifiedCopiedTree.fileCount || copiedTree.digest !
   throw new Error("R1 resume copied-root verification mutated inherited evidence.");
 }
 const targetStorage = copied.storage;
-await writeImmutableR1Artifact({ modules, storage: targetStorage, relativePath: "resume/source-controller.json", artifact: sourceCheckpoint });
+const adoptionRoot = `resume/adoptions/${targetCommit}`;
+await writeImmutableR1Artifact({ modules, storage: targetStorage,
+  relativePath: `${adoptionRoot}/source-controller.json`, artifact: sourceCheckpoint });
 const adoptionCore = Object.freeze({ schemaVersion: "gotrader-lrs-r1-controller-resume-adoption-v1",
   sourceCheckpointId: sourceCheckpoint.checkpointId, sourceControllerCommit: sourceCommit,
   targetControllerCommit: targetCommit, authorizationCommit, copiedFileCount: sourceTree.fileCount,
@@ -77,7 +79,8 @@ const adoptionCore = Object.freeze({ schemaVersion: "gotrader-lrs-r1-controller-
   sourceFingerprint: sourceCheckpoint.sourceFingerprint, authority: sourceCheckpoint.authority,
   holdoutUsed: false, adaptiveSearchUsed: false });
 const adoption = Object.freeze({ ...adoptionCore, adoptionId: await modules.canonical.canonicalHash(adoptionCore) });
-await writeImmutableR1Artifact({ modules, storage: targetStorage, relativePath: "resume/controller-adoption.json", artifact: adoption });
+await writeImmutableR1Artifact({ modules, storage: targetStorage,
+  relativePath: `${adoptionRoot}/controller-adoption.json`, artifact: adoption });
 const { checkpointId: ignoredCheckpointId, ...sourceCore } = sourceCheckpoint;
 const targetCheckpoint = await sealR1ControllerCheckpoint(modules, { ...sourceCore, controllerCommit: targetCommit });
 await targetStorage.adapter.writeTextAtomic("checkpoints/controller.json", `${modules.canonical.canonicalSerialize(targetCheckpoint)}\n`);

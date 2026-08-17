@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 import { prepareR1CompletedTrialEvidenceArchive } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
@@ -134,12 +135,49 @@ assert.equal(reopened.checkpoint.dispositions[0].disposition, "rejected");
 assert.equal(fs.existsSync(reportPath), true);
 assert.equal(fs.existsSync(path.join(trialRoot, "checkpoints", "terminal.json")), false);
 
+const resumeSourceRoot = path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/r1-chained-resume-source-test");
+const resumeTargetRoot = path.join(root, ".gotrader/liquidity-reclaim-scalper-v1/r1-chained-resume-target-test");
+fs.rmSync(resumeSourceRoot, { recursive: true, force: true });
+fs.rmSync(resumeTargetRoot, { recursive: true, force: true });
+const sourceCommit = "e".repeat(40);
+const authorizationCommit = "f".repeat(40);
+const allTrialIds = definitions.map((item) => item.trialId);
+const resumeSource = await openR1Controller({
+  modules,
+  outputRoot: resumeSourceRoot,
+  mode: "family",
+  selectedTrialIds: allTrialIds,
+  controllerCommit: sourceCommit
+});
+await resumeSource.storage.adapter.writeTextAtomic(
+  "resume/controller-adoption.json",
+  '{"schemaVersion":"prior-adoption-fixture","immutable":true}\n'
+);
+const adoptionOutput = execFileSync(process.execPath, ["scripts/prepare-liquidity-reclaim-scalper-r1-resume.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+  env: {
+    ...process.env,
+    GOTRADER_LRS_R1_RESUME_SOURCE_ROOT: resumeSourceRoot,
+    GOTRADER_LRS_R1_RESUME_TARGET_ROOT: resumeTargetRoot,
+    GOTRADER_LRS_R1_RESUME_SOURCE_COMMIT: sourceCommit,
+    GOTRADER_LRS_R1_RESUME_AUTHORIZATION_COMMIT: authorizationCommit
+  }
+});
+const adoptionResult = JSON.parse(adoptionOutput);
+const targetCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+assert.equal(adoptionResult.status, "prepared");
+assert.equal(fs.existsSync(path.join(resumeTargetRoot, "resume", "controller-adoption.json")), true);
+assert.equal(fs.existsSync(path.join(resumeTargetRoot, "resume", "adoptions", targetCommit, "source-controller.json")), true);
+assert.equal(fs.existsSync(path.join(resumeTargetRoot, "resume", "adoptions", targetCommit, "controller-adoption.json")), true);
+
 console.log(JSON.stringify({
   status: "passed",
   passedReportDisposition: passed.researchDisposition,
   blockedReportDisposition: blocked.researchDisposition,
   blockedReportId: blocked.report.reportId,
   restartVerified: true,
+  chainedResumeAdoptionVerified: true,
   familyAccounting: family,
   authority: "none/none/none"
 }, null, 2));
