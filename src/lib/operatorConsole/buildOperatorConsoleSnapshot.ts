@@ -12,6 +12,11 @@ import {
   type OperatorMemorySummary,
   type OperatorPredictionSummary
 } from "./operatorConsoleTypes";
+import {
+  operatorCycleIsActive,
+  pendingOperatorInsight,
+  pendingOperatorResearchPlan
+} from "./operatorPendingState";
 
 export interface BuildOperatorConsoleSnapshotInput {
   runtime?: ResearchRuntimeSnapshot;
@@ -339,7 +344,8 @@ export const buildOperatorConsoleSnapshot = ({
   const metrics = runtime?.performance.canonicalPerformanceMetrics ?? runtime?.latestResearchCycle.latestCycleMetrics;
   const walkForward = runtime?.walkForward.latestRun;
   const walkForwardStatus = walkForward?.stability?.verdict ?? (validation?.walkForwardResult?.verdict ?? "not run");
-  const insight = insightFor(runtime, activation, cycle);
+  const cycleActive = operatorCycleIsActive(cycle);
+  const insight = cycleActive ? pendingOperatorInsight(cycle) : insightFor(runtime, activation, cycle);
 
   return {
     generatedAt: now,
@@ -394,7 +400,9 @@ export const buildOperatorConsoleSnapshot = ({
       nextAction: "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
     },
     memory,
-    researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint),
+    researchPlan: cycleActive
+      ? pendingOperatorResearchPlan(canonicalSource?.fingerprint)
+      : researchPlanFor(activation, canonicalSource?.fingerprint),
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,
     autoApplyAllowed: false,

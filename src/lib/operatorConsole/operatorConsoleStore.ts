@@ -32,6 +32,11 @@ import {
 import { buildOperatorConsoleSnapshot } from "./buildOperatorConsoleSnapshot";
 import { buildOperatorMemorySummary } from "./operatorMemorySummary";
 import {
+  operatorCycleIsActive,
+  pendingOperatorInsight,
+  pendingOperatorResearchPlan
+} from "./operatorPendingState";
+import {
   OPERATOR_CYCLE_UPDATED_EVENT,
   readOperatorCycleState
 } from "./operatorCycle";
@@ -128,11 +133,15 @@ const refreshAtCheckpoint = () => {
 
 const refreshCycleOnly = () => {
   const cycle = readOperatorCycleState();
+  const cycleActive = operatorCycleIsActive(cycle);
   snapshot = {
     ...snapshot,
     generatedAt: new Date().toISOString(),
     cycle,
-    insight: cycle.latestInsight ?? snapshot.insight,
+    insight: cycleActive ? pendingOperatorInsight(cycle) : cycle.latestInsight ?? snapshot.insight,
+    researchPlan: cycleActive
+      ? pendingOperatorResearchPlan(snapshot.source.fingerprint)
+      : snapshot.researchPlan,
     authority: cycle.authority,
     autoApplyAllowed: false,
     researchOnly: true

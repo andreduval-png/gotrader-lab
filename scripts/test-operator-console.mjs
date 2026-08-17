@@ -11,6 +11,7 @@ const sourceRoot = path.join(projectRoot, "src", "lib", "operatorConsole");
 const outRoot = path.join(projectRoot, ".gotrader", "operator-console-test");
 const sourceFiles = [
   "operatorConsoleTypes.ts",
+  "operatorPendingState.ts",
   "buildOperatorConsoleSnapshot.ts",
   "operatorForwardScenario.ts",
   "operatorMemorySummary.ts"
@@ -184,6 +185,36 @@ async function main() {
   assert.equal(active.researchPlan.riskReward, 3.1);
   assert.equal(active.researchPlan.accountRiskEvaluation, "not_evaluated");
   assert.equal(active.researchPlan.executionAllowed, false);
+
+  const runningCycle = buildOperatorConsoleSnapshot({
+    runtime: runtime(),
+    activation: active.researchPlan,
+    cycle: {
+      cycleId: "running-cycle",
+      status: "running",
+      stage: "building_market_read",
+      progressPercent: 35,
+      message: "Building the current market read.",
+      latestInsight: {
+        bias: "bullish",
+        setup: "partial setup",
+        modelLane: "research",
+        confidence: 0.91,
+        summary: "Intermediate insight must not leak.",
+        nextAction: "Wait."
+      },
+      authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" },
+      autoApplyAllowed: false,
+      researchOnly: true
+    }
+  });
+  assert.equal(runningCycle.insight.confidence, undefined, "running cycles must not publish partial confidence");
+  assert.equal(runningCycle.insight.setup, "Current cycle in progress");
+  assert.equal(runningCycle.researchPlan.status, "unavailable");
+  assert.equal(runningCycle.researchPlan.setup, "Current cycle in progress");
+  assert.equal(runningCycle.researchPlan.entryPrice, undefined);
+  assert.equal(runningCycle.researchPlan.stopLoss, undefined);
+  assert.equal(runningCycle.researchPlan.takeProfit, undefined);
 
   const bullish = buildOperatorConsoleSnapshot({
     activation: {
@@ -482,6 +513,7 @@ async function main() {
     path.join(projectRoot, "src", "components", "operator", "OperatorConsoleView.tsx"),
     "utf8"
   );
+  const operatorStoreSource = fs.readFileSync(path.join(sourceRoot, "operatorConsoleStore.ts"), "utf8");
   assert.match(
     operatorViewSource,
     /data-testid="operator-cycle-heartbeat"/,
@@ -498,9 +530,24 @@ async function main() {
   assert.match(operatorViewSource, /snapshot\.researchPlan\.signal === "NO_TRADE" \? "muted" : "success"/, "BUY and SELL signals must use the positive action color");
   assert.match(operatorViewSource, /label: "Stop loss"[\s\S]*?"negative"/, "stop loss must use the negative color");
   assert.match(operatorViewSource, /label: "Take profit"[\s\S]*?"positive"/, "take profit must use the positive color");
-  assert.match(operatorViewSource, /label: "Probability"/, "trade plan must display probability classification");
-  assert.match(operatorViewSource, /normalized >= 0\.7/, "high probability must begin at 70 percent");
-  assert.match(operatorViewSource, /normalized >= 0\.5/, "medium probability must begin at 50 percent");
+  assert.match(operatorViewSource, /label: "Confidence"/, "trade plan must label detector confidence honestly");
+  assert.doesNotMatch(operatorViewSource, /label: "Probability"/, "uncalibrated confidence must not be labeled probability");
+  assert.match(operatorViewSource, /cycleActive \? "Pending current cycle"/, "running cycles must hide partial confidence");
+  assert.match(
+    operatorStoreSource,
+    /insight:\s*cycleActive \? pendingOperatorInsight\(cycle\)/,
+    "cycle-only refreshes must replace intermediate insight with a pending state"
+  );
+  assert.match(
+    operatorStoreSource,
+    /researchPlan:\s*cycleActive[\s\S]*?pendingOperatorResearchPlan/,
+    "cycle-only refreshes must replace the prior plan with a pending state"
+  );
+  assert.match(operatorViewSource, /normalized >= 0\.7/, "high confidence must begin at 70 percent");
+  assert.match(operatorViewSource, /normalized >= 0\.5/, "medium confidence must begin at 50 percent");
+  assert.match(operatorViewSource, /min-h-10 break-words/, "trade-plan values must wrap instead of clipping");
+  assert.doesNotMatch(operatorViewSource, /mt-2 truncate font-mono text-base/, "trade-plan values must not truncate");
+  assert.doesNotMatch(operatorViewSource, /mt-2 truncate text-lg font-semibold capitalize/, "trade-plan setup names must not truncate");
   assert.match(operatorViewSource, /Informational only/, "research levels must be explicitly non-executable");
   assert.doesNotMatch(operatorViewSource, /Place Order|Buy Market|Sell Market|Enable Live Trading|Connect Live Broker/);
   assert.match(

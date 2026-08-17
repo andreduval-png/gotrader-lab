@@ -85,7 +85,7 @@ const normalizedConfidence = (value?: number) => {
   return Math.abs(value) <= 1 ? value : value / 100;
 };
 
-const probabilityPresentation = (value?: number) => {
+const confidencePresentation = (value?: number) => {
   const normalized = normalizedConfidence(value);
   if (normalized === undefined) return { label: "Unavailable", tone: "neutral" as const };
   if (normalized >= 0.7) return { label: "High", tone: "positive" as const };
@@ -134,7 +134,8 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const [memorySyncing, setMemorySyncing] = useState(false);
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
   const cycleElapsed = elapsedTime(snapshot.cycle.startedAt, snapshot.cycle.completedAt, clockNow);
-  const probability = probabilityPresentation(snapshot.insight.confidence);
+  const displayedConfidence = cycleActive ? undefined : snapshot.insight.confidence;
+  const confidence = confidencePresentation(displayedConfidence);
   const cycleHeartbeat = cycleHeartbeatFor(snapshot.cycle.stage);
   const cycleHeartbeatStyle = {
     "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
@@ -362,7 +363,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               <Crosshair className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" aria-hidden="true" />
               <div className="min-w-0">
                 <p className={WORKSPACE_SECTION_LABEL}>Research trade plan</p>
-                <h3 className="mt-2 truncate text-lg font-semibold capitalize text-slate-100">{snapshot.researchPlan.setup}</h3>
+                <h3 className="mt-2 break-words text-lg font-semibold capitalize leading-6 text-slate-100">{snapshot.researchPlan.setup}</h3>
                 <p className="mt-1 text-xs text-slate-500">
                   {snapshot.researchPlan.entryPriceMethod === "rr_implied_recovery"
                     ? "Entry recovered from the stored stop, target, and R:R geometry."
@@ -394,11 +395,15 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               { label: "Stop loss", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
               { label: "Take profit", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
               { label: "Risk / reward", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
-              { label: "Probability", value: `${probability.label} · ${percent(snapshot.insight.confidence)}`, tone: probability.tone }
+              {
+                label: "Confidence",
+                value: cycleActive ? "Pending current cycle" : `${confidence.label} · ${percent(displayedConfidence)}`,
+                tone: cycleActive ? "neutral" as const : confidence.tone
+              }
             ].map(({ label, value, tone }) => (
               <div key={label} className={cn("min-w-0 px-4 py-4", toneClasses[tone])} data-result-tone={tone}>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">{label}</p>
-                <p className="mt-2 truncate font-mono text-base font-semibold tabular-nums" title={String(value)}>{value}</p>
+                <p className="break-words text-[0.68rem] font-semibold uppercase leading-4 tracking-[0.12em] text-slate-600">{label}</p>
+                <p className="mt-2 min-h-10 break-words font-mono text-sm font-semibold leading-5 tabular-nums sm:text-base" title={String(value)}>{value}</p>
               </div>
             ))}
           </div>
@@ -406,7 +411,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           <div className="grid gap-3 border-t border-white/10 px-5 py-4 sm:grid-cols-3 sm:px-6">
             <div>
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Market risk screen</p>
-              <p className="mt-1 text-sm capitalize text-slate-300">{snapshot.researchPlan.riskScreeningStatus}</p>
+              <p className="mt-1 break-words text-sm capitalize leading-5 text-slate-300">{snapshot.researchPlan.riskScreeningStatus.replace(/_/g, " ")}</p>
             </div>
             <div>
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Account-risk engine</p>
@@ -487,13 +492,13 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className={WORKSPACE_SECTION_LABEL}>Current market brief</p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-100">{snapshot.insight.setup}</h3>
+              <h3 className="mt-2 break-words text-xl font-semibold leading-7 text-slate-100">{snapshot.insight.setup}</h3>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="muted">{snapshot.insight.bias}</Badge>
               <Badge variant="secondary">{snapshot.insight.modelLane}</Badge>
-              <Badge variant={probability.tone === "positive" ? "success" : probability.tone === "negative" ? "danger" : probability.tone === "caution" ? "warning" : "muted"}>
-                {probability.label} probability · {percent(snapshot.insight.confidence)}
+              <Badge variant={confidence.tone === "positive" ? "success" : confidence.tone === "negative" ? "danger" : confidence.tone === "caution" ? "warning" : "muted"}>
+                {cycleActive ? "Confidence pending" : `${confidence.label} confidence · ${percent(displayedConfidence)}`}
               </Badge>
             </div>
           </div>
