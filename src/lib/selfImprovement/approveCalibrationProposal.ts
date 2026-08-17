@@ -18,6 +18,8 @@ import type {
   SelfImprovementAuditEntry,
   SelfImprovementState
 } from "@/lib/selfImprovement/selfImprovementTypes";
+import { queueGbrainMemoryPacket } from "@/lib/researchMemory/gbrainMemoryOutbox";
+import { buildSelfImprovementMemoryPacket } from "@/lib/researchMemory/supplementalResearchMemoryPackets";
 import {
   effectiveProposalComparison,
   hasMaterialImprovement,
@@ -286,12 +288,18 @@ export function upsertCalibrationProposal(
     ? state.proposals.map((item) => (item.proposalId === proposal.proposalId ? proposal : item))
     : [proposal, ...state.proposals];
 
-  return saveSelfImprovementState({
+  const nextState = saveSelfImprovementState({
     ...state,
     proposals,
     latestProposalId: proposal.proposalId,
     auditTrail: [auditEntry(proposal.proposalId, action, notes), ...state.auditTrail]
   });
+  try {
+    queueGbrainMemoryPacket(buildSelfImprovementMemoryPacket(proposal));
+  } catch {
+    // Advisory memory failure cannot block the authoritative proposal ledger.
+  }
+  return nextState;
 }
 
 const updateProposal = (
@@ -307,13 +315,19 @@ const updateProposal = (
     return state;
   }
   const updated = updater(target);
-  return saveSelfImprovementState({
+  const nextState = saveSelfImprovementState({
     ...state,
     proposals: state.proposals.map((proposal) => (proposal.proposalId === proposalId ? updated : proposal)),
     latestProposalId: updated.proposalId,
     lastAcceptedProposalId: action === "accepted" ? updated.proposalId : state.lastAcceptedProposalId,
     auditTrail: [auditEntry(proposalId, action, notes, reviewerName), ...state.auditTrail]
   });
+  try {
+    queueGbrainMemoryPacket(buildSelfImprovementMemoryPacket(updated));
+  } catch {
+    // Advisory memory failure cannot block the authoritative proposal ledger.
+  }
+  return nextState;
 };
 
 const hasAllowedProposedChanges = (proposal: CalibrationProposal) => {

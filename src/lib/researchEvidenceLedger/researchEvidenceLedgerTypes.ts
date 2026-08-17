@@ -102,6 +102,15 @@ export interface ResearchEvidenceCycleRecord {
     proposalStatus?: string;
     activeCalibrationId?: string;
   };
+  /** Compact source-of-truth attribution summaries. Raw opinions and candles are excluded. */
+  agentMetrics?: Array<{
+    agentId: string;
+    agentLabel: string;
+    averageConfidence: number;
+    averageWeight: number;
+    totalOpinions: number;
+    cioAlignmentRate: number;
+  }>;
   resultClass: ResearchEvidenceResultClass;
   blockers: string[];
   promotionBlockers: string[];

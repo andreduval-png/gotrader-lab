@@ -65,6 +65,60 @@ const authorityIsNone = (packet: GoTraderResearchMemoryPacket) =>
 
 const forbiddenObjectKey = /^(?:account|accountData|accountId|accountNumber|orders?|orderData|positions?|positionData|password|secret|apiKey|api_key|token|mt5Credentials|screenshots?|base64|rawRuntimeSnapshot|rawSnapshot|importedOhlcv)$/i;
 
+const packetSubjectId = (packet: GoTraderResearchMemoryPacket) => {
+  if (packet.memoryType === "research_cycle" && packet.cycleId) return packet.cycleId;
+  if (packet.memoryType === "walk_forward" && packet.runId) return packet.runId;
+  if (packet.memoryType === "self_improvement" && packet.proposalId) return packet.proposalId;
+  if (packet.memoryType === "agent_metric") return `${packet.agentId}-${packet.lastUpdatedCycleId ?? packet.packetId}`;
+  return packet.memoryIdentity?.evidenceRecordId ?? packet.packetId;
+};
+
+const packetDetailLines = (packet: GoTraderResearchMemoryPacket): string[] => {
+  switch (packet.memoryType) {
+    case "walk_forward":
+      return [
+        "## Walk-Forward Evidence",
+        `- Run: ${safeLine(packet.runId)}`,
+        `- Split: ${safeLine(packet.splitSummary)}`,
+        `- OOS windows passed: ${safeLine(packet.outOfSampleWindowsPassed)} / ${safeLine(packet.windowsTested)}`
+      ];
+    case "self_improvement":
+      return [
+        "## Research Calibration",
+        `- Proposal: ${safeLine(packet.proposalId)}`,
+        `- Status: ${safeLine(packet.proposalStatus)}`,
+        `- Before/after: ${safeLine(packet.beforeAfterDelta)}`,
+        ...(packet.regressionWarnings.length
+          ? packet.regressionWarnings.map((warning) => `- Regression warning: ${safeLine(warning)}`)
+          : ["- Regression warnings: none recorded"])
+      ];
+    case "gap_analysis":
+      return [
+        "## Evidence Gaps",
+        ...(packet.missingEvidence.length
+          ? packet.missingEvidence.map((gap) => `- Missing: ${safeLine(gap)}`)
+          : ["- Missing evidence: none recorded"]),
+        ...(packet.recommendedExperiments.length
+          ? packet.recommendedExperiments.map((experiment) => `- Experiment: ${safeLine(experiment)}`)
+          : [])
+      ];
+    case "agent_metric":
+      return [
+        "## Agent Metric",
+        `- Agent: ${safeLine(packet.agentLabel)} (${safeLine(packet.agentId)})`,
+        `- Metric status: ${safeLine(packet.metricStatus)}`,
+        `- Opinion count: ${safeLine(packet.totalOpinions)}`,
+        `- Average confidence: ${safeLine(packet.averageConfidence)}`,
+        `- Average CIO weight: ${safeLine(packet.averageWeight)}`,
+        `- CIO alignment rate: ${safeLine(packet.cioAlignmentRate)}`,
+        `- Source cycle: ${safeLine(packet.lastUpdatedCycleId)}`,
+        `- Regime: ${safeLine(packet.regimeContext)}`
+      ];
+    default:
+      return [];
+  }
+};
+
 export function validateGbrainMemoryPacket(packet: GoTraderResearchMemoryPacket) {
   const blockedFields: string[] = [];
   const visit = (value: unknown, path: string) => {
@@ -111,9 +165,7 @@ export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket):
   if (!validation.valid) {
     throw new Error(`gbrain memory packet blocked: ${validation.blockedFields.join(", ")}`);
   }
-  const subjectId = packet.memoryType === "research_cycle" && packet.cycleId
-    ? packet.cycleId
-    : packet.packetId;
+  const subjectId = packetSubjectId(packet);
   const path = `gotrader/${packet.memoryType.replace(/_/g, "-")}/${subjectId}.md`;
   const tags = uniqueText([
     "gotrader",
@@ -147,6 +199,8 @@ export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket):
     "## Next Action",
     safeLine(packet.nextAction),
     "",
+    ...packetDetailLines(packet),
+    "",
     "## Safety",
     "- Research memory only.",
     "- executionAuthority: none",
@@ -162,7 +216,7 @@ export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket):
     markdown: lines.join("\n"),
     tags,
     sourceFingerprint: packet.source.sourceFingerprint,
-    cycleId: "cycleId" in packet ? packet.cycleId : undefined,
+    cycleId: packet.memoryIdentity?.researchCycleId ?? ("cycleId" in packet ? packet.cycleId : undefined),
     generatedAt: packet.timestamp,
     metadata: {
       evidenceRecordId: packet.memoryIdentity?.evidenceRecordId,

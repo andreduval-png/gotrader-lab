@@ -13,7 +13,8 @@ export type CalibrationProposalStatus = "proposed" | "testing" | "accepted" | "r
 export type CalibrationProposalIntent =
   | "research_calibration_candidate"
   | "paper_demo_candidate_review"
-  | "grinch_profile_calibration_intent";
+  | "grinch_profile_calibration_intent"
+  | "ict_research_hypothesis_intent";
 
 export type CalibrationProposalValidationRequirementId =
   | "ai_research_cycle"

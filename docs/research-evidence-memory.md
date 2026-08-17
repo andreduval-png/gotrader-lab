@@ -60,7 +60,14 @@ Historical ranking cannot change candidate metrics, create evidence, promote rea
 
 ## gbrain Advisory Memory
 
-Each native evidence record is also converted to the compact GoTrader research-memory contract and queued as Markdown for the local gbrain sidecar.
+Each native evidence record is converted to compact GoTrader research-memory documents and queued as Markdown for the local gbrain sidecar. The primary `research_cycle` document is always emitted. Supplemental documents are emitted only when their source-of-truth facts exist:
+
+- `walk_forward`: an identity-bound walk-forward run or verdict exists
+- `self_improvement`: the cycle references a calibration proposal, or the proposal ledger records a state transition
+- `gap_analysis`: the cycle contains blockers, promotion blockers, or edge flags
+- `agent_metric`: the completed backtest contains real compact agent-attribution summaries
+
+No empty placeholder packet is invented. Historical backfill reconstructs cycle, walk-forward, proposal-reference, and gap documents from immutable evidence records. Agent metrics are emitted live because the compact evidence ledger intentionally does not retain per-agent attribution arrays.
 
 - storage: `gotrader.gbrain-memory-outbox.v1`
 - delivery default before trusted sidecar handshake: `false`
@@ -69,9 +76,17 @@ Each native evidence record is also converted to the compact GoTrader research-m
 - browser tokens: prohibited
 - acknowledged entries: removed from the browser outbox after durable sidecar storage
 
-Suggested gbrain paths are stable, for example:
+gbrain paths are stable by memory type, for example:
 
 `gotrader/research-cycle/<cycleId>.md`
+
+`gotrader/walk-forward/<runId>.md`
+
+`gotrader/self-improvement/<proposalId>.md`
+
+`gotrader/gap-analysis/<evidenceId>.md`
+
+`gotrader/agent-metric/<agentId>-<cycleId>.md`
 
 The outbox validator rejects unsafe authority and forbidden account/order/position, credential, raw snapshot, or candle-array fields. The delivery client enables transport only after the fixed loopback endpoint identifies itself as the GoTrader gbrain sidecar with none/none/none authority. GoTrader does not embed a gbrain token or connect to a remote gbrain host directly.
 
@@ -82,7 +97,9 @@ The sidecar stores:
 - capture receipts in `.gotrader/gbrain-sidecar/receipts.jsonl`
 - the gbrain index in `.gotrader/gbrain-sidecar/gbrain-home/.gbrain/brain.pglite`
 
-Self-Improvement can search this history for prior outcomes, recurring blockers, and next-action context. Retrieved memory remains advisory and cannot create validation evidence by itself.
+Research Calibration can search this history for prior outcomes, recurring blockers, and next-action context. Retrieved memory remains advisory and cannot create validation evidence by itself.
+
+An ICT hypothesis may be joined to Research Calibration only as a draft intent. The bridge requires a provenance-complete latest validation report and exact matching source fingerprint, requested symbol, broker symbol, timeframe, strategy profile, and parameter fingerprint. A mismatch leaves the hypothesis in its replay queue and creates no proposal. A matched draft contains no configuration changes, cannot pass approval, and cannot auto-apply.
 
 ## Authority
 
@@ -123,4 +140,4 @@ npm.cmd run test:gbrain-sidecar:real
 npm.cmd run build
 ```
 
-The focused tests verify append/deduplication, aggregation, gbrain fail-closed defaults, loopback-only delivery, localStorage cleanup after acknowledgement, packet exclusions, PGLite capture/retrieval, and none/none/none authority.
+The focused tests verify append/deduplication, aggregation, all conditional packet producers, proposal-state memory, exact ICT identity bridging, gbrain fail-closed defaults, loopback-only delivery, localStorage cleanup after acknowledgement, packet exclusions, PGLite capture/retrieval, and none/none/none authority.

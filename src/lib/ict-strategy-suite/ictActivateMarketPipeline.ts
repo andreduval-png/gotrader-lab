@@ -12,6 +12,7 @@ import type { IctLatestResearchState } from "./ictLatestResearchStateTypes";
 import { buildIctMarketAnalysisContextBundle } from "./ictMarketAnalysisContext";
 import type { IctAnalysisTimeframe, IctMarketAnalysisContextBundle } from "./ictMarketAnalysisContextTypes";
 import { queueIctResearchHypothesis } from "./ictSelfImprovement";
+import { bridgeIctHypothesisToCalibrationDraft } from "@/lib/selfImprovement/ictHypothesisCalibrationBridge";
 import type { IctResearchHypothesisQueueResult } from "./ictSelfImprovementTypes";
 import { buildIctResearchSignalFromCurrentRead } from "./ictSignalContract";
 import type { IctResearchSignal } from "./ictSignalContractTypes";
@@ -796,14 +797,22 @@ export async function runIctActivateMarketPipeline(
     }
     const queue = dependencies.queueResearchHypothesis ?? queueIctResearchHypothesis;
     const result = queue(currentRead.selfImprovementHypothesis);
+    const calibrationDraft = result.ok && !dependencies.queueResearchHypothesis
+      ? bridgeIctHypothesisToCalibrationDraft(result.hypothesis)
+      : undefined;
     selfImprovementQueue = {
       queued: result.ok,
       reason: result.reason,
       journalEventId: result.journalEvent?.journalEventId,
-      status: currentRead.selfImprovementHypothesis.status
+      status: currentRead.selfImprovementHypothesis.status,
+      calibrationDraftStatus: calibrationDraft?.status,
+      calibrationProposalId: calibrationDraft?.proposalId,
+      calibrationDraftReason: calibrationDraft?.reason
     };
     return result.ok
-      ? "Research hypothesis queued - needs replay validation."
+      ? calibrationDraft?.status === "draft_created" || calibrationDraft?.status === "existing_draft"
+        ? `Research hypothesis queued and joined to calibration draft ${calibrationDraft.proposalId}.`
+        : `Research hypothesis queued; calibration draft blocked safely: ${calibrationDraft?.reason ?? "manual bridge required"}`
       : { message: result.reason, warning: result.reason };
   });
 

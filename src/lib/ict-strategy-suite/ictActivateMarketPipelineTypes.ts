@@ -169,6 +169,9 @@ export interface IctActivateMarketResult {
     reason: string;
     journalEventId?: string;
     status?: IctResearchHypothesisStatus;
+    calibrationDraftStatus?: "draft_created" | "existing_draft" | "blocked_identity" | "blocked_validation";
+    calibrationProposalId?: string;
+    calibrationDraftReason?: string;
   };
 
   latestMonteCarlo?: {

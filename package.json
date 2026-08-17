@@ -185,6 +185,8 @@
     "test:forward-scenario-map": "node scripts/test-forward-scenario-map.mjs",
     "test:market-prediction-ledger": "node scripts/test-market-prediction-ledger.mjs",
     "test:research-evidence-memory": "node scripts/test-research-evidence-memory.mjs",
+    "test:research-memory-packet-completion": "node scripts/test-research-memory-packet-completion.mjs",
+    "test:ict-hypothesis-calibration-bridge": "node scripts/test-ict-hypothesis-calibration-bridge.mjs",
     "test:auto-research-lifetime-memory": "node scripts/test-auto-research-lifetime-memory.mjs",
     "test:results-workspace": "node scripts/test-results-workspace.mjs",
     "test:trade-plan-outcomes": "node scripts/test-trade-plan-outcomes.mjs",

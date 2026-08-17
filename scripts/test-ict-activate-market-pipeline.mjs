@@ -34,7 +34,11 @@ function compileForNode() {
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"\.\.\/currentOpportunity"/g, 'from "./currentOpportunity.mjs"')
       .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const withBridge = rewritten.replaceAll(
+      'from "@/lib/selfImprovement/ictHypothesisCalibrationBridge"',
+      'from "./ictHypothesisCalibrationBridge.mjs"'
+    );
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withBridge, "utf8");
   }
   fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return { compactSummary: {} }; }\n", "utf8");
   fs.writeFileSync(
@@ -73,6 +77,11 @@ export function saveCurrentOpportunityScan() { return { ok: true, storage: "memo
   };
 }
 `,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "ictHypothesisCalibrationBridge.mjs"),
+    "export function bridgeIctHypothesisToCalibrationDraft() { return { status: 'blocked_validation', reason: 'Test bridge has no validation.', blockers: [], authority: { executionAuthority: 'none', brokerAuthority: 'none', readinessOverrideAuthority: 'none' } }; }\n",
     "utf8"
   );
 }

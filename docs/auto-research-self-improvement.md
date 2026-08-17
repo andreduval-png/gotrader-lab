@@ -1,6 +1,6 @@
 # Auto Research Self-Improvement Supervisor
 
-The Auto Research Supervisor is a simulation-only optimizer for GoTrader AI Lab. It searches bounded research configurations, runs mock-data backtests and validation suites, compares candidates against the current baseline, and creates approval-gated calibration proposals.
+The Auto Research Supervisor is a simulation-only optimizer for GoTrader AI Lab. It searches bounded research configurations, runs backtests and validation suites on the explicitly selected research source, compares candidates against the current baseline, and creates approval-gated calibration proposals. Mock/demo results are labeled and cannot support approval.
 
 It cannot execute trades, enable paper/demo/live trading, change broker settings, override readiness gates, approve its own proposals, or modify secrets.
 
@@ -46,7 +46,7 @@ The supervisor must never search over:
 
 Each candidate runs through existing simulation-only systems:
 
-1. mock-candle backtest
+1. backtest on the explicitly selected research source
 2. validation suite
 3. research quality review
 4. baseline comparison
@@ -88,9 +88,9 @@ The active baseline is not changed when the proposal is created.
 
 ## Approval Requirement
 
-Only the user may approve a proposal. Acceptance still happens through the Self-Improvement page after reviewing before/after metrics.
+Manual acceptance happens through Research Calibration after reviewing before/after metrics. Research calibration auto-apply is disabled by default. When the operator explicitly enables the versioned policy, only allowlisted bounded fields may auto-apply after the normal approval, identity, regression, maturity, and walk-forward checks pass.
 
-Auto Research cannot approve its own proposal.
+Auto Research cannot bypass `canApproveProposal`, frozen-profile protection, identity checks, or safety authority. It cannot auto-apply unless the explicit current operator policy is enabled.
 
 ## LLM Supervisor Roadmap
 
@@ -114,4 +114,4 @@ Even then, LLM output remains advisory only. It cannot execute trades or overrid
 5. Auto Research cannot approve its own proposal.
 6. Auto Research cannot modify API keys or secrets.
 7. Auto Research must log every candidate and decision.
-8. Active baseline changes require user approval.
+8. Active baseline changes require manual approval by default or explicit current opt-in to the bounded research-only auto-apply policy.

@@ -86,6 +86,7 @@ export interface ResearchCycleBacktestSummary
     | "profitFactor"
     | "skippedSignals"
     | "grinchSummary"
+    | "agentAttribution"
   > {
   config: Pick<
     ResolvedBacktestConfig,
@@ -318,6 +319,7 @@ export interface ResearchCycleRun {
   evidenceStorageBackend?: "indexeddb" | "localStorage_fallback" | "memory";
   /** Optional advisory-memory outbox reference. Delivery remains disabled by default. */
   gbrainMemoryOutboxId?: string;
+  gbrainSupplementalMemoryOutboxIds?: string[];
   failedStepId?: ResearchCycleStepId;
   failedStepDetails?: string;
   nextRecommendedAction: string;

@@ -1067,11 +1067,11 @@ export function SelfImprovementView() {
     <div className="space-y-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <p className="text-sm uppercase text-primary">Calibration loop</p>
-          <h2 className="mt-1 text-3xl font-semibold tracking-normal">Self-Improvement</h2>
+          <p className="text-sm uppercase text-primary">Research calibration</p>
+          <h2 className="mt-1 text-3xl font-semibold tracking-normal">Research Calibration</h2>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Accept OpenClaw/Hermes-style advisory calibration proposals, test them in simulation, and promote only after
-            they improve stability with explicit user approval.
+            Review canonical AI-agent or deterministic proposal drafts, test concrete changes on eligible research data,
+            and accept them only after identity, stability, and approval gates pass. ICT hypotheses remain draft-only until replay creates a concrete candidate.
           </p>
         </div>
         <Badge variant="warning">Simulation research only</Badge>

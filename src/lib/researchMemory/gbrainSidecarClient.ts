@@ -9,6 +9,7 @@ import {
   setGbrainMemoryDeliveryEnabled,
   type GbrainMemoryDocument
 } from "@/lib/researchMemory/gbrainMemoryOutbox";
+import { buildSupplementalEvidenceMemoryPackets } from "@/lib/researchMemory/supplementalResearchMemoryPackets";
 
 export const GBRAIN_SIDECAR_BASE_URL = "http://127.0.0.1:8799";
 export const GBRAIN_SIDECAR_STATUS_STORAGE_KEY = "gotrader.gbrain-sidecar-status.v1";
@@ -247,9 +248,10 @@ export async function syncGbrainResearchMemory(options: {
   try {
     if (options.includeEvidenceBackfill !== false) {
       const records = await listResearchEvidenceRecords();
-      const documents = records.map((record) =>
-        buildGbrainMemoryDocument(buildResearchEvidenceMemoryPacket(record))
-      );
+      const documents = records.flatMap((record) => [
+        buildGbrainMemoryDocument(buildResearchEvidenceMemoryPacket(record)),
+        ...buildSupplementalEvidenceMemoryPackets(record).map(buildGbrainMemoryDocument)
+      ]);
       const batchResult = await postDocuments(documents, { fetchImpl, baseUrl });
       backfilled = batchResult.accepted;
       blocked = batchResult.blocked;

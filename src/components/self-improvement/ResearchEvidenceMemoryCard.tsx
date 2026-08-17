@@ -90,15 +90,15 @@ export function ResearchEvidenceMemoryCard() {
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2"><Database className="h-4 w-4" /> Persistent Research Memory</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Database className="h-4 w-4" /> Research evidence and gbrain advisory memory</CardTitle>
             <CardDescription>
-              Append-only compact cycle evidence is the deterministic memory source. gbrain receives advisory copies only.
+              The append-only GoTrader ledger is the source of truth. The local gbrain sidecar stores searchable advisory copies only.
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="success"><ShieldCheck className="mr-1 h-3 w-3" /> authority none</Badge>
             <Badge variant={sidecar.status === "ready" ? "success" : sidecar.sidecarStatus === "running" ? "warning" : "muted"}>
-              gbrain {sidecar.status.replace(/_/g, " ")}
+              advisory sidecar {sidecar.status.replace(/_/g, " ")}
             </Badge>
           </div>
         </div>
@@ -175,7 +175,7 @@ export function ResearchEvidenceMemoryCard() {
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground">
-          Historical retrieval can inform new proposal drafts, but it cannot create evidence, approve readiness, apply calibration, or enable execution.
+          Historical retrieval may inform a draft. It cannot create evidence, approve readiness, apply calibration, or enable execution. ICT hypothesis drafts require exact current validation identity before they appear in Research Calibration.
         </p>
       </CardContent>
     </Card>

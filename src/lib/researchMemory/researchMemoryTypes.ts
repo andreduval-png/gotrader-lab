@@ -184,6 +184,10 @@ export interface GoTraderAgentMetricMemory extends GoTraderResearchMemoryBase {
   agentLabel: string;
   metricStatus: GoTraderResearchMemoryMetricStatus;
   sampleSize: number;
+  averageConfidence: number;
+  averageWeight: number;
+  cioAlignmentRate: number;
+  totalOpinions: number;
   lastUpdatedCycleId?: string;
   regimeContext?: string;
 }

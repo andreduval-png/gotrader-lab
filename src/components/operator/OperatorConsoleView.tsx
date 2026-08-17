@@ -320,8 +320,8 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-5 sm:px-6">
             <div>
               <p className={WORKSPACE_SECTION_LABEL}>Research memory</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-100">GoTrader + gbrain inventory</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Native evidence is authoritative; gbrain packets are compact advisory copies.</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-100">gbrain advisory memory</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-400">Native GoTrader evidence is authoritative. gbrain stores and retrieves compact advisory copies only.</p>
             </div>
             <Badge variant={snapshot.memory.gbrainDeliveryEnabled ? "warning" : "muted"}>
               gbrain delivery {snapshot.memory.gbrainDeliveryEnabled ? "on" : "off"}

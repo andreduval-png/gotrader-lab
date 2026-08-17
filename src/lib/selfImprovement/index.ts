@@ -24,6 +24,10 @@ export {
 export { compareProposalToBaseline } from "@/lib/selfImprovement/compareProposalToBaseline";
 export { createCalibrationProposal } from "@/lib/selfImprovement/createCalibrationProposal";
 export {
+  bridgeIctHypothesisToCalibrationDraft,
+  type IctHypothesisCalibrationBridgeResult
+} from "@/lib/selfImprovement/ictHypothesisCalibrationBridge";
+export {
   applyProposalChangesToConfig,
   evaluateCalibrationProposal,
   summarizeValidationMetrics

@@ -32,7 +32,11 @@ import {
   buildResearchEvidenceMemoryPacket,
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
-import { queueGbrainMemoryPacket, syncGbrainResearchMemory } from "@/lib/researchMemory";
+import {
+  buildSupplementalEvidenceMemoryPackets,
+  queueGbrainMemoryPacket,
+  syncGbrainResearchMemory
+} from "@/lib/researchMemory";
 import { evaluateCycleHistoricalEvidence } from "@/lib/researchEvidence";
 import { persistAndReconcileTradePlanCycle } from "@/lib/tradePlanOutcomes";
 import {
@@ -457,6 +461,7 @@ const summarizeBacktest = (result: BacktestResult): ResearchCycleBacktestSummary
   profitFactor: result.summary.profitFactor,
   skippedSignals: result.summary.skippedSignals,
   grinchSummary: result.summary.grinchSummary,
+  agentAttribution: result.summary.agentAttribution.slice(0, 12).map((agent) => ({ ...agent })),
   bestTradeR: result.summary.bestTrade?.rMultiple,
   worstTradeR: result.summary.worstTrade?.rMultiple,
   edgeStatistics: result.summary.edgeStatistics
@@ -2121,10 +2126,13 @@ export async function runResearchCycle({
       const evidenceRecord = buildResearchEvidenceRecord(run);
       const appendResult = await appendResearchEvidenceRecord(evidenceRecord);
       const outboxEntry = queueGbrainMemoryPacket(buildResearchEvidenceMemoryPacket(evidenceRecord));
+      const supplementalOutboxEntries = buildSupplementalEvidenceMemoryPackets(evidenceRecord)
+        .map((packet) => queueGbrainMemoryPacket(packet));
       run.evidenceRecordId = evidenceRecord.evidenceId;
       run.evidenceIdentityKey = evidenceRecord.identity.identityKey;
       run.evidenceStorageBackend = appendResult.backend;
       run.gbrainMemoryOutboxId = outboxEntry.outboxId;
+      run.gbrainSupplementalMemoryOutboxIds = supplementalOutboxEntries.map((entry) => entry.outboxId);
       void syncGbrainResearchMemory({ includeEvidenceBackfill: false });
     } catch (error) {
       run.candleWindowWarnings = uniqueText([

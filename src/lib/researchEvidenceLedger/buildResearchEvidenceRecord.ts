@@ -149,6 +149,18 @@ export function buildResearchEvidenceRecord(run: ResearchCycleRun): ResearchEvid
       proposalStatus: run.proposalStatus,
       activeCalibrationId: run.activeCalibrationId
     },
+    agentMetrics: (run.backtestSummary?.agentAttribution ?? [])
+      .filter((agent) => agent.agentId && agent.totalOpinions > 0)
+      .sort((left, right) => right.totalOpinions - left.totalOpinions || left.agentId.localeCompare(right.agentId))
+      .slice(0, 12)
+      .map((agent) => ({
+        agentId: agent.agentId,
+        agentLabel: agent.name,
+        averageConfidence: safeNumber(agent.averageConfidence),
+        averageWeight: safeNumber(agent.averageWeight),
+        totalOpinions: safeNumber(agent.totalOpinions),
+        cioAlignmentRate: safeNumber(agent.cioAlignmentRate)
+      })),
     resultClass: resultClassFor(run),
     blockers: uniqueText(run.blockers ?? [], 12),
     promotionBlockers: uniqueText(run.promotionBlockers ?? [], 12),
