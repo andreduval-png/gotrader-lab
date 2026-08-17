@@ -7,7 +7,7 @@ import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset
 import { finalizeR1EvidenceArchive, prepareR1CompletedTrialEvidenceArchive } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
 import { assertR1TrialProgress, buildR1ChildTelemetry, classifyR1ChildRss, createR1CompletionBudget,
   enforceR1ResourceBounds, openR1Controller, readR1TrialProgress, R1_MAX_RSS_BYTES,
-  summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
+  summarizeR1FamilyDispositions, summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
   writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
 
 const root = process.cwd();
@@ -126,13 +126,16 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
     }
     if (Number(process.env.GOTRADER_LRS_R1_INTERRUPT_AFTER_CHILDREN) === checkpoint.childRuns) process.exit(75);
   }
-  const report = await verifyR1TrialReport({ modules, reportPath: path.join(trialRoot, "baseline-report.json"), trial });
+  const verified = await verifyR1TrialReport({ modules, reportPath: path.join(trialRoot, "baseline-report.json"), trial });
+  const report = verified.report;
   const archive = await prepareR1CompletedTrialEvidenceArchive({ modules, storage, outputRoot, trial,
     orderedChildTelemetryIds: checkpoint.orderedChildTelemetryIds });
-  const completedEvent = await appendEvent(trial, "completed", ["verified_trial_report_bt2_ledger_and_evidence_archive"],
+  const completedEvent = await appendEvent(trial, verified.researchDisposition,
+    [verified.reasonCode, "verified_trial_report_bt2_ledger_and_evidence_archive"],
     [report.reportId, report.ledgerSealId, archive.archiveId], disposition.eventId);
   await update({ nextPosition: position + 1,
-    dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? { ...item, disposition: "completed", eventId: completedEvent.eventId,
+    dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? { ...item,
+      disposition: verified.researchDisposition, reportStatus: report.status, eventId: completedEvent.eventId,
       reportId: report.reportId, ledgerSealId: report.ledgerSealId, evidenceArchiveId: archive.archiveId } : item),
     orderedEventIds: [...checkpoint.orderedEventIds, completedEvent.eventId] });
   await finalizeR1EvidenceArchive({ storage, manifest: archive });
@@ -140,10 +143,12 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
 }
 
 const resources = enforceR1ResourceBounds(outputRoot, checkpoint.maximumObservedRssBytes);
+const familyDispositionSummary = summarizeR1FamilyDispositions(checkpoint.dispositions);
 const reportCore = Object.freeze({ schemaVersion: "gotrader-lrs-r1-family-operator-report-v1", mode,
   experimentFamilyId: checkpoint.experimentFamilyId, samplingPlanId: checkpoint.samplingPlanId, sampleSetId: checkpoint.sampleSetId,
-  selectedTrialCount: selected.length, completedCount: checkpoint.dispositions.filter((item) => item.disposition === "completed").length,
-  coalescedCount: checkpoint.dispositions.filter((item) => item.disposition === "coalesced").length,
+  status: familyDispositionSummary.blockedTrialCount ? "completed_with_blocked_trials" : "passed",
+  selectedTrialCount: selected.length, completedCount: familyDispositionSummary.passingTrialCount,
+  rejectedCount: familyDispositionSummary.blockedTrialCount, ...familyDispositionSummary,
   dispositions: checkpoint.dispositions, childRuns: checkpoint.childRuns, resources, holdoutUsed: false, adaptiveSearchUsed: false,
   researchValidated: false, productionAdoptionAllowed: false, authority: checkpoint.authority });
 const report = Object.freeze({ ...reportCore, reportId: await modules.canonical.canonicalHash(reportCore) });

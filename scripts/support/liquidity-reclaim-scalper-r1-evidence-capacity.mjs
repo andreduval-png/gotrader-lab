@@ -210,8 +210,8 @@ export async function finalizeR1EvidenceArchive({ storage, manifest }) {
 
 export async function verifyAndFinalizeCommittedR1EvidenceArchives({ modules, storage, checkpoint }) {
   const manifests = [];
-  for (const disposition of checkpoint.dispositions.filter((item) => item.disposition === "completed")) {
-    if (!disposition.evidenceArchiveId) throw new Error(`R1 completed disposition is missing evidence archive identity: ${disposition.trialId}`);
+  for (const disposition of checkpoint.dispositions.filter((item) => ["completed", "rejected"].includes(item.disposition))) {
+    if (!disposition.evidenceArchiveId) throw new Error(`R1 terminal disposition is missing evidence archive identity: ${disposition.trialId}`);
     const manifest = await verifyR1EvidenceArchive({ modules, storage, archiveId: disposition.evidenceArchiveId,
       expectedTrialId: disposition.trialId });
     await finalizeR1EvidenceArchive({ storage, manifest });

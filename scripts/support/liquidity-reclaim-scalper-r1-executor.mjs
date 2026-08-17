@@ -335,13 +335,34 @@ export async function writeImmutableR1Artifact({ modules, storage, relativePath,
 export async function verifyR1TrialReport({ modules, reportPath, trial }) {
   const report = readJson(reportPath);
   const { reportId, ...core } = report;
+  const blockedOutcomeCount = report.outcomeCounts?.blocked;
+  const statusMatchesOutcomes = (report.status === "passed" && blockedOutcomeCount === 0) ||
+    (report.status === "blocked" && Number.isInteger(blockedOutcomeCount) && blockedOutcomeCount > 0);
   if (await modules.canonical.canonicalHash(core) !== reportId || report.parameterHash !== trial.parameterHash ||
-      report.certificateId !== R1_CERTIFICATE_ID || report.datasetId !== R1_DATASET_ID || report.status !== "passed" ||
+      report.certificateId !== R1_CERTIFICATE_ID || report.datasetId !== R1_DATASET_ID ||
+      !statusMatchesOutcomes ||
       report.researchValidated !== false || report.productionAdoptionAllowed !== false || report.rawCandlesSerialized !== false ||
-      report.mt5Contacted !== false || report.authority?.executionAuthority !== "none" || !report.ledgerSealId) {
+      report.mt5Contacted !== false || report.authority?.executionAuthority !== "none" ||
+      report.authority?.brokerAuthority !== "none" || report.authority?.readinessOverrideAuthority !== "none" || !report.ledgerSealId) {
     throw new Error(`LRS R1 trial report failed verification: ${trial.trialId}`);
   }
-  return report;
+  return Object.freeze({
+    report,
+    researchDisposition: report.status === "passed" ? "completed" : "rejected",
+    reasonCode: report.status === "passed" ? "verified_passing_research_outcome" : "verified_blocked_research_outcome"
+  });
+}
+
+export function summarizeR1FamilyDispositions(dispositions) {
+  const passingTrialCount = dispositions.filter((item) => item.disposition === "completed").length;
+  const blockedTrialCount = dispositions.filter((item) => item.disposition === "rejected").length;
+  const coalescedCount = dispositions.filter((item) => item.disposition === "coalesced").length;
+  return Object.freeze({
+    passingTrialCount,
+    blockedTrialCount,
+    terminalUniqueTrialCount: passingTrialCount + blockedTrialCount,
+    coalescedCount
+  });
 }
 
 export function enforceR1ResourceBounds(outputRoot, maximumObservedRssBytes) {
