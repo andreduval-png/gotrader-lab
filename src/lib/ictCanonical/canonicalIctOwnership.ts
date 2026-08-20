@@ -52,7 +52,7 @@ export const CANONICAL_ICT_FACT_OWNERSHIP: readonly CanonicalFactOwnershipEntry[
   {
     ownerId: "ICT_FACT_FVG",
     module: "ictCanonical/canonicalImbalance",
-    factTypes: ["FVG", "BPR"],
+    factTypes: ["FVG", "FVG_TRANSITION", "BPR"],
     legacyImplementations: ["ict/detectFVG", "ictStrategySuiteHelpers.detectFairValueGap", "ict/pdArrayHierarchy"],
     compatibilityAdapter: "ictCanonical/legacyCompatibility",
     migrationStatus: "CANONICAL_WITH_COMPATIBILITY_ADAPTER"
