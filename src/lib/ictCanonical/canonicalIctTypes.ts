@@ -7,6 +7,7 @@ export type CanonicalIctFactType =
   | "IRL_ERL_TRANSITION"
   | "DRAW_ON_LIQUIDITY"
   | "FVG"
+  | "FVG_TRANSITION"
   | "BPR"
   | "BLOCK"
   | "DISPLACEMENT"
@@ -153,6 +154,15 @@ export interface CanonicalBprFact extends CanonicalIctFactBase {
   overlapHigh: number;
 }
 
+export interface CanonicalFvgTransitionFact extends CanonicalIctFactBase {
+  factType: "FVG_TRANSITION";
+  transitionId: string;
+  transitionType: "INVERTED";
+  originFvgId: string;
+  direction: Exclude<CanonicalDirection, "neutral">;
+  transitionCandleId: string;
+}
+
 export type CanonicalBlockType = "ORDER_BLOCK" | "BREAKER_BLOCK" | "MITIGATION_BLOCK";
 
 export interface CanonicalBlockFact extends CanonicalIctFactBase {
@@ -275,6 +285,7 @@ export type CanonicalIctFact =
   | CanonicalIrlErlTransitionFact
   | CanonicalDrawOnLiquidityFact
   | CanonicalFvgFact
+  | CanonicalFvgTransitionFact
   | CanonicalBprFact
   | CanonicalBlockFact
   | CanonicalDisplacementFact
