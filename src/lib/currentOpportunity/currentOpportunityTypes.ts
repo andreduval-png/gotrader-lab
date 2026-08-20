@@ -1,5 +1,6 @@
 import type { IctSessionRaidReversalNarrative } from "../ict-strategy-suite/ictSessionRaidReversalTypes";
 import type { IctIfvgFreshRetestV3CompactAssessment } from "../ict-strategy-suite/ictIfvgFreshRetestV3";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type CurrentOpportunityStatus =
   | "valid_candidate"
@@ -149,6 +150,7 @@ export interface CurrentOpportunity {
   invalidation?: number;
   target?: number;
   rrEstimate?: number;
+  geometry?: CanonicalTradeGeometry;
   confidence: number;
   requiredValidation: CurrentOpportunityRequiredValidation[];
   blockers: string[];

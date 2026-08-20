@@ -25,6 +25,7 @@ import type {
   IctActivateMarketStep,
   IctActivateMarketStepId
 } from "./ictActivateMarketPipelineTypes";
+import { projectCanonicalTradeGeometry, type CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 const LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v1";
 export const ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v2";
@@ -105,6 +106,17 @@ const msBetween = (start?: string, end?: string) =>
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error ?? "unknown_error");
 const asList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const asFiniteNumber = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const asCanonicalGeometry = (value: unknown): CanonicalTradeGeometry | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<CanonicalTradeGeometry>;
+  return candidate.schemaVersion === "gotrader.trade-geometry.v1" &&
+    typeof candidate.geometryId === "string" &&
+    candidate.authority?.execution === "none" &&
+    candidate.authority?.broker === "none" &&
+    candidate.authority?.production === "none"
+    ? candidate as CanonicalTradeGeometry
+    : undefined;
+};
 
 const updateStep = (
   steps: IctActivateMarketStep[],
@@ -212,6 +224,7 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
       proposedCandidateStatus: typeof parsed.proposedCandidateStatus === "string"
         ? parsed.proposedCandidateStatus as IctActivateMarketLatestSummary["proposedCandidateStatus"]
         : undefined,
+      proposedGeometry: asCanonicalGeometry(parsed.proposedGeometry),
       proposedEntryPrice: asFiniteNumber(parsed.proposedEntryPrice),
       proposedEntryZone:
         parsed.proposedEntryZone &&
@@ -513,6 +526,7 @@ const buildLatestSummary = (
   selfImprovementHypothesisReason: result.summary.selfImprovementHypothesisReason,
   researchSide: result.summary.researchSide,
   proposedCandidateStatus: result.summary.proposedCandidateStatus,
+  proposedGeometry: result.summary.proposedGeometry,
   proposedEntryPrice: result.summary.proposedEntryPrice,
   proposedEntryZone: result.summary.proposedEntryZone,
   proposedStopLoss: result.summary.proposedStopLoss,
@@ -992,17 +1006,22 @@ export async function runIctActivateMarketPipeline(
         recommendedMaxRiskReason: latestMonteCarlo.recommendedMaxRiskReason,
         researchSide: planSide,
         proposedCandidateStatus: matchingCandidate?.status ?? signalCandidateStatus,
-        proposedEntryPrice: signalContract?.entryReference
+        proposedGeometry: matchingCandidate?.geometry,
+        proposedEntryPrice: (matchingCandidate?.geometry ? projectCanonicalTradeGeometry(matchingCandidate.geometry)?.intendedEntry : undefined)
+          ?? signalContract?.entryReference
           ?? signalContract?.entryZone?.midpoint
           ?? currentRead?.entryReference
           ?? matchingCandidate?.entry,
         proposedEntryZone: signalContract?.entryZone
           ? { lower: signalContract.entryZone.low, upper: signalContract.entryZone.high }
           : undefined,
-        proposedStopLoss: signalContract?.invalidation,
-        proposedTakeProfit: signalContract?.target,
+        proposedStopLoss: (matchingCandidate?.geometry ? projectCanonicalTradeGeometry(matchingCandidate.geometry)?.intendedStop : undefined)
+          ?? signalContract?.invalidation,
+        proposedTakeProfit: (matchingCandidate?.geometry ? projectCanonicalTradeGeometry(matchingCandidate.geometry)?.intendedTarget : undefined)
+          ?? signalContract?.target,
         proposedTargetProvenance: signalContract?.targetProvenance,
-        proposedRiskReward: signalContract?.rrEstimate,
+        proposedRiskReward: (matchingCandidate?.geometry ? projectCanonicalTradeGeometry(matchingCandidate.geometry)?.theoreticalRR : undefined)
+          ?? signalContract?.rrEstimate,
         riskScreeningStatus: currentRead?.riskStatus,
         riskScreeningReason: currentRead?.riskReason,
         nextAction: operatorWorkflow?.recommendedAction ?? currentRead?.nextAction,

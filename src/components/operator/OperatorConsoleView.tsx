@@ -334,9 +334,11 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 <p className={WORKSPACE_SECTION_LABEL}>Research trade plan</p>
                 <h3 className="mt-2 truncate text-lg font-semibold capitalize text-slate-100">{snapshot.researchPlan.setup}</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {snapshot.researchPlan.entryPriceMethod === "rr_implied_recovery"
-                    ? "Entry recovered from the stored stop, target, and R:R geometry."
-                    : "Deterministic entry from the latest compact current read."}
+                  {snapshot.researchPlan.displayKind === "RESEARCH_GEOMETRY"
+                    ? "Canonical research geometry. It is visible for diagnosis and is not actionable."
+                    : snapshot.researchPlan.entryPriceMethod
+                      ? "Deterministic entry from the latest compact current read."
+                      : "No canonical entry is available; geometry is not inferred from R:R."}
                 </p>
               </div>
             </div>
@@ -347,6 +349,11 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               <Badge variant={snapshot.researchPlan.signal === "NO_TRADE" ? "muted" : "success"}>
                 {snapshot.researchPlan.signal.replace("_", " ")}
               </Badge>
+              {snapshot.researchPlan.displayKind ? (
+                <Badge variant={snapshot.researchPlan.actionable ? "success" : "warning"}>
+                  {snapshot.researchPlan.displayKind.replace(/_/g, " ")}
+                </Badge>
+              ) : null}
               <Badge variant="muted">{snapshot.researchPlan.status.replace(/_/g, " ")}</Badge>
               <Badge variant={snapshot.researchPlan.planIdentityStatus === "current" ? "success" : "warning"}>
                 {snapshot.researchPlan.planIdentityStatus.replace(/_/g, " ")}
@@ -363,10 +370,10 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
 
           <div className="grid grid-cols-1 gap-px bg-white/10 sm:grid-cols-2 2xl:grid-cols-3">
             {[
-              { label: "Entry price", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },
-              { label: "Stop loss", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
-              { label: "Take profit", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
-              { label: "Risk / reward", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
+              { label: snapshot.researchPlan.actionable ? "Entry price" : "Research entry", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },
+              { label: snapshot.researchPlan.actionable ? "Stop loss" : "Research stop", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
+              { label: snapshot.researchPlan.actionable ? "Take profit" : "Research target", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
+              { label: "Theoretical R:R", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
               { label: "Probability", value: `${probability.label} · ${probability.percentage}`, tone: probability.tone }
             ].map(({ label, value, tone }) => (
               <div

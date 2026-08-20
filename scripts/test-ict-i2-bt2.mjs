@@ -18,6 +18,14 @@ for (const candidate of candidates) {
   assert.equal(adapted.request.outcomePolicyOwner, "BT2");
   assert.equal(adapted.request.symbol, "NQ");
   assert.equal(adapted.request.timeframe, "5m");
+  assert.equal(adapted.request.canonicalGeometry.stop.price, adapted.request.invalidation);
+  assert.equal(adapted.request.canonicalGeometry.target.price, adapted.request.targetLiquidity);
+  assert.equal(
+    adapted.request.canonicalGeometry.entry.intendedPrice,
+    (adapted.request.entryZone[0] + adapted.request.entryZone[1]) / 2
+  );
+  assert.equal(adapted.request.canonicalGeometry.actionable, false);
+  assert.equal(adapted.request.canonicalGeometry.authority.execution, "none");
   assert(!("outcome" in adapted.request));
   assert(ict.assertCompactIctI2Bt2Request(adapted.request).ok);
 }

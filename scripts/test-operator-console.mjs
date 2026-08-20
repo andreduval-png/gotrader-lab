@@ -17,7 +17,25 @@ const sourceFiles = [
 ];
 
 function compileForNode() {
+  fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
+  const dependencyFiles = [
+    [path.join(projectRoot, "src/lib/ictCanonical"), "canonicalIctTypes.ts"],
+    [path.join(projectRoot, "src/lib/ictCanonical"), "canonicalIctIdentity.ts"],
+    [path.join(projectRoot, "src/lib/tradeGeometry"), "tradeGeometryTypes.ts"],
+    [path.join(projectRoot, "src/lib/tradeGeometry"), "targetSelection.ts"],
+    [path.join(projectRoot, "src/lib/tradeGeometry"), "canonicalTradeGeometry.ts"]
+  ];
+  for (const [root, file] of dependencyFiles) {
+    const sourcePath = path.join(root, file);
+    const output = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 }
+    }).outputText
+      .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), output, "utf8");
+  }
   for (const file of sourceFiles) {
     const sourcePath = path.join(sourceRoot, file);
     const source = fs.readFileSync(sourcePath, "utf8");
@@ -32,7 +50,8 @@ function compileForNode() {
     }).outputText;
     const rewritten = output
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
+      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
 }
@@ -306,11 +325,65 @@ async function main() {
       proposedRiskReward: 2
     })
   });
-  assert.equal(impliedEntry.researchPlan.entryPrice, 23050);
-  assert.equal(impliedEntry.researchPlan.entryPriceMethod, "rr_implied_recovery");
+  assert.equal(impliedEntry.researchPlan.entryPrice, undefined);
+  assert.equal(impliedEntry.researchPlan.entryPriceMethod, undefined);
   assert.equal(impliedEntry.researchPlan.setupDirection, "bullish");
   assert.equal(impliedEntry.researchPlan.status, "no_trade");
   assert.equal(impliedEntry.researchPlan.signal, "NO_TRADE");
+
+  const canonicalResearchGeometry = buildOperatorConsoleSnapshot({
+    activation: activationIdentity({
+      modelName: "order_block_retracement",
+      researchSide: "long",
+      proposedCandidateStatus: "near_miss",
+      proposedGeometry: {
+        schemaVersion: "gotrader.trade-geometry.v1",
+        geometryVersion: "g1.1.0",
+        geometryId: "geometry-fixture-a",
+        logicalGeometryKey: "logical-fixture-a",
+        strategyId: "order_block_retracement",
+        strategyVersion: "1.0.0",
+        candidateId: "candidate-fixture-a",
+        direction: "LONG",
+        entry: { model: "OB_MIDPOINT", intendedPrice: 100, lifecycleStatus: "WAITING_FOR_ENTRY" },
+        stop: { model: "OB_INVALIDATION", price: 96, structuralInvalidation: true },
+        target: {
+          model: "DRAW_ON_LIQUIDITY",
+          price: 103,
+          targetId: "draw-a",
+          targetType: "DRAW_ON_LIQUIDITY",
+          selectionRole: "PRIMARY",
+          policyId: "order-block.native-draw",
+          policyVersion: "1.0.0"
+        },
+        targetPolicy: {
+          policyId: "order-block.native-draw",
+          policyVersion: "1.0.0",
+          primaryTargetType: "DRAW_ON_LIQUIDITY",
+          primaryTargetId: "draw-a",
+          allowedFallbackTargetTypes: []
+        },
+        riskDistance: 4,
+        rewardDistance: 3,
+        theoreticalRR: 0.75,
+        minimumRequiredRR: 2,
+        geometryValid: true,
+        actionable: false,
+        status: "VALID_BELOW_RR_THRESHOLD",
+        blockers: ["rr_below_minimum"],
+        warnings: [],
+        sourceFingerprint: "mt5-fingerprint",
+        authority: { execution: "none", broker: "none", production: "none" }
+      }
+    })
+  });
+  assert.equal(canonicalResearchGeometry.researchPlan.entryPrice, 100);
+  assert.equal(canonicalResearchGeometry.researchPlan.stopLoss, 96);
+  assert.equal(canonicalResearchGeometry.researchPlan.takeProfit, 103);
+  assert.equal(canonicalResearchGeometry.researchPlan.riskReward, 0.75);
+  assert.equal(canonicalResearchGeometry.researchPlan.displayKind, "RESEARCH_GEOMETRY");
+  assert.equal(canonicalResearchGeometry.researchPlan.signal, "NO_TRADE");
+  assert.notEqual(canonicalResearchGeometry.researchPlan.setup, "No qualified research plan");
 
   const legacyFlatLong = buildOperatorConsoleSnapshot({
     activation: activationIdentity({
@@ -339,8 +412,8 @@ async function main() {
   });
   assert.equal(legacyMissingSideShort.researchPlan.side, "short");
   assert.equal(legacyMissingSideShort.researchPlan.setupDirection, "bearish");
-  assert.equal(legacyMissingSideShort.researchPlan.entryPrice, 23100);
-  assert.equal(legacyMissingSideShort.researchPlan.signal, "SELL");
+  assert.equal(legacyMissingSideShort.researchPlan.entryPrice, undefined);
+  assert.equal(legacyMissingSideShort.researchPlan.signal, "NO_TRADE");
 
   const conflictingBullishPlan = buildOperatorConsoleSnapshot({
     activation: activationIdentity({
@@ -677,12 +750,13 @@ async function main() {
   assert.match(operatorViewSource, /elapsedTime\(snapshot\.cycle\.startedAt, snapshot\.cycle\.completedAt, clockNow\)/, "elapsed time must bind to recorded cycle timestamps");
   assert.match(operatorViewSource, /data-testid="operator-gbrain-memory-summary"/, "operator console must show memory counts");
   assert.match(operatorViewSource, /data-testid="operator-research-risk-preview"/, "operator console must show research levels and risk context");
-  assert.match(operatorViewSource, /label: "Entry price", value: price\(snapshot\.researchPlan\.entryPrice\)/, "operator console must show one definite entry price");
+  assert.match(operatorViewSource, /"Research entry"[\s\S]*?price\(snapshot\.researchPlan\.entryPrice\)/, "operator console must distinguish research entry geometry");
   assert.match(operatorViewSource, /snapshot\.researchPlan\.setupDirection/, "operator console must show bullish, bearish, or neutral setup direction");
   assert.match(operatorViewSource, /snapshot\.researchPlan\.signal/, "operator console must show BUY, SELL, or NO TRADE");
   assert.match(operatorViewSource, /snapshot\.researchPlan\.signal === "NO_TRADE" \? "muted" : "success"/, "BUY and SELL signals must use the positive action color");
-  assert.match(operatorViewSource, /label: "Stop loss"[\s\S]*?"negative"/, "stop loss must use the negative color");
-  assert.match(operatorViewSource, /label: "Take profit"[\s\S]*?"positive"/, "take profit must use the positive color");
+  assert.match(operatorViewSource, /"Research stop"[\s\S]*?"negative"/, "research stop must use the negative color");
+  assert.match(operatorViewSource, /"Research target"[\s\S]*?"positive"/, "research target must use the positive color");
+  assert.doesNotMatch(operatorViewSource, /rr_implied_recovery/, "UI must not describe algebraically recovered entries");
   assert.match(operatorViewSource, /label: "Probability"/, "trade plan must display probability classification");
   assert.match(operatorViewSource, /data-testid="operator-target-provenance"/, "trade plan must display target provenance");
   assert.match(operatorViewSource, /Target gate only; overall candidate and readiness gates remain separate/, "target acceptance must not imply candidate readiness");

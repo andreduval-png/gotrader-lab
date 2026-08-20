@@ -11,6 +11,11 @@ const sourceRoot = path.join(projectRoot, "src", "lib", "currentOpportunity");
 const ictSourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const outRoot = path.join(projectRoot, ".gotrader", "current-opportunity-scanner-test");
 const sourceFiles = [
+  { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctTypes.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctIdentity.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "tradeGeometryTypes.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "targetSelection.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "canonicalTradeGeometry.ts" },
   { root: sourceRoot, file: "currentOpportunityTypes.ts" },
   { root: sourceRoot, file: "buildCurrentOpportunityContext.ts" },
   { root: ictSourceRoot, file: "ictTradeConstructionTypes.ts" },
@@ -21,6 +26,7 @@ const sourceFiles = [
 ];
 
 function compileForNode() {
+  fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
   for (const { root, file } of sourceFiles) {
     const sourcePath = path.join(root, file);
@@ -39,7 +45,11 @@ function compileForNode() {
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/ict-strategy-suite\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'..\/ict-strategy-suite\/([^']+)'/g, "from './$1.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const dependenciesRewritten = rewritten
+      .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), dependenciesRewritten, "utf8");
   }
 }
 

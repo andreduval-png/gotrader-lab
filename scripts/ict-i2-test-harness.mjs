@@ -7,7 +7,7 @@ export async function loadIctI2() {
   const root = process.cwd();
   const out = path.join(root, ".gotrader", `ict-i2-test-runtime-${process.pid}`);
   fs.rmSync(out, { recursive: true, force: true });
-  for (const directory of ["ictCanonical", "ictI2"]) {
+  for (const directory of ["ictCanonical", "tradeGeometry", "ictI2"]) {
     const sourceDirectory = path.join(root, "src", "lib", directory);
     const outputDirectory = path.join(out, directory);
     fs.mkdirSync(outputDirectory, { recursive: true });
@@ -23,7 +23,9 @@ export async function loadIctI2() {
         fileName: name
       }).outputText
         .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "../ictCanonical/$1.mjs"')
-        .replace(/from\s+"@\/lib\/ictI2\/([^"]+)"/g, 'from "../ictI2/$1.mjs"');
+        .replace(/from\s+"@\/lib\/ictI2\/([^"]+)"/g, 'from "../ictI2/$1.mjs"')
+        .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "../tradeGeometry/$1.mjs"')
+        .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "../tradeGeometry/index.mjs"');
       fs.writeFileSync(path.join(outputDirectory, name.replace(/\.ts$/, ".mjs")), output, "utf8");
     }
   }

@@ -18,6 +18,7 @@ import type {
 } from "./ictOpportunityDetectionTypes";
 import type { IctResearchHypothesis, IctResearchHypothesisStatus } from "./ictSelfImprovementTypes";
 import type { IctResearchSignal } from "./ictSignalContractTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 import type { CurrentOpportunity, CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
 
 export type IctActivateMarketStepId =
@@ -119,6 +120,7 @@ export interface IctActivateMarketLatestSummary {
   selfImprovementHypothesisReason?: string;
   researchSide?: IctCurrentRead["side"];
   proposedCandidateStatus?: CurrentOpportunity["status"];
+  proposedGeometry?: CanonicalTradeGeometry;
   proposedEntryPrice?: number;
   proposedEntryZone?: { lower: number; upper: number };
   proposedStopLoss?: number;
@@ -226,6 +228,7 @@ export interface IctActivateMarketResult {
     recommendedMaxRiskReason?: string;
     researchSide?: IctCurrentRead["side"];
     proposedCandidateStatus?: CurrentOpportunity["status"];
+    proposedGeometry?: CanonicalTradeGeometry;
     proposedEntryPrice?: number;
     proposedEntryZone?: { lower: number; upper: number };
     proposedStopLoss?: number;

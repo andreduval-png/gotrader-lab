@@ -5,6 +5,7 @@ import { projectIctJudasCurrentRead } from "@/lib/ictI2/ictJudasSwingModel";
 import type { IctPo3State } from "@/lib/ictI2/ictPowerOfThreeModel";
 import { projectIctPo3CurrentRead } from "@/lib/ictI2/ictPowerOfThreeModel";
 import type { IctI2CurrentReadProjection, IctI2ModelCandidate } from "@/lib/ictI2/ictI2Types";
+import { buildCanonicalTradeGeometry, type CanonicalTradeGeometry, type CanonicalTargetType } from "@/lib/tradeGeometry";
 
 export interface IctI2Bt2Request {
   requestVersion: "ict-i2-bt2-request-v1";
@@ -22,6 +23,7 @@ export interface IctI2Bt2Request {
   entryZone: readonly [number, number];
   invalidation: number;
   targetLiquidity: number;
+  canonicalGeometry: CanonicalTradeGeometry;
   expiresAt: string;
   supportingFactIds: readonly string[];
   ambiguityPolicyOwner: "BT2";
@@ -48,6 +50,54 @@ export const adaptIctI2CandidateToBt2 = <State extends string>(candidate: IctI2M
   const entryZone = Array.isArray(candidate.geometry.entry)
     ? candidate.geometry.entry
     : [candidate.geometry.entry, candidate.geometry.entry];
+  const intendedEntry = (entryZone[0] + entryZone[1]) / 2;
+  const targetType: CanonicalTargetType = candidate.strategyId === "ict_2022_model_v1"
+    ? "PRIMARY_DRAW_ON_LIQUIDITY"
+    : candidate.direction === "long" ? "HOD" : "LOD";
+  const targetId = `${candidate.candidateId}:native-target`;
+  const canonicalGeometry = buildCanonicalTradeGeometry({
+    strategyId: candidate.strategyId,
+    strategyVersion: candidate.strategyVersion,
+    profileId: candidate.profileId,
+    parameterHash: candidate.parameterHash,
+    candidateId: candidate.candidateId,
+    direction: candidate.direction === "long" ? "LONG" : "SHORT",
+    entry: {
+      model: Array.isArray(candidate.geometry.entry) ? "NATIVE_ENTRY_ZONE_MIDPOINT" : "NATIVE_ENTRY_PRICE",
+      intendedPrice: intendedEntry,
+      ownerTimeframe: candidate.timeframe,
+      validFrom: candidate.marketTimestamp,
+      expiresAt: candidate.geometry.expiresAt,
+      lifecycleStatus: "WAITING_FOR_ENTRY"
+    },
+    stop: {
+      model: "I2_NATIVE_STRUCTURAL_INVALIDATION",
+      price: candidate.geometry.stop,
+      ownerTimeframe: candidate.timeframe,
+      structuralInvalidation: true
+    },
+    targetCandidates: [{
+      targetId,
+      type: targetType,
+      direction: candidate.direction === "long" ? "LONG" : "SHORT",
+      price: candidate.geometry.target,
+      ownerTimeframe: candidate.timeframe,
+      validFrom: candidate.marketTimestamp,
+      consumed: false,
+      internalExternalClass: candidate.strategyId === "ict_2022_model_v1" ? "EXTERNAL" : undefined
+    }],
+    targetPolicy: {
+      policyId: `${candidate.strategyId}.accepted-i2-target`,
+      policyVersion: candidate.strategyVersion,
+      primaryTargetType: targetType,
+      primaryTargetId: targetId,
+      allowedFallbackTargetTypes: []
+    },
+    primaryDrawOnLiquidityId: candidate.strategyId === "ict_2022_model_v1" ? targetId : undefined,
+    sourceFingerprint: candidate.sourceFingerprint,
+    asOf: candidate.marketTimestamp,
+    researchOnly: true
+  });
   return {
     status: "ready",
     blockers: [],
@@ -67,6 +117,7 @@ export const adaptIctI2CandidateToBt2 = <State extends string>(candidate: IctI2M
       entryZone: entryZone as readonly [number, number],
       invalidation: candidate.geometry.stop,
       targetLiquidity: candidate.geometry.target,
+      canonicalGeometry,
       expiresAt: candidate.geometry.expiresAt,
       supportingFactIds: candidate.supportingFactIds,
       ambiguityPolicyOwner: "BT2",
@@ -83,6 +134,11 @@ export const assertCompactIctI2Bt2Request = (request: IctI2Bt2Request) => {
   const forbidden = /"(candles|rawCandles|orders|positions|account|outcome|targetHit|stopHit|fillPrice)"\s*:/i;
   if (forbidden.test(serialized)) throw new Error("I2 BT2 request crossed a forbidden ownership or raw-data boundary.");
   if (!request.supportingFactIds.length) throw new Error("I2 BT2 request lost canonical fact lineage.");
+  if (
+    request.canonicalGeometry.entry.intendedPrice !== (request.entryZone[0] + request.entryZone[1]) / 2 ||
+    request.canonicalGeometry.stop.price !== request.invalidation ||
+    request.canonicalGeometry.target?.price !== request.targetLiquidity
+  ) throw new Error("I2 BT2 request geometry diverged from canonical intended geometry.");
   if (request.ambiguityPolicyOwner !== "BT2" || request.outcomePolicyOwner !== "BT2") {
     throw new Error("BT2 ownership is incomplete.");
   }
