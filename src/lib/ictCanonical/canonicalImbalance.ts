@@ -144,7 +144,9 @@ export const buildCanonicalFvgTransitions = ({
       transitionType: "INVERTED",
       originFvgId: fvg.fvgId,
       direction,
-      transitionCandleId: transition.id
+      transitionCandleId: transition.id,
+      proximalPrice: fvg.proximalPrice,
+      distalPrice: fvg.distalPrice
     }];
   });
 };

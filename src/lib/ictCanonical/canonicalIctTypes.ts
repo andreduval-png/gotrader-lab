@@ -161,6 +161,8 @@ export interface CanonicalFvgTransitionFact extends CanonicalIctFactBase {
   originFvgId: string;
   direction: Exclude<CanonicalDirection, "neutral">;
   transitionCandleId: string;
+  proximalPrice: number;
+  distalPrice: number;
 }
 
 export type CanonicalBlockType = "ORDER_BLOCK" | "BREAKER_BLOCK" | "MITIGATION_BLOCK";
