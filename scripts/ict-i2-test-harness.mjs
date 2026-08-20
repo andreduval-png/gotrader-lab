@@ -5,7 +5,7 @@ import ts from "typescript";
 
 export async function loadIctI2() {
   const root = process.cwd();
-  const out = path.join(root, ".gotrader", "ict-i2-test-runtime");
+  const out = path.join(root, ".gotrader", `ict-i2-test-runtime-${process.pid}`);
   fs.rmSync(out, { recursive: true, force: true });
   for (const directory of ["ictCanonical", "ictI2"]) {
     const sourceDirectory = path.join(root, "src", "lib", directory);
