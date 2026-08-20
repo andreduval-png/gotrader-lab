@@ -109,45 +109,60 @@ export const buildCanonicalFvgTransitions = ({
   const candles = causalCandlesAt(input.candles, input.asOf);
   const sourceFingerprint = input.sourceFingerprint ?? fingerprintCanonicalSource(candles);
   return fvgs.flatMap((fvg) => {
-    const transition = candles.find(
+    const later = candles.filter((candle) => Date.parse(candle.timestamp) > Date.parse(fvg.validFrom));
+    const partial = later.find((candle) =>
+      fvg.direction === "bullish"
+        ? candle.low < fvg.proximalPrice && candle.low > fvg.distalPrice
+        : candle.high > fvg.proximalPrice && candle.high < fvg.distalPrice
+    );
+    const filled = later.find((candle) =>
+      fvg.direction === "bullish" ? candle.low <= fvg.distalPrice : candle.high >= fvg.distalPrice
+    );
+    const inversion = later.find(
       (candle) =>
-        Date.parse(candle.timestamp) > Date.parse(fvg.validFrom) &&
         (fvg.direction === "bullish" ? candle.close < fvg.distalPrice : candle.close > fvg.distalPrice)
     );
-    if (!transition) return [];
-    const direction = fvg.direction === "bullish" ? "bearish" : "bullish";
-    const factId = canonicalFactId("FVG_TRANSITION", {
-      originFvgId: fvg.fvgId,
-      transitionType: "INVERTED",
-      transitionCandleId: transition.id
+    return [
+      ...(partial ? [{ transitionType: "PARTIALLY_FILLED" as const, candle: partial }] : []),
+      ...(filled ? [{ transitionType: "FILLED" as const, candle: filled }] : []),
+      ...(inversion ? [{ transitionType: "INVERTED" as const, candle: inversion }] : [])
+    ].map(({ transitionType, candle }) => {
+      const direction = transitionType === "INVERTED"
+        ? fvg.direction === "bullish" ? "bearish" : "bullish"
+        : fvg.direction;
+      const factId = canonicalFactId("FVG_TRANSITION", {
+        originFvgId: fvg.fvgId,
+        transitionType,
+        transitionCandleId: candle.id
+      });
+      return {
+        ...canonicalFactBase({
+          factId,
+          factType: "FVG_TRANSITION",
+          symbol: fvg.symbol,
+          timeframe: fvg.timeframe,
+          occurredAt: candle.timestamp,
+          confirmedAt: candle.timestamp,
+          validFrom: candle.timestamp,
+          state: "ACTIVE",
+          lineage: canonicalLineage({
+            sourceCandleIds: [...fvg.lineage.sourceCandleIds, candle.id],
+            sourceFactIds: [fvg.factId],
+            sourceFingerprint,
+            policyId: `gotrader.canonical.fvg.${transitionType.toLowerCase()}`,
+            policyVersion: "1.0.0"
+          })
+        }),
+        factType: "FVG_TRANSITION" as const,
+        transitionId: factId,
+        transitionType,
+        originFvgId: fvg.fvgId,
+        direction,
+        transitionCandleId: candle.id,
+        proximalPrice: fvg.proximalPrice,
+        distalPrice: fvg.distalPrice
+      };
     });
-    return [{
-      ...canonicalFactBase({
-        factId,
-        factType: "FVG_TRANSITION",
-        symbol: fvg.symbol,
-        timeframe: fvg.timeframe,
-        occurredAt: transition.timestamp,
-        confirmedAt: transition.timestamp,
-        validFrom: transition.timestamp,
-        state: "ACTIVE",
-        lineage: canonicalLineage({
-          sourceCandleIds: [...fvg.lineage.sourceCandleIds, transition.id],
-          sourceFactIds: [fvg.factId],
-          sourceFingerprint,
-          policyId: "gotrader.canonical.fvg.inversion",
-          policyVersion: "1.0.0"
-        })
-      }),
-      factType: "FVG_TRANSITION",
-      transitionId: factId,
-      transitionType: "INVERTED",
-      originFvgId: fvg.fvgId,
-      direction,
-      transitionCandleId: transition.id,
-      proximalPrice: fvg.proximalPrice,
-      distalPrice: fvg.distalPrice
-    }];
   });
 };
 

@@ -39,7 +39,7 @@ const round = (value: number, digits = 8) => Number(value.toFixed(digits));
 
 export const buildCanonicalSwings = (
   input: CanonicalFactBuildInput,
-  lookback = CANONICAL_SWING_POLICY.defaultLookback
+  lookback: number = CANONICAL_SWING_POLICY.defaultLookback
 ): CanonicalSwingFact[] => {
   const window = Math.max(1, Math.floor(lookback));
   const candles = causalCandlesAt(input.candles, input.asOf);

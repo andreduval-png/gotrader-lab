@@ -157,7 +157,7 @@ export interface CanonicalBprFact extends CanonicalIctFactBase {
 export interface CanonicalFvgTransitionFact extends CanonicalIctFactBase {
   factType: "FVG_TRANSITION";
   transitionId: string;
-  transitionType: "INVERTED";
+  transitionType: "PARTIALLY_FILLED" | "FILLED" | "INVERTED";
   originFvgId: string;
   direction: Exclude<CanonicalDirection, "neutral">;
   transitionCandleId: string;
