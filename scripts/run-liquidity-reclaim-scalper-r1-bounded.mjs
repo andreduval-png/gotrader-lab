@@ -7,7 +7,7 @@ import { createHistoricalDatasetNodeStorage } from "./support/historical-dataset
 import { finalizeR1EvidenceArchive, prepareR1CompletedTrialEvidenceArchive } from "./support/liquidity-reclaim-scalper-r1-evidence-capacity.mjs";
 import { assertR1TrialProgress, buildR1ChildTelemetry, classifyR1ChildRss, createR1CompletionBudget,
   enforceR1ResourceBounds, openR1Controller, readR1TrialProgress, R1_MAX_RSS_BYTES,
-  summarizeR1FamilyDispositions, summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
+  nextR1TrialEventSequence, summarizeR1FamilyDispositions, summarizeR1StageSamples, verifyAcceptedR1Inputs, verifyR1TrialReport, writeImmutableR1Artifact, writeR1ChildTelemetry,
   writeR1ControllerCheckpoint } from "./support/liquidity-reclaim-scalper-r1-executor.mjs";
 
 const root = process.cwd();
@@ -35,8 +35,9 @@ const update = async (patch = {}) => {
     orderedChildTelemetryIds: checkpoint.orderedChildTelemetryIds, ...patch } });
 };
 const appendEvent = async (trial, disposition, reasonCodes, evidenceIds, previousEventId) => {
+  const sequence = await nextR1TrialEventSequence({ storage, previousEventId, trialId: trial.trialId });
   const event = await modules.trialControls.buildLrsR1TrialEvent({ trialId: trial.trialId,
-    sequence: previousEventId ? 1 : 0, disposition, recordedAtUtc: new Date().toISOString(), reasonCodes, evidenceIds,
+    sequence, disposition, recordedAtUtc: new Date().toISOString(), reasonCodes, evidenceIds,
     ...(previousEventId ? { previousEventId } : {}) });
   await controlRepository.writeEvent(event);
   return event;
@@ -57,6 +58,13 @@ for (let position = checkpoint.nextPosition; position < selected.length; positio
     const attempted = await appendEvent(trial, "attempted", ["bounded_certified_trial_started"], []);
     disposition = { trialId: trial.trialId, ordinal: trial.ordinal, disposition: "attempted", eventId: attempted.eventId };
     await update({ dispositions: [...checkpoint.dispositions, disposition], orderedEventIds: [...checkpoint.orderedEventIds, attempted.eventId] });
+  }
+  if (disposition.disposition === "failed") {
+    const attempted = await appendEvent(trial, "attempted", ["authorized_bounded_child_failure_resume"],
+      [disposition.eventId], disposition.eventId);
+    disposition = { trialId: trial.trialId, ordinal: trial.ordinal, disposition: "attempted", eventId: attempted.eventId };
+    await update({ dispositions: checkpoint.dispositions.map((item) => item.trialId === trial.trialId ? disposition : item),
+      orderedEventIds: [...checkpoint.orderedEventIds, attempted.eventId] });
   }
   const trialRoot = path.join(outputRoot, "trials", trial.trialId.replace(":", "_"));
   let completed = fs.existsSync(path.join(trialRoot, "baseline-report.json"));

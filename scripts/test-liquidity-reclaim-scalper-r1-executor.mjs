@@ -6,6 +6,7 @@ import path from "node:path";
 import { loadLrsBaselineModules } from "./support/liquidity-reclaim-scalper-baseline-runner.mjs";
 import {
   enforceR1ResourceBounds,
+  nextR1TrialEventSequence,
   openR1Controller,
   R1_SAMPLE_SET_ID,
   validateR1ControllerCheckpoint,
@@ -61,6 +62,33 @@ const opened = await openR1Controller({
 });
 assert.equal(opened.checkpoint.sampleSetId, R1_SAMPLE_SET_ID);
 assert.equal(opened.checkpoint.nextPosition, 0);
+
+const eventRepository = new modules.trialControls.LrsR1TrialControlRepository(opened.storage.adapter);
+const attemptedEvent = await modules.trialControls.buildLrsR1TrialEvent({
+  trialId: selectedTrialIds[0],
+  sequence: 0,
+  disposition: "attempted",
+  recordedAtUtc: "2026-08-20T00:00:00.000Z",
+  reasonCodes: ["bounded_certified_trial_started"],
+  evidenceIds: [],
+});
+await eventRepository.writeEvent(attemptedEvent);
+const failedEvent = await modules.trialControls.buildLrsR1TrialEvent({
+  trialId: selectedTrialIds[0],
+  sequence: 1,
+  disposition: "failed",
+  recordedAtUtc: "2026-08-20T00:01:00.000Z",
+  reasonCodes: ["bounded_child_failed"],
+  evidenceIds: [`sha256:${"2".repeat(64)}`],
+  previousEventId: attemptedEvent.eventId,
+});
+await eventRepository.writeEvent(failedEvent);
+assert.equal(await nextR1TrialEventSequence({ storage: opened.storage,
+  previousEventId: failedEvent.eventId, trialId: selectedTrialIds[0] }), 2);
+await assert.rejects(nextR1TrialEventSequence({ storage: opened.storage,
+  previousEventId: failedEvent.eventId, trialId: selectedTrialIds[1] }), /lineage/);
+await assert.rejects(nextR1TrialEventSequence({ storage: opened.storage,
+  previousEventId: `sha256:${"9".repeat(64)}`, trialId: selectedTrialIds[0] }), /missing/);
 
 const updated = await writeR1ControllerCheckpoint({
   modules,
@@ -138,6 +166,9 @@ const boundedControllerSource = fs.readFileSync(
   "utf8",
 );
 assert.match(boundedControllerSource, /\["--expose-gc", "scripts\/run-liquidity-reclaim-scalper-r1-trial\.mjs"\]/);
+assert.match(boundedControllerSource, /disposition\.disposition === "failed"/);
+assert.match(boundedControllerSource, /authorized_bounded_child_failure_resume/);
+assert.match(boundedControllerSource, /nextR1TrialEventSequence/);
 
 const duplicateTrial = accepted.definitions.find(
   (item) => item.initialDisposition === "coalesced_duplicate",

@@ -152,6 +152,18 @@ export async function sealR1ControllerCheckpoint(modules, input) {
   return Object.freeze({ ...core, checkpointId: await modules.canonical.canonicalHash(core) });
 }
 
+export async function nextR1TrialEventSequence({ storage, previousEventId, trialId }) {
+  if (previousEventId === undefined) return 0;
+  const text = await storage.adapter.readText(`events/${previousEventId.replace(":", "_")}.json`);
+  if (text === undefined) throw new Error("LRS R1 previous trial event is missing.");
+  const event = JSON.parse(text);
+  if (event.eventId !== previousEventId || event.trialId !== trialId ||
+      !Number.isInteger(event.sequence) || event.sequence < 0) {
+    throw new Error("LRS R1 previous trial event lineage is invalid.");
+  }
+  return event.sequence + 1;
+}
+
 export async function validateR1ControllerCheckpoint(modules, checkpoint, expected) {
   const { checkpointId, ...core } = checkpoint;
   if (checkpoint.schemaVersion !== R1_EXECUTOR_SCHEMA_VERSION || checkpoint.mode !== expected.mode ||
