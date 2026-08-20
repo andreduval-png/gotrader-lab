@@ -70,6 +70,8 @@ const candidateBase = (input: IctI2DetectionInput, parameters: Ict2022Parameters
   parameterHash: parameterHash("gotrader.ict.i2.2022.parameters.v1", parameters),
   sourceFingerprint: input.sourceFingerprint,
   datasetCertificateId: input.dataset?.datasetCertificateId,
+  symbol: input.facts[0]?.symbol,
+  timeframe: input.facts[0]?.timeframe,
   marketTimestamp: input.asOf,
   authority: ICT_I2_AUTHORITY,
   researchValidated: false as const

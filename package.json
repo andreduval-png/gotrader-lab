@@ -12,6 +12,7 @@
     "test:ict-judas-causality": "node scripts/test-ict-judas-causality.mjs",
     "test:ict-i2-bt2": "node scripts/test-ict-i2-bt2.mjs",
     "test:ict-i2-current-read": "node scripts/test-ict-i2-current-read.mjs",
+    "test:ict-i2-governance": "node scripts/test-ict-i2-governance.mjs",
     "dev": "vite --host 127.0.0.1",
     "start:local-stack": "node scripts/start-local-stack.mjs",
     "stop:local-stack": "node scripts/stop-local-stack.mjs",

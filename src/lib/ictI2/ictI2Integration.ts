@@ -15,6 +15,8 @@ export interface IctI2Bt2Request {
   parameterHash: string;
   sourceFingerprint: string;
   datasetCertificateId: string;
+  symbol: NonNullable<IctI2ModelCandidate<string>["symbol"]>;
+  timeframe: NonNullable<IctI2ModelCandidate<string>["timeframe"]>;
   direction: "long" | "short";
   marketTimestamp: string;
   entryZone: readonly [number, number];
@@ -38,8 +40,9 @@ export const adaptIctI2CandidateToBt2 = <State extends string>(candidate: IctI2M
   if (candidate.state !== "ACTIVE") blockers.push(`Candidate state ${candidate.state} is not ACTIVE.`);
   if (!candidate.geometry) blockers.push("Canonical geometry intent is missing.");
   if (!candidate.datasetCertificateId) blockers.push("Accepted dataset certificate identity is missing.");
+  if (!candidate.symbol || !candidate.timeframe) blockers.push("Candidate symbol/timeframe identity is missing.");
   if (candidate.direction === "none") blockers.push("Directional candidate is missing.");
-  if (blockers.length || !candidate.geometry || !candidate.datasetCertificateId || candidate.direction === "none") {
+  if (blockers.length || !candidate.geometry || !candidate.datasetCertificateId || !candidate.symbol || !candidate.timeframe || candidate.direction === "none") {
     return { status: "blocked", blockers: Array.from(new Set(blockers)) };
   }
   const entryZone = Array.isArray(candidate.geometry.entry)
@@ -57,6 +60,8 @@ export const adaptIctI2CandidateToBt2 = <State extends string>(candidate: IctI2M
       parameterHash: candidate.parameterHash,
       sourceFingerprint: candidate.sourceFingerprint,
       datasetCertificateId: candidate.datasetCertificateId,
+      symbol: candidate.symbol,
+      timeframe: candidate.timeframe,
       direction: candidate.direction,
       marketTimestamp: candidate.marketTimestamp,
       entryZone: entryZone as readonly [number, number],

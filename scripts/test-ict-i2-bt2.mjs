@@ -16,6 +16,8 @@ for (const candidate of candidates) {
   assert.equal(adapted.status, "ready");
   assert.equal(adapted.request.ambiguityPolicyOwner, "BT2");
   assert.equal(adapted.request.outcomePolicyOwner, "BT2");
+  assert.equal(adapted.request.symbol, "NQ");
+  assert.equal(adapted.request.timeframe, "5m");
   assert(!("outcome" in adapted.request));
   assert(ict.assertCompactIctI2Bt2Request(adapted.request).ok);
 }
