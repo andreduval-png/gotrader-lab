@@ -1,4 +1,5 @@
 export * from "@/lib/ictI2/ict2022Model";
+export * from "@/lib/ictI2/ictJudasSwingModel";
 export * from "@/lib/ictI2/ictPowerOfThreeModel";
 export * from "@/lib/ictI2/ictI2Registry";
 export * from "@/lib/ictI2/ictI2Shared";
