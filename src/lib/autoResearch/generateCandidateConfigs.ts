@@ -616,7 +616,7 @@ export function generateCandidateConfigs(
         baseline,
         searchMode,
         "ICT + full-stack strict gate",
-        "Stress-test whether the full Grinch refinement stack reduces mistimed ICT entries, weak PD reactions, and profile mismatch false positives.",
+        "Stress-test whether the full Grinch refinement stack reduces mistimed ICT entries, weak PD reactions, and attributed profile-mismatch losses.",
         {
           minimumConfluenceThreshold: round(clamp01(Math.max(0.58, baseline.minimumConfluenceThreshold + 0.1)), 2),
           minimumConfidenceThreshold: round(clamp01(Math.max(0.55, baseline.minimumConfidenceThreshold + 0.08)), 2),
@@ -1319,7 +1319,7 @@ export function generateAdaptiveCandidateConfigs({
       candidates,
       baseline,
       "Adaptive false-positive filter",
-      "False positives were too high, so this pass raises confluence without broadening the search.",
+      "Attributed avoidable losses were too high, so this pass raises confluence without broadening the search.",
       { minimumConfluenceThreshold: stricterConfluence },
       ["confluenceThreshold"]
     );
@@ -1327,7 +1327,7 @@ export function generateAdaptiveCandidateConfigs({
       candidates,
       baseline,
       "Adaptive confidence filter",
-      "False positives were too high, so this pass raises minimum confidence.",
+      "Attributed avoidable losses were too high, so this pass raises minimum confidence.",
       { minimumConfidenceThreshold: stricterConfidence },
       ["confidenceThreshold"]
     );
@@ -1335,7 +1335,7 @@ export function generateAdaptiveCandidateConfigs({
       candidates,
       baseline,
       "Adaptive NY AM false-positive check",
-      "False positives were too high, so this pass removes weaker session exposure.",
+      "Attributed avoidable losses were too high, so this pass removes weaker session exposure.",
       { sessionFilter: "NY AM Kill Zone" },
       ["sessionFilter"]
     );

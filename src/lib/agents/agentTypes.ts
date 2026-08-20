@@ -74,10 +74,20 @@ export interface CIOSynthesisResult {
   thesisSummary: string;
   reasoningSummary: string;
   riskNotes: string;
-  invalidationLevel: number;
-  targetLiquidity: number;
-  entryZone: [number, number];
-  riskReward: number;
+  pricePlan?: {
+    invalidationLevel: number;
+    targetLiquidity: number;
+    entryZone: [number, number];
+    riskReward: number;
+  };
+  /** @deprecated Read pricePlan; absent means canonical price geometry is unavailable. */
+  invalidationLevel?: number;
+  /** @deprecated Read pricePlan; absent means canonical price geometry is unavailable. */
+  targetLiquidity?: number;
+  /** @deprecated Read pricePlan; absent means canonical price geometry is unavailable. */
+  entryZone?: [number, number];
+  /** @deprecated Read pricePlan; absent means canonical price geometry is unavailable. */
+  riskReward?: number;
   activeAgentCount: number;
   abstainingAgentCount: number;
   evidenceCoverage: number;

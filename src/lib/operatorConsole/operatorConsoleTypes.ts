@@ -32,11 +32,14 @@ export interface OperatorInsightSummary {
 
 export interface OperatorCycleState {
   cycleId?: string;
+  ownerTabId?: string;
+  ownerInstanceId?: string;
   status: OperatorCycleStatus;
   stage: OperatorCycleStage;
   progressPercent: number;
   message: string;
   startedAt?: string;
+  heartbeatAt?: string;
   completedAt?: string;
   lastError?: string;
   sourceFingerprint?: string;
@@ -124,6 +127,10 @@ export type OperatorResearchPlanStatus = "complete" | "partial" | "no_trade" | "
 
 export interface OperatorResearchPlanSummary {
   status: OperatorResearchPlanStatus;
+  planIdentityStatus: "current" | "pending_cycle" | "legacy_unbound" | "stale_cycle" | "source_mismatch" | "candidate_mismatch" | "unavailable";
+  cycleId?: string;
+  currentReadEvaluatedAt?: string;
+  currentCandidateId?: string;
   setup: string;
   side: "long" | "short" | "flat";
   setupDirection: "bullish" | "bearish" | "neutral";
@@ -137,10 +144,20 @@ export interface OperatorResearchPlanSummary {
   entryPriceMethod?: "canonical_candidate" | "zone_midpoint" | "rr_implied_recovery";
   stopLoss?: number;
   takeProfit?: number;
+  targetProvenance?: {
+    type: string;
+    sourceTimeframe?: string;
+    selectionReason: string;
+    distancePoints?: number;
+    rr?: number;
+    minimumRR: number;
+    gateStatus: "accepted" | "rejected" | "unavailable";
+    rejectionReasons: string[];
+  };
   riskReward?: number;
   riskScreeningStatus: string;
   riskScreeningReason: string;
-  accountRiskEvaluation: "not_evaluated";
+  accountRiskEvaluation: "external_simulation_required";
   recommendedMaxRiskPerTradePct?: number;
   sourceFingerprint?: string;
   generatedAt?: string;

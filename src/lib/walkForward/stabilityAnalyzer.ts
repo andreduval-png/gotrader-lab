@@ -44,6 +44,11 @@ const defaultEvidenceRules: WalkForwardEvidenceRules = {
   minimumTotalOosTrades: 20
 };
 
+const avoidableLossScore = (metrics: WalkForwardWindowMetrics) =>
+  typeof metrics.attributedAvoidableLossCount === "number"
+    ? clamp(1 - metrics.attributedAvoidableLossCount / Math.max(1, metrics.totalTrades), 0, 1) * 100
+    : 50;
+
 const windowScore = (metrics: WalkForwardWindowMetrics) =>
   clamp(
     metrics.readinessScore * 0.28 +
@@ -51,7 +56,7 @@ const windowScore = (metrics: WalkForwardWindowMetrics) =>
       clamp(metrics.totalTrades / 8, 0, 1) * 100 * 0.16 +
       clamp((metrics.averageR + 0.3) / 0.9, 0, 1) * 100 * 0.16 +
       clamp(1 - metrics.maxDrawdownR / 8, 0, 1) * 100 * 0.14 +
-      clamp(1 - metrics.falsePositiveCount / Math.max(1, metrics.totalTrades + metrics.falsePositiveCount), 0, 1) * 100 * 0.08
+      avoidableLossScore(metrics) * 0.08
   );
 
 const overfitRiskFor = (windows: WalkForwardWindowResult[], outOfSample: WalkForwardWindowMetrics[]): WalkForwardOverfitRisk => {
@@ -394,7 +399,9 @@ export function analyzeWalkForwardStability(
   const averageRs = outOfSample.map((metrics) => metrics.averageR);
   const drawdowns = outOfSample.map((metrics) => metrics.maxDrawdownR);
   const tradeCounts = outOfSample.map((metrics) => metrics.totalTrades);
-  const falsePositives = outOfSample.map((metrics) => metrics.falsePositiveCount);
+  const attributedAvoidableLosses = outOfSample
+    .map((metrics) => metrics.attributedAvoidableLossCount)
+    .filter((value): value is number => typeof value === "number");
   const readinessScores = outOfSample.map((metrics) => metrics.readinessScore);
   const outOfSampleWindowsPassed = outOfSample.filter((metrics) => metrics.pass).length;
   const windowsPassed = windows.filter((window) => window.verdict === "pass").length;
@@ -426,14 +433,16 @@ export function analyzeWalkForwardStability(
   const averageWinRate = average(winRates);
   const averageRConsistency = consistencyScore(averageRs, 0.45);
   const tradeCountConsistency = consistencyScore(tradeCounts, 12);
-  const falsePositiveConsistency = consistencyScore(falsePositives, 12);
+  const attributedAvoidableLossConsistency = attributedAvoidableLosses.length
+    ? consistencyScore(attributedAvoidableLosses, 12)
+    : 50;
   const readinessConsistency = consistencyScore(readinessScores, 35);
   const stabilityScore = round(
     clamp(
       average(outOfSample.map(windowScore)) * 0.34 +
         averageRConsistency * 0.18 +
         tradeCountConsistency * 0.12 +
-        falsePositiveConsistency * 0.12 +
+        attributedAvoidableLossConsistency * 0.12 +
         readinessConsistency * 0.14 +
         outOfSamplePassRate * 100 * 0.1 -
         (overfitRisk === "high" ? 22 : overfitRisk === "medium" ? 10 : 0)
@@ -470,7 +479,8 @@ export function analyzeWalkForwardStability(
     worstWindowAverageR: round(averageRs.length ? Math.min(...averageRs) : 0, 2),
     worstWindowDrawdownR: round(drawdowns.length ? Math.max(...drawdowns) : 0, 2),
     tradeCountConsistency: round(tradeCountConsistency, 0),
-    falsePositiveConsistency: round(falsePositiveConsistency, 0),
+    attributedAvoidableLossConsistency: round(attributedAvoidableLossConsistency, 0),
+    falsePositiveConsistency: round(attributedAvoidableLossConsistency, 0),
     readinessConsistency: round(readinessConsistency, 0),
     overfitRisk,
     stabilityScore,

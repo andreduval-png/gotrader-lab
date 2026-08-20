@@ -515,16 +515,18 @@ export function ReplayView() {
                   <div className="rounded-lg border border-border bg-background/45 p-3">
                     <p className="text-xs text-muted-foreground">Entry</p>
                     <p className="mt-1 font-mono text-sm">
-                      {activeThesis.simulatedTradePlan.entryZone[0]} - {activeThesis.simulatedTradePlan.entryZone[1]}
+                      {activeThesis.simulatedTradePlan
+                        ? `${activeThesis.simulatedTradePlan.entryZone[0]} - ${activeThesis.simulatedTradePlan.entryZone[1]}`
+                        : "Unavailable"}
                     </p>
                   </div>
                   <div className="rounded-lg border border-border bg-background/45 p-3">
                     <p className="text-xs text-muted-foreground">Invalidation</p>
-                    <p className="mt-1 font-mono text-lg">{activeThesis.invalidationLevel}</p>
+                    <p className="mt-1 font-mono text-lg">{activeThesis.invalidationLevel ?? "Unavailable"}</p>
                   </div>
                   <div className="rounded-lg border border-border bg-background/45 p-3">
                     <p className="text-xs text-muted-foreground">Target</p>
-                    <p className="mt-1 font-mono text-lg">{activeThesis.targetLiquidity}</p>
+                    <p className="mt-1 font-mono text-lg">{activeThesis.targetLiquidity ?? "Unavailable"}</p>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{activeThesis.thesisSummary}</p>

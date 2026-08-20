@@ -1,5 +1,7 @@
 # Live Data Status Audit
 
+> Historical audit, superseded by `docs/tradingview-mcp-readonly-bridge.md` and `docs/gotrader-research-mcp.md` as of 2026-08-18. The conclusions below describe the earlier inspected state and must not be used as current operational status.
+
 ## Summary
 
 The app was not showing live chart data because the TradingView MCP and MT5 work added architecture contracts, authority boundaries, and planned adapter stubs, not a connected live market-data feed.

@@ -18,6 +18,23 @@ export const fingerprintCandles = (candles: Candle[], sourceType: ChartDataSourc
   const last = candles[candles.length - 1];
   const firstClose = compactNumber(first?.close);
   const lastClose = compactNumber(last?.close);
+  // Include every rendered value so provider corrections to an interior candle
+  // cannot leave the chart memoized against stale OHLCV data.
+  let contentHash = 2166136261;
+  for (const candle of candles) {
+    const row = [
+      candle.timestamp,
+      compactNumber(candle.open),
+      compactNumber(candle.high),
+      compactNumber(candle.low),
+      compactNumber(candle.close),
+      compactNumber(candle.volume)
+    ].join(":");
+    for (let index = 0; index < row.length; index += 1) {
+      contentHash ^= row.charCodeAt(index);
+      contentHash = Math.imul(contentHash, 16777619);
+    }
+  }
   return [
     sourceType,
     sourceLabel,
@@ -25,7 +42,8 @@ export const fingerprintCandles = (candles: Candle[], sourceType: ChartDataSourc
     first?.timestamp ?? "no-first",
     firstClose ?? "no-first-close",
     last?.timestamp ?? "no-last",
-    lastClose ?? "no-last-close"
+    lastClose ?? "no-last-close",
+    (contentHash >>> 0).toString(16).padStart(8, "0")
   ].join("|");
 };
 

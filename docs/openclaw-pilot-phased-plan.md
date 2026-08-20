@@ -1,6 +1,6 @@
 # OpenClaw Pilot Phased Plan
 
-Last updated: 2026-06-11
+Last updated: 2026-08-17
 
 ## Purpose
 
@@ -156,7 +156,8 @@ Use existing research-memory contracts first:
 - `GoTraderWalkForwardMemory`
 - `GoTraderSelfImprovementMemory`
 - `GoTraderGapAnalysisMemory`
-- `GoTraderAgentMetricMemory`
+
+An earlier fifth agent-metric packet proposal is intentionally omitted. GoTrader does not currently have an immutable, source-bound producer for that packet family, so the canonical contract must not advertise or synthesize it.
 
 Add OpenClaw pilot memory/audit envelopes only as wrappers around compact summaries. Do not duplicate candle arrays or runtime snapshots.
 

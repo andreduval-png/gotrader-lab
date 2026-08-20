@@ -131,7 +131,7 @@ export const buildSwingLevelOverlays = (candles: Candle[], swings: SwingPoint[],
     .filter((overlay): overlay is TradingChartLineOverlay => Boolean(overlay));
 
 export const buildTradePlanOverlays = (candles: Candle[], thesis?: TradeThesis): TradingChartLineOverlay[] => {
-  if (!thesis) {
+  if (!thesis?.simulatedTradePlan || thesis.targetLiquidity === undefined || thesis.invalidationLevel === undefined) {
     return [];
   }
 
@@ -197,7 +197,7 @@ export const buildIctMarkers = ({
     type: "sweep" as const
   }));
 
-  const thesisMarkers: TradingChartMarker[] = thesis
+  const thesisMarkers: TradingChartMarker[] = thesis?.simulatedTradePlan
     ? [
         {
           direction: thesis.finalBias,

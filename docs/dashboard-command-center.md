@@ -120,7 +120,7 @@ The dashboard includes a single safe control: **Run AI Research Cycle**. It runs
 
 1. Generate or refresh the research thesis with ICT context and CIO synthesis.
 2. Run a structured agent debate and store moderator consensus.
-3. Run a mock-data backtest with the active Backtest Lab config.
+3. Run an identity-bound backtest on the active eligible non-mock source with the active Backtest Lab config.
 4. Try the local LLM advisory bridge.
 5. Continue with deterministic simulation steps if the bridge is unavailable.
 6. Run multi-pass Auto Research configuration search.

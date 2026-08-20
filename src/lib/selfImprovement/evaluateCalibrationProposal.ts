@@ -30,11 +30,14 @@ const profitFactorAverage = (scenarios: ValidationScenarioResult[]) => {
   return values.length ? round(average(values), 2) : null;
 };
 
-/** Approximate stop-hit count from scenario win rate (resolved trades only). */
-export const estimateFalsePositives = (scenarios: ValidationScenarioResult[]) =>
+/** Approximate aggregate loss count from scenario win rate (resolved trades only). */
+export const estimateLossCount = (scenarios: ValidationScenarioResult[]) =>
   Math.round(
     scenarios.reduce((sum, scenario) => sum + scenario.totalTrades * Math.max(0, 1 - scenario.winRate), 0)
   );
+
+/** @deprecated Use estimateLossCount. Aggregate losses are not false-positive attribution. */
+export const estimateFalsePositives = estimateLossCount;
 
 export function summarizeValidationMetrics(report: ValidationSuiteReport): CalibrationProposalMetrics {
   const scenarios = report.scenarios;
@@ -45,11 +48,19 @@ export function summarizeValidationMetrics(report: ValidationSuiteReport): Calib
   const averageR = average(scenarios.map((scenario) => scenario.averageR));
   const maxDrawdown = Math.max(...scenarios.map((scenario) => scenario.maxDrawdown));
   const confidenceCalibration = average(scenarios.map((scenario) => scenario.confidenceCalibration.score));
-  const falsePositiveCount = estimateFalsePositives(scenarios);
+  const estimatedLossCount = estimateLossCount(scenarios);
+  const stopHitCount = scenarios.reduce(
+    (sum, scenario) => sum + (scenario.qualityTelemetry?.stopHitCount ?? 0),
+    0
+  );
+  const attributedAvoidableLossCount = scenarios.reduce(
+    (sum, scenario) => sum + (scenario.qualityTelemetry?.attributedStopHitCount ?? 0),
+    0
+  );
   const stabilityScore = clamp(
     100 -
       maxDrawdown * 8 -
-      falsePositiveCount * 3 +
+      attributedAvoidableLossCount * 3 +
       confidenceCalibration * 18 +
       Math.min(totalTrades, 12) * 1.5,
     0,
@@ -65,7 +76,10 @@ export function summarizeValidationMetrics(report: ValidationSuiteReport): Calib
     maxDrawdown: round(maxDrawdown, 2),
     profitFactor: profitFactorAverage(scenarios),
     skippedSignals,
-    falsePositiveCount,
+    stopHitCount: stopHitCount || estimatedLossCount,
+    estimatedLossCount,
+    attributedAvoidableLossCount,
+    falsePositiveCount: attributedAvoidableLossCount,
     confidenceCalibration: round(confidenceCalibration, 3),
     readinessScore: report.calibration.readinessScore,
     readinessStatus: report.calibration.readinessStatus,

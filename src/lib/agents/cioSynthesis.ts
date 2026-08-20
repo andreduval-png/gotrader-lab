@@ -3,17 +3,6 @@ import { summarizeInternalAgentParticipation } from "@/lib/agents/agentEvidenceP
 import type { FuturesSymbol, ICTContext, MarketBias, ThesisInput } from "@/lib/types";
 import { clamp } from "@/lib/utils";
 
-const basePriceBySymbol: Partial<Record<FuturesSymbol, number>> = {
-  ES: 5265,
-  NQ: 18880,
-  MES: 5265,
-  MNQ: 18880,
-  YM: 39000,
-  XAUUSD: 2300,
-  EURUSD: 1.08,
-  BTCUSD: 65000
-};
-
 const biasToScore = (bias: MarketBias) => (bias === "bullish" ? 1 : bias === "bearish" ? -1 : 0);
 
 const scoreToBias = (score: number): MarketBias => {
@@ -31,14 +20,19 @@ const latestUnmitigatedGapMidpoint = (ictContext: ICTContext, bias: MarketBias, 
   return gap?.midpoint ?? fallback;
 };
 
+const canonicalCurrentPrice = (ictContext: ICTContext) => {
+  const value = ictContext.premiumDiscountZone.currentPrice;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
 function buildLevels(input: ThesisInput, finalBias: MarketBias, ictContext: ICTContext) {
-  const fallbackBase = basePriceBySymbol[input.symbol] ?? 1;
-  const rawCurrentPrice = ictContext.premiumDiscountZone.currentPrice || fallbackBase;
-  const base = basePriceBySymbol[input.symbol] ?? rawCurrentPrice;
+  const rawCurrentPrice = canonicalCurrentPrice(ictContext);
+  if (rawCurrentPrice === undefined) {
+    return undefined;
+  }
   const unit = input.symbol.includes("NQ") ? 16 : input.symbol === "EURUSD" ? 0.001 : input.symbol === "XAUUSD" ? 2 : input.symbol === "BTCUSD" ? 100 : 5;
-  const scale = input.symbol === "ES" || input.symbol === "MES" ? base / Math.max(1, rawCurrentPrice) : 1;
-  const scaleLevel = (value: number | undefined, fallback: number) => Number(((value ?? fallback) * scale).toFixed(2));
-  const currentPrice = scaleLevel(rawCurrentPrice, base);
+  const scaleLevel = (value: number | undefined, fallback: number) => Number((value ?? fallback).toFixed(2));
+  const currentPrice = scaleLevel(rawCurrentPrice, rawCurrentPrice);
   const equilibrium = scaleLevel(ictContext.premiumDiscountZone.equilibrium, currentPrice);
   const latestSwingHigh = scaleLevel(ictContext.latestSwingHigh?.price, currentPrice + unit * 2);
   const latestSwingLow = scaleLevel(ictContext.latestSwingLow?.price, currentPrice - unit * 2);
@@ -85,31 +79,42 @@ export function synthesizeCIO(input: ThesisInput, ictContext: ICTContext, opinio
   const totalWeight = activeOpinions.reduce((sum, opinion) => sum + opinion.weight, 0) || 1;
   const weightedDirectionalScore =
     activeOpinions.reduce((sum, opinion) => sum + biasToScore(opinion.bias) * opinion.confidence * opinion.weight, 0) / totalWeight;
-  const finalBias = activeOpinions.length ? scoreToBias(weightedDirectionalScore) : "neutral";
+  const priceEvidenceAvailable = canonicalCurrentPrice(ictContext) !== undefined;
+  const finalBias = activeOpinions.length && priceEvidenceAvailable ? scoreToBias(weightedDirectionalScore) : "neutral";
   const avgConfidence = activeOpinions.reduce((sum, opinion) => sum + opinion.confidence * opinion.weight, 0) / totalWeight;
   const rawConfidence = 0.38 + Math.abs(weightedDirectionalScore) * 0.46 + avgConfidence * 0.24;
   const evidenceCoverageCap = 0.3 + participation.evidenceCoverage * 0.58;
-  const confidence = activeOpinions.length ? clamp(Math.min(rawConfidence, evidenceCoverageCap), 0.2, 0.88) : 0.2;
-  const levels = buildLevels(input, finalBias, ictContext);
+  const confidence = activeOpinions.length && priceEvidenceAvailable
+    ? clamp(Math.min(rawConfidence, evidenceCoverageCap), 0.2, 0.88)
+    : 0.2;
+  const pricePlan = buildLevels(input, finalBias, ictContext);
   const aligned = activeOpinions.filter((opinion) => opinion.bias === finalBias);
   const warnings = [...new Set(opinions.flatMap((opinion) => opinion.warningFactors))];
   const topFactors = aligned.flatMap((opinion) => opinion.supportingFactors).slice(0, 5);
   const thesisSummary =
     finalBias === "neutral"
-      ? `${input.symbol} ${input.timeframe} remains neutral because evidence-participating agents do not show enough weighted directional agreement.`
+      ? priceEvidenceAvailable
+        ? `${input.symbol} ${input.timeframe} remains neutral because evidence-participating agents do not show enough weighted directional agreement.`
+        : `${input.symbol} ${input.timeframe} remains neutral because canonical current-price evidence is unavailable.`
       : `${input.symbol} ${input.timeframe} CIO thesis is ${finalBias}; ${aligned.length} evidence-participating agent(s) align with the weighted synthesis.`;
   const riskNotes =
     finalBias === "neutral"
-      ? "Simulation remains neutral until internal agents agree on structure, timing, and risk/reward."
-      : `Simulation invalidates at ${levels.invalidationLevel}; warnings: ${warnings.slice(0, 3).join("; ") || "no major internal-agent veto"}. No order execution.`;
+      ? priceEvidenceAvailable
+        ? "Simulation remains neutral until internal agents agree on structure, timing, and risk/reward."
+        : "Simulation remains neutral and price levels are unavailable until canonical current-price evidence is present."
+      : `Simulation invalidates at ${pricePlan?.invalidationLevel}; warnings: ${warnings.slice(0, 3).join("; ") || "no major internal-agent veto"}. No order execution.`;
   const targetLogic =
-    finalBias === "neutral"
-      ? `Target logic remains balance-oriented near ${levels.targetLiquidity}.`
-      : `Target logic uses the next ICT liquidity reference at ${levels.targetLiquidity}.`;
+    !pricePlan
+      ? "Target logic is unavailable because canonical price evidence is missing."
+      : finalBias === "neutral"
+        ? `Target logic remains balance-oriented near ${pricePlan.targetLiquidity}.`
+        : `Target logic uses the next ICT liquidity reference at ${pricePlan.targetLiquidity}.`;
   const invalidationLogic =
-    finalBias === "neutral"
-      ? `Invalidation logic references the lower dealing range at ${levels.invalidationLevel}.`
-      : `Invalidation logic uses the opposite ICT structure level at ${levels.invalidationLevel}.`;
+    !pricePlan
+      ? "Invalidation logic is unavailable because canonical price evidence is missing."
+      : finalBias === "neutral"
+        ? `Invalidation logic references the lower dealing range at ${pricePlan.invalidationLevel}.`
+        : `Invalidation logic uses the opposite ICT structure level at ${pricePlan.invalidationLevel}.`;
 
   return {
     finalBias,
@@ -117,10 +122,15 @@ export function synthesizeCIO(input: ThesisInput, ictContext: ICTContext, opinio
     thesisSummary,
     reasoningSummary: `CIO synthesized ${participation.activeAgentCount} active agent(s); ${participation.abstainingAgentCount} abstained. Evidence coverage ${Math.round(participation.evidenceCoverage * 100)}%. Weighted score ${weightedDirectionalScore.toFixed(2)}. ${invalidationLogic} ${targetLogic}`,
     riskNotes,
-    invalidationLevel: levels.invalidationLevel,
-    targetLiquidity: levels.targetLiquidity,
-    entryZone: levels.entryZone,
-    riskReward: levels.riskReward,
+    pricePlan,
+    ...(pricePlan
+      ? {
+          invalidationLevel: pricePlan.invalidationLevel,
+          targetLiquidity: pricePlan.targetLiquidity,
+          entryZone: pricePlan.entryZone,
+          riskReward: pricePlan.riskReward
+        }
+      : {}),
     activeAgentCount: participation.activeAgentCount,
     abstainingAgentCount: participation.abstainingAgentCount,
     evidenceCoverage: Number(participation.evidenceCoverage.toFixed(4)),

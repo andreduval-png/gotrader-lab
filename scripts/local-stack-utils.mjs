@@ -54,6 +54,14 @@ export const serviceDefinitions = [
     healthUrls: [`http://${stackHost}:8787/health`, `http://${stackHost}:8787/`]
   },
   {
+    id: "research-mcp",
+    label: "GoTrader Research MCP",
+    port: 7332,
+    required: true,
+    defaultEnabled: true,
+    healthUrls: [`http://${stackHost}:7332/health`]
+  },
+  {
     id: "tradingview-mcp",
     label: "TradingView MCP bridge",
     port: 7331,

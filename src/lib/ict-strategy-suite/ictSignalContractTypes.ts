@@ -1,4 +1,4 @@
-import type { IctBias, IctLocation, IctSide } from "./ictAdvisorTypes";
+import type { IctBias, IctLocation, IctSide, IctTargetProvenance } from "./ictAdvisorTypes";
 import type { IctApprovedCandidateStatus, IctHtfAlignmentBreakdown } from "./ictApprovedSetupProfileTypes";
 import type { IctCmdIndependentDateGateStatus } from "./ictCmdIndependentDateGateTypes";
 import type { IctModelQualityLane } from "./ictCurrentReadTypes";
@@ -89,6 +89,7 @@ export interface IctResearchSignal {
   entryZone?: IctResearchSignalEntryZone;
   invalidation?: number;
   target?: number;
+  targetProvenance?: IctTargetProvenance;
   rrEstimate?: number;
   confidence?: number;
   approvedProfileStatus?: IctApprovedCandidateStatus;

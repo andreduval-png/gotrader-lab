@@ -464,7 +464,7 @@ export function ResearchQualityView() {
 
           <TechnicalDetails
             title="View detailed quality analysis"
-            description="Open for session tables, threshold sensitivity, false positives, drawdown clusters, agent analysis, and target quality."
+            description="Open for session tables, threshold sensitivity, avoidable-loss attribution, drawdown clusters, agent analysis, and target quality."
           >
           <div className="grid gap-5 xl:grid-cols-2">
             <Card>

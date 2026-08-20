@@ -414,6 +414,12 @@ async function main() {
   assert.equal(eligible.qualityAttribution.attributedInvalidationCount, 8);
   assert.equal(eligible.qualityAttribution.attributionCoverage, 1);
   assert.equal(eligible.qualityAttribution.failureCauses[0]?.causeCode, "session_window_mismatch");
+  assert.equal(eligible.qualityAttribution.failureCauses[0]?.contextAssociated, true);
+  assert.equal(
+    eligible.qualityAttribution.failureCauses[0]?.directlyAttributed,
+    undefined,
+    "forward context flags must not be serialized as causal attribution"
+  );
   assert.equal(eligible.qualityAttribution.sessionLanes.filter((lane) => lane.side === "all").length, 2);
   assert.equal(eligible.qualityAttribution.strongestSessionLane?.status, "stable_research");
   assert.ok((eligible.qualityAttribution.strongestSessionLane?.costAdjustedAverageR05 ?? 0) > 0);

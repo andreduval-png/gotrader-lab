@@ -208,8 +208,13 @@ class Mt5ReadOnlyHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
         self.send_header("Access-Control-Allow-Methods", "GET,OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            # Local health/data callers can time out while MT5 IPC is recovering.
+            # Their disconnect must not flood logs or affect the server process.
+            return
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self.send_json(204, {})
@@ -400,7 +405,11 @@ def main() -> None:
 
     state = Mt5ReadOnlyState(args.path)
     if not state.ensure_connected():
-        raise SystemExit(state.last_error or "Unable to attach to the logged-in MT5 terminal.")
+        print(
+            "MT5 terminal is not ready; starting the read-only upstream in degraded mode. "
+            f"Live status and market-data requests will retry the terminal connection. Last error: {state.last_error}",
+            flush=True,
+        )
 
     server = ThreadingHTTPServer((args.host, args.port), Mt5ReadOnlyHandler)
     server.state = state  # type: ignore[attr-defined]

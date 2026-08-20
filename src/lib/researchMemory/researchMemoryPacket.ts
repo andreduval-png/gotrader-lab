@@ -154,7 +154,7 @@ function buildMetrics(cycle: ResearchCycleRun | undefined): GoTraderResearchMemo
   const canonicalMetrics: CanonicalPerformanceMetrics | undefined = canonicalMetricsForRun(cycle);
   const backtest = cycle?.backtestSummary;
   const sampleSize = canonicalMetrics?.totalTrades ?? backtest?.totalTrades ?? 0;
-  const falsePositiveCount = finiteNumberOrNull(canonicalMetrics?.falsePositiveCount);
+  const attributedAvoidableLossCount = finiteNumberOrNull(canonicalMetrics?.attributedAvoidableLossCount);
 
   return {
     netR: finiteNumberOrNull(canonicalMetrics?.realizedR ?? backtest?.realizedR),
@@ -163,7 +163,8 @@ function buildMetrics(cycle: ResearchCycleRun | undefined): GoTraderResearchMemo
     winRate: finiteNumberOrNull(canonicalMetrics?.winRate ?? backtest?.winRate),
     maxDrawdownR: finiteNumberOrNull(canonicalMetrics?.maxDrawdownR ?? backtest?.maxDrawdown),
     sampleSize,
-    falsePositiveRate: pctOrNull(falsePositiveCount, sampleSize),
+    attributedAvoidableLossRate: pctOrNull(attributedAvoidableLossCount, sampleSize),
+    falsePositiveRate: pctOrNull(attributedAvoidableLossCount, sampleSize),
     processedCandles: cycle?.processedCandleCount ?? canonicalMetrics?.processedCandleCount ?? 0,
     rawCandles: cycle?.rawCandleCount ?? canonicalMetrics?.rawCandleCount ?? 0,
     metricStatus: sampleSize > 0 ? "simulated" : "unavailable"

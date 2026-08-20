@@ -2,6 +2,8 @@ import type { GoTraderResearchMemoryPacket } from "./researchMemoryTypes";
 
 export const GBRAIN_MEMORY_OUTBOX_STORAGE_KEY = "gotrader.gbrain-memory-outbox.v1";
 export const GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT = "gotrader-gbrain-memory-outbox-updated";
+export const RESEARCH_MEMORY_OUTBOX_STORAGE_KEY = GBRAIN_MEMORY_OUTBOX_STORAGE_KEY;
+export const RESEARCH_MEMORY_OUTBOX_UPDATED_EVENT = GBRAIN_MEMORY_OUTBOX_UPDATED_EVENT;
 const MAX_OUTBOX_ENTRIES = 250;
 
 export type GbrainMemoryOutboxStatus = "pending" | "delivered" | "failed";
@@ -38,14 +40,19 @@ export interface GbrainMemoryOutboxState {
   deliveryEnabled: boolean;
   endpointHost?: string;
   entries: GbrainMemoryOutboxEntry[];
-  safetyNotice: "gbrain memory is advisory only. GoTrader remains the research and readiness authority.";
+  safetyNotice: "AI-agent research memory is advisory only. GoTrader remains the research and readiness authority.";
 }
+
+export type ResearchMemoryOutboxStatus = GbrainMemoryOutboxStatus;
+export type ResearchMemoryDocument = GbrainMemoryDocument;
+export type ResearchMemoryOutboxEntry = GbrainMemoryOutboxEntry;
+export type ResearchMemoryOutboxState = GbrainMemoryOutboxState;
 
 const initialState = (): GbrainMemoryOutboxState => ({
   schemaVersion: 1,
   deliveryEnabled: false,
   entries: [],
-  safetyNotice: "gbrain memory is advisory only. GoTrader remains the research and readiness authority."
+  safetyNotice: "AI-agent research memory is advisory only. GoTrader remains the research and readiness authority."
 });
 
 let sessionState = initialState();
@@ -107,7 +114,7 @@ export function validateGbrainMemoryPacket(packet: GoTraderResearchMemoryPacket)
 export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket): GbrainMemoryDocument {
   const validation = validateGbrainMemoryPacket(packet);
   if (!validation.valid) {
-    throw new Error(`gbrain memory packet blocked: ${validation.blockedFields.join(", ")}`);
+    throw new Error(`Research memory packet blocked: ${validation.blockedFields.join(", ")}`);
   }
   const subjectId = packet.memoryType === "research_cycle" && packet.cycleId
     ? packet.cycleId
@@ -154,7 +161,7 @@ export function buildGbrainMemoryDocument(packet: GoTraderResearchMemoryPacket):
   ];
 
   return {
-    documentId: `gbrain_document_${packet.packetId}`,
+    documentId: `research_memory_document_${packet.packetId}`,
     path,
     title: `GoTrader ${packet.memoryType.replace(/_/g, " ")} ${subjectId}`,
     markdown: lines.join("\n"),
@@ -197,6 +204,10 @@ export function loadGbrainMemoryOutbox(): GbrainMemoryOutboxState {
   }
 }
 
+export const loadResearchMemoryOutbox = loadGbrainMemoryOutbox;
+export const validateResearchMemoryPacket = validateGbrainMemoryPacket;
+export const buildResearchMemoryDocument = buildGbrainMemoryDocument;
+
 export function setGbrainMemoryDeliveryEnabled(enabled: boolean, endpointHost?: string) {
   const state = loadGbrainMemoryOutbox();
   const sanitizedHost = (() => {
@@ -215,13 +226,15 @@ export function setGbrainMemoryDeliveryEnabled(enabled: boolean, endpointHost?: 
   });
 }
 
+export const setResearchMemoryDeliveryEnabled = setGbrainMemoryDeliveryEnabled;
+
 export function queueGbrainMemoryPacket(packet: GoTraderResearchMemoryPacket) {
   const document = buildGbrainMemoryDocument(packet);
   const state = loadGbrainMemoryOutbox();
   const existing = state.entries.find((entry) => entry.document.documentId === document.documentId);
   if (existing) return existing;
   const entry: GbrainMemoryOutboxEntry = {
-    outboxId: `gbrain_outbox_${packet.packetId}`,
+    outboxId: `research_memory_outbox_${packet.packetId}`,
     queuedAt: new Date().toISOString(),
     status: "pending",
     attemptCount: 0,
@@ -233,6 +246,8 @@ export function queueGbrainMemoryPacket(packet: GoTraderResearchMemoryPacket) {
   });
   return entry;
 }
+
+export const queueResearchMemoryPacket = queueGbrainMemoryPacket;
 
 const isLoopbackEndpoint = (endpoint: string) => {
   try {
@@ -268,7 +283,7 @@ export async function deliverPendingGbrainMemory(options: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry.document)
       });
-      if (!response.ok) throw new Error(`Local gbrain gateway returned HTTP ${response.status}.`);
+      if (!response.ok) throw new Error(`Local research-memory gateway returned HTTP ${response.status}.`);
       delivered += 1;
       updated.set(entry.outboxId, {
         ...entry,
@@ -285,10 +300,12 @@ export async function deliverPendingGbrainMemory(options: {
         status: "failed",
         attemptCount: entry.attemptCount + 1,
         lastAttemptAt: attemptedAt,
-        lastError: error instanceof Error ? error.message : "Local gbrain delivery failed."
+        lastError: error instanceof Error ? error.message : "Local research-memory delivery failed."
       });
     }
   }
   publish({ ...state, entries: state.entries.map((entry) => updated.get(entry.outboxId) ?? entry) });
   return { status: failed ? "completed_with_failures" as const : "completed" as const, delivered, failed };
 }
+
+export const deliverPendingResearchMemory = deliverPendingGbrainMemory;

@@ -73,6 +73,9 @@ export interface ResearchEvidenceCycleRecord {
     realizedR: number;
     profitFactor: number | null;
     maxDrawdownR: number;
+    stopHitCount?: number;
+    attributedAvoidableLossCount?: number;
+    /** @deprecated Compatibility alias for attributedAvoidableLossCount. */
     falsePositiveCount: number;
     skippedSignals: number;
   };

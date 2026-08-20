@@ -153,6 +153,8 @@ const runFixture = (cycleId, completedAt, options = {}) => ({
   evidenceSummary: { evidenceScore: 72, realEvidenceCoverage: 0.8, weakestEvidenceCategories: [], readinessEvidenceWarnings: [], nextDataImprovement: "Forward sample" },
   maturitySummary: { maturityScore: 68, maturityGrade: "developing", missingRequirements: [], maturityWarnings: [], nextMaturityRequirement: "More cycles" },
   readinessSnapshot: { state: "Research Ready" },
+  createdProposalId: options.proposalId,
+  proposalStatus: options.proposalId ? "proposed" : undefined,
   blockers: ["Forward sample incomplete."],
   promotionBlockers: ["Paper-Demo independent evidence incomplete."],
   nextRecommendedAction: "Collect untouched forward evidence.",
@@ -191,7 +193,9 @@ async function main() {
   const storage = await import(pathToFileURL(path.join(outRoot, "researchEvidenceLedgerStorage.mjs")).href);
   const gbrain = await import(pathToFileURL(path.join(outRoot, "gbrainMemoryOutbox.mjs")).href);
 
-  const first = builder.buildResearchEvidenceRecord(runFixture("cycle_1", "2026-07-18T14:00:00.000Z"));
+  const first = builder.buildResearchEvidenceRecord(runFixture("cycle_1", "2026-07-18T14:00:00.000Z", {
+    proposalId: "proposal_cycle_1"
+  }));
   const second = builder.buildResearchEvidenceRecord(runFixture("cycle_2", "2026-07-19T14:00:00.000Z", {
     fingerprint: "mt5_cycle_2",
     trades: 10,
@@ -231,25 +235,36 @@ async function main() {
   assert.equal(backfilled.totalRecords, 3, "backfill should add missing completed cycles and ignore duplicates");
 
   const packet = builder.buildResearchEvidenceMemoryPacket(first);
-  assert.deepEqual(gbrain.validateGbrainMemoryPacket(packet), { valid: true, blockedFields: [] });
-  const document = gbrain.buildGbrainMemoryDocument(packet);
+  const packetFamily = builder.buildResearchEvidenceMemoryPackets(first);
+  assert.deepEqual(packetFamily.map((item) => item.memoryType), [
+    "research_cycle",
+    "walk_forward",
+    "self_improvement",
+    "gap_analysis"
+  ]);
+  assert.equal(packetFamily.find((item) => item.memoryType === "walk_forward")?.windowsTested, 3);
+  assert.equal(packetFamily.find((item) => item.memoryType === "self_improvement")?.proposalId, "proposal_cycle_1");
+  packetFamily.forEach((item) => {
+    assert.deepEqual(gbrain.validateResearchMemoryPacket(item), { valid: true, blockedFields: [] });
+  });
+  const document = gbrain.buildResearchMemoryDocument(packet);
   assert.equal(document.path, "gotrader/research-cycle/cycle_1.md");
   assert.match(document.markdown, /executionAuthority: none/);
   assert.doesNotMatch(document.markdown, /(?:password|api key|account data|order data|position data):/i);
-  const queued = gbrain.queueGbrainMemoryPacket(packet);
-  assert.equal(gbrain.loadGbrainMemoryOutbox().deliveryEnabled, false);
+  const queued = gbrain.queueResearchMemoryPacket(packet);
+  assert.equal(gbrain.loadResearchMemoryOutbox().deliveryEnabled, false);
   assert.equal(queued.status, "pending");
-  assert.deepEqual(await gbrain.deliverPendingGbrainMemory({ endpoint: "http://127.0.0.1:8799/ingest" }), {
+  assert.deepEqual(await gbrain.deliverPendingResearchMemory({ endpoint: "http://127.0.0.1:8799/ingest" }), {
     status: "disabled", delivered: 0, failed: 0
   });
 
   window.localStorage.setItem(gbrain.GBRAIN_MEMORY_OUTBOX_STORAGE_KEY, JSON.stringify({ schemaVersion: 1, entries: [] }));
-  assert.equal(gbrain.loadGbrainMemoryOutbox().deliveryEnabled, false, "missing persisted flag must fail closed");
-  gbrain.queueGbrainMemoryPacket(packet);
-  gbrain.setGbrainMemoryDeliveryEnabled(true, "http://user:secret@127.0.0.1:8799/ingest?token=hidden");
-  assert.equal(gbrain.loadGbrainMemoryOutbox().endpointHost, "127.0.0.1:8799");
-  assert.equal((await gbrain.deliverPendingGbrainMemory({ endpoint: "https://example.com/ingest" })).status, "blocked_non_loopback_endpoint");
-  const delivered = await gbrain.deliverPendingGbrainMemory({
+  assert.equal(gbrain.loadResearchMemoryOutbox().deliveryEnabled, false, "missing persisted flag must fail closed");
+  gbrain.queueResearchMemoryPacket(packet);
+  gbrain.setResearchMemoryDeliveryEnabled(true, "http://user:secret@127.0.0.1:8799/ingest?token=hidden");
+  assert.equal(gbrain.loadResearchMemoryOutbox().endpointHost, "127.0.0.1:8799");
+  assert.equal((await gbrain.deliverPendingResearchMemory({ endpoint: "https://example.com/ingest" })).status, "blocked_non_loopback_endpoint");
+  const delivered = await gbrain.deliverPendingResearchMemory({
     endpoint: "http://127.0.0.1:8799/ingest",
     fetchImpl: async () => ({ ok: true, status: 200 })
   });
@@ -266,7 +281,7 @@ async function main() {
   const cycleSource = fs.readFileSync(path.join(root, "src/lib/researchCycle/runResearchCycle.ts"), "utf8");
   const proposalSource = fs.readFileSync(path.join(root, "src/lib/selfImprovement/createCalibrationProposal.ts"), "utf8");
   assert.match(cycleSource, /appendResearchEvidenceRecord/);
-  assert.match(cycleSource, /queueGbrainMemoryPacket/);
+  assert.match(cycleSource, /queueResearchMemoryPacket/);
   assert.match(proposalSource, /lifetimeEvidenceFor/);
   assert.match(proposalSource, /historical_context_only/);
 
@@ -274,8 +289,8 @@ async function main() {
     status: "passed",
     records: backfilled.totalRecords,
     profiles: backfilled.totalProfiles,
-    gbrainDefault: "disabled",
-    gbrainDelivery: delivered.status,
+    researchMemoryDefault: "disabled",
+    researchMemoryDelivery: delivered.status,
     authority: first.authority
   }, null, 2));
 }

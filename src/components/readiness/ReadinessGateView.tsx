@@ -110,7 +110,7 @@ export function ReadinessGateView() {
 
   const conservative = validation?.scenarios.find((scenario) => scenario.id === "conservative-confluence");
   const maxDrawdown = validation?.scenarios.reduce((max, scenario) => Math.max(max, scenario.maxDrawdown), 0) ?? 0;
-  const falsePositiveCount = quality?.falsePositivePatterns.reduce((sum, item) => sum + item.estimatedFalsePositives, 0) ?? 0;
+  const attributedAvoidableLossCount = quality?.failureAttribution?.attributedStopHitCount;
   const averageCalibration = validation?.scenarios.length
     ? validation.scenarios.reduce((sum, scenario) => sum + scenario.confidenceCalibration.score, 0) / validation.scenarios.length
     : 0;
@@ -530,7 +530,7 @@ export function ReadinessGateView() {
               ["Current readiness grade", quality?.readinessGrade ?? "missing"],
               ["Conservative scenario", conservative ? `${conservative.readiness}; ${conservative.averageR.toFixed(2)}R` : "missing"],
               ["Max drawdown", `${maxDrawdown.toFixed(2)}R`],
-              ["False positives", String(falsePositiveCount)],
+              ["Attributed avoidable losses", String(attributedAvoidableLossCount ?? "n/a")],
               ["Confidence calibration", formatPercent(averageCalibration)],
               ["Session consistency", sessionConsistency ? "pass" : "fail"],
               ["Runbook completion", `${runbookCompletionPercent}%`]
@@ -638,7 +638,7 @@ export function ReadinessGateView() {
             <div className="mt-2 space-y-1 text-muted-foreground">
               <div>{gate.researchQualitySnapshot?.generatedAt ?? "missing"}</div>
               <div>grade {gate.researchQualitySnapshot?.readinessGrade ?? "n/a"}</div>
-              <div>false positives {gate.researchQualitySnapshot?.falsePositiveCount ?? "n/a"}</div>
+              <div>attributed avoidable losses {gate.researchQualitySnapshot?.attributedAvoidableLossCount ?? "n/a"}</div>
             </div>
           </div>
           <div className="rounded-lg border border-border bg-background/45 p-3 text-sm">

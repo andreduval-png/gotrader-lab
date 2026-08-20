@@ -81,7 +81,12 @@ export function scoreCandidateConfig({
   const drawdownScore = clamp(100 - metrics.maxDrawdown * 14);
   const averageRScore = clamp(((metrics.averageR + 0.4) / 1.4) * 100);
   const winRateScore = clamp(metrics.winRate * 100);
-  const falsePositiveScore = clamp(100 - metrics.falsePositiveCount * 12);
+  const attribution = quality.failureAttribution;
+  const avoidableLossRate = attribution
+    ? attribution.attributedStopHitCount / Math.max(1, attribution.completedTradeCount)
+    : undefined;
+  // Missing attribution is neutral, never inferred from ordinary stop-hit losses.
+  const avoidableLossScore = typeof avoidableLossRate === "number" ? clamp((1 - avoidableLossRate) * 100) : 50;
   const confidenceCalibrationScore = clamp(metrics.confidenceCalibration * 100);
   const sessionScore = sessionConsistencyScore(quality);
   const tradeCountScore = clamp((metrics.totalTrades / AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES) * 100);
@@ -104,7 +109,7 @@ export function scoreCandidateConfig({
     drawdownScore * weights.lowerMaxDrawdown +
     averageRScore * weights.betterAverageR +
     winRateScore * weights.acceptableWinRate +
-    falsePositiveScore * weights.lowerFalsePositives +
+    avoidableLossScore * weights.lowerFalsePositives +
     confidenceCalibrationScore * weights.confidenceCalibration +
     sessionScore * weights.sessionConsistency +
     tradeCountScore * weights.sufficientTradeCount +
@@ -121,8 +126,7 @@ export function scoreCandidateConfig({
   );
   const stabilityImproved =
     metrics.maxDrawdown <= baselineMetrics.maxDrawdown &&
-    metrics.confidenceCalibration >= baselineMetrics.confidenceCalibration - 0.03 &&
-    metrics.falsePositiveCount <= baselineMetrics.falsePositiveCount + 1;
+    metrics.confidenceCalibration >= baselineMetrics.confidenceCalibration - 0.03;
   const sufficientSample =
     metrics.totalTrades >= AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES &&
     metrics.totalTrades >= Math.max(AUTO_RESEARCH_MINIMUM_SAMPLE_TRADES, baselineMetrics.totalTrades * 0.35);
@@ -132,7 +136,8 @@ export function scoreCandidateConfig({
     drawdownScore: round(drawdownScore),
     averageRScore: round(averageRScore),
     winRateScore: round(winRateScore),
-    falsePositiveScore: round(falsePositiveScore),
+    avoidableLossScore: round(avoidableLossScore),
+    falsePositiveScore: round(avoidableLossScore),
     confidenceCalibrationScore: round(confidenceCalibrationScore),
     sessionConsistencyScore: round(sessionScore),
     tradeCountScore: round(tradeCountScore),

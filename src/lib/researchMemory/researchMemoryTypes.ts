@@ -5,8 +5,7 @@ export type GoTraderResearchMemoryType =
   | "research_cycle"
   | "walk_forward"
   | "self_improvement"
-  | "gap_analysis"
-  | "agent_metric";
+  | "gap_analysis";
 
 export type GoTraderResearchMemoryMetricStatus =
   | "real"
@@ -88,6 +87,8 @@ export interface GoTraderResearchMemoryMetrics {
   winRate: number | null;
   maxDrawdownR: number | null;
   sampleSize: number;
+  attributedAvoidableLossRate: number | null;
+  /** @deprecated Compatibility alias for attributedAvoidableLossRate. */
   falsePositiveRate: number | null;
   processedCandles: number;
   rawCandles: number;
@@ -170,22 +171,11 @@ export interface GoTraderGapAnalysisMemory extends GoTraderResearchMemoryBase {
   recommendedExperiments: string[];
 }
 
-export interface GoTraderAgentMetricMemory extends GoTraderResearchMemoryBase {
-  memoryType: "agent_metric";
-  agentId: string;
-  agentLabel: string;
-  metricStatus: GoTraderResearchMemoryMetricStatus;
-  sampleSize: number;
-  lastUpdatedCycleId?: string;
-  regimeContext?: string;
-}
-
 export type GoTraderResearchMemoryPacket =
   | GoTraderResearchCycleMemory
   | GoTraderWalkForwardMemory
   | GoTraderSelfImprovementMemory
-  | GoTraderGapAnalysisMemory
-  | GoTraderAgentMetricMemory;
+  | GoTraderGapAnalysisMemory;
 
 export const gotraderResearchMemoryAuthorityNone: GoTraderResearchMemoryAuthority = {
   executionAuthority: "none",

@@ -19,6 +19,10 @@ interface CreateGoTraderHandoffOptions {
 }
 
 export function createGoTraderHandoff(thesis: TradeThesis, options: CreateGoTraderHandoffOptions = {}): GoTraderHandoff {
+  const plan = thesis.simulatedTradePlan;
+  if (!plan || thesis.invalidationLevel === undefined || thesis.targetLiquidity === undefined) {
+    throw new Error("GoTrader handoff unavailable: canonical price geometry is required.");
+  }
   const timestamp = options.timestamp ?? new Date().toISOString();
   const backtestConfig = resolveActiveBacktestConfig().config;
   const replayBacktestMetadata: GoTraderHandoffReplayBacktestMetadata = {
@@ -87,7 +91,7 @@ export function createGoTraderHandoff(thesis: TradeThesis, options: CreateGoTrad
       session: thesis.session,
       marketRegime: thesis.marketRegime
     },
-    entryZone: thesis.simulatedTradePlan.entryZone,
+    entryZone: plan.entryZone,
     invalidation: thesis.invalidationLevel,
     target: thesis.targetLiquidity,
     riskNotes: thesis.riskNotes,

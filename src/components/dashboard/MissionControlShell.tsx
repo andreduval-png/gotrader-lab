@@ -210,7 +210,7 @@ const pendingPaperDemoChecklistItems = [
   ["grinch_ict_profile_evidence", "Grinch/ICT profile evidence sufficient", "Wait for valid ICT foundation plus Grinch refinement evidence."],
   ["conservative_scenario_stable", "Conservative scenario stable", "Pass conservative validation before candidate review."],
   ["simulation_runbook_complete", "Simulation runbook complete", "Complete simulation runbook checks; this creates no execution authority."],
-  ["false_positive_rate_acceptable", "False-positive rate acceptable", "Run Research Quality and reduce false-positive pressure."],
+  ["false_positive_rate_acceptable", "Attributed avoidable-loss rate acceptable", "Run Research Quality and investigate discriminating pre-entry loss cohorts."],
   ["risk_policy_complete", "Risk policy complete", "Complete drawdown and conservative risk simulation checks."],
   ["advisory_reviewed", "Advisory reviewed", "Record advisory review as explanation-only."],
   ["no_authority_violations", "No authority violations", "Keep executionAuthority, brokerAuthority, and readinessOverrideAuthority as none."]
@@ -1947,9 +1947,9 @@ export function MissionControlShell({ state }: { state: LabState }) {
   const benchmarkMatrix = useMemo(() => safeArray(latestGrinchComparison?.benchmarkMatrix), [latestGrinchComparison?.benchmarkMatrix]);
   const layerContributionRows = useMemo(() => buildLayerContributionRows(layerMetrics), [layerMetrics]);
   const benchmarkRows = useMemo(() => buildBenchmarkDisplayRows(benchmarkMatrix, latestAutoResearch), [benchmarkMatrix, latestAutoResearch]);
-  const falsePositiveRate =
-    canonicalMetrics && canonicalMetrics.totalTrades + canonicalMetrics.falsePositiveCount > 0
-      ? canonicalMetrics.falsePositiveCount / (canonicalMetrics.totalTrades + canonicalMetrics.falsePositiveCount)
+  const avoidableLossRate =
+    canonicalMetrics && typeof canonicalMetrics.attributedAvoidableLossCount === "number" && canonicalMetrics.totalTrades > 0
+      ? canonicalMetrics.attributedAvoidableLossCount / canonicalMetrics.totalTrades
       : undefined;
   const sourceContextRows = useMemo(() => buildSourceContextRows(runtimeSnapshot), [runtimeSnapshot]);
   const sourceConsistencyRows = useMemo(
@@ -2827,13 +2827,13 @@ export function MissionControlShell({ state }: { state: LabState }) {
               <MiniReadout label="Expectancy" value={formatR(canonicalMetrics.averageR)} detail="Average simulated R per trade" />
               <MiniReadout label="Profit factor" value={formatNullableNumber(canonicalMetrics.profitFactor)} detail={`Sample ${canonicalMetrics.totalTrades} trades`} />
               <MiniReadout label="Max drawdown" value={formatR(canonicalMetrics.maxDrawdownR)} detail={`Net ${formatR(canonicalMetrics.realizedR)}`} />
-              <MiniReadout label="False-positive rate" value={formatPercentMetric(falsePositiveRate)} detail={`${canonicalMetrics.falsePositiveCount} estimated false positives`} />
+              <MiniReadout label="Avoidable-loss rate" value={formatPercentMetric(avoidableLossRate)} detail={typeof canonicalMetrics.attributedAvoidableLossCount === "number" ? `${canonicalMetrics.attributedAvoidableLossCount} losses associated with qualified pre-entry cohorts` : "Attribution unavailable; ordinary stop hits are not substituted"} />
               <MiniReadout label="Evidence" value={`${runtimeSnapshot?.evidence.evidenceQualityScore ?? 0}/100`} detail={runtimeSnapshot?.evidence.weakestEvidenceCategories[0]?.replace(/_/g, " ") ?? "ledger ready"} />
               <MiniReadout label="Maturity" value={`${runtimeSnapshot?.maturity.maturityScore ?? 0}/100`} detail={runtimeSnapshot?.maturity.maturityGrade.replace(/_/g, " ") ?? "untested"} />
             </div>
           ) : (
             <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-sm text-slate-400">
-              Not enough completed research data. Run an AI Research Cycle to populate expectancy, false-positive rate, evidence, maturity, and walk-forward status.
+              Not enough completed research data. Run an AI Research Cycle to populate expectancy, avoidable-loss attribution, evidence, maturity, and walk-forward status.
             </div>
           )}
           <div className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/5 p-3 text-xs text-cyan-100/80">

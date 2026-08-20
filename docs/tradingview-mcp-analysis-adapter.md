@@ -1,5 +1,7 @@
 # TradingView MCP Analysis Adapter
 
+Current status note (2026-08-18): the local wrapper is implemented. When explicitly connected it polls read-only TradingView Desktop/CDP quote and candle data, caches normalized candles, and may provide chart display or guarded research input when eligibility gates pass. It is not streaming broker truth, fill/order/account data, or execution data. The older future-tense passages below are retained as historical design context and are superseded by `docs/tradingview-mcp-readonly-bridge.md`.
+
 ## Role
 
 TradingView MCP is a chart-analysis and technical-confirmation source only. It can help GoTrader read chart state, visible levels, indicators, annotations, OHLCV summaries, replay state, and screenshots.

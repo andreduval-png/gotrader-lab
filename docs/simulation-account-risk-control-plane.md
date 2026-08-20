@@ -108,7 +108,7 @@ Default local artifacts:
 - `.gotrader/simulation-account-risk-state.json`
 - `.gotrader/simulation-account-risk-ledger.jsonl`
 
-The Paper-Demo gateway status exposed through the trade-proposal MCP includes a compact `accountRiskGovernor` summary. It does not expose broker credentials or broker state.
+The legacy Paper-Demo gateway compatibility module can expose a compact `accountRiskGovernor` summary. The canonical GoTrader Research MCP does not grant gateway or broker authority; its former `mcp:trade-proposal` command is only a compatibility alias. Neither surface exposes broker credentials or broker state.
 
 ## Safety Result
 

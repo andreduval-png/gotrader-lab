@@ -15,7 +15,7 @@ The app stores useful research state in several places:
 - LLM advisory state in localStorage.
 - Validation and research-quality reports in localStorage.
 - Self-improvement proposals in localStorage.
-- Simulation runbook status in localStorage.
+- Simulation runbook display projection from the local GoTrader Research MCP append-only evidence ledger. Browser localStorage is a non-authoritative cache and legacy checkbox state cannot satisfy readiness.
 
 That is expected for a local-only app, but it can create confusing UI drift. Dashboard, Performance, Self-Improvement, Readiness, Validation, Backtest Lab, Market Data, and Auto Research should not each invent their own version of "current state."
 

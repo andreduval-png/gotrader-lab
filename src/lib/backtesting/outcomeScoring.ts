@@ -60,10 +60,14 @@ export function scoreSimulatedTradeOutcome(
   decision: BacktestDecisionPoint,
   candles: Candle[],
   lookaheadCandles: number,
-  frictions: BacktestFillFrictions = NO_FRICTIONS
+  frictions: BacktestFillFrictions = NO_FRICTIONS,
+  qualityContext?: SimulatedTradeRecord["qualityContext"]
 ): SimulatedTradeRecord {
   const thesis = decision.thesis;
   const plan = thesis.simulatedTradePlan;
+  if (!plan) {
+    throw new Error("Simulated trade plan unavailable: outcome scoring requires canonical price geometry.");
+  }
   const direction = directionFor(thesis.finalBias);
   // Fill model: pay half the spread plus adverse slippage on entry, adverse
   // slippage again on stop exits, and a round-trip commission in price terms.
@@ -105,7 +109,8 @@ export function scoreSimulatedTradeOutcome(
       riskReward: 0,
       reason: "CIO thesis was neutral, so the replay stored a research record without directional exposure.",
       simulatedTradePlan: plan,
-      agentAttribution: attributionFor(decision)
+      agentAttribution: attributionFor(decision),
+      qualityContext
     };
   }
 
@@ -200,6 +205,7 @@ export function scoreSimulatedTradeOutcome(
     riskReward: plan.riskReward,
     reason,
     simulatedTradePlan: plan,
-    agentAttribution: attributionFor(decision)
+    agentAttribution: attributionFor(decision),
+    qualityContext
   };
 }

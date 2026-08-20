@@ -320,15 +320,19 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
                 </div>
                 <div className="rounded-lg border border-border bg-background/45 p-3">
                   <p className="text-xs text-muted-foreground">Invalidation</p>
-                  <p className="mt-1 font-mono text-lg">{activeThesis.invalidationLevel}</p>
+                  <p className="mt-1 font-mono text-lg">{activeThesis.invalidationLevel ?? "Unavailable"}</p>
                 </div>
                 <div className="rounded-lg border border-border bg-background/45 p-3">
                   <p className="text-xs text-muted-foreground">Target liquidity</p>
-                  <p className="mt-1 font-mono text-lg">{activeThesis.targetLiquidity}</p>
+                  <p className="mt-1 font-mono text-lg">{activeThesis.targetLiquidity ?? "Unavailable"}</p>
                 </div>
                 <div className="rounded-lg border border-border bg-background/45 p-3">
                   <p className="text-xs text-muted-foreground">Risk/reward</p>
-                  <p className="mt-1 font-mono text-lg">{activeThesis.simulatedTradePlan.riskReward.toFixed(2)}R</p>
+                  <p className="mt-1 font-mono text-lg">
+                    {activeThesis.simulatedTradePlan
+                      ? `${activeThesis.simulatedTradePlan.riskReward.toFixed(2)}R`
+                      : "Unavailable"}
+                  </p>
                 </div>
               </div>
 
@@ -364,10 +368,12 @@ export function ResearchWorkbench({ state, actions }: { state: LabState; actions
                   <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-muted-foreground">
                     <span>Entry zone</span>
                     <span className="font-mono text-foreground">
-                      {activeThesis.simulatedTradePlan.entryZone[0]} - {activeThesis.simulatedTradePlan.entryZone[1]}
+                      {activeThesis.simulatedTradePlan
+                        ? `${activeThesis.simulatedTradePlan.entryZone[0]} - ${activeThesis.simulatedTradePlan.entryZone[1]}`
+                        : "Unavailable"}
                     </span>
                     <span>Mode</span>
-                    <span className="font-mono text-foreground">{activeThesis.simulatedTradePlan.mode}</span>
+                    <span className="font-mono text-foreground">{activeThesis.simulatedTradePlan?.mode ?? "Unavailable"}</span>
                     <span>Bias</span>
                     <span className="font-mono text-foreground">{activeThesis.finalBias}</span>
                   </div>

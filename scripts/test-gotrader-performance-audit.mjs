@@ -19,6 +19,9 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
   { root: sourceRoot, file: "ictPhase2Types.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictReplayValidationTypes.ts" },
   { root: sourceRoot, file: "ictReplayDiagnosticsTypes.ts" },
   { root: sourceRoot, file: "ictApprovedSetupProfileTypes.ts" },
@@ -114,7 +117,9 @@ function compileSuiteForNode() {
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
       .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
       .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
-      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'");
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -142,6 +147,12 @@ export async function listCanonicalCandleSourceSummaries() {
 export function detectCurrentOpportunities() {
   return { summary: { total: 0, validCandidates: 0, formingCandidates: 0, diagnosticContexts: 0 }, opportunities: [] };
 }
+`,
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "forwardScenarioStub.mjs"),
+    `export function buildForwardScenarioMapFromCurrentRead() { return undefined; }
 `,
     "utf8"
   );

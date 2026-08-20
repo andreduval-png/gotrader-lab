@@ -4,6 +4,9 @@ const host = process.env.MT5_READONLY_BRIDGE_HOST || "127.0.0.1";
 const port = Number(process.env.MT5_READONLY_BRIDGE_PORT || 7341);
 const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || `http://${host}:${port}`).replace(/\/$/, "");
 const timeoutMs = Number(process.env.MT5_READONLY_DIAGNOSE_TIMEOUT_MS || 2000);
+const requestedSymbol = process.env.MT5_READONLY_REQUESTED_SYMBOL || "MNQ";
+const brokerSymbol = process.env.MT5_READONLY_BROKER_SYMBOL || "USTECH";
+const timeframe = process.env.MT5_READONLY_TIMEFRAME || "5m";
 
 const probePort = () =>
   new Promise((resolve) => {
@@ -52,7 +55,14 @@ const fetchWithTimeout = async (path) => {
 const portOpen = await probePort();
 const health = await fetchWithTimeout("health");
 const status = await fetchWithTimeout("status");
-const candles = await fetchWithTimeout("candles?symbol=MNQ&timeframe=5m&limit=5");
+const candleQuery = new URLSearchParams({
+  requestedSymbol,
+  symbol: brokerSymbol,
+  brokerSymbol,
+  timeframe,
+  limit: "5"
+});
+const candles = await fetchWithTimeout(`candles?${candleQuery.toString()}`);
 
 const payload = health.payload && typeof health.payload === "object" ? health.payload : undefined;
 const statusPayload = status.payload && typeof status.payload === "object" ? status.payload : undefined;
@@ -89,6 +99,9 @@ console.log(
   JSON.stringify(
     {
       bridgeUrl,
+      requestedSymbol,
+      brokerSymbol,
+      timeframe,
       portOpen,
       diagnosticStatus,
       health: health.payload ?? health.error,

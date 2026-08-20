@@ -213,7 +213,7 @@ export function selectScenarioFamilyFromBlockers(
     blockerSet.has("overfitting_risk")
   ) {
     selectedScenarioFamily = "conservative_only";
-    reasoningSummary = "Selected conservative-only testing because risk, false positives, or overfit risk dominate the blocker set.";
+    reasoningSummary = "Selected conservative-only testing because risk, attributed avoidable losses, or overfit risk dominate the blocker set.";
   }
 
   const allFamilies: AutonomyScenarioFamily[] = [

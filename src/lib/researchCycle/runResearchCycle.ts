@@ -28,10 +28,15 @@ import { buildEvidenceLedger } from "@/lib/evidence";
 import type { EvidenceLedgerInput } from "@/lib/evidence";
 import {
   appendResearchEvidenceRecord,
-  buildResearchEvidenceMemoryPacket,
+  buildResearchEvidenceMemoryPackets,
   buildResearchEvidenceRecord
 } from "@/lib/researchEvidenceLedger";
-import { queueGbrainMemoryPacket } from "@/lib/researchMemory";
+import { queueResearchMemoryPacket } from "@/lib/researchMemory";
+import {
+  appendSimulatedOutcomeEvents,
+  buildBacktestOutcomeEvents,
+  buildCurrentCyclePlanEvent
+} from "@/lib/simulatedOutcomeLedger";
 import {
   buildLLMResearchContextPacket,
   importLLMAgentResponse,
@@ -214,7 +219,7 @@ const readinessBlockerLabel = (requirement: { id?: string; label: string; passed
     case "confidence-calibration":
       return "Confidence calibration too low.";
     case "false-positive-control":
-      return "False positives too high.";
+      return "Attributed avoidable losses exceed the quality gate.";
     case "session-consistency":
       return "Session consistency weak.";
     case "conservative-stability":
@@ -1062,6 +1067,7 @@ export async function runResearchCycle({
             target: recommended.target,
             invalidation: recommended.invalidation,
             rrEstimate: recommended.rrEstimate,
+            targetProvenance: recommended.targetProvenance,
             summary: recommended.summary,
             noTradeReasons: safeTopN(recommended.noTradeReasons, 6),
             universalRecognitionLabel: advisorPacket.universalRecognition
@@ -1188,6 +1194,7 @@ export async function runResearchCycle({
     // LLM advisory review now runs after validation/quality/readiness so the
     // packet carries real results instead of undefined placeholders.
 
+    const generatedPlan = generatedThesis.thesis.simulatedTradePlan;
     const cycleForwardScenarioMap = buildForwardScenarioMap({
       timestamp: run.startedAt,
       sourceProvider: activeResearchCandleSource.sourceMode,
@@ -1199,7 +1206,9 @@ export async function runResearchCycle({
       evidenceQuality: generatedThesis.thesis.confidence * 100,
       direction: generatedThesis.thesis.finalBias,
       confirmedSetup: false,
-      liquidityDraw: `Conditional liquidity objective ${generatedThesis.thesis.targetLiquidity}`,
+      liquidityDraw: generatedThesis.thesis.targetLiquidity === undefined
+        ? "Conditional liquidity objective unavailable without canonical price geometry."
+        : `Conditional liquidity objective ${generatedThesis.thesis.targetLiquidity}`,
       liquidityDrawDirection: generatedThesis.thesis.finalBias,
       liquiditySwept: generatedThesis.thesis.ictContext.liquiditySweep,
       mitigationDetected: false,
@@ -1212,23 +1221,32 @@ export async function runResearchCycle({
           : generatedThesis.thesis.ictContext.fairValueGap === "bearish"
             ? "bearish"
             : "neutral",
-      ifvgZone: {
-        lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
-        upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
-      },
+      ifvgZone: generatedPlan
+        ? {
+            lower: Math.min(...generatedPlan.entryZone),
+            upper: Math.max(...generatedPlan.entryZone)
+          }
+        : undefined,
       ifvgProfileStrength: "unvalidated",
-      conditionalEntryZone: {
-        lower: Math.min(...generatedThesis.thesis.simulatedTradePlan.entryZone),
-        upper: Math.max(...generatedThesis.thesis.simulatedTradePlan.entryZone)
-      },
+      conditionalEntryZone: generatedPlan
+        ? {
+            lower: Math.min(...generatedPlan.entryZone),
+            upper: Math.max(...generatedPlan.entryZone)
+          }
+        : undefined,
       conditionalStopReference: generatedThesis.thesis.invalidationLevel,
-      conditionalTargets: [{ label: "Conditional thesis liquidity target", price: generatedThesis.thesis.targetLiquidity }],
+      conditionalTargets: generatedThesis.thesis.targetLiquidity === undefined
+        ? []
+        : [{ label: "Conditional thesis liquidity target", price: generatedThesis.thesis.targetLiquidity }],
       missingConfirmations: [
         generatedThesis.thesis.ictContext.liquiditySweep ? undefined : "Liquidity sweep is not confirmed.",
         generatedThesis.thesis.ictContext.displacement === "strong" ? undefined : "Strong displacement is not confirmed.",
         generatedThesis.thesis.ictContext.fairValueGap === "none" ? "A qualifying FVG is not confirmed." : "A fresh FVG retest is not confirmed."
       ].filter((item): item is string => Boolean(item)),
-      blockers: generatedThesis.thesis.finalBias === "neutral" ? ["Directional thesis is neutral."] : [],
+      blockers: [
+        generatedThesis.thesis.finalBias === "neutral" ? "Directional thesis is neutral." : undefined,
+        generatedPlan ? undefined : "Canonical price geometry is unavailable."
+      ].filter((item): item is string => Boolean(item)),
       warnings: [generatedThesis.thesis.riskNotes]
     });
 
@@ -1713,6 +1731,8 @@ export async function runResearchCycle({
     const runbookBefore = loadSimulationRunbookState();
     const runbookAfter = {
       ...runbookBefore,
+      schemaVersion: 2 as const,
+      verifiedAt: undefined,
       latestResearchPipelineAt: now(),
       latestResearchCycleId: run.cycleId,
       latestResearchPipelineStatus: "completed" as const,
@@ -1721,22 +1741,28 @@ export async function runResearchCycle({
       signal: signalFor(generatedThesis.thesis),
       mode: "simulation",
       platform: runbookBefore.platform || "ai_lab_handoff",
-      notes: [
-        runbookBefore.notes,
-        `AI Research Cycle ${run.cycleId} completed thesis/backtest/validation pipeline at ${new Date().toISOString()}. Scheduler verification checks were not changed by this automated pipeline.`
-      ].filter(Boolean).join("\n"),
+      notes: `AI Research Cycle ${run.cycleId} completed its browser research pipeline at ${new Date().toISOString()}. External handoff and scheduler facts require exact-cycle MCP receipts.`,
+      evidence: {},
+      canonicalStatus: "unavailable" as const,
+      canonicalEvidenceId: undefined,
+      canonicalBlockers: ["canonical_runbook_evidence_refresh_required"],
       checklist: {
-        ...runbookBefore.checklist,
-        aiLabThesisGenerated: true,
-        schedulerOneCycleCompleted: true,
-        signalLogged: true,
-        brokerExecutionSkipped: true
+        aiLabThesisGenerated: false,
+        handoffExported: false,
+        savedLatestHandoff: false,
+        readerConversionTested: false,
+        schedulerOneCycleCompleted: false,
+        signalLogged: false,
+        brokerExecutionSkipped: false,
+        positionsZero: false,
+        tradesZero: false,
+        shutdownComplete: false
       }
     };
     saveSimulationRunbookState(runbookAfter);
     passStep("simulation_verification", {
-      summary: "Simulation runbook recorded research pipeline completion.",
-      detail: "Marked research-safe checklist items (thesis generated, one cycle completed, signal logged, broker execution skipped). Positions/trades/shutdown remain operator-verified."
+      summary: "Simulation runbook awaits canonical evidence refresh.",
+      detail: "No runbook check was self-certified. Research artifacts are derived by the local MCP host; handoff and scheduler facts require exact-cycle receipts."
     });
 
     startStep("readiness_gate");
@@ -1973,7 +1999,8 @@ export async function runResearchCycle({
         winRate: metrics?.winRate ?? cycle.backtestSummary?.winRate,
         averageR: metrics?.averageR ?? cycle.backtestSummary?.averageR,
         maxDrawdownR: metrics?.maxDrawdownR ?? cycle.backtestSummary?.maxDrawdown,
-        falsePositiveCount: metrics?.falsePositiveCount,
+        attributedAvoidableLossCount: metrics?.attributedAvoidableLossCount,
+        falsePositiveCount: metrics?.attributedAvoidableLossCount,
         readinessScore: metrics?.readinessScore ?? cycle.researchQualitySummary?.readinessScore ?? cycle.validationSummary?.readinessScore,
         readinessState: cycle.readinessSnapshot?.state,
         llmAdvisoryPassed: cycle.llmRun?.advisoryPassed
@@ -2070,15 +2097,29 @@ export async function runResearchCycle({
     try {
       const evidenceRecord = buildResearchEvidenceRecord(run);
       const appendResult = await appendResearchEvidenceRecord(evidenceRecord);
-      const outboxEntry = queueGbrainMemoryPacket(buildResearchEvidenceMemoryPacket(evidenceRecord));
+      const outboxEntries = buildResearchEvidenceMemoryPackets(evidenceRecord).map(queueResearchMemoryPacket);
       run.evidenceRecordId = evidenceRecord.evidenceId;
       run.evidenceIdentityKey = evidenceRecord.identity.identityKey;
       run.evidenceStorageBackend = appendResult.backend;
-      run.gbrainMemoryOutboxId = outboxEntry.outboxId;
+      run.gbrainMemoryOutboxId = outboxEntries[0]?.outboxId;
     } catch (error) {
       run.candleWindowWarnings = uniqueText([
         ...(run.candleWindowWarnings ?? []),
         `Persistent research evidence failed safely: ${error instanceof Error ? error.message : "unknown error"}. Readiness and execution authority were not changed.`
+      ]);
+    }
+    try {
+      const outcomeEvents = [
+        ...(generatedPlan ? [await buildCurrentCyclePlanEvent({ cycle: run, plan: generatedPlan })] : []),
+        ...(await buildBacktestOutcomeEvents({ cycle: run, result: backtestResult }))
+      ];
+      const outcomeAppendResults = await appendSimulatedOutcomeEvents(outcomeEvents);
+      run.simulatedOutcomeEventIds = outcomeEvents.map((event) => event.eventId);
+      run.simulatedOutcomeStorageBackend = outcomeAppendResults.at(-1)?.backend ?? "memory";
+    } catch (error) {
+      run.candleWindowWarnings = uniqueText([
+        ...(run.candleWindowWarnings ?? []),
+        `Identity-bound simulated outcome persistence failed safely: ${error instanceof Error ? error.message : "unknown error"}. No unverified Results rows were created.`
       ]);
     }
     saveResearchCycleRun(snapshot());

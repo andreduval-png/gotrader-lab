@@ -1,4 +1,4 @@
-import type { IctBias, IctLocation, IctSide } from "./ictAdvisorTypes";
+import type { IctBias, IctLocation, IctSide, IctTargetProvenance } from "./ictAdvisorTypes";
 import type { ForwardScenarioMap } from "../forwardScenario";
 import type { IctApprovedCandidateStatus, IctHtfAlignmentBreakdown } from "./ictApprovedSetupProfileTypes";
 import type { IctCmdIndependentDateGateStatus } from "./ictCmdIndependentDateGateTypes";
@@ -112,6 +112,7 @@ export interface IctCurrentRead {
   confidence?: number;
   rrEstimate?: number;
   target?: number;
+  targetProvenance?: IctTargetProvenance;
   invalidation?: number;
   bias?: IctBias;
   smtStatus?: string;

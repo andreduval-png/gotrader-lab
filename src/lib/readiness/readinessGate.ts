@@ -69,13 +69,11 @@ const falsePositiveTotal = (quality?: ResearchQualityReview) =>
 const falsePositiveControlFor = (quality?: ResearchQualityReview) => {
   const attribution = quality?.failureAttribution;
   if (!attribution) {
-    const count = falsePositiveTotal(quality);
-    const patterns = quality?.falsePositivePatterns.length ?? 99;
     return {
-      passed: Boolean(quality) && count <= 2 && patterns <= 2,
-      currentValue: `${count} legacy estimated; ${patterns === 99 ? "missing" : patterns} patterns`,
-      requiredValue: "legacy estimated <= 2 and patterns <= 2",
-      detail: `Legacy estimated false positives ${count}; patterns ${patterns === 99 ? 0 : patterns}.`
+      passed: false,
+      currentValue: "qualified attribution unavailable",
+      requiredValue: "qualified avoidable-loss attribution with >= 90% context evaluation",
+      detail: "Legacy estimated loss counts and pattern labels cannot satisfy the avoidable-loss control gate."
     };
   }
   const directlyAttributedFamilies = attribution.failureCauses.filter((cause) => cause.directlyAttributed).length;
@@ -86,7 +84,7 @@ const falsePositiveControlFor = (quality?: ResearchQualityReview) => {
     passed: coveragePassed && attributableRate <= 0.25 && directlyAttributedFamilies <= 2,
     currentValue: `${Math.round(attributableRate * 100)}% avoidable-loss rate; ${directlyAttributedFamilies} causal families; ${Math.round(contextCoverage * 100)}% context evaluated`,
     requiredValue: "avoidable-loss rate <= 25%, causal families <= 2, context evaluation >= 90%",
-    detail: `${attribution.stopHitCount} completed stop hits; ${attribution.attributedStopHitCount} have a discriminating pre-entry cause; ${attribution.unattributedStopHitCount} are ordinary/unexplained model losses, not automatically false positives.`
+    detail: `${attribution.stopHitCount} completed stop hits; ${attribution.attributedStopHitCount} have a discriminating pre-entry cause; ${attribution.unattributedStopHitCount} are ordinary or unexplained model losses, not attributed avoidable losses.`
   };
 };
 
@@ -98,7 +96,9 @@ const totalValidationTrades = (validation?: ValidationSuiteReport) =>
 
 const runbookComplete = (runbook?: SimulationRunbookState) =>
   Boolean(
-    runbook?.verifiedAt &&
+    runbook?.canonicalStatus === "available" &&
+      runbook.verifiedAt &&
+      runbook.latestResearchCycleId &&
       countCompletedRunbookItems(runbook) === simulationRunbookChecklist.length &&
       runbook.checklist.brokerExecutionSkipped &&
       runbook.checklist.positionsZero &&
@@ -166,6 +166,7 @@ const researchQualitySnapshotFor = (quality?: ResearchQualityReview) =>
         generatedAt: quality.generatedAt,
         readinessGrade: quality.readinessGrade,
         readinessScore: quality.readinessScore,
+        attributedAvoidableLossCount: falsePositiveTotal(quality),
         falsePositiveCount: falsePositiveTotal(quality),
         redDrawdownClusters: redDrawdownClusters(quality)
       }
@@ -175,6 +176,9 @@ const runbookSnapshotFor = (runbook?: SimulationRunbookState) =>
   runbook
     ? {
         verifiedAt: runbook.verifiedAt,
+        cycleId: runbook.latestResearchCycleId,
+        canonicalStatus: runbook.canonicalStatus ?? "unavailable",
+        evidenceId: runbook.canonicalEvidenceId,
         completedChecks: countCompletedRunbookItems(runbook),
         totalChecks: simulationRunbookChecklist.length,
         brokerExecutionSkipped: runbook.checklist.brokerExecutionSkipped,
@@ -297,7 +301,7 @@ export function evaluateReadinessGate({
       {
         currentValue: quality?.generatedAt ?? "missing",
         requiredValue: "completed research quality review",
-        explanation: "The gate needs the quality review to identify false positives, weak sessions, and readiness grade.",
+        explanation: "The gate needs the quality review to identify attributed avoidable-loss cohorts, weak sessions, and readiness grade.",
         suggestedFix: "Run Research Quality after validation is complete.",
         runPage: "/research-quality"
       }
@@ -356,16 +360,16 @@ export function evaluateReadinessGate({
       "Simulation runbook passed with broker execution skipped",
       runbookComplete(runbook),
       runbook
-        ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length} checks complete; broker skipped=${runbook.checklist.brokerExecutionSkipped}.`
+        ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length} exact-cycle evidence checks verified; canonical=${runbook.canonicalStatus ?? "unavailable"}; broker skip evidence=${runbook.checklist.brokerExecutionSkipped ? "verified" : "unavailable"}.`
         : "Simulation runbook is missing.",
       "blocker",
       {
         currentValue: runbook
-          ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length}; broker skipped=${runbook.checklist.brokerExecutionSkipped}`
+          ? `${countCompletedRunbookItems(runbook)}/${simulationRunbookChecklist.length}; canonical=${runbook.canonicalStatus ?? "unavailable"}; cycle=${runbook.latestResearchCycleId ?? "missing"}`
           : "missing",
-        requiredValue: `${simulationRunbookChecklist.length}/${simulationRunbookChecklist.length}; broker skipped=true; positions=0; trades=0`,
-        explanation: "The app must prove the AI Lab to go-trader bridge was simulation-only and produced zero executed trades.",
-        suggestedFix: "Complete every item in /simulation-runbook after a scheduler one-cycle simulation run.",
+        requiredValue: `${simulationRunbookChecklist.length}/${simulationRunbookChecklist.length} immutable exact-cycle evidence records; scheduler-observed broker skipped, positions=0, trades=0, shutdown complete`,
+        explanation: "Missing evidence means unavailable, not an observed nonzero position, trade, or failed shutdown. Browser checkboxes cannot satisfy this gate.",
+        suggestedFix: "Refresh /simulation-runbook, then record exact-cycle handoff and scheduler receipts through the local GoTrader Research MCP.",
         runPage: "/simulation-runbook"
       }
     ),
@@ -403,7 +407,7 @@ export function evaluateReadinessGate({
     ),
     requirement(
       "false-positive-control",
-      "False positives are controlled",
+      "Attributed avoidable losses are controlled",
       falsePositiveControl.passed,
       falsePositiveControl.detail,
       "blocker",

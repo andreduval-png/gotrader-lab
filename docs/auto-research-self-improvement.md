@@ -1,6 +1,6 @@
 # Auto Research Self-Improvement Supervisor
 
-The Auto Research Supervisor is a simulation-only optimizer for GoTrader AI Lab. It searches bounded research configurations, runs mock-data backtests and validation suites, compares candidates against the current baseline, and creates approval-gated calibration proposals.
+The Auto Research Supervisor is a simulation-only optimizer for GoTrader AI Lab. It searches bounded research configurations, runs source-bound backtests and validation suites on an eligible active non-mock candle source, compares candidates against the current baseline, and creates approval-gated calibration proposals.
 
 It cannot execute trades, enable paper/demo/live trading, change broker settings, override readiness gates, approve its own proposals, or modify secrets.
 
@@ -46,13 +46,13 @@ The supervisor must never search over:
 
 Each candidate runs through existing simulation-only systems:
 
-1. mock-candle backtest
+1. active-source backtest with source fingerprint
 2. validation suite
 3. research quality review
 4. baseline comparison
 5. stability-first scoring
 
-All candidate results are stored in the local audit trail.
+All candidate results are stored in the local audit trail. Mock/demo candles, missing fingerprints, and ineligible source modes fail closed and cannot create research evidence.
 
 ## Why Stability Beats Profit
 
@@ -61,7 +61,7 @@ The supervisor does not select a candidate simply because it has the highest pro
 - lower max drawdown
 - better average R
 - acceptable win rate
-- lower false positives
+- fewer stop hits and attributed avoidable losses
 - confidence calibration
 - session consistency
 - sufficient trade count

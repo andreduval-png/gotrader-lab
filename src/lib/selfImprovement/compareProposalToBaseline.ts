@@ -32,13 +32,18 @@ const profitFactorText = (value: number | null) => (value === null ? "n/a" : Str
 const drawdownReductionRatio = (before: CalibrationProposalMetrics, after: CalibrationProposalMetrics) =>
   before.maxDrawdown > 0 ? (before.maxDrawdown - after.maxDrawdown) / before.maxDrawdown : 0;
 
-const stabilityImprovementIsExceptional = (before: CalibrationProposalMetrics, after: CalibrationProposalMetrics) =>
-  drawdownReductionRatio(before, after) >= promotionGuards.exceptionalDrawdownReductionRatio &&
-  after.falsePositiveCount <= before.falsePositiveCount * 0.65 &&
-  after.confidenceCalibration >= before.confidenceCalibration + 0.15 &&
-  after.totalTrades >= Math.max(promotionGuards.minimumTradeCount, before.totalTrades * 0.75) &&
-  after.winRate >= before.winRate - 0.02 &&
-  after.averageR >= before.averageR - 0.02;
+const stabilityImprovementIsExceptional = (before: CalibrationProposalMetrics, after: CalibrationProposalMetrics) => {
+  const avoidableLossEvidenceStable =
+    typeof before.attributedAvoidableLossCount !== "number" ||
+    typeof after.attributedAvoidableLossCount !== "number" ||
+    after.attributedAvoidableLossCount <= before.attributedAvoidableLossCount * 0.65;
+  return drawdownReductionRatio(before, after) >= promotionGuards.exceptionalDrawdownReductionRatio &&
+    avoidableLossEvidenceStable &&
+    after.confidenceCalibration >= before.confidenceCalibration + 0.15 &&
+    after.totalTrades >= Math.max(promotionGuards.minimumTradeCount, before.totalTrades * 0.75) &&
+    after.winRate >= before.winRate - 0.02 &&
+    after.averageR >= before.averageR - 0.02;
+};
 
 const inferFollowUpSearchDirection = (criticalRegressions: string[]) => {
   const text = criticalRegressions.join(" ").toLowerCase();
@@ -117,12 +122,20 @@ export function compareProposalToBaseline(
     neutralChanges.push("Win rate stayed within the baseline tolerance.");
   }
 
-  if (after.falsePositiveCount < before.falsePositiveCount) {
-    positiveChanges.push(deltaText("Estimated false positives improved", before.falsePositiveCount, after.falsePositiveCount));
-    improvedMetrics.push(metricLine("False positives", before.falsePositiveCount, after.falsePositiveCount));
-  } else if (after.falsePositiveCount > before.falsePositiveCount) {
-    negativeChanges.push(deltaText("Estimated false positives worsened", before.falsePositiveCount, after.falsePositiveCount));
-    worsenedMetrics.push(metricLine("False positives", before.falsePositiveCount, after.falsePositiveCount));
+  if (
+    typeof before.attributedAvoidableLossCount === "number" &&
+    typeof after.attributedAvoidableLossCount === "number" &&
+    after.attributedAvoidableLossCount < before.attributedAvoidableLossCount
+  ) {
+    positiveChanges.push(deltaText("Attributed avoidable losses improved", before.attributedAvoidableLossCount, after.attributedAvoidableLossCount));
+    improvedMetrics.push(metricLine("Attributed avoidable losses", before.attributedAvoidableLossCount, after.attributedAvoidableLossCount));
+  } else if (
+    typeof before.attributedAvoidableLossCount === "number" &&
+    typeof after.attributedAvoidableLossCount === "number" &&
+    after.attributedAvoidableLossCount > before.attributedAvoidableLossCount
+  ) {
+    negativeChanges.push(deltaText("Attributed avoidable losses worsened", before.attributedAvoidableLossCount, after.attributedAvoidableLossCount));
+    worsenedMetrics.push(metricLine("Attributed avoidable losses", before.attributedAvoidableLossCount, after.attributedAvoidableLossCount));
   }
 
   if (after.confidenceCalibration > before.confidenceCalibration) {
@@ -245,7 +258,9 @@ export function compareProposalToBaseline(
     after.averageR >= before.averageR + 0.05 ||
     after.winRate >= before.winRate + 0.04 ||
     after.maxDrawdown < before.maxDrawdown ||
-    after.falsePositiveCount < before.falsePositiveCount ||
+    (typeof before.attributedAvoidableLossCount === "number" &&
+      typeof after.attributedAvoidableLossCount === "number" &&
+      after.attributedAvoidableLossCount < before.attributedAvoidableLossCount) ||
     after.confidenceCalibration > before.confidenceCalibration ||
     after.stabilityScore > before.stabilityScore;
   const balancedEnough =

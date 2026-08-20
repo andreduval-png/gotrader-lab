@@ -16,6 +16,7 @@ export * from "./ictSelfImprovementTypes";
 export * from "./ictSelfImprovement";
 export * from "./ictHypothesisValidationTypes";
 export * from "./ictHypothesisValidation";
+export * from "./ictCalibrationBridge";
 export * from "./ictCurrentReadTypes";
 export * from "./ictCurrentRead";
 export * from "./ictTradeConstructionTypes";

@@ -17,7 +17,11 @@ const unsafeTextMatchers = [
   { reason: "direct trade execution", pattern: /\b(?:execute|place|send)\s+(?:a\s+|an\s+|the\s+)?(?:trade|order)s?\b/i },
   { reason: "position control", pattern: /\b(?:open|close)\s+(?:a\s+|an\s+|the\s+)?position\b/i },
   { reason: "broker connection or control", pattern: /\b(?:connect|route|submit|control)\s+(?:to\s+)?(?:a\s+)?broker\b/i },
-  { reason: "broker connection or control", pattern: /\bbroker\s+(?:connection|control|execution|routing)\b/i },
+  { reason: "broker connection or control", pattern: /\bbroker\s+(?:connection|control|routing)\b/i },
+  {
+    reason: "broker execution enablement",
+    pattern: /\b(?:enable|initiate|perform|authorize|allow|use|start|proceed\s+with)\s+(?:direct\s+|live\s+)?broker\s+execution\b/i
+  },
   { reason: "readiness bypass", pattern: /\b(?:bypass|override|ignore|skip)\s+(?:the\s+)?readiness\b/i },
   { reason: "readiness bypass", pattern: /\breadiness\s+(?:bypass|override)\b/i },
   { reason: "approval authority", pattern: /\bapprove\s+(?:the\s+)?(?:trade|order|paper|demo|live|execution)\b/i },

@@ -44,6 +44,7 @@ import {
   applyIctHypothesisValidationToQueue,
   buildIctPaperSignalJournalEvent,
   buildIctResearchHypothesisValidationJournalEvent,
+  bridgeValidatedIctHypothesisToCalibration,
   buildLatestMonteCarloSnapshot,
   buildLatestReplaySnapshot,
   buildLatestScorecardSnapshot,
@@ -126,6 +127,10 @@ import {
 import { RESEARCH_CYCLE_UPDATED_EVENT } from "@/lib/researchCycle";
 import { loadAutoPaperDemoCycleState } from "@/lib/paperDemoOperations";
 import { resolveResearchRuntimeSnapshot, type ResearchRuntimeSnapshot } from "@/lib/runtime";
+import {
+  appendSimulatedOutcomeEvent,
+  buildPaperOutcomeEvent
+} from "@/lib/simulatedOutcomeLedger";
 import { runAdvisorChatWithFallback } from "@/lib/llm/advisorChat";
 import type { Timeframe } from "@/lib/types";
 import {
@@ -417,7 +422,7 @@ function buildLocalAdvisorReply(
   }
   if (lower.includes("self-improvement") || lower.includes("self improvement")) {
     return currentRead.selfImprovementHypothesisQueued
-      ? `Self-improvement has a research-only hypothesis queued: ${currentRead.selfImprovementHypothesisReason ?? "needs replay validation"}. It cannot auto-apply, change thresholds, promote readiness, or create execution authority.`
+      ? `ICT hypothesis validation has a research candidate queued: ${currentRead.selfImprovementHypothesisReason ?? "needs replay validation"}. Replay-supported hypotheses can create draft calibration intents, but cannot auto-apply, change thresholds, promote readiness, or create execution authority.`
       : `No self-improvement hypothesis is queued: ${currentRead.selfImprovementHypothesisReason ?? "current opportunity is not eligible"}. Keep collecting compact evidence before creating a proposal.`;
   }
   if (lower.includes("calibration") || lower.includes("suggest")) {
@@ -496,6 +501,7 @@ export function ResearchAdvisorView() {
   const [advisorPacket, setAdvisorPacket] = useState<IctAdvisorPacket>();
   const [advisorPacketError, setAdvisorPacketError] = useState<string>();
   const [paperSignal, setPaperSignal] = useState<IctPaperSignal>();
+  const [paperSignalPersistenceMessage, setPaperSignalPersistenceMessage] = useState<string>();
   const [cmdPaperTracking, setCmdPaperTracking] = useState<IctCmdPaperTrackingRecord>();
   const [cmdPaperTrackingMessage, setCmdPaperTrackingMessage] = useState<string>();
   const [advisorRequestedSymbol, setAdvisorRequestedSymbol] = useState(() => loadMt5ReadOnlySettings().requestedSymbol ?? "MNQ");
@@ -637,6 +643,7 @@ export function ResearchAdvisorView() {
     setManualReportSaveResult(undefined);
     setScorecardReportSaveResult(undefined);
     setPaperSignal(undefined);
+    setPaperSignalPersistenceMessage(undefined);
   }, [snapshot?.marketData.activeResearchSource.fingerprint]);
 
   const htfSummary = useMemo(
@@ -999,6 +1006,7 @@ export function ResearchAdvisorView() {
       const journalEvent = buildIctResearchHypothesisValidationJournalEvent(result);
       appendIctResearchHypothesisValidationJournalEvent(journalEvent);
       applyIctHypothesisValidationToQueue(result);
+      bridgeValidatedIctHypothesisToCalibration(hypothesis, result);
       recordReplayReviewInValidationChain(replayReview);
       setHypothesisValidationResult(result);
       setHypothesisValidationStatus("completed");
@@ -1185,13 +1193,39 @@ export function ResearchAdvisorView() {
     submitAdvisorMessage(action);
   };
 
-  const createPaperSimulation = () => {
+  const createPaperSimulation = async () => {
     if (!paperSimEligibility.eligible) return;
     const nextPaperSignal = createPaperSignalFromResearchSignal(researchSignal);
     setPaperSignal(nextPaperSignal);
     appendIctPaperSignalJournalEvent(
       buildIctPaperSignalJournalEvent(nextPaperSignal, "ict_paper_signal_created")
     );
+    try {
+      const activeIdentity = snapshot?.researchIdentity.active;
+      const cycleId = snapshot?.latestResearchCycle.latestCycleId;
+      if (!activeIdentity || !cycleId) {
+        throw new Error("No exact current-cycle research identity is available.");
+      }
+      const event = await buildPaperOutcomeEvent({
+        paperSignal: nextPaperSignal,
+        identity: {
+          cycleId,
+          sourceFingerprint: activeIdentity.sourceFingerprint ?? "",
+          strategyProfile: activeIdentity.strategyProfile ?? "",
+          strategyProfileVersion: activeIdentity.strategyProfileVersion,
+          parameterFingerprint: activeIdentity.parameterFingerprint ?? "",
+          requestedSymbol: activeIdentity.requestedSymbol ?? researchSignal.requestedSymbol,
+          brokerSymbol: activeIdentity.brokerSymbol ?? researchSignal.brokerSymbol,
+          timeframe: activeIdentity.timeframe ?? researchSignal.primaryTimeframe,
+          sourceProvider: activeIdentity.sourceProvider
+        },
+        recordedAt: nextPaperSignal.generatedAt
+      });
+      const appended = await appendSimulatedOutcomeEvent(event);
+      setPaperSignalPersistenceMessage(`Verified pending outcome stored in ${appended.backend}.`);
+    } catch (error) {
+      setPaperSignalPersistenceMessage(`Outcome not stored: ${errorMessage(error)}`);
+    }
   };
 
   const createCmdPaperTracking = () => {
@@ -1427,6 +1461,7 @@ export function ResearchAdvisorView() {
         eligibility={paperSimEligibility}
         onCreate={createPaperSimulation}
         paperSignal={paperSignal}
+        persistenceMessage={paperSignalPersistenceMessage}
         signal={researchSignal}
       />
       <CmdPaperTrackingCard
@@ -2248,11 +2283,13 @@ function PaperSimulationCard({
   eligibility,
   onCreate,
   paperSignal,
+  persistenceMessage,
   signal
 }: {
   eligibility: IctPaperSignalEligibility;
-  onCreate: () => void;
+  onCreate: () => void | Promise<void>;
   paperSignal?: IctPaperSignal;
+  persistenceMessage?: string;
   signal: IctResearchSignal;
 }) {
   const previewSignal = useMemo(() => createPaperSignalFromResearchSignal(signal), [signal]);
@@ -2322,6 +2359,11 @@ function PaperSimulationCard({
       <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-sm leading-5 text-slate-300">
         Safety: realOrderPlaced false, brokerMutation false, raw candles/snapshots/secrets/account/order/position data excluded.
       </p>
+      {persistenceMessage ? (
+        <p className="mt-3 break-words text-xs text-slate-300" data-testid="ict-paper-signal-persistence">
+          {persistenceMessage}
+        </p>
+      ) : null}
     </section>
   );
 }

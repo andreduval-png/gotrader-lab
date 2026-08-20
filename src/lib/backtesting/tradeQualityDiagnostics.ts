@@ -438,7 +438,7 @@ export function diagnoseTradeQuality({
         "Use stronger confidence/confluence gates and session filters before approving a proposal.",
         [
           hint("Higher confidence false-positive filter", { minimumConfidenceThreshold: Math.min(0.88, config.minimumConfidenceThreshold + 0.08) }, "Filter weak CIO conviction."),
-          hint("NY AM false-positive filter", { sessionFilter: "NY AM Kill Zone" }, "Check whether false positives cluster outside the main session.")
+          hint("NY AM avoidable-loss filter", { sessionFilter: "NY AM Kill Zone" }, "Check whether attributed avoidable losses cluster outside the main session.")
         ]
       )
     );

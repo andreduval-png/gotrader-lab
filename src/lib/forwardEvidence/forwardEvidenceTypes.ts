@@ -56,7 +56,10 @@ export interface ForwardEvidenceFailureCauseSummary {
   totalLostR: number;
   sessions: ForwardEvidenceSession[];
   sides: Array<"long" | "short">;
-  directlyAttributed: boolean;
+  /** A pre-entry context flag was recorded; this does not establish causality. */
+  contextAssociated: boolean;
+  /** @deprecated Historical input only. New evidence must use contextAssociated. */
+  directlyAttributed?: boolean;
   evidence: string;
 }
 

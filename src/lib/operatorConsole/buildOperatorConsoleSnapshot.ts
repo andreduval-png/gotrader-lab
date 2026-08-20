@@ -99,11 +99,61 @@ const emptyMemory = (): OperatorMemorySummary => ({
 
 const researchPlanFor = (
   activation: IctActivateMarketLatestSummary | undefined,
-  sourceFingerprint: string | undefined
+  sourceFingerprint: string | undefined,
+  cycle: OperatorCycleState
 ): OperatorConsoleSnapshot["researchPlan"] => {
   const currentCandidate = activation?.currentOpportunitySummary?.topOpportunity
     ?? activation?.currentOpportunitySummary?.topNearMiss
     ?? activation?.currentOpportunitySummary?.topRejected;
+  const identityComplete = Boolean(
+    activation?.cycleId &&
+    activation.sourceFingerprint &&
+    activation.currentReadEvaluatedAt
+  );
+  const planIdentityStatus = !activation
+    ? "unavailable" as const
+    : !identityComplete
+      ? "legacy_unbound" as const
+      : cycle.cycleId && activation.cycleId !== cycle.cycleId
+        ? "stale_cycle" as const
+        : sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint
+          ? "source_mismatch" as const
+          : activation.currentCandidateId && currentCandidate?.id && activation.currentCandidateId !== currentCandidate.id
+            ? "candidate_mismatch" as const
+            : "current" as const;
+  if (planIdentityStatus !== "current") {
+    const identityReason = planIdentityStatus === "legacy_unbound"
+      ? "The saved trade plan predates cycle and source identity binding. Run a new research cycle to replace it."
+      : planIdentityStatus === "stale_cycle"
+        ? "The saved trade plan belongs to an earlier research cycle and has been hidden."
+        : planIdentityStatus === "source_mismatch"
+          ? "The saved trade plan belongs to a different market-data source and has been hidden."
+          : planIdentityStatus === "candidate_mismatch"
+            ? "The saved trade plan candidate does not match the current opportunity and has been hidden."
+            : "No identity-bound current trade plan is available.";
+    return {
+      status: "unavailable",
+      planIdentityStatus,
+      cycleId: activation?.cycleId,
+      currentReadEvaluatedAt: activation?.currentReadEvaluatedAt,
+      currentCandidateId: activation?.currentCandidateId,
+      setup: "No current identity-bound research plan",
+      side: "flat",
+      setupDirection: "neutral",
+      signal: "NO_TRADE",
+      planSource: "unavailable",
+      planCoherence: "incomplete",
+      planCoherenceReason: identityReason,
+      riskScreeningStatus: "not evaluated",
+      riskScreeningReason: identityReason,
+      accountRiskEvaluation: "external_simulation_required",
+      sourceFingerprint: activation?.sourceFingerprint,
+      generatedAt: activation?.activationTimestamp,
+      informationalOnly: true,
+      executionAllowed: false
+    };
+  }
+  const currentActivation = activation!;
   const stopLoss = activation?.proposedStopLoss;
   const takeProfit = activation?.proposedTakeProfit;
   const levelImpliedSide = finite(stopLoss) && finite(takeProfit) && stopLoss !== takeProfit
@@ -181,6 +231,10 @@ const researchPlanFor = (
 
   return {
     status,
+    planIdentityStatus,
+    cycleId: currentActivation.cycleId,
+    currentReadEvaluatedAt: currentActivation.currentReadEvaluatedAt,
+    currentCandidateId: currentActivation.currentCandidateId,
     setup: clean(activation?.modelName, "No qualified research plan").replace(/_/g, " "),
     side,
     setupDirection,
@@ -200,6 +254,7 @@ const researchPlanFor = (
         : undefined,
     stopLoss,
     takeProfit,
+    targetProvenance: activation?.proposedTargetProvenance,
     riskReward,
     riskScreeningStatus: clean(activation?.riskScreeningStatus, "not evaluated").replace(/_/g, " "),
     riskScreeningReason: `${clean(
@@ -208,9 +263,9 @@ const researchPlanFor = (
         ? "Market-context screening is complete; independent account-risk evaluation has not run."
         : "A complete directional research plan is required before independent account-risk evaluation."
     )}${planCoherence === "incoherent" ? ` ${planCoherenceReason}` : ""}`,
-    accountRiskEvaluation: "not_evaluated",
+    accountRiskEvaluation: "external_simulation_required",
     recommendedMaxRiskPerTradePct: activation?.recommendedMaxRiskPerTradePct,
-    sourceFingerprint,
+    sourceFingerprint: currentActivation.sourceFingerprint,
     generatedAt: activation?.activationTimestamp,
     informationalOnly: true,
     executionAllowed: false
@@ -394,7 +449,7 @@ export const buildOperatorConsoleSnapshot = ({
       nextAction: "Run a research cycle with an eligible MT5 source to issue the first timestamped forecast."
     },
     memory,
-    researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint),
+    researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint, cycle),
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,
     autoApplyAllowed: false,

@@ -42,8 +42,14 @@ import {
   selectRuntimeProvenanceWarnings,
   type ResearchRuntimeSnapshot
 } from "@/lib/runtime";
-import { aggregatePortfolioMetrics, identifyWeakestAgent } from "@/lib/scoring";
-import type { LabState, MarketOutcome } from "@/lib/types";
+import { identifyWeakestAgent } from "@/lib/scoring";
+import type { LabState } from "@/lib/types";
+import {
+  listSimulatedOutcomeEvents,
+  SIMULATED_OUTCOME_LEDGER_UPDATED_EVENT,
+  type SimulatedOutcomeEvent,
+  type SimulatedOutcomeLedgerReadResult
+} from "@/lib/simulatedOutcomeLedger";
 import { cn } from "@/lib/utils";
 import { loadLatestValidationReport } from "@/lib/validation";
 import { latestWalkForwardRun } from "@/lib/walkForward";
@@ -55,6 +61,15 @@ import { loadPredictionLedger } from "@/lib/predictionLedger";
 import { loadForwardEvidenceLedger } from "@/lib/forwardEvidence";
 import { latestValidationChainEntry, readValidationChainState } from "@/lib/validationChain";
 import { buildResultsWorkspaceSnapshot } from "@/lib/results";
+import type { ResultsWorkspaceSnapshot } from "@/lib/results";
+import {
+  buildResearchMcpRuntimeMirror,
+  readMcpCurrentCycle,
+  readMcpResults,
+  readMcpTradeProposals,
+  syncGoTraderResearchMcpRuntime,
+  type ResearchMcpConnectionState
+} from "@/lib/researchMcp";
 import { WORKSPACE_PAGE, WORKSPACE_SECTION_LABEL } from "@/components/common/workspaceStyles";
 
 type ResultsTab = "overview" | "backtest" | "replay" | "walk_forward" | "paper_forward" | "robustness";
@@ -75,11 +90,14 @@ const compactDate = new Intl.DateTimeFormat(undefined, { month: "short", year: "
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const safeNumber = (value?: number | null) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-const pct = (value?: number, digits = 1) =>
+const pct = (value?: number | null, digits = 1) =>
   typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "n/a";
 const rValue = (value?: number | null, digits = 2) =>
   typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(digits)}R` : "n/a";
 const readableProfile = (profileId: string) => profileId.replace(/_/g, " ");
+const resultCount = (value?: number | null) => typeof value === "number" && Number.isFinite(value) ? String(value) : "n/a";
+const resultPair = (left?: number | null, right?: number | null) =>
+  typeof left === "number" && typeof right === "number" ? `${left}/${right}` : "n/a";
 
 interface CalendarCell {
   date: Date;
@@ -98,8 +116,18 @@ export function PerformanceView({ state }: { state: LabState }) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<ResearchRuntimeSnapshot>();
   const [resultsTab, setResultsTab] = useState<ResultsTab>("overview");
   const [monthOffset, setMonthOffset] = useState(0);
+  const [outcomeLedger, setOutcomeLedger] = useState<SimulatedOutcomeLedgerReadResult>({
+    events: [],
+    latest: [],
+    rejectedEventCount: 0
+  });
+  const [mcpConnection, setMcpConnection] = useState<ResearchMcpConnectionState>("disconnected");
+  const [mcpEvidenceId, setMcpEvidenceId] = useState<string>();
+  const [mcpResults, setMcpResults] = useState<ResultsWorkspaceSnapshot>();
+  const [mcpCycleStatus, setMcpCycleStatus] = useState<string>();
+  const [mcpBlockers, setMcpBlockers] = useState<string[]>([]);
+  const [mcpProposals, setMcpProposals] = useState<Awaited<ReturnType<typeof readMcpTradeProposals>>["proposals"]>([]);
 
-  const legacyMetrics = aggregatePortfolioMetrics(state);
   const weakest = identifyWeakestAgent(state);
   const latestCycle = latestResearchCycleRun(loadResearchCycleState());
   const latestValidation = loadLatestValidationReport();
@@ -113,19 +141,19 @@ export function PerformanceView({ state }: { state: LabState }) {
     () => runtimeSnapshot?.performance.simulatedAccountSummary ?? buildSimulatedAccountFromCanonicalMetrics(canonicalMetrics),
     [canonicalMetrics, runtimeSnapshot]
   );
+  const recordedOutcomes = outcomeLedger.latest;
   const calendar = useMemo(
     () =>
       buildResultsCalendar({
-        metrics: canonicalMetrics,
-        outcomes: state.outcomes,
+        outcomes: recordedOutcomes,
         monthOffset
       }),
-    [canonicalMetrics, simulatedAccount, state.outcomes, monthOffset]
+    [recordedOutcomes, monthOffset]
   );
   const outcomeMoveCurve = useMemo(() => buildOutcomeMoveCurve(calendar.cells), [calendar.cells]);
   const tradeBars = useMemo(() => buildTradeBars(calendar.cells), [calendar.cells]);
-  const recentRows = useMemo(() => buildRecentOutcomeRows(state.outcomes), [state.outcomes]);
-  const resultsSnapshot = useMemo(
+  const recentRows = useMemo(() => buildRecentOutcomeRows(recordedOutcomes), [recordedOutcomes]);
+  const localResultsSnapshot = useMemo(
     () => buildResultsWorkspaceSnapshot({
       runtimeSnapshot,
       canonicalMetrics,
@@ -139,10 +167,29 @@ export function PerformanceView({ state }: { state: LabState }) {
     }),
     [canonicalMetrics, runtimeSnapshot, walkForward]
   );
+  const resultsSnapshot = mcpResults ?? localResultsSnapshot;
   const sourceWarnings = selectRuntimeProvenanceWarnings(runtimeSnapshot);
-  const winRate = canonicalMetrics?.winRate ?? legacyMetrics.hitRate;
-  const avgWinLoss = averageWinLossRatio(canonicalMetrics);
-  const hasDatedOutcomes = state.outcomes.length > 0;
+  const verifiedCanonicalMetrics = resultsSnapshot.backtest.identityStatus === "matched" ? canonicalMetrics : undefined;
+  const winRate = verifiedCanonicalMetrics?.winRate;
+  const avgWinLoss = averageWinLossRatio(verifiedCanonicalMetrics);
+  const hasDatedOutcomes = recordedOutcomes.some((outcome) => Boolean(outcome.resolvedAt) && outcome.status !== "rejected");
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => {
+      void listSimulatedOutcomeEvents().then((next) => {
+        if (mounted) setOutcomeLedger(next);
+      });
+    };
+    refresh();
+    window.addEventListener(SIMULATED_OUTCOME_LEDGER_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener(SIMULATED_OUTCOME_LEDGER_UPDATED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -158,6 +205,48 @@ export function PerformanceView({ state }: { state: LabState }) {
     };
   }, [state]);
 
+  useEffect(() => {
+    if (!runtimeSnapshot) return;
+    let mounted = true;
+    const sync = async () => {
+      try {
+        const mirror = await buildResearchMcpRuntimeMirror();
+        let syncedEvidenceId: string | undefined;
+        let syncBlockers: string[] = [];
+        try {
+          const receipt = await syncGoTraderResearchMcpRuntime(mirror);
+          syncedEvidenceId = receipt.evidenceId;
+        } catch (error) {
+          syncBlockers = [error instanceof Error ? error.message : "Local runtime mirror was rejected."];
+        }
+        const [resultsResponse, cycleResponse, proposalsResponse] = await Promise.all([
+          readMcpResults(), readMcpCurrentCycle(), readMcpTradeProposals()
+        ]);
+        if (!mounted) return;
+        setMcpProposals(proposalsResponse.proposals);
+        if (resultsResponse.status !== "available" || !resultsResponse.data) {
+          setMcpResults(undefined);
+          setMcpCycleStatus(undefined);
+          setMcpEvidenceId(resultsResponse.evidenceId ?? syncedEvidenceId);
+          setMcpConnection(resultsResponse.freshness === "stale" ? "stale" : "blocked");
+          setMcpBlockers(resultsResponse.blockers);
+          return;
+        }
+        setMcpResults(resultsResponse.data as ResultsWorkspaceSnapshot);
+        setMcpCycleStatus((cycleResponse.data as { status?: string } | undefined)?.status ?? cycleResponse.status);
+        setMcpEvidenceId(resultsResponse.evidenceId ?? syncedEvidenceId);
+        setMcpBlockers(syncBlockers);
+        setMcpConnection(resultsResponse.activeProfile?.sourceProvider === "tradingview_mcp" ? "tradingview_upstream" : "direct");
+      } catch (error) {
+        if (!mounted) return;
+        setMcpConnection("disconnected");
+        setMcpBlockers([error instanceof Error ? error.message : "GoTrader Research MCP unavailable."]);
+      }
+    };
+    void sync();
+    return () => { mounted = false; };
+  }, [runtimeSnapshot?.snapshotId]);
+
   return (
     <div data-testid="performance-results-page" className={`${WORKSPACE_PAGE} text-slate-100`}>
       <header className="premium-surface premium-panel-grid flex flex-col justify-between gap-4 rounded-lg p-4 sm:p-5 lg:flex-row lg:items-end">
@@ -165,10 +254,22 @@ export function PerformanceView({ state }: { state: LabState }) {
           <p className={WORKSPACE_SECTION_LABEL}>Research Results</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-normal text-slate-50">Research Performance</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-            One evidence ledger for backtest, replay, chronological OOS, robustness, Paper-Demo monitoring, and forward forecasts.
+            Identity-bound evidence views for backtest, replay, chronological OOS, robustness, Paper-Demo monitoring, and forward forecasts.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Badge variant={mcpConnection === "direct" ? "success" : mcpConnection === "tradingview_upstream" || mcpConnection === "stale" ? "warning" : "danger"}>
+            {mcpConnection === "direct"
+              ? "Direct GoTrader MCP"
+              : mcpConnection === "tradingview_upstream"
+                ? "TradingView bridge / MCP upstream"
+                : mcpConnection === "stale"
+                  ? "GoTrader MCP stale / blocked"
+                : mcpConnection === "blocked"
+                  ? "GoTrader MCP blocked"
+                  : "GoTrader MCP disconnected"}
+          </Badge>
+          {mcpCycleStatus ? <Badge variant="secondary">cycle {mcpCycleStatus.replace(/_/g, " ")}</Badge> : null}
           <Badge variant={resultsSnapshot.source.provider === "mt5_read_only" ? "success" : "warning"}>
             {resultsSnapshot.source.provider.replace(/_/g, " ")}
           </Badge>
@@ -176,6 +277,16 @@ export function PerformanceView({ state }: { state: LabState }) {
           <Badge variant="danger">authority none</Badge>
         </div>
       </header>
+
+      {mcpBlockers.length ? (
+        <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-amber-100" data-testid="results-mcp-blockers">
+          {mcpConnection === "direct" || mcpConnection === "tradingview_upstream"
+            ? `This browser's runtime mirror was not accepted: ${mcpBlockers.join("; ")}. Results are reading the last fresh shared MCP evidence instead.`
+            : `MCP source unavailable: ${mcpBlockers.join("; ")}. Local canonical Results remain visible and are not relabeled as MCP evidence.`}
+        </div>
+      ) : mcpEvidenceId ? (
+        <div className="text-xs text-slate-500" data-testid="results-mcp-evidence-id">MCP ledger {mcpEvidenceId}</div>
+      ) : null}
 
       <ResultsCalendar
         calendar={calendar}
@@ -209,30 +320,51 @@ export function PerformanceView({ state }: { state: LabState }) {
         ))}
       </div>
 
+      {mcpProposals[0] ? (
+        <section className="rounded-lg border border-white/10 bg-white/[0.03] p-4" data-testid="results-mcp-trade-proposal">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={WORKSPACE_SECTION_LABEL}>MCP Trade Proposal</p>
+              <p className="mt-1 break-words font-mono text-sm text-slate-200">{mcpProposals[0].proposalId}</p>
+            </div>
+            <Badge variant={mcpProposals[0].status === "validated_research_proposal" ? "success" : "danger"}>
+              {mcpProposals[0].status.replace(/_/g, " ")}
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-slate-300 sm:grid-cols-2 xl:grid-cols-4">
+            <div>Profile: {mcpProposals[0].compactProposal.strategyProfileId ?? "missing"} / {mcpProposals[0].compactProposal.strategyProfileVersion ?? "missing"}</div>
+            <div>Identity: {mcpProposals[0].checks.profileIdentityMatched ? "matched" : "blocked"}</div>
+            <div>Freshness: {mcpProposals[0].checks.runtimeFreshness}</div>
+            <div className="break-words">Ledger: {mcpProposals[0].ledgerReference ?? "missing"}</div>
+          </div>
+          {mcpProposals[0].blockers.length ? <p className="mt-3 text-xs text-amber-200">Blockers: {mcpProposals[0].blockers.join("; ")}</p> : null}
+        </section>
+      ) : null}
+
       {resultsTab === "overview" ? (
         <section className="space-y-4" data-testid="results-tab-overview">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <ResultMetricCard
               label="Frozen research profile"
-              value={`${resultsSnapshot.frozenProfile.historicalTrades} trades`}
+              value={resultsSnapshot.frozenProfile.historicalTrades === null ? "n/a" : `${resultsSnapshot.frozenProfile.historicalTrades} trades`}
               detail={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} / ${pct(resultsSnapshot.frozenProfile.historicalTargetFirstRate)} target-first / ${rValue(resultsSnapshot.frozenProfile.historicalAverageR)}`}
-              tone="positive"
+              tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"}
             />
             <ResultMetricCard
               label="Chronological OOS"
-              value={`${resultsSnapshot.frozenProfile.oosTrades} trades`}
-              detail={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal} rolling windows / ${rValue(resultsSnapshot.frozenProfile.oosAverageR)}`}
-              tone="positive"
+              value={resultsSnapshot.frozenProfile.oosTrades === null ? "n/a" : `${resultsSnapshot.frozenProfile.oosTrades} trades`}
+              detail={`${resultPair(resultsSnapshot.frozenProfile.rollingWindowsPassed, resultsSnapshot.frozenProfile.rollingWindowsTotal)} rolling windows / ${rValue(resultsSnapshot.frozenProfile.oosAverageR)}`}
+              tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"}
             />
             <ResultMetricCard
               label="Forward Evidence"
-              value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`}
-              detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} dates / ${resultsSnapshot.frozenProfile.forwardWindows} windows`}
+              value={resultsSnapshot.frozenProfile.forwardCompleted === null ? "n/a" : `${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`}
+              detail={`${resultCount(resultsSnapshot.frozenProfile.forwardIndependentDates)} dates / ${resultCount(resultsSnapshot.frozenProfile.forwardWindows)} windows`}
             />
             <ResultMetricCard
-              label="Research Readiness"
+              label="Progression status"
               value={resultsSnapshot.validation.readinessState.replace(/_/g, " ")}
-              detail={`Evidence ${resultsSnapshot.validation.evidenceScore} / Maturity ${resultsSnapshot.validation.maturityScore}`}
+              detail={`Reported ${resultsSnapshot.validation.reportedReadinessState} / Evidence ${resultsSnapshot.validation.evidenceScore} / Maturity ${resultsSnapshot.validation.maturityScore}`}
             />
           </div>
 
@@ -253,20 +385,28 @@ export function PerformanceView({ state }: { state: LabState }) {
                 />
                 <StatTile label="Weekly bias" value={`${resultsSnapshot.source.weeklyBiasDirection} / ${resultsSnapshot.source.weeklyBiasStatus}`} />
                 <StatTile label="Fingerprint" value={resultsSnapshot.source.fingerprint} />
+                <StatTile label="Activation identity" value={resultsSnapshot.source.activationIdentityStatus} />
               </div>
             </ResultPanel>
 
             <ResultPanel>
               <PanelHeading icon={<ShieldCheck className="h-4 w-4" />} title="Progression gate" subtitle="Historical strength does not auto-promote a profile" />
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <StatTile label="Latest replay" value={resultsSnapshot.validation.replayVerdict.replace(/_/g, " ")} />
-                <StatTile label="Latest walk-forward" value={resultsSnapshot.validation.walkForwardVerdict.replace(/_/g, " ")} />
-                <StatTile label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} />
+                <StatTile label="Replay" value={`${resultsSnapshot.replay.identityStatus} / ${resultsSnapshot.validation.replayVerdict.replace(/_/g, " ")}`} />
+                <StatTile label="Walk-forward" value={`${resultsSnapshot.walkForward.identityStatus} / ${resultsSnapshot.validation.walkForwardVerdict.replace(/_/g, " ")}`} />
+                <StatTile label="Monte Carlo" value={`${resultsSnapshot.monteCarlo.identityStatus} / ${resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")}`} />
                 <StatTile label="Paper-Demo" value={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / broker disconnected`} />
               </div>
-              <p className="mt-4 rounded-md border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm leading-6 text-emerald-100">
-                {readableProfile(resultsSnapshot.frozenProfile.profileId)} historical replay, chronological OOS, and Monte Carlo evidence are preserved separately. Forward reassessment still requires untouched post-cutoff outcomes.
+              <p className={cn("mt-4 rounded-md border p-3 text-sm leading-6", resultsSnapshot.frozenProfile.availability === "available" ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100" : "border-amber-300/20 bg-amber-300/10 text-amber-100")}>
+                {resultsSnapshot.frozenProfile.availability === "available"
+                  ? `${readableProfile(resultsSnapshot.frozenProfile.profileId)} historical evidence is registered separately. Forward reassessment still requires untouched post-cutoff outcomes.`
+                  : `No registered frozen evidence is available for ${readableProfile(resultsSnapshot.frozenProfile.profileId)}. No substitute profile metrics are displayed.`}
               </p>
+              {resultsSnapshot.validation.readinessIntegrity === "contradictory" ? (
+                <p className="mt-4 rounded-md border border-rose-300/25 bg-rose-300/10 p-3 text-sm leading-6 text-rose-100">
+                  The stored readiness label conflicts with active blockers. Results fail closed to blocked until the readiness record is recomputed.
+                </p>
+              ) : null}
               <p className="mt-4 rounded-md border border-amber-300/20 bg-amber-300/10 p-3 text-sm leading-6 text-amber-100">
                 {resultsSnapshot.validation.nextAction}
               </p>
@@ -279,7 +419,7 @@ export function PerformanceView({ state }: { state: LabState }) {
         <section className="premium-surface space-y-4 rounded-lg p-4 sm:p-5" data-testid="results-tab-replay">
           <PanelHeading icon={<Activity className="h-4 w-4" />} title="Replay evidence" subtitle="Compact manual replay outcomes; no candles are stored here" />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="Signals" value={String(resultsSnapshot.replay.totalSignals)} detail={resultsSnapshot.replay.runId ?? "no saved replay"} />
+            <ResultMetricCard label="Signals" value={resultCount(resultsSnapshot.replay.totalSignals)} detail={`${resultsSnapshot.replay.identityStatus} identity / ${resultsSnapshot.replay.runId ?? "no matching replay"}`} />
             <ResultMetricCard label="Target-first" value={pct(resultsSnapshot.replay.targetFirstRate ?? undefined)} detail="all replay signals" />
             <ResultMetricCard label="Approved target-first" value={pct(resultsSnapshot.replay.approvedTargetFirstRate ?? undefined)} detail={`Approved RR ${rValue(resultsSnapshot.replay.approvedAverageRr)}`} />
             <ResultMetricCard label="Replay verdict" value={resultsSnapshot.replay.verdict.replace(/_/g, " ")} detail="Recognition alone is not evidence" />
@@ -295,26 +435,26 @@ export function PerformanceView({ state }: { state: LabState }) {
             subtitle="Latest active validation and frozen profile evidence are reported separately"
           />
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">latest run: {resultsSnapshot.walkForward.status.replace(/_/g, " ")}</Badge>
-            <Badge variant="secondary">{readableProfile(resultsSnapshot.frozenProfile.profileId)}: OOS passed</Badge>
+            <Badge variant={resultsSnapshot.walkForward.identityStatus === "matched" ? "success" : "warning"}>latest run: {resultsSnapshot.walkForward.identityStatus}</Badge>
+            <Badge variant={resultsSnapshot.frozenProfile.availability === "available" ? "secondary" : "warning"}>{readableProfile(resultsSnapshot.frozenProfile.profileId)}: {resultsSnapshot.frozenProfile.availability}</Badge>
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Latest active validation run</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="OOS expectancy" value={rValue(resultsSnapshot.walkForward.oosAverageR)} detail={`${resultsSnapshot.walkForward.oosTrades} OOS trades`} />
+            <ResultMetricCard label="OOS expectancy" value={rValue(resultsSnapshot.walkForward.oosAverageR)} detail={`${resultCount(resultsSnapshot.walkForward.oosTrades)} OOS trades`} />
             <ResultMetricCard label="Lower 95% expectancy" value={rValue(resultsSnapshot.walkForward.oosLower95)} detail="Must remain positive for stronger evidence" />
             <ResultMetricCard
               label="Windows passed"
-              value={`${resultsSnapshot.walkForward.windowsPassed}/${resultsSnapshot.walkForward.windows}`}
+              value={resultPair(resultsSnapshot.walkForward.windowsPassed, resultsSnapshot.walkForward.windows)}
               detail={`Stability ${walkForward?.stability?.stabilityScore ?? "n/a"} / use expectancy CI`}
             />
             <ResultMetricCard label="Verdict" value={resultsSnapshot.walkForward.verdict.replace(/_/g, " ")} detail={resultsSnapshot.walkForward.runId ?? "no saved WF run"} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Frozen profile chronological evidence</p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="OOS sample" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} detail={`${resultsSnapshot.frozenProfile.historicalUniqueDates} historical dates`} tone="positive" />
-            <ResultMetricCard label="Rolling windows" value={`${resultsSnapshot.frozenProfile.rollingWindowsPassed}/${resultsSnapshot.frozenProfile.rollingWindowsTotal}`} detail="positive chronological windows" tone="positive" />
-            <ResultMetricCard label="OOS average" value={rValue(resultsSnapshot.frozenProfile.oosAverageR)} detail="frozen detector profile" tone="positive" />
-            <ResultMetricCard label="OOS profit factor" value={resultsSnapshot.frozenProfile.oosProfitFactor.toFixed(3)} detail="historical evidence; no auto-promotion" tone="positive" />
+            <ResultMetricCard label="OOS sample" value={resultsSnapshot.frozenProfile.oosTrades === null ? "n/a" : `${resultsSnapshot.frozenProfile.oosTrades} trades`} detail={`${resultCount(resultsSnapshot.frozenProfile.historicalUniqueDates)} historical dates`} tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"} />
+            <ResultMetricCard label="Rolling windows" value={resultPair(resultsSnapshot.frozenProfile.rollingWindowsPassed, resultsSnapshot.frozenProfile.rollingWindowsTotal)} detail="positive chronological windows" tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"} />
+            <ResultMetricCard label="OOS average" value={rValue(resultsSnapshot.frozenProfile.oosAverageR)} detail="registered frozen profile" tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"} />
+            <ResultMetricCard label="OOS profit factor" value={resultsSnapshot.frozenProfile.oosProfitFactor?.toFixed(3) ?? "n/a"} detail="historical evidence; no auto-promotion" tone={resultsSnapshot.frozenProfile.availability === "available" ? "positive" : "neutral"} />
           </div>
         </section>
       ) : null}
@@ -322,10 +462,10 @@ export function PerformanceView({ state }: { state: LabState }) {
       {resultsTab === "paper_forward" ? (
         <section className="space-y-4" data-testid="results-tab-paper-forward">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="Paper candidates" value={String(resultsSnapshot.paperDemo.candidateCount)} detail={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / ${resultsSnapshot.paperDemo.blockedCount} blocked`} />
+            <ResultMetricCard label="Paper candidates" value={String(resultsSnapshot.paperDemo.candidateCount)} detail={`${resultsSnapshot.paperDemo.monitoringCount} monitoring / ${resultsSnapshot.paperDemo.blockedCount} blocked / ${resultsSnapshot.paperDemo.excludedCandidateCount} other-source excluded`} />
             <ResultMetricCard label="Daily checklist" value={`${resultsSnapshot.paperDemo.checklistCompleted}/${resultsSnapshot.paperDemo.checklistTotal}`} detail={`${resultsSnapshot.paperDemo.journalEntries} compact journal entries`} />
-            <ResultMetricCard label="Forward outcomes" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} detail={`${resultsSnapshot.frozenProfile.forwardIndependentDates} independent dates`} />
-            <ResultMetricCard label="Forecast calibration" value={resultsSnapshot.predictions.classification.replace(/_/g, " ")} detail={`${resultsSnapshot.predictions.completedForecasts} completed / ${resultsSnapshot.predictions.pendingForecasts} pending`} />
+            <ResultMetricCard label="Forward outcomes" value={resultsSnapshot.frozenProfile.forwardCompleted === null ? "n/a" : `${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} detail={`${resultCount(resultsSnapshot.frozenProfile.forwardIndependentDates)} independent dates`} />
+            <ResultMetricCard label="Forecast calibration" value={resultsSnapshot.predictions.classification.replace(/_/g, " ")} detail={`${resultsSnapshot.predictions.completedForecasts} completed / ${resultsSnapshot.predictions.pendingForecasts} pending / ${resultsSnapshot.predictions.excludedForecasts} other-source excluded`} />
           </div>
           <div className="grid gap-4 xl:grid-cols-2">
             <ResultPanel>
@@ -338,7 +478,7 @@ export function PerformanceView({ state }: { state: LabState }) {
               </div>
             </ResultPanel>
             <ResultPanel>
-              <PanelHeading icon={<TrendingUp className="h-4 w-4" />} title="Causal forecast ledger" subtitle="Anticipated scenarios measured before outcomes" />
+              <PanelHeading icon={<TrendingUp className="h-4 w-4" />} title="Causal forecast ledger" subtitle={`Active source identity only / ${resultsSnapshot.predictions.identityStatus}`} />
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <StatTile label="Forecasts" value={`${resultsSnapshot.predictions.totalForecasts} total / ${resultsSnapshot.predictions.actionableForecasts} actionable`} />
                 <StatTile label="Target-first" value={pct(resultsSnapshot.predictions.targetFirstRate ?? undefined)} />
@@ -358,7 +498,7 @@ export function PerformanceView({ state }: { state: LabState }) {
             subtitle="Latest saved simulation and frozen profile evidence remain distinct"
           />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <ResultMetricCard label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} detail={`${resultsSnapshot.monteCarlo.usableOutcomes} usable outcomes`} />
+            <ResultMetricCard label="Latest Monte Carlo" value={resultsSnapshot.monteCarlo.robustness.replace(/_/g, " ")} detail={`${resultCount(resultsSnapshot.monteCarlo.usableOutcomes)} usable outcomes / ${resultsSnapshot.monteCarlo.identityStatus}`} />
             <ResultMetricCard label="5th percentile ending R" value={rValue(resultsSnapshot.monteCarlo.fifthPercentileEndingR)} detail={`Median ${rValue(resultsSnapshot.monteCarlo.medianEndingR)}`} />
             <ResultMetricCard label="Worst drawdown" value={resultsSnapshot.monteCarlo.worstMaxDrawdownPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.worstMaxDrawdownPct.toFixed(2)}%`} detail={`Median ${resultsSnapshot.monteCarlo.medianMaxDrawdownPct?.toFixed(2) ?? "n/a"}%`} />
             <ResultMetricCard label="Risk of ruin" value={resultsSnapshot.monteCarlo.riskOfRuinPct === null ? "n/a" : `${resultsSnapshot.monteCarlo.riskOfRuinPct.toFixed(2)}%`} detail="Research simulation only" />
@@ -367,9 +507,9 @@ export function PerformanceView({ state }: { state: LabState }) {
             <PanelHeading icon={<Activity className="h-4 w-4" />} title={`${readableProfile(resultsSnapshot.frozenProfile.profileId)} robustness`} subtitle="Validated historical profile; forward reassessment remains gated" />
             <div className="mt-4 grid gap-2 md:grid-cols-4">
               <StatTile label="Monte Carlo" value={resultsSnapshot.frozenProfile.monteCarloRobustness.replace(/_/g, " ")} />
-              <StatTile label="Historical outcomes" value={String(resultsSnapshot.frozenProfile.historicalTrades)} />
-              <StatTile label="Chronological OOS" value={`${resultsSnapshot.frozenProfile.oosTrades} trades`} />
-              <StatTile label="Forward threshold" value={`${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} />
+              <StatTile label="Historical outcomes" value={resultCount(resultsSnapshot.frozenProfile.historicalTrades)} />
+              <StatTile label="Chronological OOS" value={resultsSnapshot.frozenProfile.oosTrades === null ? "n/a" : `${resultsSnapshot.frozenProfile.oosTrades} trades`} />
+              <StatTile label="Forward threshold" value={resultsSnapshot.frozenProfile.forwardCompleted === null ? "n/a" : `${resultsSnapshot.frozenProfile.forwardCompleted}/${resultsSnapshot.frozenProfile.forwardRequired}`} />
             </div>
           </ResultPanel>
           <ResultPanel>
@@ -387,38 +527,42 @@ export function PerformanceView({ state }: { state: LabState }) {
         <>
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
         <ResultMetricCard
-          label="Aggregate simulated P&L"
-          value={money.format(resultsSnapshot.backtest.realizedPnL ?? 0)}
-          detail={`${resultsSnapshot.backtest.totalTrades.toLocaleString()} canonical research trades`}
-          tone={(resultsSnapshot.backtest.realizedPnL ?? 0) >= 0 ? "positive" : "negative"}
+          label="Estimated simulated P&L"
+          value={resultsSnapshot.backtest.realizedPnL === null ? "n/a" : money.format(resultsSnapshot.backtest.realizedPnL)}
+          detail={
+            typeof resultsSnapshot.backtest.totalTrades === "number"
+              ? `${resultsSnapshot.backtest.totalTrades.toLocaleString()} canonical research trades`
+              : "Current-cycle metric unavailable"
+          }
+          tone={resultsSnapshot.backtest.realizedPnL === null ? "neutral" : resultsSnapshot.backtest.realizedPnL >= 0 ? "positive" : "negative"}
         />
         <ResultMetricCard
           label="Win Rate"
           value={pct(winRate, 2)}
-          detail={`${canonicalMetrics?.winningTrades ?? 0}/${canonicalMetrics?.totalTrades ?? 0} trades`}
-          visual={<SemiGauge value={winRate} />}
+          detail={`${verifiedCanonicalMetrics?.winningTrades ?? 0}/${verifiedCanonicalMetrics?.totalTrades ?? 0} trades / ${resultsSnapshot.backtest.identityStatus}`}
+          visual={typeof winRate === "number" ? <SemiGauge value={winRate} /> : undefined}
         />
         <ResultMetricCard
           label="Reward / Risk"
           value={avgWinLoss ? avgWinLoss.toFixed(2) : "n/a"}
-          detail={`Avg R ${rValue(canonicalMetrics?.averageR)}`}
-          visual={<RatioBar value={avgWinLoss ?? 0} />}
+          detail={`Average win/loss ratio / Avg R ${rValue(verifiedCanonicalMetrics?.averageR)}`}
+          visual={avgWinLoss === null ? undefined : <RatioBar value={avgWinLoss} />}
         />
         <ResultMetricCard
           label="Profit Factor"
-          value={canonicalMetrics?.profitFactor === null || canonicalMetrics?.profitFactor === undefined ? "n/a" : canonicalMetrics.profitFactor.toFixed(2)}
-          detail="Canonical latest-cycle metric · in_sample"
+          value={verifiedCanonicalMetrics?.losingTrades ? verifiedCanonicalMetrics.profitFactor?.toFixed(2) ?? "n/a" : "n/a"}
+          detail={verifiedCanonicalMetrics?.losingTrades ? "Canonical latest-cycle metric / in_sample" : "Requires at least one losing trade"}
         />
         <ResultMetricCard
           label="Max Drawdown"
-          value={rValue(canonicalMetrics?.maxDrawdownR)}
-          detail={wholeMoney.format(simulatedAccount?.maxDrawdownDollars ?? 0)}
+          value={rValue(verifiedCanonicalMetrics?.maxDrawdownR)}
+          detail={verifiedCanonicalMetrics ? wholeMoney.format(simulatedAccount?.maxDrawdownDollars ?? 0) : "n/a"}
           tone="negative"
         />
         <ResultMetricCard
-          label="Current Balance"
-          value={wholeMoney.format(simulatedAccount?.currentBalance ?? simulatedAccount?.startingBalance ?? 50000)}
-          detail={`Start ${wholeMoney.format(simulatedAccount?.startingBalance ?? 50000)}`}
+          label="Estimated simulated balance"
+          value={verifiedCanonicalMetrics ? wholeMoney.format(simulatedAccount?.currentBalance ?? verifiedCanonicalMetrics.currentBalance) : "n/a"}
+          detail={verifiedCanonicalMetrics ? `Start ${wholeMoney.format(simulatedAccount?.startingBalance ?? verifiedCanonicalMetrics.startingBalance)}` : "No identity-matched canonical run"}
         />
       </section>
 
@@ -430,7 +574,7 @@ export function PerformanceView({ state }: { state: LabState }) {
               <h3 className="mt-1 text-xl font-semibold text-slate-50">Cumulative dated outcome move</h3>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">{canonicalMetrics?.sourceCycleId ?? "no cycle"}</Badge>
+              <Badge variant="secondary">{verifiedCanonicalMetrics?.sourceCycleId ?? "no matching cycle"}</Badge>
               <Badge variant="warning">in_sample</Badge>
             </div>
           </div>
@@ -459,22 +603,22 @@ export function PerformanceView({ state }: { state: LabState }) {
             <Badge variant="secondary">Canonical</Badge>
           </div>
           <div className="mt-4 space-y-2">
-            <StatRow label="Biggest trade" value={rValue(canonicalMetrics?.bestTradeR)} />
-            <StatRow label="Worst trade" value={rValue(canonicalMetrics?.worstTradeR)} negative />
-            <StatRow label="Expectancy" value={rValue(canonicalMetrics?.averageR)} />
-            <StatRow label="Profit factor" value={canonicalMetrics?.profitFactor === null || canonicalMetrics?.profitFactor === undefined ? "n/a" : canonicalMetrics.profitFactor.toFixed(2)} />
-            <StatRow label="False positives" value={String(canonicalMetrics?.falsePositiveCount ?? 0)} negative />
-            <StatRow label="Skipped signals" value={String(canonicalMetrics?.skippedSignals ?? 0)} />
+            <StatRow label="Biggest trade" value={rValue(verifiedCanonicalMetrics?.bestTradeR)} />
+            <StatRow label="Worst trade" value={rValue(verifiedCanonicalMetrics?.worstTradeR)} negative />
+            <StatRow label="Expectancy" value={rValue(verifiedCanonicalMetrics?.averageR)} />
+            <StatRow label="Profit factor" value={verifiedCanonicalMetrics?.losingTrades ? verifiedCanonicalMetrics.profitFactor?.toFixed(2) ?? "n/a" : "n/a"} />
+            <StatRow label="Stop-hit losses" value={verifiedCanonicalMetrics ? String(verifiedCanonicalMetrics.stopHitCount) : "n/a"} negative />
+            <StatRow label="Skipped signals" value={verifiedCanonicalMetrics ? String(verifiedCanonicalMetrics.skippedSignals) : "n/a"} />
             <StatRow
               label="Readiness"
               value={String(
-                canonicalMetrics?.readinessScore ??
+                verifiedCanonicalMetrics?.readinessScore ??
                   runtimeSnapshot?.readiness.readinessSnapshot.validationSnapshot?.readinessScore ??
                   runtimeSnapshot?.readiness.readinessSnapshot.researchQualitySnapshot?.readinessScore ??
                   0
               )}
             />
-            <StatRow label="Stability" value={String(canonicalMetrics?.stabilityScore ?? 0)} />
+            <StatRow label="Stability" value={verifiedCanonicalMetrics ? String(verifiedCanonicalMetrics.stabilityScore) : "n/a"} />
           </div>
           <div className="mt-4 rounded-lg border border-amber-300/25 bg-amber-300/10 p-3 text-sm text-amber-100">
             <ShieldAlert className="mr-2 inline h-4 w-4" aria-hidden="true" />
@@ -511,9 +655,9 @@ export function PerformanceView({ state }: { state: LabState }) {
             <Badge variant="danger">in_sample · authority gated</Badge>
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2">
-            <StatTile label="Metric source" value={canonicalMetrics?.metricSourceLabel ?? "no completed research cycle"} />
-            <StatTile label="Data source" value={canonicalMetrics?.dataSource ?? runtimeSnapshot?.marketData.sourceLabel ?? "n/a"} />
-            <StatTile label="Candle window" value={canonicalMetrics?.candleWindow ?? "n/a"} />
+            <StatTile label="Metric source" value={verifiedCanonicalMetrics?.metricSourceLabel ?? "no identity-matched completed research cycle"} />
+            <StatTile label="Data source" value={verifiedCanonicalMetrics?.dataSource ?? "n/a"} />
+            <StatTile label="Candle window" value={verifiedCanonicalMetrics?.candleWindow ?? "n/a"} />
             <StatTile label="Fingerprint" value={selectRuntimeFingerprintLabel(runtimeSnapshot)} />
           </div>
           {sourceWarnings.length || canonicalMismatchWarnings.length ? (
@@ -533,23 +677,25 @@ export function PerformanceView({ state }: { state: LabState }) {
             <h3 className="mt-1 text-xl font-semibold text-slate-50">Recent simulated outcomes</h3>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">{state.outcomes.length} stored outcomes</Badge>
-            <Badge variant="warning">Local memory</Badge>
+            <Badge variant="secondary">{recordedOutcomes.length} verified records</Badge>
+            {outcomeLedger.rejectedEventCount ? <Badge variant="danger">{outcomeLedger.rejectedEventCount} integrity failures excluded</Badge> : null}
           </div>
         </div>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[920px] text-left text-sm">
+          <table className="w-full min-w-[1240px] text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-xs uppercase tracking-[0.14em] text-slate-500">
                 <th className="py-3 pr-4">#</th>
                 <th className="py-3 pr-4">Date & Time</th>
+                <th className="py-3 pr-4">Cycle</th>
                 <th className="py-3 pr-4">Symbol</th>
-                <th className="py-3 pr-4">Session</th>
-                <th className="py-3 pr-4">Bias</th>
-                <th className="py-3 pr-4">Move</th>
-                <th className="py-3 pr-4">Target</th>
-                <th className="py-3 pr-4">Invalidation</th>
-                <th className="py-3 pr-4">Notes</th>
+                <th className="py-3 pr-4">Source</th>
+                <th className="py-3 pr-4">Model</th>
+                <th className="py-3 pr-4">Side</th>
+                <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">Points</th>
+                <th className="py-3 pr-4">Target provenance</th>
+                <th className="py-3 pr-4">Reason</th>
               </tr>
             </thead>
             <tbody>
@@ -557,19 +703,21 @@ export function PerformanceView({ state }: { state: LabState }) {
                 <tr key={row.id} className="border-b border-white/5 text-slate-300 hover:bg-white/[0.035]">
                   <td className="py-3 pr-4 font-mono text-slate-500">{String(index + 1).padStart(2, "0")}</td>
                   <td className="py-3 pr-4 font-mono text-xs">{row.resolvedAt}</td>
+                  <td className="max-w-[170px] break-all py-3 pr-4 font-mono text-xs text-slate-400">{row.cycleId}</td>
                   <td className="py-3 pr-4 font-semibold text-slate-100">{row.symbol}</td>
-                  <td className="py-3 pr-4"><Badge variant="secondary">{row.session}</Badge></td>
-                  <td className="py-3 pr-4"><Badge variant={row.actualBias === "bullish" ? "success" : row.actualBias === "bearish" ? "danger" : "warning"}>{row.actualBias}</Badge></td>
-                  <td className={cn("py-3 pr-4 font-mono", row.move >= 0 ? "text-emerald-300" : "text-rose-300")}>{formatMove(row.move)}</td>
-                  <td className="py-3 pr-4">{row.liquidityTargetReached ? "Reached" : "No"}</td>
-                  <td className="py-3 pr-4">{row.invalidationHit ? "Hit" : "Held"}</td>
-                  <td className="max-w-[360px] py-3 pr-4 text-slate-500">{row.notes}</td>
+                  <td className="py-3 pr-4"><Badge variant="secondary">{row.source}</Badge></td>
+                  <td className="max-w-[180px] break-words py-3 pr-4 text-slate-200">{row.model}</td>
+                  <td className="py-3 pr-4"><Badge variant={row.side === "long" ? "success" : row.side === "short" ? "danger" : "warning"}>{row.side}</Badge></td>
+                  <td className="py-3 pr-4"><Badge variant={row.status === "target_hit" ? "success" : row.status === "stop_hit" || row.status === "rejected" ? "danger" : "warning"}>{row.status.replace(/_/g, " ")}</Badge></td>
+                  <td className={cn("py-3 pr-4 font-mono", (row.points ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300")}>{row.points === null ? "n/a" : formatMove(row.points)}</td>
+                  <td className="max-w-[260px] break-words py-3 pr-4 text-slate-300">{row.targetProvenance}</td>
+                  <td className="max-w-[360px] break-words py-3 pr-4 text-slate-400">{row.reason}</td>
                 </tr>
               ))}
               {!recentRows.length ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-sm text-slate-500">
-                    No dated simulated outcomes are stored. Aggregate cycle metrics are not presented as individual outcome rows.
+                  <td colSpan={11} className="py-10 text-center text-sm text-slate-500">
+                    No verified identity-bound simulated outcomes are stored. Aggregate cycle metrics are not presented as individual outcome rows.
                   </td>
                 </tr>
               ) : null}
@@ -797,24 +945,23 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 function buildResultsCalendar({
-  metrics,
   outcomes,
   monthOffset = 0
 }: {
-  metrics?: CanonicalPerformanceMetrics;
-  outcomes: MarketOutcome[];
+  outcomes: SimulatedOutcomeEvent[];
   monthOffset?: number;
 }) {
-  const base = new Date(metrics?.generatedAt ?? outcomes[0]?.resolvedAt ?? Date.now());
+  const base = new Date();
   const anchorDate = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
   const firstOfMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
   const calendarStart = new Date(firstOfMonth);
   calendarStart.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
   const outcomeByDay = new Map<string, { move: number; trades: number }>();
   for (const outcome of outcomes) {
+    if (!outcome.resolvedAt || outcome.status === "pending" || outcome.status === "rejected") continue;
     const key = dateKey(new Date(outcome.resolvedAt));
     const current = outcomeByDay.get(key) ?? { move: 0, trades: 0 };
-    current.move += outcome.priceMove;
+    current.move += outcome.result?.points ?? 0;
     current.trades += 1;
     outcomeByDay.set(key, current);
   }
@@ -879,28 +1026,34 @@ function buildTradeBars(cells: CalendarCell[]) {
     }));
 }
 
-function buildRecentOutcomeRows(outcomes: MarketOutcome[]) {
+function buildRecentOutcomeRows(outcomes: SimulatedOutcomeEvent[]) {
   return outcomes
     .slice()
-    .sort((left, right) => new Date(right.resolvedAt).getTime() - new Date(left.resolvedAt).getTime())
+    .sort((left, right) => new Date(right.resolvedAt ?? right.recordedAt).getTime() - new Date(left.resolvedAt ?? left.recordedAt).getTime())
     .slice(0, 12)
     .map((outcome) => ({
-      id: outcome.id,
-      resolvedAt: new Date(outcome.resolvedAt).toLocaleString(),
-      symbol: outcome.symbol,
-      session: outcome.session,
-      actualBias: outcome.actualBias,
-      move: outcome.priceMove,
-      liquidityTargetReached: outcome.liquidityTargetReached,
-      invalidationHit: outcome.invalidationHit,
-      notes: outcome.notes
+      id: outcome.eventId,
+      resolvedAt: new Date(outcome.resolvedAt ?? outcome.recordedAt).toLocaleString(),
+      cycleId: outcome.identity.cycleId,
+      symbol: outcome.identity.requestedSymbol,
+      source: outcome.sourceKind,
+      model: [outcome.plan.tradeModel ?? outcome.identity.strategyProfile, outcome.plan.tradeHorizon].filter(Boolean).join(" / "),
+      side: outcome.plan.side,
+      status: outcome.status,
+      points: typeof outcome.result?.points === "number" ? outcome.result.points : null,
+      targetProvenance: outcome.plan.targetProvenance
+        ? [
+            `${outcome.plan.targetProvenance.type.replace(/_/g, " ")} / ${outcome.plan.targetProvenance.sourceTimeframe ?? "n/a"} / ${outcome.plan.targetProvenance.gateStatus}`,
+            outcome.plan.targetProvenance.selectionReason,
+            `${typeof outcome.plan.targetProvenance.distancePoints === "number" ? `${outcome.plan.targetProvenance.distancePoints.toFixed(2)} pts` : "distance n/a"} / ${typeof outcome.plan.targetProvenance.rr === "number" ? `${outcome.plan.targetProvenance.rr.toFixed(2)}R` : "RR n/a"} / ${typeof outcome.plan.targetProvenance.minimumRR === "number" ? `min ${outcome.plan.targetProvenance.minimumRR.toFixed(2)}R` : "min n/a"}`
+          ].join(" | ")
+        : "unavailable",
+      reason: outcome.result?.reason ?? outcome.plan.targetProvenance?.selectionReason ?? "Pending later closed-candle resolution."
     }));
 }
 
 function averageWinLossRatio(metrics?: CanonicalPerformanceMetrics) {
-  if (!metrics?.profitFactor || !metrics.winningTrades || !metrics.losingTrades) {
-    return metrics?.profitFactor ?? null;
-  }
+  if (!metrics?.winningTrades || !metrics.losingTrades || metrics.profitFactor === null) return null;
   return metrics.profitFactor * (metrics.losingTrades / metrics.winningTrades);
 }
 

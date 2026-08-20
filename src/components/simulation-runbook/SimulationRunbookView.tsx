@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ClipboardCheck, RotateCcw, Save, TerminalSquare } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardCheck, RefreshCw, TerminalSquare } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,18 +11,18 @@ import { Progress } from "@/components/ui/progress";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  completeSimulationRunbookVerification,
   countCompletedRunbookItems,
   loadSimulationRunbookState,
-  resetSimulationRunbookState,
+  projectCanonicalSimulationRunbook,
   saveSimulationRunbookState,
   simulationRunbookChecklist
 } from "@/lib/simulationRunbook";
-import type {
-  SimulationRunbookChecklistId,
-  SimulationRunbookSignal,
-  SimulationRunbookState
-} from "@/lib/simulationRunbook";
+import type { SimulationRunbookState } from "@/lib/simulationRunbook";
+import {
+  buildResearchMcpRuntimeMirror,
+  readMcpSimulationRunbook,
+  syncGoTraderResearchMcpRuntime
+} from "@/lib/researchMcp";
 
 const readerCommand =
   "python shared_scripts/check_ict_ai_lab.py --handoff-file ../gotrader/exports/latest-gotrader-handoff.json";
@@ -30,53 +30,33 @@ const readerCommand =
 const schedulerCommand = `$env:GOTRADER_PYTHON = "C:\\Python314\\python.exe"
 go run . -config ../docs/ai-lab-scheduler-simulation.config.json -once`;
 
-const signalOptions = [
-  { label: "Select signal", value: "" },
-  { label: "BUY", value: "BUY" },
-  { label: "SELL", value: "SELL" },
-  { label: "NEUTRAL", value: "NEUTRAL" }
-];
-
 const completionLabel = (completed: number, total: number) =>
   completed === total ? "Verification complete" : `${completed}/${total} checks complete`;
 
+const shortEvidenceId = (value?: string) => value ? `${value.slice(0, 15)}...${value.slice(-8)}` : "";
+
 export function SimulationRunbookView() {
   const [runbook, setRunbook] = useState<SimulationRunbookState>(() => loadSimulationRunbookState());
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string>();
   const completed = countCompletedRunbookItems(runbook);
   const total = simulationRunbookChecklist.length;
   const progress = (completed / total) * 100;
   const failedItems = simulationRunbookChecklist.filter((item) => !runbook.checklist[item.id]);
 
-  const persist = (next: SimulationRunbookState) => {
-    setRunbook(next);
-    saveSimulationRunbookState(next);
-  };
-
-  const updateField = (field: keyof SimulationRunbookState, value: string) => {
-    persist({
-      ...runbook,
-      [field]: value
-    });
-  };
-
-  const toggleChecklist = (id: SimulationRunbookChecklistId, checked: boolean) => {
-    persist({
-      ...runbook,
-      checklist: {
-        ...runbook.checklist,
-        [id]: checked
-      }
-    });
-  };
-
-  const saveVerification = () => {
-    setRunbook(completeSimulationRunbookVerification(runbook));
-  };
-
-  const resetRunbook = () => {
-    const approved = window.confirm("Reset the local simulation verification runbook?");
-    if (approved) {
-      setRunbook(resetSimulationRunbookState());
+  const refreshCanonicalEvidence = async () => {
+    setRefreshing(true);
+    setRefreshError(undefined);
+    try {
+      await syncGoTraderResearchMcpRuntime(await buildResearchMcpRuntimeMirror());
+      const response = await readMcpSimulationRunbook();
+      const next = projectCanonicalSimulationRunbook(loadSimulationRunbookState(), response);
+      saveSimulationRunbookState(next);
+      setRunbook(next);
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : "Canonical runbook evidence is unavailable.");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -92,13 +72,9 @@ export function SimulationRunbookView() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={saveVerification}>
-            <Save className="h-4 w-4" aria-hidden="true" />
-            Save Verification
-          </Button>
-          <Button variant="outline" onClick={resetRunbook}>
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            Reset
+          <Button onClick={() => void refreshCanonicalEvidence()} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+            Refresh Evidence
           </Button>
         </div>
       </div>
@@ -108,7 +84,7 @@ export function SimulationRunbookView() {
       {failedItems.length ? (
         <Card className="border-amber-300/25 bg-amber-300/10">
           <CardContent className="space-y-2 p-4 text-sm text-amber-100">
-            <div className="font-medium">Failed checklist items</div>
+            <div className="font-medium">Evidence unavailable</div>
             <div className="flex flex-wrap gap-2">
               {failedItems.slice(0, 5).map((item) => (
                 <Badge key={item.id} variant="warning">{item.label}</Badge>
@@ -119,10 +95,17 @@ export function SimulationRunbookView() {
         </Card>
       ) : null}
 
+      {refreshError ? (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300/25 bg-red-300/10 p-3 text-sm text-red-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{refreshError}</span>
+        </div>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <TechnicalDetails
           title="View full verification checklist"
-          description="Open to mark each simulation bridge verification item."
+          description="Open to inspect immutable evidence for each simulation bridge check."
         >
         <Card>
           <CardHeader>
@@ -130,7 +113,7 @@ export function SimulationRunbookView() {
               <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" />
               <CardTitle>Verification Checklist</CardTitle>
             </div>
-            <CardDescription>Use this as the local audit trail for the safe simulation handoff loop.</CardDescription>
+            <CardDescription>Derived from the host-side exact-cycle evidence ledger. These states are not manually editable.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-background/45 p-3">
@@ -143,19 +126,23 @@ export function SimulationRunbookView() {
 
             <div className="grid gap-2 md:grid-cols-2">
               {simulationRunbookChecklist.map((item, index) => (
-                <label
+                <div
                   key={item.id}
-                  className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-background/45 p-3 text-sm transition-colors hover:bg-secondary/45"
+                  className="flex min-h-14 items-center gap-3 rounded-lg border border-border bg-background/45 p-3 text-sm"
                 >
-                  <input
-                    type="checkbox"
-                    checked={runbook.checklist[item.id]}
-                    onChange={(event) => toggleChecklist(item.id, event.target.checked)}
-                    className="h-4 w-4 accent-primary"
-                  />
                   <span className="font-mono text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-                  <span>{item.label}</span>
-                </label>
+                  <span className="min-w-0 flex-1">
+                    <span className="block">{item.label}</span>
+                    {runbook.evidence?.[item.id] ? (
+                      <span className="mt-1 block break-all font-mono text-[11px] text-muted-foreground">
+                        {runbook.evidence[item.id]?.source} · {shortEvidenceId(runbook.evidence[item.id]?.evidenceId)}
+                      </span>
+                    ) : null}
+                  </span>
+                  <Badge variant={runbook.checklist[item.id] ? "success" : "muted"}>
+                    {runbook.checklist[item.id] ? "Verified" : "Unavailable"}
+                  </Badge>
+                </div>
               ))}
             </div>
           </CardContent>
@@ -168,12 +155,26 @@ export function SimulationRunbookView() {
               <CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />
               <CardTitle>Latest Verification</CardTitle>
             </div>
-            <CardDescription>Stored locally in this browser.</CardDescription>
+            <CardDescription>Canonical evidence is stored by the local GoTrader Research MCP; this browser keeps a display projection.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-border bg-background/45 p-3 text-sm">
               <div className="text-xs text-muted-foreground">Latest verification timestamp</div>
               <div className="mt-1 font-mono">{runbook.verifiedAt ?? "not saved"}</div>
+            </div>
+            <div className="grid gap-3 rounded-lg border border-border bg-background/45 p-3 text-sm md:grid-cols-2">
+              <div>
+                <div className="text-xs text-muted-foreground">Canonical status</div>
+                <div className="mt-1 font-mono">{runbook.canonicalStatus ?? "unavailable"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Cycle</div>
+                <div className="mt-1 break-all font-mono">{runbook.latestResearchCycleId ?? "unavailable"}</div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-muted-foreground">Ledger evidence</div>
+                <div className="mt-1 break-all font-mono">{runbook.canonicalEvidenceId ?? "incomplete"}</div>
+              </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-2">
@@ -182,7 +183,7 @@ export function SimulationRunbookView() {
                   id="runbook-symbol"
                   value={runbook.symbol}
                   placeholder="MES"
-                  onChange={(event) => updateField("symbol", event.target.value.toUpperCase())}
+                  readOnly
                 />
               </div>
               <div className="space-y-2">
@@ -191,7 +192,7 @@ export function SimulationRunbookView() {
                   id="runbook-timeframe"
                   value={runbook.timeframe}
                   placeholder="5m"
-                  onChange={(event) => updateField("timeframe", event.target.value)}
+                  readOnly
                 />
               </div>
               <div className="space-y-2">
@@ -199,8 +200,8 @@ export function SimulationRunbookView() {
                 <Select
                   id="runbook-signal"
                   value={runbook.signal}
-                  options={signalOptions}
-                  onChange={(event) => updateField("signal", event.target.value as SimulationRunbookSignal)}
+                  options={[{ label: runbook.signal || "Unavailable", value: runbook.signal }]}
+                  disabled
                 />
               </div>
               <div className="space-y-2">
@@ -212,7 +213,7 @@ export function SimulationRunbookView() {
                 <Input
                   id="runbook-platform"
                   value={runbook.platform}
-                  onChange={(event) => updateField("platform", event.target.value)}
+                  readOnly
                   className="font-mono"
                 />
               </div>
@@ -223,7 +224,7 @@ export function SimulationRunbookView() {
                 id="runbook-notes"
                 value={runbook.notes}
                 placeholder="Paste scheduler evidence or notes from the simulation cycle."
-                onChange={(event) => updateField("notes", event.target.value)}
+                readOnly
               />
             </div>
           </CardContent>

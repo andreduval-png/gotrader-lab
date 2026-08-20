@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 import {
   compactDiagnostic,
   diagnoseService,
@@ -24,7 +25,20 @@ import { loadLocalEnvironment } from "./local-env.mjs";
 
 await loadLocalEnvironment();
 
-const serviceOrder = ["mt5-upstream", "mt5-wrapper", "llm-bridge", "app", "tradingview-mcp"];
+const serviceOrder = ["mt5-upstream", "mt5-wrapper", "llm-bridge", "research-mcp", "app", "tradingview-mcp"];
+
+if (!process.env.GOTRADER_RESEARCH_MCP_TOKEN) {
+  const tokenPath = path.join(repoRoot, ".gotrader", "research-mcp-token");
+  try {
+    const storedToken = (await fs.readFile(tokenPath, "utf8")).trim();
+    if (storedToken.length < 24) throw new Error("stored_research_mcp_token_invalid");
+    process.env.GOTRADER_RESEARCH_MCP_TOKEN = storedToken;
+  } catch {
+    process.env.GOTRADER_RESEARCH_MCP_TOKEN = randomBytes(32).toString("hex");
+    await fs.mkdir(path.dirname(tokenPath), { recursive: true });
+    await fs.writeFile(tokenPath, `${process.env.GOTRADER_RESEARCH_MCP_TOKEN}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+}
 
 const envStatus = mt5UpstreamEnvStatus();
 const enableTradingView = isTruthyEnv(process.env.ENABLE_TRADINGVIEW_MCP);
@@ -109,6 +123,18 @@ const startConfigFor = async (id) => {
       args: ["run", "llm:bridge"],
       cwd: repoRoot,
       commandLabel: "npm.cmd run llm:bridge",
+      waitMs: 300
+    };
+  }
+  if (id === "research-mcp") {
+    return {
+      id,
+      label: "GoTrader Research MCP",
+      command: npmCommand,
+      args: ["run", "mcp:research:http"],
+      cwd: repoRoot,
+      env: process.env,
+      commandLabel: "npm.cmd run mcp:research:http",
       waitMs: 300
     };
   }

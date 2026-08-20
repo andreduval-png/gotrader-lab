@@ -86,6 +86,10 @@ export interface IctActivateMarketOperatorWorkflow {
 
 export interface IctActivateMarketLatestSummary {
   activationTimestamp: string;
+  cycleId?: string;
+  sourceFingerprint?: string;
+  currentReadEvaluatedAt?: string;
+  currentCandidateId?: string;
   requestedSymbol: string;
   brokerSymbol: string;
   primaryTimeframe: string;
@@ -119,6 +123,7 @@ export interface IctActivateMarketLatestSummary {
   proposedEntryZone?: { lower: number; upper: number };
   proposedStopLoss?: number;
   proposedTakeProfit?: number;
+  proposedTargetProvenance?: IctResearchSignal["targetProvenance"];
   proposedRiskReward?: number;
   riskScreeningStatus?: string;
   riskScreeningReason?: string;
@@ -225,6 +230,7 @@ export interface IctActivateMarketResult {
     proposedEntryZone?: { lower: number; upper: number };
     proposedStopLoss?: number;
     proposedTakeProfit?: number;
+    proposedTargetProvenance?: IctResearchSignal["targetProvenance"];
     proposedRiskReward?: number;
     riskScreeningStatus?: string;
     riskScreeningReason?: string;

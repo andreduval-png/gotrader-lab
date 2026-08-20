@@ -230,7 +230,12 @@ const compositeBiasFor = (primary: IctBias, htf: Record<string, IctBias>): IctBi
 
 const sideForBias = (bias: IctBias): IctSide => (bias === "bullish" ? "long" : bias === "bearish" ? "short" : "flat");
 
-type CompactLevelCandidate = { price?: number; reason: string };
+type CompactLevelCandidate = {
+  price?: number;
+  type: string;
+  sourceTimeframe?: string;
+  reason: string;
+};
 
 const signalBase = ({
   brokerSymbol,
@@ -304,12 +309,15 @@ const eventCandidates = (
   sessionNarrative: IctSessionNarrative,
   eventTypes: Array<IctSessionNarrative["events"][number]["eventType"]>,
   preference: "high" | "low" | "mid" | "price",
-  label: string
+  label: string,
+  sourceTimeframe?: string
 ) =>
   sessionNarrative.events
     .filter((event) => eventTypes.includes(event.eventType))
     .map((event) => ({
       price: compactEventPrice(event, preference),
+      type: event.eventType,
+      sourceTimeframe,
       reason: `${label}: ${event.eventType}`
     }));
 
@@ -322,7 +330,7 @@ const selectLevel = (
   entry: number,
   purpose: "target" | "invalidation"
 ) => {
-  const filtered = candidates.filter((candidate): candidate is { price: number; reason: string } => {
+  const filtered = candidates.filter((candidate): candidate is CompactLevelCandidate & { price: number } => {
     if (!finitePrice(candidate.price)) return false;
     return purpose === "target"
       ? logicalTargetForSide(side, entry, candidate.price)
@@ -335,15 +343,24 @@ const targetCandidatesFor = (signal: IctAdvisorSignal, sessionNarrative: IctSess
   const asia = rangeFor(sessionNarrative, "asia");
   const london = rangeFor(sessionNarrative, "london");
   const candidates = ([
-    signal.drawOnLiquidity ? { price: signal.drawOnLiquidity.price, reason: `external liquidity ${signal.drawOnLiquidity.type}` } : undefined,
+    signal.drawOnLiquidity
+      ? {
+          price: signal.drawOnLiquidity.price,
+          type: signal.drawOnLiquidity.type,
+          sourceTimeframe: signal.drawOnLiquidity.timeframe,
+          reason: `Directional liquidity draw: ${signal.drawOnLiquidity.type}`
+        }
+      : undefined,
     sessionNarrative.activeDealingRange
       ? {
           price: signal.side === "long" ? sessionNarrative.activeDealingRange.high : sessionNarrative.activeDealingRange.low,
+          type: "active_dealing_range_extreme",
+          sourceTimeframe: signal.primaryTimeframe,
           reason: "active dealing range extreme"
         }
       : undefined,
-    asia ? { price: signal.side === "long" ? asia.high : asia.low, reason: "Asia session extreme" } : undefined,
-    london ? { price: signal.side === "long" ? london.high : london.low, reason: "London session extreme" } : undefined,
+    asia ? { price: signal.side === "long" ? asia.high : asia.low, type: "asia_session_extreme", sourceTimeframe: signal.primaryTimeframe, reason: "Asia session extreme" } : undefined,
+    london ? { price: signal.side === "long" ? london.high : london.low, type: "london_session_extreme", sourceTimeframe: signal.primaryTimeframe, reason: "London session extreme" } : undefined,
     sessionNarrative.fvgTarget?.detected
       ? {
           price:
@@ -352,6 +369,8 @@ const targetCandidatesFor = (signal: IctAdvisorSignal, sessionNarrative: IctSess
               : signal.side === "short" && sessionNarrative.fvgTarget.direction === "discount"
                 ? sessionNarrative.fvgTarget.midpoint ?? sessionNarrative.fvgTarget.low
                 : undefined,
+          type: `${sessionNarrative.fvgTarget.direction}_fvg_target`,
+          sourceTimeframe: signal.primaryTimeframe,
           reason: `${sessionNarrative.fvgTarget.direction} FVG target`
         }
       : undefined,
@@ -359,7 +378,8 @@ const targetCandidatesFor = (signal: IctAdvisorSignal, sessionNarrative: IctSess
       sessionNarrative,
       signal.side === "long" ? ["premium_fvg_target", "bullish_expansion"] : ["discount_fvg_target", "bearish_expansion"],
       signal.side === "long" ? "high" : "low",
-      "session model target"
+      "session model target",
+      signal.primaryTimeframe
     )
   ] as Array<CompactLevelCandidate | undefined>).filter((candidate): candidate is CompactLevelCandidate => Boolean(candidate));
   return selectLevel(candidates, signal.side as "long" | "short", entry, "target");
@@ -373,20 +393,26 @@ const invalidationCandidatesFor = (signal: IctAdvisorSignal, sessionNarrative: I
     mitigation.detected
       ? {
           price: signal.side === "long" ? mitigation.zoneLow : mitigation.zoneHigh,
+          type: "mitigation_block_boundary",
+          sourceTimeframe: signal.primaryTimeframe,
           reason: "mitigation block boundary"
         }
       : undefined,
     signal.fairValueGap
       ? {
           price: signal.side === "long" ? signal.fairValueGap.low : signal.fairValueGap.high,
+          type: "fvg_origin_boundary",
+          sourceTimeframe: signal.fairValueGap.timeframe,
           reason: "FVG origin boundary"
         }
       : undefined,
-    asia ? { price: signal.side === "long" ? asia.low : asia.high, reason: "Asia session extreme" } : undefined,
-    london ? { price: signal.side === "long" ? london.low : london.high, reason: "London raid/session extreme" } : undefined,
+    asia ? { price: signal.side === "long" ? asia.low : asia.high, type: "asia_session_extreme", sourceTimeframe: signal.primaryTimeframe, reason: "Asia session extreme" } : undefined,
+    london ? { price: signal.side === "long" ? london.low : london.high, type: "london_session_extreme", sourceTimeframe: signal.primaryTimeframe, reason: "London raid/session extreme" } : undefined,
     sessionNarrative.activeDealingRange
       ? {
           price: signal.side === "long" ? sessionNarrative.activeDealingRange.low : sessionNarrative.activeDealingRange.high,
+          type: "active_dealing_range_invalidation",
+          sourceTimeframe: signal.primaryTimeframe,
           reason: "active dealing range invalidation extreme"
         }
       : undefined,
@@ -410,12 +436,49 @@ const completeSignalTradeStructure = (
   if (signal.decision !== "research_only" || !isDirectionalSide(signal.side)) return signal;
   const entry = entryReferenceForSignal(signal, currentPrice);
   const target = logicalTargetForSide(signal.side, entry, signal.target)
-    ? { price: signal.target, reason: "existing target" }
+    ? signal.drawOnLiquidity && signal.drawOnLiquidity.price === signal.target
+      ? {
+          price: signal.target,
+          type: signal.drawOnLiquidity.type,
+          sourceTimeframe: signal.drawOnLiquidity.timeframe,
+          reason: `Advisor signal selected directional liquidity: ${signal.drawOnLiquidity.type}`
+        }
+      : {
+          price: signal.target,
+          type: "advisor_signal_target",
+          sourceTimeframe: signal.primaryTimeframe,
+          reason: "Advisor signal supplied the existing directional target."
+        }
     : targetCandidatesFor(signal, sessionNarrative, entry);
   const invalidation = logicalInvalidationForSide(signal.side, entry, signal.invalidation)
     ? { price: signal.invalidation, reason: "existing invalidation" }
     : invalidationCandidatesFor(signal, sessionNarrative, entry);
   const rrEstimate = estimateRewardRisk({ entry, target: target?.price, invalidation: invalidation?.price });
+  const minimumRR = /turtle/i.test(signal.strategyId) ? 2.5 : /cameron|amd|power.of.three/i.test(signal.strategyId) ? 3 : 2;
+  const targetRejectionReasons = [
+    !finitePrice(target?.price) ? "No directional target price was available." : undefined,
+    !finitePrice(rrEstimate) ? "Target RR could not be calculated from entry and invalidation." : undefined,
+    finitePrice(rrEstimate) && rrEstimate < minimumRR ? `Target RR ${rrEstimate.toFixed(2)}R is below the ${minimumRR.toFixed(2)}R minimum.` : undefined
+  ].filter((reason): reason is string => Boolean(reason));
+  const targetProvenance = target
+    ? {
+        type: target.type,
+        sourceTimeframe: target.sourceTimeframe,
+        selectionReason: target.reason,
+        distancePoints: finitePrice(target.price) ? round(Math.abs(target.price - entry), 4) : undefined,
+        rr: rrEstimate,
+        minimumRR,
+        gateStatus: targetRejectionReasons.length ? "rejected" as const : "accepted" as const,
+        rejectionReasons: targetRejectionReasons
+      }
+    : {
+        type: "unavailable",
+        sourceTimeframe: signal.primaryTimeframe,
+        selectionReason: "No directional target candidate survived target selection.",
+        minimumRR,
+        gateStatus: "unavailable" as const,
+        rejectionReasons: targetRejectionReasons
+      };
   const completed = finitePrice(target?.price) && finitePrice(invalidation?.price) && finitePrice(rrEstimate);
   const missingReason = completed
     ? undefined
@@ -424,6 +487,7 @@ const completeSignalTradeStructure = (
     ...signal,
     entryReference: entry,
     target: target?.price ?? signal.target,
+    targetProvenance,
     invalidation: invalidation?.price ?? signal.invalidation,
     rrEstimate: rrEstimate ?? signal.rrEstimate,
     noTradeReasons: Array.from(

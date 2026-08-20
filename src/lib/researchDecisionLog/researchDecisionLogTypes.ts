@@ -75,6 +75,8 @@ export interface ResearchDecisionMetrics {
   averageR: number | null;
   drawdown: number | null;
   profitFactor: number | null;
+  attributedAvoidableLossRate: number | null;
+  /** @deprecated Compatibility alias for attributedAvoidableLossRate. */
   falsePositiveRate: number | null;
 }
 

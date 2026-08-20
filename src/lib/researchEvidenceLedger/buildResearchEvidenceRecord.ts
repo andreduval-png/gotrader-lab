@@ -1,5 +1,11 @@
 import type { ResearchCycleRun } from "@/lib/researchCycle/researchCycleTypes";
-import type { GoTraderResearchCycleMemory } from "@/lib/researchMemory/researchMemoryTypes";
+import type {
+  GoTraderGapAnalysisMemory,
+  GoTraderResearchCycleMemory,
+  GoTraderResearchMemoryPacket,
+  GoTraderSelfImprovementMemory,
+  GoTraderWalkForwardMemory
+} from "@/lib/researchMemory/researchMemoryTypes";
 import {
   gotraderResearchMemoryAuthorityNone,
   gotraderResearchMemoryExcludedSections
@@ -120,7 +126,9 @@ export function buildResearchEvidenceRecord(run: ResearchCycleRun): ResearchEvid
       realizedR: safeNumber(metrics?.realizedR ?? run.backtestSummary?.realizedR),
       profitFactor: metrics?.profitFactor ?? run.backtestSummary?.profitFactor ?? null,
       maxDrawdownR: safeNumber(metrics?.maxDrawdownR ?? run.backtestSummary?.maxDrawdown),
-      falsePositiveCount: safeNumber(metrics?.falsePositiveCount),
+      stopHitCount: safeNumber(metrics?.stopHitCount ?? run.backtestSummary?.losses),
+      attributedAvoidableLossCount: metrics?.attributedAvoidableLossCount,
+      falsePositiveCount: safeNumber(metrics?.attributedAvoidableLossCount),
       skippedSignals: safeNumber(metrics?.skippedSignals ?? run.backtestSummary?.skippedSignals)
     },
     validation: {
@@ -164,7 +172,7 @@ export function buildResearchEvidenceMemoryPacket(
   record: ResearchEvidenceCycleRecord
 ): GoTraderResearchCycleMemory {
   return {
-    packetId: `gbrain_memory_${record.evidenceId}`,
+    packetId: `research_memory_${record.evidenceId}`,
     timestamp: record.completedAt,
     memoryType: "research_cycle",
     cycleId: record.cycleId,
@@ -215,8 +223,11 @@ export function buildResearchEvidenceMemoryPacket(
       winRate: record.performance.winRate,
       maxDrawdownR: record.performance.maxDrawdownR,
       sampleSize: record.performance.tradeCount,
-      falsePositiveRate: record.performance.tradeCount
-        ? record.performance.falsePositiveCount / record.performance.tradeCount
+      attributedAvoidableLossRate: record.performance.tradeCount && typeof record.performance.attributedAvoidableLossCount === "number"
+        ? record.performance.attributedAvoidableLossCount / record.performance.tradeCount
+        : null,
+      falsePositiveRate: record.performance.tradeCount && typeof record.performance.attributedAvoidableLossCount === "number"
+        ? record.performance.attributedAvoidableLossCount / record.performance.tradeCount
         : null,
       processedCandles: record.source.processedCandleCount,
       rawCandles: record.source.candleCount,
@@ -249,6 +260,57 @@ export function buildResearchEvidenceMemoryPacket(
     authority: gotraderResearchMemoryAuthorityNone,
     exclusions: gotraderResearchMemoryExcludedSections
   };
+}
+
+export function buildResearchEvidenceMemoryPackets(
+  record: ResearchEvidenceCycleRecord
+): GoTraderResearchMemoryPacket[] {
+  const cycle = buildResearchEvidenceMemoryPacket(record);
+  const packets: GoTraderResearchMemoryPacket[] = [cycle];
+
+  if (
+    record.validation.walkForwardRunId ||
+    record.validation.walkForwardVerdict ||
+    record.validation.walkForwardWindowsTested > 0
+  ) {
+    const walkForward: GoTraderWalkForwardMemory = {
+      ...cycle,
+      packetId: `${cycle.packetId}_walk_forward`,
+      memoryType: "walk_forward",
+      runId: record.validation.walkForwardRunId,
+      splitSummary: `${record.validation.walkForwardWindowsPassed}/${record.validation.walkForwardWindowsTested} OOS windows passed; ${record.validation.walkForwardOosTrades} OOS trades.`,
+      outOfSampleWindowsPassed: record.validation.walkForwardWindowsPassed,
+      windowsTested: record.validation.walkForwardWindowsTested
+    };
+    packets.push(walkForward);
+  }
+
+  if (record.proposal.proposalId) {
+    const selfImprovement: GoTraderSelfImprovementMemory = {
+      ...cycle,
+      packetId: `${cycle.packetId}_self_improvement`,
+      memoryType: "self_improvement",
+      proposalId: record.proposal.proposalId,
+      proposalStatus: record.proposal.proposalStatus,
+      regressionWarnings: uniqueText([...record.blockers, ...record.promotionBlockers], 12)
+    };
+    packets.push(selfImprovement);
+  }
+
+  const gaps = uniqueText([...record.blockers, ...record.promotionBlockers], 12);
+  if (gaps.length) {
+    const gapAnalysis: GoTraderGapAnalysisMemory = {
+      ...cycle,
+      packetId: `${cycle.packetId}_gap_analysis`,
+      memoryType: "gap_analysis",
+      recurringGapIds: gaps,
+      missingEvidence: record.promotionBlockers,
+      recommendedExperiments: uniqueText([record.nextAction], 4)
+    };
+    packets.push(gapAnalysis);
+  }
+
+  return packets;
 }
 
 const forbiddenKeyPattern = /(?:^|_)(?:candles?|rawcandles?|raw_runtime_snapshot|rawsnapshots?|imported_ohlcv|account|orders?|positions?|password|secret|api_?key|token|screenshots?|base64)(?:$|_)/i;

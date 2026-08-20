@@ -517,6 +517,26 @@ async function main() {
   assert.ok(advisorPacket.signals.some((signal) => signal.strategyId === "ict-fvg-displacement"), "advisor packet should include FVG signal");
   assert.ok(advisorPacket.signals.some((signal) => signal.strategyId === "ict-order-block-taxonomy"), "advisor packet should include order-block taxonomy signal");
   assert.ok(advisorPacket.signals.some((signal) => signal.phase === "phase_2"), "advisor packet should include Phase 2 model signals");
+  const directionalTargetSignals = advisorPacket.signals.filter(
+    (signal) => signal.decision === "research_only" && typeof signal.target === "number"
+  );
+  assert.ok(directionalTargetSignals.length > 0, "advisor packet should include at least one directional target");
+  assert.ok(
+    directionalTargetSignals.every((signal) =>
+      signal.targetProvenance &&
+      signal.targetProvenance.type &&
+      signal.targetProvenance.selectionReason &&
+      typeof signal.targetProvenance.distancePoints === "number" &&
+      typeof signal.targetProvenance.minimumRR === "number" &&
+      ["accepted", "rejected"].includes(signal.targetProvenance.gateStatus)
+    ),
+    "every directional advisor target must retain structured selection and RR-gate provenance"
+  );
+  for (const signal of directionalTargetSignals) {
+    if (typeof signal.targetProvenance?.rr !== "number") continue;
+    const expectedGate = signal.targetProvenance.rr < signal.targetProvenance.minimumRR ? "rejected" : "accepted";
+    assert.equal(signal.targetProvenance.gateStatus, expectedGate, "target gate must be derived from canonical RR geometry");
+  }
   assert.ok(
     advisorPacket.signals.every((signal) => signal.approvedProfileDecision?.status),
     "every advisor signal should be evaluated by the approved setup profile layer"

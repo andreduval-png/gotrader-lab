@@ -207,7 +207,7 @@ export function generateTradeQualityCandidateConfigs(
   if (reasonCodes.has("false_positive_cluster")) {
     add(
       "Grinch Phase 1 HTF alignment gate",
-      "False positives were elevated, so require stronger higher-timeframe bias and PD hierarchy agreement before accepting a research thesis.",
+      "Attributed avoidable losses were elevated, so require stronger higher-timeframe bias and PD hierarchy agreement before accepting a research thesis.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfluenceThreshold + 0.08)), 2),
         agentWeights: {
@@ -221,7 +221,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "Grinch opening-price alignment gate",
-      "False positives can come from ignoring Sunday Open and 12AM Open; this emphasizes opening-price equilibrium and time-price alignment.",
+      "Attributed avoidable losses may be associated with ignoring Sunday Open and 12AM Open; this tests opening-price equilibrium and time-price alignment.",
       {
         minimumConfidenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfidenceThreshold + 0.06)), 2),
         agentWeights: {
@@ -235,7 +235,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "Grinch Model 1 confirmation gate",
-      "False positives were elevated, so this requires cleaner Model 1 classification and entry-confirmation evidence.",
+      "Attributed avoidable losses were elevated, so this requires cleaner Model 1 classification and entry-confirmation evidence.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfluenceThreshold + 0.1)), 2),
         minimumConfidenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfidenceThreshold + 0.08)), 2),
@@ -250,7 +250,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "Grinch reversal profile validation gate",
-      "False positives were elevated, so this tests whether requiring failed London/12AM interaction and NY reversal timing improves reversal-profile quality.",
+      "Attributed avoidable losses were elevated, so this tests whether requiring failed London/12AM interaction and NY reversal timing improves reversal-profile quality.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfluenceThreshold + 0.08)), 2),
         minimumConfidenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfidenceThreshold + 0.06)), 2),
@@ -266,7 +266,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "Grinch consolidation profile validation gate",
-      "False positives were elevated, so this tests whether 12AM consolidation, side raid, and displacement alignment improve profile selection.",
+      "Attributed avoidable losses were elevated, so this tests whether 12AM consolidation, side raid, and displacement alignment improve profile selection.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfluenceThreshold + 0.08)), 2),
         minimumConfidenceThreshold: round(clamp01(Math.max(0.5, baseline.minimumConfidenceThreshold + 0.06)), 2),
@@ -282,7 +282,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "Grinch SMT confirmation gate",
-      "False positives were elevated, so this tests whether SMT confirmation supports strong profiles, missing SMT gets penalized, and SMT conflict blocks weak setups.",
+      "Attributed avoidable losses were elevated, so this tests whether SMT confirmation supports strong profiles, missing SMT gets penalized, and SMT conflict blocks weak setups.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.54, baseline.minimumConfluenceThreshold + 0.1)), 2),
         minimumConfidenceThreshold: round(clamp01(Math.max(0.52, baseline.minimumConfidenceThreshold + 0.08)), 2),
@@ -319,7 +319,7 @@ export function generateTradeQualityCandidateConfigs(
     );
     add(
       "ICT + strict refinement false-positive filter",
-      "Test whether stricter Grinch profile validity reduces low-quality ICT setup exposure and false positives before changing readiness rules.",
+      "Test whether stricter Grinch profile validity reduces low-quality ICT setup exposure and attributed avoidable losses before changing readiness rules.",
       {
         minimumConfluenceThreshold: round(clamp01(Math.max(0.56, baseline.minimumConfluenceThreshold + 0.09)), 2),
         minimumConfidenceThreshold: round(clamp01(Math.max(0.54, baseline.minimumConfidenceThreshold + 0.07)), 2),

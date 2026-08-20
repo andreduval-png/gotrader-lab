@@ -105,11 +105,11 @@ const frozenProfileSourceMatches = (snapshot: ResearchRuntimeSnapshot) => {
   );
 };
 
-const latestFalsePositiveRate = (snapshot: ResearchRuntimeSnapshot) => {
+const latestAvoidableLossRate = (snapshot: ResearchRuntimeSnapshot) => {
   const metrics = snapshot.performance.canonicalPerformanceMetrics;
   const trades = metrics?.totalTrades ?? latestTradeSample(snapshot);
-  const falsePositives = metrics?.falsePositiveCount;
-  return typeof falsePositives === "number" && trades > 0 ? falsePositives / trades : undefined;
+  const attributedLosses = metrics?.attributedAvoidableLossCount;
+  return typeof attributedLosses === "number" && trades > 0 ? attributedLosses / trades : undefined;
 };
 
 const sourceQualityItem = (snapshot: ResearchRuntimeSnapshot) => {
@@ -328,19 +328,19 @@ const runbookItem = (snapshot: ResearchRuntimeSnapshot) => {
 };
 
 const falsePositiveItem = (snapshot: ResearchRuntimeSnapshot) => {
-  const rate = latestFalsePositiveRate(snapshot);
+  const rate = latestAvoidableLossRate(snapshot);
   const pass = typeof rate === "number" ? rate <= MAX_FALSE_POSITIVE_RATE : requirementPassed(snapshot, "false-positive-control");
   const warning = typeof rate === "number" ? rate <= 0.4 : false;
   const failed = requirementFailed(snapshot, "false-positive-control");
 
   return item({
     id: "false_positive_rate_acceptable",
-    label: "False-positive rate acceptable",
+    label: "Attributed avoidable-loss rate acceptable",
     status: statusFor(pass, warning),
     currentValue: typeof rate === "number" ? pctLabel(rate) : failed?.currentValue ?? "unavailable",
-    requiredValue: `<= ${pctLabel(MAX_FALSE_POSITIVE_RATE)} false-positive rate or research-quality false-positive control pass`,
-    blockerReason: pass ? "False-positive pressure is acceptable." : failed?.detail ?? "False-positive evidence is too weak or unavailable.",
-    nextAction: pass ? "Keep false-positive review attached." : failed?.suggestedFix ?? "Run Research Quality and reduce false-positive patterns."
+    requiredValue: `<= ${pctLabel(MAX_FALSE_POSITIVE_RATE)} attributed avoidable-loss rate or research-quality control pass`,
+    blockerReason: pass ? "Attributed avoidable-loss pressure is acceptable." : failed?.detail ?? "Avoidable-loss attribution is too weak or unavailable.",
+    nextAction: pass ? "Keep the attribution review attached." : failed?.suggestedFix ?? "Run Research Quality and investigate discriminating pre-entry loss cohorts."
   });
 };
 

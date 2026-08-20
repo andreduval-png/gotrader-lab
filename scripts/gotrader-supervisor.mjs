@@ -11,7 +11,8 @@ import {
   findRecoverableServices,
   gotraderCoreServiceIds,
   gotraderSupervisorAuthority,
-  resolveGoTraderSupervisorOptions
+  resolveGoTraderSupervisorOptions,
+  shouldReplaceBlockedSupervisor
 } from "./gotrader-supervisor-core.mjs";
 import { loadLocalEnvironment } from "./local-env.mjs";
 import {
@@ -122,9 +123,26 @@ const collectDiagnostics = async () => {
 
 const existingSupervisor = await readSupervisorState();
 if (existingSupervisor?.pid && isPidAlive(existingSupervisor.pid)) {
-  console.log(`GoTrader supervisor is already running with PID ${existingSupervisor.pid}.`);
-  await openDashboard();
-  process.exit(0);
+  const replaceBlocked = shouldReplaceBlockedSupervisor(existingSupervisor, {
+    maxRecoveryAttempts: options.maxRecoveryAttempts,
+    staleAfterMs: Math.max(60_000, options.healthIntervalMs * 2)
+  });
+  if (!replaceBlocked) {
+    console.log(`GoTrader supervisor is already running with PID ${existingSupervisor.pid}.`);
+    await openDashboard();
+    process.exit(0);
+  }
+  console.warn(`Replacing blocked GoTrader supervisor PID ${existingSupervisor.pid}.`);
+  if (process.platform === "win32") {
+    await execFileAsync("taskkill.exe", ["/PID", String(existingSupervisor.pid), "/T", "/F"], {
+      windowsHide: true,
+      timeout: 10_000
+    });
+  } else {
+    process.kill(Number(existingSupervisor.pid), "SIGTERM");
+  }
+  await runNodeScript("scripts/stop-local-stack.mjs");
+  await fs.rm(supervisorLockPath, { force: true });
 }
 
 await ensureStackDirs();

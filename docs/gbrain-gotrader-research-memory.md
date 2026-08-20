@@ -1,10 +1,10 @@
-# gbrain Research Memory Plan
+# Optional gbrain Adapter For AI-Agent Research Memory
 
-Last updated: 2026-06-02
+Last updated: 2026-08-17
 
 ## Purpose
 
-GoTrader treats `garrytan/gbrain` as an optional memory and synthesis reference, not as a trading runtime. The useful concepts for GoTrader are persistent research memory, cited synthesis, graph traversal, and gap analysis across prior research cycles. gbrain must not become a signal engine, chart source, readiness authority, broker authority, or execution path.
+GoTrader exposes a canonical, agent-neutral research-memory contract. `garrytan/gbrain` is one optional memory/synthesis adapter, not the product name and not a trading runtime. It must not become a signal engine, chart source, readiness authority, broker authority, or execution path.
 
 ## gbrain Concepts Inspected
 
@@ -20,11 +20,10 @@ GoTrader treats `garrytan/gbrain` as an optional memory and synthesis reference,
 2. Store Walk-Forward summaries so OpenClaw can reason about recurring OOS instability without reading raw candle data.
 3. Store Self-Improvement proposal summaries and before/after deltas for regression tracking.
 4. Store gap-analysis packets for recurring blockers such as missing macro inputs, regime insufficiency, low sample size, or Grinch profile absence.
-5. Store agent metric provenance so confidence, hit rate, and weighting changes can be traced to source, regime, and sample size.
 
 ## Current Implementation
 
-GoTrader has a native research-memory contract in `src/lib/researchMemory` and an authoritative append-only evidence ledger in `src/lib/researchEvidenceLedger`. Completed cycles now create compact evidence records and queue gbrain-compatible Markdown documents. Delivery remains disabled by default and loopback-only; no gbrain dependency or browser token is added. This does not change chart source, walk-forward, readiness, or safety gates.
+GoTrader has a native research-memory contract in `src/lib/researchMemory` and an authoritative append-only evidence ledger in `src/lib/researchEvidenceLedger`. Completed cycles create compact evidence records and all applicable agent-neutral memory packets. The UI exposes explicit enable and manual-send controls for the loopback-only gateway. Delivery remains disabled by default; no gbrain dependency or browser token is added.
 
 Created packet types:
 
@@ -32,11 +31,11 @@ Created packet types:
 - `GoTraderWalkForwardMemory`
 - `GoTraderSelfImprovementMemory`
 - `GoTraderGapAnalysisMemory`
-- `GoTraderAgentMetricMemory`
 
-Created builder:
+Created builders:
 
-- `buildResearchCycleMemoryPacket(latestCycle, runtimeSnapshot)`
+- `buildResearchEvidenceMemoryPacket(record)`
+- `buildResearchEvidenceMemoryPackets(record)`
 
 ## Packet Fields
 
@@ -74,21 +73,21 @@ Research-memory packets must not contain:
 
 The packet contract records these exclusions explicitly in `exclusions` so future connectors can assert the safety boundary before writing memory.
 
-## OpenClaw Advisory Context
+## AI-Agent Advisory Context
 
-OpenClaw can eventually read gbrain memory as advisory context for calibration, self-improvement, and gap analysis. The intended flow is:
+Any AI agent connected through an approved local adapter may read the compact memory as advisory context. The implemented flow is:
 
 ```text
 GoTrader deterministic cycle
   -> compact research-memory packet
-  -> disabled-by-default local gbrain outbox [IMPLEMENTED]
-  -> optional trusted loopback writer [OPERATOR CONFIGURATION REQUIRED]
-  -> gbrain search/think synthesis [PLANNED]
-  -> OpenClaw advisory context [PLANNED]
+  -> disabled-by-default local AI-agent memory outbox
+  -> explicit UI enable and manual loopback delivery
+  -> optional adapter indexing/search/synthesis
+  -> agent advisory context
   -> GoTrader explanation/proposal review only
 ```
 
-OpenClaw and gbrain advisory outputs remain explanation-only. They cannot activate a source, pass readiness, place orders, override safety gates, or mark broker truth.
+All adapter and agent outputs remain explanation-only. They cannot activate a source, pass readiness, place orders, override safety gates, or mark broker truth.
 
 ## Offline Behavior
 
@@ -101,16 +100,9 @@ gbrain is optional. If gbrain is missing, offline, unconfigured, or rate-limited
 - readiness gates still use GoTrader's own evidence, maturity, and safety logic
 - OpenClaw/LLM advisory can report memory unavailable without blocking deterministic research
 
-## Future Connector Plan
+## Adapter Boundary
 
-A future connector may add:
-
-- an operator-managed trusted loopback writer for optional gbrain MCP/HTTP writes
-- a dry-run validator that rejects packets containing candles or forbidden authority
-- a queue for best-effort packet writes
-- read-side gap-analysis queries for OpenClaw advisory context
-
-The connector should be optional and disabled by default. It must not become a required runtime dependency.
+The operator supplies any adapter behind the trusted loopback endpoint. GoTrader owns packet validation, queueing, delivery state, and fail-closed authority. Adapter-specific search and synthesis remain optional and must not become a required runtime dependency.
 
 ## Safety Boundary
 

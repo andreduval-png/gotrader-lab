@@ -131,7 +131,12 @@ export function calculateResearchMaturity(input: ResearchMaturityInput): Researc
   const winRateConsistency = normalizedSpreadScore(maturityCycles.map((cycle) => cycle.winRate ?? 0), 0.18);
   const averageRConsistency = normalizedSpreadScore(maturityCycles.map((cycle) => cycle.averageR ?? 0), 0.35);
   const drawdownConsistency = normalizedSpreadScore(maturityCycles.map((cycle) => cycle.maxDrawdownR ?? 0), 4);
-  const falsePositiveConsistency = normalizedSpreadScore(maturityCycles.map((cycle) => cycle.falsePositiveCount ?? 0), 20);
+  const attributedAvoidableLosses = maturityCycles
+    .map((cycle) => cycle.attributedAvoidableLossCount)
+    .filter((value): value is number => typeof value === "number");
+  const attributedAvoidableLossConsistency = attributedAvoidableLosses.length
+    ? normalizedSpreadScore(attributedAvoidableLosses, 20)
+    : 50;
   const sessionConsistency = Math.round(average([winRateConsistency, averageRConsistency, drawdownConsistency]));
   const trendAvailability = getMaturityTrendAvailability(maturityCycles.length);
   const readinessTrend = trendAvailability.basicTrendAvailable ? readinessTrendFor(maturityCycles) : "unknown";
@@ -146,7 +151,7 @@ export function calculateResearchMaturity(input: ResearchMaturityInput): Researc
     cycleCoverage: clamp((maturityCycles.length / 5) * 100),
     windowCoverage: clamp((dataWindowsTested / 3) * 100),
     tradeSample: clamp((totalSimulatedTrades / 120) * 100),
-    performanceConsistency: Math.round(average([winRateConsistency, averageRConsistency, drawdownConsistency, falsePositiveConsistency])),
+    performanceConsistency: Math.round(average([winRateConsistency, averageRConsistency, drawdownConsistency, attributedAvoidableLossConsistency])),
     llmReview: clamp((llmAdvisoryPassCount / 3) * 100),
     evidenceQuality: clamp(input.evidenceQualityScore),
     walkForward: clamp(walkForwardScore),
@@ -269,7 +274,8 @@ export function calculateResearchMaturity(input: ResearchMaturityInput): Researc
     winRateConsistency,
     averageRConsistency,
     drawdownConsistency,
-    falsePositiveConsistency,
+    attributedAvoidableLossConsistency,
+    falsePositiveConsistency: attributedAvoidableLossConsistency,
     sessionConsistency,
     llmAdvisoryPassCount,
     walkForwardWindowsTested,

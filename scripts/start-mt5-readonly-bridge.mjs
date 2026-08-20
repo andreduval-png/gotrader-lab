@@ -61,8 +61,7 @@ const upstreamPathCandidates = {
     "/api/v1/market/candles/by-date",
     "/api/v1/market/candles",
     "/candles/range",
-    "/candles/by-date",
-    "/candles"
+    "/candles/by-date"
   ].filter(Boolean),
   symbols: [configuredUpstreamPaths.symbols, "/symbols", "/api/v1/market/symbols"].filter(Boolean),
   symbolInfo: [
@@ -416,8 +415,9 @@ const updateEndpointAvailability = async () => {
   const latestCandleTime = normalizedLatest.at(-1)?.timestamp;
   const latestMillis = latestCandleTime ? Date.parse(latestCandleTime) : Number.NaN;
   const rangeAnchor = Number.isFinite(latestMillis) ? latestMillis : Date.now();
-  const from = new Date(rangeAnchor - 12 * 60 * 60 * 1000).toISOString();
-  const to = new Date(rangeAnchor + 60 * 60 * 1000).toISOString();
+  // Probe a completed historical interval so a latest-only endpoint cannot masquerade as date-range history.
+  const from = new Date(rangeAnchor - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const to = new Date(rangeAnchor - 7 * 24 * 60 * 60 * 1000).toISOString();
   const range = await probeUpstream("candleRange", {
     symbol_name: defaultBrokerSymbol,
     symbol: defaultBrokerSymbol,
@@ -430,9 +430,16 @@ const updateEndpointAvailability = async () => {
     to,
     start: from,
     end: to,
-    count: 1,
-    limit: 1
-  }, candleLikePayload);
+    count: 2,
+    limit: 2
+  }, (payload) => candlePayloadWithinRange({
+    payload,
+    brokerSymbol: defaultBrokerSymbol,
+    timeframe,
+    from,
+    to,
+    limit: 2
+  }));
   latestEndpointAvailable = latest.available;
   rangeEndpointAvailable = range.available;
   latestEndpointPath = latest.path;
@@ -603,6 +610,18 @@ const normalizeCandles = ({ payload, brokerSymbol, timeframe, limit }) => {
     .slice(-limit);
   return candles;
 };
+const candlePayloadWithinRange = ({ payload, brokerSymbol, timeframe, from, to, limit }) => {
+  const fromMillis = Date.parse(from);
+  const toMillis = Date.parse(to);
+  if (!Number.isFinite(fromMillis) || !Number.isFinite(toMillis) || fromMillis > toMillis) {
+    return false;
+  }
+  const candles = normalizeCandles({ payload, brokerSymbol, timeframe, limit });
+  return candles.length > 0 && candles.every((candle) => {
+    const timestampMillis = Date.parse(candle.timestamp);
+    return Number.isFinite(timestampMillis) && timestampMillis >= fromMillis && timestampMillis <= toMillis;
+  });
+};
 
 const disconnectedCandles = ({ requestedSymbol, brokerSymbol, timeframe, limit }) => ({
   provider: "mt5_read_only",
@@ -687,7 +706,7 @@ const upstreamCandleRange = async ({ requestedSymbol, brokerSymbol, timeframe, l
     utc_to: to,
     count: limit,
     limit
-  }, candleLikePayload);
+  }, (payload) => candlePayloadWithinRange({ payload, brokerSymbol, timeframe, from, to, limit }));
   const candles = normalizeCandles({ payload, brokerSymbol, timeframe, limit });
   return {
     provider: "mt5_read_only",

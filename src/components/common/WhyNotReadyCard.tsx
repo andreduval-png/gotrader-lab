@@ -16,7 +16,7 @@ export function WhyNotReadyCard({
 }) {
   const metrics = snapshot?.performance.canonicalPerformanceMetrics;
   const winRate = metrics?.winRate;
-  const readinessState = snapshot?.readiness.readinessState ?? "Not Ready";
+  const reportedReadinessState = snapshot?.readiness.readinessState ?? "Not Ready";
   const goodWinRate = typeof winRate === "number" && winRate >= 0.45;
   const hasOutcomeSample = Boolean(metrics && metrics.totalTrades > 0);
   const blockers = unique([
@@ -41,6 +41,7 @@ export function WhyNotReadyCard({
       : ""
   ]);
   const warnings = unique(snapshot?.readiness.warnings ?? []);
+  const readinessState = blockers.length ? "Blocked" : reportedReadinessState;
   const topReason = blockers[0] ?? warnings[0] ?? snapshot?.readiness.nextAction ?? "Run the autonomous research loop to refresh readiness evidence.";
   const contextLabel = context.replace(/_/g, " ");
 
@@ -52,7 +53,7 @@ export function WhyNotReadyCard({
             <CardTitle>Why Not Ready?</CardTitle>
             <CardDescription>
               Win rate is only one metric. Readiness also requires sample size, average R, drawdown, walk-forward,
-              evidence quality, maturity, and false-positive control.
+              evidence quality, maturity, and attributed avoidable-loss control.
             </CardDescription>
           </div>
           <Badge variant={readinessState === "Paper-Demo Candidate" ? "success" : goodWinRate ? "warning" : "danger"}>
@@ -75,7 +76,7 @@ export function WhyNotReadyCard({
             <div className="text-xs uppercase tracking-[0.14em] text-amber-100/70">Top blocking evidence</div>
             <p className="mt-1 text-sm">{topReason}</p>
             <p className="mt-2 text-xs text-amber-100/70">
-              Source: {metrics?.metricSourceLabel ?? snapshot?.latestResearchCycle.latestCycleId ?? contextLabel}
+              Source: {metrics?.metricSourceLabel ?? snapshot?.latestResearchCycle.latestCycleId ?? contextLabel} / Reported readiness: {reportedReadinessState}
             </p>
           </div>
         </div>

@@ -94,6 +94,14 @@ const runtime = ({ provider = "mt5_read_only", candles = 1000, fingerprint = "mt
   }
 });
 
+const activationIdentity = (overrides = {}) => ({
+  activationTimestamp: "2026-07-12T14:05:00.000Z",
+  cycleId: "operator-cycle-fixture",
+  sourceFingerprint: "mt5-fingerprint",
+  currentReadEvaluatedAt: "2026-07-12T14:04:59.000Z",
+  ...overrides
+});
+
 async function main() {
   compileForNode();
   const { buildOperatorConsoleSnapshot } = await import(
@@ -135,7 +143,7 @@ async function main() {
 
   const active = buildOperatorConsoleSnapshot({
     runtime: runtime(),
-    activation: {
+    activation: activationIdentity({
       modelName: "ifvg_v1",
       modelLane: "watchlist",
       requestedSymbol: "MNQ",
@@ -145,14 +153,25 @@ async function main() {
       proposedEntryZone: { lower: 22850.25, upper: 22856.5 },
       proposedStopLoss: 22882.25,
       proposedTakeProfit: 22765.75,
+      proposedTargetProvenance: {
+        type: "previous_day_low",
+        sourceTimeframe: "daily",
+        selectionReason: "Advisor signal selected directional liquidity: previous_day_low",
+        distancePoints: 79.75,
+        rr: 3.1,
+        minimumRR: 2,
+        gateStatus: "accepted",
+        rejectionReasons: []
+      },
       proposedRiskReward: 3.1,
       riskScreeningStatus: "clear",
       riskScreeningReason: "Session/news risk screen is clear.",
       recommendedMaxRiskPerTradePct: 0.5,
       nextAction: "Run independent-date validation."
-    },
+    }),
     memory,
     cycle: {
+      cycleId: "operator-cycle-fixture",
       status: "completed",
       stage: "complete",
       progressPercent: 100,
@@ -173,6 +192,7 @@ async function main() {
   assert.equal(active.memory.gbrainDelivered, 1);
   assert.equal(active.memory.gbrainFailed, 1);
   assert.equal(active.researchPlan.status, "complete");
+  assert.equal(active.researchPlan.planIdentityStatus, "current");
   assert.equal(active.researchPlan.side, "short");
   assert.equal(active.researchPlan.setupDirection, "bearish");
   assert.equal(active.researchPlan.signal, "SELL");
@@ -181,19 +201,21 @@ async function main() {
   assert.equal(active.researchPlan.entryPriceMethod, "zone_midpoint");
   assert.equal(active.researchPlan.stopLoss, 22882.25);
   assert.equal(active.researchPlan.takeProfit, 22765.75);
+  assert.equal(active.researchPlan.targetProvenance?.type, "previous_day_low");
+  assert.equal(active.researchPlan.targetProvenance?.gateStatus, "accepted");
   assert.equal(active.researchPlan.riskReward, 3.1);
-  assert.equal(active.researchPlan.accountRiskEvaluation, "not_evaluated");
+  assert.equal(active.researchPlan.accountRiskEvaluation, "external_simulation_required");
   assert.equal(active.researchPlan.executionAllowed, false);
 
   const bullish = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "bullish_test",
       researchSide: "long",
       proposedEntryZone: { lower: 101, upper: 99 },
       proposedStopLoss: 97,
       proposedTakeProfit: 107,
       proposedRiskReward: 2.33
-    }
+    })
   });
   assert.equal(bullish.researchPlan.setupDirection, "bullish");
   assert.equal(bullish.researchPlan.signal, "BUY");
@@ -202,14 +224,14 @@ async function main() {
   assert.equal(bullish.researchPlan.entryPrice, 100);
 
   const flatPlan = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "flat_test",
       researchSide: "flat",
       proposedEntryZone: { lower: 99, upper: 101 },
       proposedStopLoss: 97,
       proposedTakeProfit: 107,
       proposedRiskReward: 2.33
-    }
+    })
   });
   assert.equal(flatPlan.researchPlan.status, "no_trade");
   assert.equal(flatPlan.researchPlan.setupDirection, "neutral");
@@ -217,14 +239,14 @@ async function main() {
   assert.equal(flatPlan.researchPlan.entryPrice, undefined);
 
   const incomplete = buildOperatorConsoleSnapshot({
-    activation: { modelName: "incomplete_test", researchSide: "short" }
+    activation: activationIdentity({ modelName: "incomplete_test", researchSide: "short" })
   });
   assert.equal(incomplete.researchPlan.status, "unavailable");
   assert.equal(incomplete.researchPlan.signal, "NO_TRADE");
   assert.equal(incomplete.researchPlan.entryPrice, undefined);
 
   const rejectedShort = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "order_block_retracement",
       researchSide: "short",
       proposedCandidateStatus: "rejected",
@@ -233,7 +255,7 @@ async function main() {
       proposedTakeProfit: 23088.5,
       proposedRiskReward: 1.15,
       riskScreeningStatus: "unsuitable_after_hours"
-    }
+    })
   });
   assert.equal(rejectedShort.researchPlan.status, "no_trade");
   assert.equal(rejectedShort.researchPlan.setupDirection, "bearish");
@@ -242,7 +264,7 @@ async function main() {
   assert.equal(rejectedShort.researchPlan.signal, "NO_TRADE");
 
   const persistedRejectedShort = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "order_block_retracement",
       researchSide: "short",
       proposedStopLoss: 23156.25,
@@ -251,7 +273,7 @@ async function main() {
       currentOpportunitySummary: {
         topRejected: { status: "rejected", entry: 23124.75 }
       }
-    }
+    })
   });
   assert.equal(persistedRejectedShort.researchPlan.entryPrice, 23124.75);
   assert.equal(persistedRejectedShort.researchPlan.entryPriceMethod, "canonical_candidate");
@@ -259,14 +281,14 @@ async function main() {
   assert.equal(persistedRejectedShort.researchPlan.signal, "NO_TRADE");
 
   const impliedEntry = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "one_shot_one_kill",
       researchSide: "long",
       proposedCandidateStatus: "rejected",
       proposedStopLoss: 23000,
       proposedTakeProfit: 23150,
       proposedRiskReward: 2
-    }
+    })
   });
   assert.equal(impliedEntry.researchPlan.entryPrice, 23050);
   assert.equal(impliedEntry.researchPlan.entryPriceMethod, "rr_implied_recovery");
@@ -275,7 +297,7 @@ async function main() {
   assert.equal(impliedEntry.researchPlan.signal, "NO_TRADE");
 
   const legacyFlatLong = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "one_shot_one_kill",
       researchSide: "flat",
       proposedStopLoss: 23000,
@@ -284,7 +306,7 @@ async function main() {
       currentOpportunitySummary: {
         topRejected: { status: "rejected", side: "long" }
       }
-    }
+    })
   });
   assert.equal(legacyFlatLong.researchPlan.side, "flat");
   assert.equal(legacyFlatLong.researchPlan.setupDirection, "neutral");
@@ -292,12 +314,12 @@ async function main() {
   assert.equal(legacyFlatLong.researchPlan.signal, "NO_TRADE");
 
   const legacyMissingSideShort = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "order_block_retracement",
       proposedStopLoss: 23150,
       proposedTakeProfit: 23000,
       proposedRiskReward: 2
-    }
+    })
   });
   assert.equal(legacyMissingSideShort.researchPlan.side, "short");
   assert.equal(legacyMissingSideShort.researchPlan.setupDirection, "bearish");
@@ -305,7 +327,7 @@ async function main() {
   assert.equal(legacyMissingSideShort.researchPlan.signal, "SELL");
 
   const conflictingBullishPlan = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       modelName: "direction_conflict",
       researchSide: "long",
       proposedEntryPrice: 23100,
@@ -313,7 +335,7 @@ async function main() {
       proposedTakeProfit: 23000,
       proposedRiskReward: 2,
       riskScreeningStatus: "clear"
-    }
+    })
   });
   assert.equal(conflictingBullishPlan.researchPlan.side, "long");
   assert.equal(conflictingBullishPlan.researchPlan.setupDirection, "neutral");
@@ -321,6 +343,99 @@ async function main() {
   assert.match(conflictingBullishPlan.researchPlan.planCoherenceReason, /Bullish direction conflicts/);
   assert.equal(conflictingBullishPlan.researchPlan.status, "no_trade");
   assert.equal(conflictingBullishPlan.researchPlan.signal, "NO_TRADE");
+
+  const staleSellDuringNewLongCycle = buildOperatorConsoleSnapshot({
+    runtime: runtime(),
+    cycle: {
+      cycleId: "current-long-cycle",
+      status: "completed",
+      stage: "complete",
+      progressPercent: 100,
+      message: "Current long cycle completed.",
+      authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" },
+      autoApplyAllowed: false,
+      researchOnly: true
+    },
+    activation: activationIdentity({
+      cycleId: "older-sell-cycle",
+      modelName: "stale_sell",
+      researchSide: "short",
+      proposedEntryPrice: 23100,
+      proposedStopLoss: 23150,
+      proposedTakeProfit: 23000,
+      proposedRiskReward: 2
+    })
+  });
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.planIdentityStatus, "stale_cycle");
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.signal, "NO_TRADE");
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.side, "flat");
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.entryPrice, undefined);
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.stopLoss, undefined);
+  assert.equal(staleSellDuringNewLongCycle.researchPlan.takeProfit, undefined);
+
+  const sourceMismatch = buildOperatorConsoleSnapshot({
+    runtime: runtime(),
+    activation: activationIdentity({ sourceFingerprint: "older-source-fingerprint" })
+  });
+  assert.equal(sourceMismatch.researchPlan.planIdentityStatus, "source_mismatch");
+  assert.equal(sourceMismatch.researchPlan.signal, "NO_TRADE");
+
+  const candidateMismatch = buildOperatorConsoleSnapshot({
+    activation: activationIdentity({
+      currentCandidateId: "candidate-old",
+      currentOpportunitySummary: {
+        topRejected: { id: "candidate-current", status: "rejected", side: "long", entry: 100 }
+      },
+      researchSide: "long",
+      proposedStopLoss: 97,
+      proposedTakeProfit: 107,
+      proposedRiskReward: 2.33
+    })
+  });
+  assert.equal(candidateMismatch.researchPlan.planIdentityStatus, "candidate_mismatch");
+  assert.equal(candidateMismatch.researchPlan.entryPrice, undefined);
+
+  const legacyUnbound = buildOperatorConsoleSnapshot({
+    activation: {
+      modelName: "legacy_sell",
+      researchSide: "short",
+      proposedEntryPrice: 23100,
+      proposedStopLoss: 23150,
+      proposedTakeProfit: 23000,
+      proposedRiskReward: 2
+    }
+  });
+  assert.equal(legacyUnbound.researchPlan.planIdentityStatus, "legacy_unbound");
+  assert.equal(legacyUnbound.researchPlan.signal, "NO_TRADE");
+  assert.equal(legacyUnbound.researchPlan.entryPrice, undefined);
+
+  const currentRejectedLong = buildOperatorConsoleSnapshot({
+    runtime: runtime(),
+    cycle: {
+      cycleId: "operator-cycle-fixture",
+      status: "completed",
+      stage: "complete",
+      progressPercent: 100,
+      message: "Current rejected long cycle completed.",
+      authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" },
+      autoApplyAllowed: false,
+      researchOnly: true
+    },
+    activation: activationIdentity({
+      modelName: "daily_range_projection",
+      researchSide: "long",
+      proposedCandidateStatus: "rejected",
+      proposedEntryPrice: 30060,
+      proposedStopLoss: 30024.34,
+      proposedTakeProfit: 30167.15,
+      proposedRiskReward: 3,
+      riskScreeningStatus: "rejected_candidate"
+    })
+  });
+  assert.equal(currentRejectedLong.researchPlan.planIdentityStatus, "current");
+  assert.equal(currentRejectedLong.researchPlan.setupDirection, "bullish");
+  assert.equal(currentRejectedLong.researchPlan.signal, "NO_TRADE");
+  assert.equal(currentRejectedLong.researchPlan.entryPrice, 30060);
 
   const unavailable = buildOperatorConsoleSnapshot({ runtime: runtime({ provider: "mock", candles: 48, fingerprint: "" }) });
   assert.equal(unavailable.source.researchEligible, false);
@@ -390,6 +505,7 @@ async function main() {
     path.join(projectRoot, "src", "lib", "ict-strategy-suite", "ictActivateMarketPipeline.ts"),
     "utf8"
   );
+  const operatorStoreSource = fs.readFileSync(path.join(sourceRoot, "operatorConsoleStore.ts"), "utf8");
   assert.match(cycleSource, /advancedFullResearchMode:\s*false/, "operator cycle must use bounded research mode");
   assert.match(
     cycleSource,
@@ -422,8 +538,38 @@ async function main() {
     /modelVersion:\s*"operator_market_scenario:v1"/,
     "operator scenario watches need an explicit non-execution model version"
   );
-  assert.match(cycleSource, /OPERATOR_RESEARCH_TIMEOUT_MS\s*=\s*300_000/, "operator cycle must allow deep validation and a bounded advisory request");
-  assert.match(cycleSource, /exceeded five minutes/, "operator cycle must retain an explicit outer responsiveness timeout");
+  assert.match(cycleSource, /OPERATOR_RESEARCH_STALL_TIMEOUT_MS\s*=\s*180_000/, "operator cycle must retain a bounded no-progress watchdog");
+  assert.match(cycleSource, /made no observable progress for three minutes/, "operator cycle must describe a genuine research stall accurately");
+  assert.match(
+    cycleSource,
+    /onUpdate:\s*\(run\)\s*=>\s*\{\s*resetResearchStallWatchdog\(\);/,
+    "every autonomous update must renew the no-progress watchdog"
+  );
+  assert.match(
+    cycleSource,
+    /resetResearchStallWatchdog\(\);[\s\S]*?if \(stage === lastAutonomousStage/,
+    "even throttled duplicate progress updates must prove liveness"
+  );
+  assert.match(
+    cycleSource,
+    /activeController\.abort\(OPERATOR_STOP_ABORT_REASON\)/,
+    "the Stop button must record explicit operator-stop provenance"
+  );
+  assert.match(
+    cycleSource,
+    /controller\.abort\(OPERATOR_TIMEOUT_ABORT_REASON\)/,
+    "the responsiveness timeout must record distinct timeout provenance"
+  );
+  assert.match(
+    cycleSource,
+    /stoppedByOperator\s*=\s*controller\.signal\.reason\s*===\s*OPERATOR_STOP_ABORT_REASON/,
+    "terminal cycle labeling must derive operator cancellation from the abort reason"
+  );
+  assert.match(
+    cycleSource,
+    /timedOut\s*=\s*controller\.signal\.reason\s*===\s*OPERATOR_TIMEOUT_ABORT_REASON/,
+    "terminal cycle labeling must preserve timeout failures separately"
+  );
   assert.match(
     researchCycleSource,
     /backtestResult\s*=\s*await runDetectorProfileBacktest\(\{[\s\S]*?candles:\s*researchCandles,[\s\S]*?signal,/,
@@ -439,8 +585,31 @@ async function main() {
     /runIctAdvisorPacket\(\{\s*snapshot\s*\}\)/,
     "multi-strategy advisor analysis must run off the browser main thread"
   );
+  assert.match(activateMarketSource, /gotrader\.ict-activate-market\.latest\.v2/, "trade plans must use the identity-bound v2 summary protocol");
+  assert.match(activateMarketSource, /cycleId:\s*config\.cycleId/, "activation summaries must bind to the operator cycle");
+  assert.match(activateMarketSource, /sourceFingerprint:\s*sourceFingerprint\(snapshot\)/, "activation summaries must bind to the active source");
+  assert.match(activateMarketSource, /currentReadEvaluatedAt/, "activation summaries must preserve current-read time identity");
+  assert.match(activateMarketSource, /currentCandidateId/, "activation summaries must preserve current candidate identity");
+  assert.match(cycleSource, /cycleId\s*\n?\s*\}/, "operator pipeline calls must carry the current cycle identity");
+  assert.match(operatorStoreSource, /pendingResearchPlan/, "a newly started cycle must clear the prior trade plan");
+  assert.match(operatorStoreSource, /planIdentityStatus:\s*"pending_cycle"/, "pending cycles must display a truthful plan identity state");
   assert.match(cycleSource, /recoverInterruptedState/, "orphaned running state must recover after a reload");
   assert.match(cycleSource, /status:\s*"canceled"/, "interrupted cycles must become terminal");
+  assert.match(cycleSource, /ownerInstanceId/, "cycle state must bind a running cycle to one page owner");
+  assert.match(cycleSource, /gotrader\.operator-cycle\.v3/, "corrected cycle ownership must use an isolated v3 storage protocol");
+  assert.match(cycleSource, /LEGACY_OPERATOR_CYCLE_STORAGE_KEYS/, "legacy cycle state must migrate fail-closed");
+  assert.match(cycleSource, /window\.sessionStorage\.getItem\(OPERATOR_CYCLE_TAB_STORAGE_KEY\)/, "reload detection must use a tab-stable identity");
+  assert.match(cycleSource, /__gotraderOperatorCycleOwnerInstanceId/, "document ownership must survive development hot-module replacement");
+  assert.match(cycleSource, /heartbeatIsFresh/, "foreign tabs must distinguish a fresh owner from an abandoned cycle");
+  assert.match(
+    cycleSource,
+    /state\.ownerInstanceId && state\.ownerInstanceId !== ownerInstanceId && heartbeatIsFresh\(state\)/,
+    "a fresh foreign owner must be observed without canceling its cycle"
+  );
+  assert.match(cycleSource, /OPERATOR_CYCLE_STALE_AFTER_MS\s*=\s*90_000/, "abandoned owner recovery must remain bounded");
+  assert.match(cycleSource, /options:\s*\{ notify\?: boolean \}/, "heartbeat writes must support quiet persistence");
+  assert.doesNotMatch(cycleSource, /window\.addEventListener\("pagehide"/, "transient page lifecycle events must not cancel a cycle");
+  assert.match(cycleSource, /state\.ownerTabId === ownerTabId/, "same-tab document replacement must recover abandoned work");
 
   const autonomousSource = fs.readFileSync(
     path.join(projectRoot, "src", "lib", "autonomousResearch", "runAutonomousResearchLoop.ts"),
@@ -499,6 +668,20 @@ async function main() {
   assert.match(operatorViewSource, /label: "Stop loss"[\s\S]*?"negative"/, "stop loss must use the negative color");
   assert.match(operatorViewSource, /label: "Take profit"[\s\S]*?"positive"/, "take profit must use the positive color");
   assert.match(operatorViewSource, /label: "Probability"/, "trade plan must display probability classification");
+  assert.match(operatorViewSource, /data-testid="operator-target-provenance"/, "trade plan must display target provenance");
+  assert.match(operatorViewSource, /Target gate only; overall candidate and readiness gates remain separate/, "target acceptance must not imply candidate readiness");
+  assert.match(
+    operatorViewSource,
+    /uppercase tracking-\[0\.12em\] text-white">\{label\}/,
+    "trade-plan level labels must remain readable at full contrast"
+  );
+  assert.match(operatorViewSource, /percentage: percent\(normalized\)/, "probability decimals must render as percentages");
+  assert.match(operatorViewSource, /data-testid=\{label === "Probability" \? "operator-plan-probability-value"/, "probability must expose its rendered value for clipping checks");
+  assert.doesNotMatch(
+    operatorViewSource,
+    /mt-2 truncate font-mono text-base font-semibold tabular-nums/,
+    "trade-plan values must not hide source-of-truth values behind ellipsis"
+  );
   assert.match(operatorViewSource, /normalized >= 0\.7/, "high probability must begin at 70 percent");
   assert.match(operatorViewSource, /normalized >= 0\.5/, "medium probability must begin at 50 percent");
   assert.match(operatorViewSource, /Informational only/, "research levels must be explicitly non-executable");

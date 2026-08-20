@@ -19,7 +19,7 @@ const readinessReasons = [
   "Drawdown is too high or clustered.",
   "Win rate is unstable across scenario slices.",
   "Average R is weak or depends on one large winner.",
-  "False positives remain unexplained.",
+  "Avoidable-loss attribution remains unexplained.",
   "Confidence or confluence thresholds are too loose.",
   "Session performance is weak or inconsistent.",
   "Stop model is too loose, too tight, or fragile.",

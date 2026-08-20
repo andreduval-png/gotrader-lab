@@ -87,26 +87,29 @@ const buildSimulatedPlan = (
   config: ResolvedBacktestConfig,
   gaps: FairValueGap[]
 ): SimulatedTradePlan => {
+  if (!synthesis.pricePlan) {
+    throw new Error("CIO price plan unavailable: canonical candle price evidence is required for backtest geometry.");
+  }
   const bias = synthesis.finalBias;
   const direction = directionFor(bias);
   const tickSize = tickSizeBySymbol[input.symbol] ?? 0.25;
-  const entryMid = (synthesis.entryZone[0] + synthesis.entryZone[1]) / 2;
+  const entryMid = (synthesis.pricePlan.entryZone[0] + synthesis.pricePlan.entryZone[1]) / 2;
   const stopDistance =
     config.stopModel === "fixed ticks"
       ? config.fixedTickStopSize * tickSize
-      : Math.abs(entryMid - synthesis.invalidationLevel);
+      : Math.abs(entryMid - synthesis.pricePlan.invalidationLevel);
   const invalidation =
     bias === "neutral"
-      ? synthesis.invalidationLevel
+      ? synthesis.pricePlan.invalidationLevel
       : config.stopModel === "fixed ticks"
         ? entryMid - direction * stopDistance
         : config.stopModel === "FVG invalidation"
-          ? fvgInvalidationFor(gaps, bias, synthesis.invalidationLevel, tickSize)
-          : synthesis.invalidationLevel;
+          ? fvgInvalidationFor(gaps, bias, synthesis.pricePlan.invalidationLevel, tickSize)
+          : synthesis.pricePlan.invalidationLevel;
   const risk = Math.max(tickSize, Math.abs(entryMid - invalidation));
   const targetLiquidity =
     bias === "neutral"
-      ? synthesis.targetLiquidity
+      ? synthesis.pricePlan.targetLiquidity
       : entryMid + direction * risk * config.targetRMultiple;
 
   return {
@@ -114,7 +117,7 @@ const buildSimulatedPlan = (
     symbol: input.symbol,
     timeframe: input.timeframe,
     bias,
-    entryZone: synthesis.entryZone,
+    entryZone: synthesis.pricePlan.entryZone,
     invalidation: round(invalidation),
     targetLiquidity: round(targetLiquidity),
     stopRiskNotes: `${synthesis.riskNotes} Backtest assumption: ${config.stopModel} stop, ${config.targetRMultiple.toFixed(2)}R target, ${config.maxBarsToResolveTrade} bar max resolution.`,
@@ -480,6 +483,21 @@ const candidateKeyFor = (candidate: ReturnType<typeof assessIctIfvgFilteredV2>["
 const sourceProviderFor = (candles: Candle[]) =>
   candles.some((candle) => /mock|sample|fixture/i.test(candle.id)) ? "mock" : "canonical_research";
 
+const genericQualityContextFor = (
+  decision: BacktestDecisionPoint,
+  config: ResolvedBacktestConfig
+): SimulatedTradeRecord["qualityContext"] => ({
+  strategyProfile: config.strategyProfile,
+  setupFamily: config.strategyProfile,
+  liquidityTargetPresent: Number.isFinite(decision.thesis.targetLiquidity),
+  presentConditions: [
+    `market_regime:${decision.thesis.marketRegime}`,
+    `session:${decision.thesis.session}`,
+    `bias:${decision.thesis.finalBias}`
+  ],
+  warnings: decision.thesis.riskNotes ? [decision.thesis.riskNotes] : []
+});
+
 const scoreIfvgFilteredTrade = ({
   candidate,
   decisionIndex,
@@ -829,7 +847,15 @@ const scoreCmdHighDisplacementTrade = ({
       riskReward: round(targetR, 3),
       mode: "simulation"
     },
-    agentAttribution: []
+    agentAttribution: [],
+    qualityContext: {
+      strategyProfile: config.strategyProfile,
+      setupFamily: "cmd_high_displacement",
+      liquidityTargetPresent: true,
+      displacementConfirmed: true,
+      presentConditions: ["fresh_displacement", "fvg", "external_liquidity_target"],
+      warnings: []
+    }
   };
 };
 
@@ -970,7 +996,13 @@ export function runBacktest(candles: Candle[], config: BacktestConfig = {}): Bac
     commissionTicks: resolved.commissionTicks
   };
   const trades = eligibleDecisions.map((decision) => ({
-    ...scoreSimulatedTradeOutcome(decision, sample, resolved.maxBarsToResolveTrade, fillFrictions),
+    ...scoreSimulatedTradeOutcome(
+      decision,
+      sample,
+      resolved.maxBarsToResolveTrade,
+      fillFrictions,
+      genericQualityContextFor(decision, resolved)
+    ),
     grinchScore: decision.grinchScore
   }));
 

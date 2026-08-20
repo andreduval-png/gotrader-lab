@@ -51,6 +51,14 @@ export function validateGoTraderBridgeInput(thesis: EquivalentResearchOutput): G
     errors.push('mode must be "simulation"');
   }
 
+  if (
+    !thesis.simulatedTradePlan ||
+    thesis.invalidationLevel === undefined ||
+    thesis.targetLiquidity === undefined
+  ) {
+    errors.push("canonical price geometry is required");
+  }
+
   return {
     valid: errors.length === 0,
     errors
@@ -64,12 +72,18 @@ export function createGoTraderSimulationSignal(thesis: EquivalentResearchOutput)
   }
 
   const plan = thesis.simulatedTradePlan;
-  const entryZone = plan?.entryZone ?? [0, 0];
+  if (!plan || thesis.invalidationLevel === undefined || thesis.targetLiquidity === undefined) {
+    throw new GoTraderBridgeValidationError({
+      valid: false,
+      errors: ["canonical price geometry is required"]
+    });
+  }
+  const entryZone = plan.entryZone;
   const entryMid = (entryZone[0] + entryZone[1]) / 2;
   const finalBias = thesis.finalBias ?? "neutral";
   const confidence = thesis.confidence ?? 0;
-  const invalidation = thesis.invalidationLevel ?? plan?.invalidation ?? 0;
-  const target = thesis.targetLiquidity ?? plan?.targetLiquidity ?? 0;
+  const invalidation = thesis.invalidationLevel;
+  const target = thesis.targetLiquidity;
   const timestamp = thesis.createdAt ?? new Date().toISOString();
 
   return {
@@ -86,7 +100,7 @@ export function createGoTraderSimulationSignal(thesis: EquivalentResearchOutput)
     risk_notes: thesis.riskNotes ?? plan?.stopRiskNotes ?? "",
     indicators: {
       confidence,
-      risk_reward: plan?.riskReward ?? 0,
+      risk_reward: plan.riskReward,
       invalidation,
       target_liquidity: target,
       liquidity_sweep: thesis.ictContext?.liquiditySweep ?? false,

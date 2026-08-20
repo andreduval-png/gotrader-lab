@@ -170,6 +170,10 @@ export interface WalkForwardWindowMetrics {
   averageR: number;
   maxDrawdownR: number;
   profitFactor: number | null;
+  stopHitCount?: number;
+  estimatedLossCount?: number;
+  attributedAvoidableLossCount?: number;
+  /** @deprecated Compatibility alias. Missing new attribution fields must not be inferred from this value. */
   falsePositiveCount: number;
   skippedSignals: number;
   confidenceCalibration: number;
@@ -274,6 +278,8 @@ export interface WalkForwardStabilitySummary {
   worstWindowAverageR: number;
   worstWindowDrawdownR: number;
   tradeCountConsistency: number;
+  attributedAvoidableLossConsistency?: number;
+  /** @deprecated Compatibility alias for attributedAvoidableLossConsistency. */
   falsePositiveConsistency: number;
   readinessConsistency: number;
   stabilityScore: number;

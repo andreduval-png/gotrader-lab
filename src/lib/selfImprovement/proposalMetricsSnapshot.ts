@@ -26,7 +26,9 @@ const metricKeys: Array<keyof CalibrationProposalMetrics> = [
   "maxDrawdown",
   "profitFactor",
   "skippedSignals",
-  "falsePositiveCount",
+  "stopHitCount",
+  "estimatedLossCount",
+  "attributedAvoidableLossCount",
   "confidenceCalibration",
   "readinessScore",
   "readinessStatus",
@@ -93,7 +95,11 @@ export const materialImprovementKeys = (
     valueImproved(before.winRate, after.winRate, "higher") ? "winRate" : undefined,
     valueImproved(before.averageR, after.averageR, "higher") ? "averageR" : undefined,
     valueImproved(before.maxDrawdown, after.maxDrawdown, "lower") ? "maxDrawdownR" : undefined,
-    after.falsePositiveCount < before.falsePositiveCount ? "falsePositiveCount" : undefined,
+    typeof before.attributedAvoidableLossCount === "number" &&
+    typeof after.attributedAvoidableLossCount === "number" &&
+    after.attributedAvoidableLossCount < before.attributedAvoidableLossCount
+      ? "attributedAvoidableLossCount"
+      : undefined,
     valueImproved(before.confidenceCalibration, after.confidenceCalibration, "higher") ? "confidenceCalibration" : undefined,
     after.readinessScore > before.readinessScore ? "readinessScore" : undefined,
     after.stabilityScore > before.stabilityScore ? "stabilityScore" : undefined,

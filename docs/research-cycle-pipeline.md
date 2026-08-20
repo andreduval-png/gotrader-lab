@@ -10,7 +10,9 @@ The dashboard **Run AI Research Cycle** control runs a local, simulation-only re
    - Produces a CIO thesis with bias, confidence, invalidation, target, and risk notes.
    - Saves the thesis into local AI Lab memory.
 
-2. Run the mock-data backtest.
+2. Run the active-source backtest.
+   - Requires an explicit eligible canonical source, a source fingerprint, and sufficient candles.
+   - Rejects mock/sample data as research evidence.
    - Uses active/default Backtest Lab config.
    - Stores a compact summary only: trades, win rate, average R, max drawdown, skipped signals, best/worst R.
    - If this step fails, candidate scoring stops because downstream optimization would not be trustworthy.
@@ -29,7 +31,7 @@ The dashboard **Run AI Research Cycle** control runs a local, simulation-only re
 
 5. Run Validation Suite.
    - Stores strongest/weakest scenarios and recommended thresholds.
-   - Uses mock OHLC data only.
+   - Uses the identity-bound validation source selected for the active research profile.
 
 6. Run Research Quality Review.
    - Produces readiness grade, top weaknesses, top strengths, and next action.
@@ -40,7 +42,10 @@ The dashboard **Run AI Research Cycle** control runs a local, simulation-only re
 
 8. Update Simulation Runbook.
    - Marks the research pipeline timestamp and AI Lab thesis generation.
-   - Does not mark scheduler one-cycle, signal logged, broker skipped, positions zero, trades zero, or shutdown complete unless those were already manually verified.
+   - Does not self-certify any simulation-runbook check or carry checks forward from an earlier cycle.
+   - After the runtime mirror is accepted, the local GoTrader Research MCP derives only thesis-generated and signal-logged evidence from the exact completed cycle artifact.
+   - Handoff checks require an immutable handoff receipt. Scheduler completion, broker skipped, positions zero, trades zero, and shutdown complete require an immutable scheduler receipt for the exact active cycle.
+   - Missing receipt evidence is reported as unavailable; it is not interpreted as an observed nonzero position/trade or failed shutdown.
 
 9. Update Readiness Gate.
    - Calculates Not Ready, Research Ready, or Paper-Demo Candidate.
@@ -51,10 +56,15 @@ The dashboard **Run AI Research Cycle** control runs a local, simulation-only re
    - Final status is `completed`, `completed_with_warnings`, or `failed`.
    - Includes readiness, blockers, best candidate, proposal status, and next action.
 
+11. Persist research memory.
+   - Appends the compact source-of-truth cycle record to the immutable Research Evidence Ledger.
+   - Queues applicable `research_cycle`, `walk_forward`, `self_improvement`, and `gap_analysis` advisory packets.
+   - Optional delivery is operator-enabled, manual, loopback-only, and disabled by default.
+
 ## What Is Automated
 
 - Thesis generation
-- Mock-data backtest
+- Eligible active-source backtest
 - Local LLM bridge attempt
 - Auto Research candidate search
 - Validation suite

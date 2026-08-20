@@ -337,15 +337,15 @@ export interface TradeThesis {
   finalBias: MarketBias;
   confidence: number;
   thesisSummary: string;
-  invalidationLevel: number;
-  targetLiquidity: number;
+  invalidationLevel?: number;
+  targetLiquidity?: number;
   riskNotes: string;
   reasoningSummary: string;
   activeAgentCount?: number;
   abstainingAgentCount?: number;
   agentEvidenceCoverage?: number;
   ictContext: ICTContext;
-  simulatedTradePlan: SimulatedTradePlan;
+  simulatedTradePlan?: SimulatedTradePlan;
   createdAt: string;
   disclaimer: string;
 }

@@ -11,6 +11,7 @@ export const gotraderCoreServiceIds = Object.freeze([
   "mt5-upstream",
   "mt5-wrapper",
   "llm-bridge",
+  "research-mcp",
   "app"
 ]);
 
@@ -47,7 +48,7 @@ export function classifyGoTraderReadiness(diagnostics = []) {
   const blockers = [];
   const warnings = [];
 
-  for (const id of ["app", "mt5-wrapper"]) {
+  for (const id of ["app", "mt5-wrapper", "research-mcp"]) {
     const diagnostic = byId.get(id);
     if (!diagnostic || diagnostic.status !== "healthy") {
       blockers.push(`${id}_unavailable`);
@@ -101,6 +102,17 @@ export function findRecoverableServices(
           Number(failureCounts[diagnostic.id] ?? 0) >= unhealthyRestartThreshold)
     )
     .map((diagnostic) => diagnostic.id);
+}
+
+export function shouldReplaceBlockedSupervisor(
+  state,
+  { nowMs = Date.now(), maxRecoveryAttempts = 3, staleAfterMs = 60_000 } = {}
+) {
+  if (!state || state.status !== "blocked") return false;
+  const attemptsExhausted = Number(state.recoveryAttempts ?? 0) >= maxRecoveryAttempts;
+  const updatedAtMs = Date.parse(String(state.updatedAt ?? ""));
+  const stateIsStale = !Number.isFinite(updatedAtMs) || nowMs - updatedAtMs >= staleAfterMs;
+  return attemptsExhausted || stateIsStale;
 }
 
 export function compactSupervisorDiagnostics(diagnostics = []) {

@@ -19,6 +19,7 @@ import type { CalibrationProposal, CalibrationProposalChanges } from "@/lib/self
 import type { FuturesSymbol, MarketBias, Timeframe } from "@/lib/types";
 import type { ValidationSuiteReport } from "@/lib/validation";
 import type { ValidationProvenanceIdentity } from "@/lib/validationProvenance";
+import type { SimulatedOutcomeTargetProvenance } from "@/lib/simulatedOutcomeLedger";
 
 export type ResearchCycleStatus = "idle" | "running" | "completed" | "completed_with_warnings" | "failed" | "canceled";
 
@@ -67,8 +68,8 @@ export interface ResearchCycleThesisSummary {
   ictBias: MarketBias;
   confluenceScore: number;
   summary: string;
-  invalidation: number;
-  target: number;
+  invalidation?: number;
+  target?: number;
 }
 
 export interface ResearchCycleBacktestSummary
@@ -212,6 +213,7 @@ export interface ResearchCycleAdvisorSignalSummary {
   target?: number;
   invalidation?: number;
   rrEstimate?: number;
+  targetProvenance?: SimulatedOutcomeTargetProvenance;
   summary: string;
   noTradeReasons: string[];
   universalRecognitionLabel?: string;
@@ -312,6 +314,8 @@ export interface ResearchCycleRun {
   evidenceRecordId?: string;
   evidenceIdentityKey?: string;
   evidenceStorageBackend?: "indexeddb" | "localStorage_fallback" | "memory";
+  simulatedOutcomeEventIds?: string[];
+  simulatedOutcomeStorageBackend?: "indexeddb" | "localStorage_fallback" | "memory";
   /** Optional advisory-memory outbox reference. Delivery remains disabled by default. */
   gbrainMemoryOutboxId?: string;
   failedStepId?: ResearchCycleStepId;

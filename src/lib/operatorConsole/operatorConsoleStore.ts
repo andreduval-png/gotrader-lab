@@ -37,6 +37,7 @@ import {
 } from "./operatorCycle";
 import type { OperatorConsoleSnapshot } from "./operatorConsoleTypes";
 import type { OperatorPredictionSummary } from "./operatorConsoleTypes";
+import type { OperatorResearchPlanSummary } from "./operatorConsoleTypes";
 
 const listeners = new Set<() => void>();
 let refreshPromise: Promise<OperatorConsoleSnapshot> | undefined;
@@ -76,6 +77,28 @@ const readPredictionSummary = (): OperatorPredictionSummary => {
 };
 
 const notify = () => listeners.forEach((listener) => listener());
+
+const pendingResearchPlan = (
+  cycleId: string | undefined,
+  sourceFingerprint: string | undefined
+): OperatorResearchPlanSummary => ({
+  status: "unavailable",
+  planIdentityStatus: "pending_cycle",
+  cycleId,
+  setup: "Refreshing current-cycle research plan",
+  side: "flat",
+  setupDirection: "neutral",
+  signal: "NO_TRADE",
+  planSource: "unavailable",
+  planCoherence: "incomplete",
+  planCoherenceReason: "The current cycle has not produced an identity-bound trade plan yet.",
+  riskScreeningStatus: "not evaluated",
+  riskScreeningReason: "Wait for the current market read and risk screen to complete.",
+  accountRiskEvaluation: "external_simulation_required",
+  sourceFingerprint,
+  informationalOnly: true,
+  executionAllowed: false
+});
 
 export const getOperatorConsoleSnapshot = () => snapshot;
 
@@ -128,11 +151,15 @@ const refreshAtCheckpoint = () => {
 
 const refreshCycleOnly = () => {
   const cycle = readOperatorCycleState();
+  const cycleActive = cycle.status === "running" || cycle.status === "stopping";
   snapshot = {
     ...snapshot,
     generatedAt: new Date().toISOString(),
     cycle,
     insight: cycle.latestInsight ?? snapshot.insight,
+    researchPlan: cycleActive
+      ? pendingResearchPlan(cycle.cycleId, snapshot.source.fingerprint)
+      : snapshot.researchPlan,
     authority: cycle.authority,
     autoApplyAllowed: false,
     researchOnly: true

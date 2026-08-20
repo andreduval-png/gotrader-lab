@@ -99,6 +99,17 @@ export type IctAdvisorSetup =
   | "fvg_retracement"
   | IctPhase2Setup;
 
+export interface IctTargetProvenance {
+  type: string;
+  sourceTimeframe?: string;
+  selectionReason: string;
+  distancePoints?: number;
+  rr?: number;
+  minimumRR: number;
+  gateStatus: "accepted" | "rejected" | "unavailable";
+  rejectionReasons: string[];
+}
+
 export interface IctAdvisorSignal {
   strategyId: IctAdvisorStrategyId;
   phase: "phase_1" | "phase_2";
@@ -132,6 +143,7 @@ export interface IctAdvisorSignal {
   entryReference?: number;
   invalidation?: number;
   target?: number;
+  targetProvenance?: IctTargetProvenance;
   rrEstimate?: number;
   setup: IctAdvisorSetup;
   summary: string;

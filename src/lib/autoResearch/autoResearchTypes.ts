@@ -214,6 +214,8 @@ export interface AutoResearchScoreBreakdown {
   drawdownScore: number;
   averageRScore: number;
   winRateScore: number;
+  avoidableLossScore?: number;
+  /** @deprecated Compatibility alias for avoidableLossScore. */
   falsePositiveScore: number;
   confidenceCalibrationScore: number;
   sessionConsistencyScore: number;
@@ -275,6 +277,9 @@ export interface AutoResearchCandidateResult {
       winRate: number;
       averageR: number;
       maxDrawdown: number;
+      stopHitCount?: number;
+      attributedAvoidableLossCount?: number;
+      /** @deprecated Compatibility alias for attributedAvoidableLossCount. */
       falsePositiveCount: number;
       readiness: string;
       walkForwardVerdict?: string;

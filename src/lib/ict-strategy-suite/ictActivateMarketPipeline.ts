@@ -26,7 +26,8 @@ import type {
   IctActivateMarketStepId
 } from "./ictActivateMarketPipelineTypes";
 
-export const ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v1";
+const LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v1";
+export const ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v2";
 export const ICT_ACTIVATE_MARKET_UPDATED_EVENT = "gotrader:ict-activate-market-updated";
 
 const authority = {
@@ -78,6 +79,7 @@ export interface IctActivateMarketPipelineConfig {
   snapshot: ResearchRuntimeSnapshot;
   latestResearchState?: IctLatestResearchState;
   saveLatestSummary?: boolean;
+  cycleId?: string;
 }
 
 export interface IctActivateMarketPipelineDependencies {
@@ -166,10 +168,16 @@ const defaultSaveLatestSummary = (summary: IctActivateMarketLatestSummary) => {
 export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummary | undefined => {
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") return undefined;
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY) ?? "null");
+    const raw = window.localStorage.getItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY);
+    const parsed = JSON.parse(raw ?? "null");
     if (!parsed?.researchOnly) return undefined;
     return {
       activationTimestamp: String(parsed.activationTimestamp ?? now()),
+      cycleId: typeof parsed.cycleId === "string" ? parsed.cycleId : undefined,
+      sourceFingerprint: typeof parsed.sourceFingerprint === "string" ? parsed.sourceFingerprint : undefined,
+      currentReadEvaluatedAt: typeof parsed.currentReadEvaluatedAt === "string" ? parsed.currentReadEvaluatedAt : undefined,
+      currentCandidateId: typeof parsed.currentCandidateId === "string" ? parsed.currentCandidateId : undefined,
       requestedSymbol: String(parsed.requestedSymbol ?? "MNQ"),
       brokerSymbol: String(parsed.brokerSymbol ?? "USTECH"),
       primaryTimeframe: String(parsed.primaryTimeframe ?? "5m"),
@@ -216,6 +224,23 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
           : undefined,
       proposedStopLoss: asFiniteNumber(parsed.proposedStopLoss),
       proposedTakeProfit: asFiniteNumber(parsed.proposedTakeProfit),
+      proposedTargetProvenance:
+        parsed.proposedTargetProvenance &&
+        typeof parsed.proposedTargetProvenance.type === "string" &&
+        typeof parsed.proposedTargetProvenance.selectionReason === "string" &&
+        typeof parsed.proposedTargetProvenance.minimumRR === "number" &&
+        ["accepted", "rejected", "unavailable"].includes(parsed.proposedTargetProvenance.gateStatus)
+          ? {
+              type: parsed.proposedTargetProvenance.type,
+              sourceTimeframe: typeof parsed.proposedTargetProvenance.sourceTimeframe === "string" ? parsed.proposedTargetProvenance.sourceTimeframe : undefined,
+              selectionReason: parsed.proposedTargetProvenance.selectionReason,
+              distancePoints: asFiniteNumber(parsed.proposedTargetProvenance.distancePoints),
+              rr: asFiniteNumber(parsed.proposedTargetProvenance.rr),
+              minimumRR: parsed.proposedTargetProvenance.minimumRR,
+              gateStatus: parsed.proposedTargetProvenance.gateStatus,
+              rejectionReasons: asList(parsed.proposedTargetProvenance.rejectionReasons)
+            }
+          : undefined,
       proposedRiskReward: asFiniteNumber(parsed.proposedRiskReward),
       riskScreeningStatus: typeof parsed.riskScreeningStatus === "string" ? parsed.riskScreeningStatus : undefined,
       riskScreeningReason: typeof parsed.riskScreeningReason === "string" ? parsed.riskScreeningReason : undefined,
@@ -446,8 +471,19 @@ const operatorWorkflowFor = (currentRead: IctCurrentRead, signal: IctResearchSig
   };
 };
 
-const buildLatestSummary = (result: IctActivateMarketResult): IctActivateMarketLatestSummary => ({
+const buildLatestSummary = (
+  result: IctActivateMarketResult,
+  identity: { cycleId?: string; sourceFingerprint?: string } = {}
+): IctActivateMarketLatestSummary => ({
   activationTimestamp: result.generatedAt,
+  cycleId: identity.cycleId,
+  sourceFingerprint: identity.sourceFingerprint ?? result.currentRead?.debug.sourceFingerprint,
+  currentReadEvaluatedAt: result.currentRead?.debug.lastEvaluationAt,
+  currentCandidateId: (
+    result.currentRead?.currentOpportunitySummary?.topOpportunity
+    ?? result.currentRead?.currentOpportunitySummary?.topNearMiss
+    ?? result.currentRead?.currentOpportunitySummary?.topRejected
+  )?.id,
   requestedSymbol: result.requestedSymbol,
   brokerSymbol: result.brokerSymbol,
   primaryTimeframe: result.primaryTimeframe,
@@ -481,6 +517,7 @@ const buildLatestSummary = (result: IctActivateMarketResult): IctActivateMarketL
   proposedEntryZone: result.summary.proposedEntryZone,
   proposedStopLoss: result.summary.proposedStopLoss,
   proposedTakeProfit: result.summary.proposedTakeProfit,
+  proposedTargetProvenance: result.summary.proposedTargetProvenance,
   proposedRiskReward: result.summary.proposedRiskReward,
   riskScreeningStatus: result.summary.riskScreeningStatus,
   riskScreeningReason: result.summary.riskScreeningReason,
@@ -964,6 +1001,7 @@ export async function runIctActivateMarketPipeline(
           : undefined,
         proposedStopLoss: signalContract?.invalidation,
         proposedTakeProfit: signalContract?.target,
+        proposedTargetProvenance: signalContract?.targetProvenance,
         proposedRiskReward: signalContract?.rrEstimate,
         riskScreeningStatus: currentRead?.riskStatus,
         riskScreeningReason: currentRead?.riskReason,
@@ -982,7 +1020,10 @@ export async function runIctActivateMarketPipeline(
     const result = sanitizeActivateMarketResult(draftResult());
     const save = dependencies.saveLatestSummary ?? defaultSaveLatestSummary;
     if (config.saveLatestSummary !== false) {
-      save(buildLatestSummary(result));
+      save(buildLatestSummary(result, {
+        cycleId: config.cycleId,
+        sourceFingerprint: sourceFingerprint(snapshot)
+      }));
     }
     return "Compact activation summary saved; raw candles excluded.";
   });

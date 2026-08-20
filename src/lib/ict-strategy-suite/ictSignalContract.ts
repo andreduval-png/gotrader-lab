@@ -253,6 +253,7 @@ export const buildIctResearchSignalFromCurrentRead = (
     entryZone: parseEntryZone(currentRead.entryZone),
     invalidation: currentRead.invalidation,
     target: currentRead.target,
+    targetProvenance: currentRead.targetProvenance,
     rrEstimate: currentRead.rrEstimate,
     confidence: currentRead.confidence,
     approvedProfileStatus: currentRead.approvedStatus,

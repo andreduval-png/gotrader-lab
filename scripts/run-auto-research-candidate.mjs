@@ -790,7 +790,7 @@ const directScoreBreakdown = (baselineMetrics, metrics, grinch) => {
   const averageRScore = Math.min(100, Math.max(0, ((metrics.averageR + 0.4) / 1.4) * 100));
   const winRateScore = Math.min(100, Math.max(0, metrics.winRate * 100));
   const drawdownScore = Math.min(100, Math.max(0, 100 - metrics.maxDrawdown * 14));
-  const falsePositiveScore = Math.min(100, Math.max(0, 100 - metrics.falsePositiveCount * 12));
+  const avoidableLossScore = Math.min(100, Math.max(0, 100 - metrics.falsePositiveCount * 12));
   const grinchModelScore = grinch.score ?? 50;
   const stabilityImproved = metrics.maxDrawdown <= baselineMetrics.maxDrawdown;
   const sufficientSample = metrics.totalTrades >= 2 && metrics.totalTrades >= Math.max(2, baselineMetrics.totalTrades * 0.35);
@@ -798,12 +798,14 @@ const directScoreBreakdown = (baselineMetrics, metrics, grinch) => {
     averageRScore * 0.18 +
       winRateScore * 0.14 +
       drawdownScore * 0.16 +
-      falsePositiveScore * 0.14 +
+      avoidableLossScore * 0.14 +
       tradeCountScore * 0.14 +
       grinchModelScore * 0.24
   );
   return {
     totalScore,
+    avoidableLossScore: Math.round(avoidableLossScore),
+    falsePositiveScore: Math.round(avoidableLossScore),
     grinchModelScore: Math.round(grinchModelScore),
     grinchFalsePositiveRisk: grinch.falsePositiveRisk,
     grinchProfileValidity: grinch.profileValidity,

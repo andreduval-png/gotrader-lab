@@ -3,6 +3,7 @@ export {
   countCompletedRunbookItems,
   defaultSimulationRunbookState,
   loadSimulationRunbookState,
+  projectCanonicalSimulationRunbook,
   resetSimulationRunbookState,
   saveSimulationRunbookState,
   SIMULATION_RUNBOOK_STORAGE_KEY,
@@ -11,7 +12,10 @@ export {
 } from "@/lib/simulationRunbook/storage";
 export type {
   SimulationRunbookChecklistDefinition,
+  SimulationRunbookCheckEvidence,
   SimulationRunbookChecklistId,
+  SimulationRunbookCanonicalStatus,
+  SimulationRunbookEvidenceSource,
   SimulationRunbookSignal,
   SimulationRunbookState
 } from "@/lib/simulationRunbook/simulationRunbookTypes";

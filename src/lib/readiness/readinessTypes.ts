@@ -49,11 +49,16 @@ export interface ReadinessGateSnapshot {
     generatedAt: string;
     readinessGrade: string;
     readinessScore: number;
+    attributedAvoidableLossCount?: number;
+    /** @deprecated Compatibility alias for attributedAvoidableLossCount. */
     falsePositiveCount: number;
     redDrawdownClusters: number;
   };
   runbookSnapshot?: {
     verifiedAt?: string;
+    cycleId?: string;
+    canonicalStatus: "available" | "blocked" | "unavailable";
+    evidenceId?: string;
     completedChecks: number;
     totalChecks: number;
     brokerExecutionSkipped: boolean;

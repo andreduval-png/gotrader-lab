@@ -47,8 +47,13 @@ const rejectionReasonsFor = (
   if (promotionVerdict === "no_material_change") {
     reasons.push("Candidate did not materially improve the baseline.");
   }
-  if (candidate.metrics.falsePositiveCount > Math.max(6, baselineMetrics.falsePositiveCount + 3)) {
-    reasons.push("False positives too high.");
+  const attribution = candidate.researchQualityReview?.failureAttribution;
+  const avoidableLossRate = attribution
+    ? attribution.attributedStopHitCount / Math.max(1, attribution.completedTradeCount)
+    : undefined;
+  const causalFamilies = attribution?.failureCauses.filter((cause) => cause.directlyAttributed).length ?? 0;
+  if (typeof avoidableLossRate === "number" && (avoidableLossRate > 0.25 || causalFamilies > 2)) {
+    reasons.push("Attributed avoidable-loss evidence exceeds the research-quality gate.");
   }
   if (candidate.metrics.confidenceCalibration < 0.45) {
     reasons.push("Confidence calibration is poor.");
@@ -77,7 +82,7 @@ const categoryFor = (
       "Candidate has no material positive improvement versus baseline.",
       "Candidate did not produce enough simulated trades.",
       "Drawdown too high for bounded simulation readiness.",
-      "False positives too high.",
+      "Attributed avoidable-loss evidence exceeds the research-quality gate.",
       "Confidence calibration is poor.",
       "Conservative scenario is unstable.",
       "Composite stability-first score is too low."

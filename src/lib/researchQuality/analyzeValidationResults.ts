@@ -291,7 +291,7 @@ const nextStepFor = (grade: ResearchQualityReadinessGrade, attribution?: Researc
   if (grade === "Research Ready") {
     return "Keep the strategy in simulation. Tune weak assumptions and rerun validation before paper-demo consideration.";
   }
-  return "Do not proceed to broker demo. Focus on weak ICT assumptions, false positives, and drawdown calibration.";
+  return "Do not proceed to broker demo. Focus on weak ICT assumptions, attributed avoidable-loss cohorts, and drawdown calibration.";
 };
 
 export function analyzeValidationResults(report: ValidationSuiteReport): ResearchQualityReview {

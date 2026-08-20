@@ -162,8 +162,20 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(page.getByTestId("operator-gbrain-memory-summary")).toBeVisible();
     await expect(page.getByTestId("operator-gbrain-memory-summary")).toContainText(/Stored cycles/i);
     await expect(page.getByTestId("operator-research-risk-preview")).toBeVisible();
-    await expect(page.getByTestId("operator-research-risk-preview")).toContainText(/Proposed entry/i);
+    await expect(page.getByTestId("operator-research-risk-preview")).toContainText(/Entry price/i);
     await expect(page.getByTestId("operator-research-risk-preview")).toContainText(/Informational only/i);
+    await expect(page.getByTestId("operator-target-provenance")).toBeVisible();
+    await expect(page.getByTestId("operator-target-provenance")).toContainText(/Target type/i);
+    await expect(page.getByTestId("operator-target-provenance")).toContainText(/Source timeframe/i);
+    await expect(page.getByTestId("operator-target-provenance")).toContainText(/Distance/i);
+    await expect(page.getByTestId("operator-target-provenance")).toContainText(/RR gate/i);
+    const probabilityValue = page.getByTestId("operator-plan-probability-value");
+    await expect(probabilityValue).toBeVisible();
+    await expect(probabilityValue).toHaveText(/^(?:Unavailable · --|(?:Low|Medium|High) · \d+(?:\.\d)?%)$/);
+    expect(
+      await probabilityValue.evaluate((element) => element.scrollWidth <= element.clientWidth),
+      "trade-plan probability must not be visually clipped"
+    ).toBe(true);
     await expect(page.locator("main")).toContainText(/supervised research cycle/i);
     await expect(page.locator("main")).toContainText(/Research trades/i);
     await expect(page.locator("main")).toContainText(/Advanced Research Lab/i);
@@ -180,6 +192,27 @@ test.describe("GoTrader browser route smoke", () => {
     await expect(page).toHaveURL(/\/performance$/);
     await expectUpgradedResultsPage(page);
     await expectNoVisibleExecutionControls(page);
+  });
+
+  test("simulation runbook exposes evidence state without editable truth checkboxes", async ({ page }) => {
+    await gotoRoute(page, "/simulation-runbook");
+    await expect(page.getByRole("button", { name: /Refresh Evidence/i })).toBeVisible();
+    await expect(page.locator("main")).toContainText(/Canonical status/i);
+    await expect(page.locator("main")).toContainText(/Ledger evidence/i);
+    await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);
+    await expect(page.locator("main")).toContainText(/Unavailable|Verified/i);
+  });
+
+  test("Results MCP state and Backtest tab remain usable on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoRoute(page, "/performance");
+    await expect(page.getByTestId("performance-results-page")).toBeVisible();
+    await expect(page.getByText(/GoTrader MCP (?:disconnected|blocked|Direct|TradingView)/i).first()).toBeVisible();
+    await page.getByRole("tab", { name: "Backtest" }).click();
+    await expect(page.getByRole("tab", { name: "Backtest" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("heading", { name: "Statistics" })).toBeVisible();
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+    expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width + 1);
   });
 
   test("ICT Strategy Suite panels remain available in the advanced advisor workspace", async ({ page }) => {
@@ -652,13 +685,9 @@ async function expectChartOrFallback(page: Page, route: string) {
     await expect(chartApplication.first()).toBeVisible();
     return;
   }
-  await expect(
-    page
-      .getByText(
-        /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable|ICT Candle Map|Structure Tape|Chart input/i
-      )
-      .first()
-  ).toBeVisible();
+  await expect(page.locator("main")).toContainText(
+    /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable|ICT Candle Map|Structure Tape|Chart input/i
+  );
 }
 
 async function expectNoVisibleExecutionControls(page: Page) {

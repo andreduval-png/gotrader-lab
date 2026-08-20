@@ -148,6 +148,8 @@ const fallbackMetrics = (): AutoResearchCandidateResult["metrics"] => ({
   maxDrawdown: 0,
   profitFactor: null,
   skippedSignals: 0,
+  stopHitCount: 0,
+  estimatedLossCount: 0,
   falsePositiveCount: 0,
   confidenceCalibration: 0,
   readinessScore: 0,
@@ -161,6 +163,7 @@ const fallbackScoreBreakdown = (): AutoResearchCandidateResult["scoreBreakdown"]
   drawdownScore: 0,
   averageRScore: 0,
   winRateScore: 0,
+  avoidableLossScore: 0,
   falsePositiveScore: 0,
   confidenceCalibrationScore: 0,
   sessionConsistencyScore: 0,
@@ -178,7 +181,7 @@ const fallbackScoreBreakdown = (): AutoResearchCandidateResult["scoreBreakdown"]
 
 const failedGateLabels: Record<AutoResearchFailedGate, string> = {
   max_drawdown_too_high: "max drawdown too high",
-  false_positives_too_high: "false positives too high",
+  false_positives_too_high: "attributed avoidable losses too high",
   average_r_too_low: "average R too low",
   win_rate_too_low: "win rate too low",
   trade_count_too_low: "trade count too low",
@@ -265,6 +268,9 @@ const compactCandidate = (candidate: AutoResearchCandidateResult): AutoResearchC
       maxDrawdown: metrics.maxDrawdown ?? 0,
       profitFactor: metrics.profitFactor ?? null,
       skippedSignals: metrics.skippedSignals ?? 0,
+      stopHitCount: metrics.stopHitCount,
+      estimatedLossCount: metrics.estimatedLossCount,
+      attributedAvoidableLossCount: metrics.attributedAvoidableLossCount,
       falsePositiveCount: metrics.falsePositiveCount ?? 0,
       confidenceCalibration: metrics.confidenceCalibration ?? 0,
       readinessScore: metrics.readinessScore ?? 0,
@@ -746,6 +752,8 @@ const buildCalibrationFamilyReport = ({
       winRate: metrics.winRate,
       averageR: metrics.averageR,
       maxDrawdown: metrics.maxDrawdown,
+      stopHitCount: metrics.stopHitCount,
+      attributedAvoidableLossCount: metrics.attributedAvoidableLossCount,
       falsePositiveCount: metrics.falsePositiveCount,
       readiness: readinessEstimate.state
     },
@@ -821,7 +829,9 @@ const detectorMetricsFromBacktest = (
   maxDrawdown: result.summary.maxDrawdown,
   profitFactor: result.summary.profitFactor,
   skippedSignals: result.summary.skippedSignals,
-  falsePositiveCount: result.trades.filter((trade) => trade.outcome === "stop_hit").length,
+  stopHitCount: result.trades.filter((trade) => trade.outcome === "stop_hit").length,
+  estimatedLossCount: result.trades.filter((trade) => trade.outcome === "stop_hit").length,
+  falsePositiveCount: 0,
   confidenceCalibration: 0,
   readinessScore: 0,
   readinessStatus: "red",
@@ -884,15 +894,16 @@ const detectorScoreBreakdown = (
   const drawdownScore = clamp(100 - metrics.maxDrawdown * 5);
   const averageRScore = clamp((metrics.averageR / 2) * 100);
   const winRateScore = clamp(metrics.winRate * 100);
-  const falsePositiveRate = metrics.falsePositiveCount / Math.max(1, metrics.totalTrades);
-  const falsePositiveScore = clamp((1 - falsePositiveRate) * 100);
+  // Frozen detector evidence does not include a qualified avoidable-loss cohort.
+  // Keep this component neutral rather than treating every stop as attribution.
+  const avoidableLossScore = 50;
   const tradeCountScore = clamp((metrics.totalTrades / 60) * 100);
   const oosScore = walkForward.verdict === "passed" ? 100 : clamp(walkForward.oosWindowPassRate * 100);
   const totalScore = Math.round(
     drawdownScore * 0.1 +
       averageRScore * 0.2 +
       winRateScore * 0.1 +
-      falsePositiveScore * 0.1 +
+      avoidableLossScore * 0.1 +
       tradeCountScore * 0.15 +
       oosScore * 0.35
   );
@@ -901,7 +912,8 @@ const detectorScoreBreakdown = (
     drawdownScore: Math.round(drawdownScore),
     averageRScore: Math.round(averageRScore),
     winRateScore: Math.round(winRateScore),
-    falsePositiveScore: Math.round(falsePositiveScore),
+    avoidableLossScore: Math.round(avoidableLossScore),
+    falsePositiveScore: Math.round(avoidableLossScore),
     confidenceCalibrationScore: 0,
     sessionConsistencyScore: Math.round(walkForward.oosWindowPassRate * 100),
     tradeCountScore: Math.round(tradeCountScore),
@@ -1096,7 +1108,12 @@ const diagnoseFailedGates = (
   if (metrics.maxDrawdown > Math.max(6, baselineMetrics.maxDrawdown + 1.5) || score.drawdownScore < 55) {
     gates.push("max_drawdown_too_high");
   }
-  if (metrics.falsePositiveCount > Math.max(6, baselineMetrics.falsePositiveCount + 3) || score.falsePositiveScore < 65) {
+  const attribution = candidate.researchQualityReview?.failureAttribution;
+  const avoidableLossRate = attribution
+    ? attribution.attributedStopHitCount / Math.max(1, attribution.completedTradeCount)
+    : undefined;
+  const attributedFamilies = attribution?.failureCauses.filter((cause) => cause.directlyAttributed).length ?? 0;
+  if (typeof avoidableLossRate === "number" && (avoidableLossRate > 0.25 || attributedFamilies > 2)) {
     gates.push("false_positives_too_high");
   }
   if (metrics.averageR < baselineMetrics.averageR - 0.1 || score.averageRScore < 45 || criticalText.includes("average r")) {
@@ -1415,8 +1432,13 @@ const buildGrinchComparison = (
   };
 };
 
-const falsePositivesControlled = (candidate?: AutoResearchCandidateResult) =>
-  Boolean(candidate && candidate.metrics.falsePositiveCount <= 2 && candidate.scoreBreakdown.falsePositiveScore >= 70);
+const avoidableLossesControlled = (candidate?: AutoResearchCandidateResult) => {
+  const attribution = candidate?.researchQualityReview?.failureAttribution;
+  if (!attribution || attribution.contextEvaluationCoverage < 0.9) return false;
+  const avoidableLossRate = attribution.attributedStopHitCount / Math.max(1, attribution.completedTradeCount);
+  const attributedFamilies = attribution.failureCauses.filter((cause) => cause.directlyAttributed).length;
+  return avoidableLossRate <= 0.25 && attributedFamilies <= 2;
+};
 
 const sessionConsistencyPassed = (candidate?: AutoResearchCandidateResult) =>
   Boolean(
@@ -1566,7 +1588,7 @@ const createZeroTradeRecoveryProposal = ({
     minimumConfluenceThreshold: confluenceThreshold
   };
   const qualityGatesPassed = [
-    falsePositivesControlled(recoveryResult) ? "false positives controlled" : undefined,
+    avoidableLossesControlled(recoveryResult) ? "attributed avoidable losses controlled" : undefined,
     sessionConsistencyPassed(recoveryResult) ? "session consistency passed" : undefined,
     conservativeScenarioStabilityPassed(recoveryResult) ? "conservative scenario stability passed" : undefined
   ].filter((item): item is string => Boolean(item));
@@ -1706,8 +1728,10 @@ const improvementSummaryFor = (
     candidate.metrics.averageR !== baselineMetrics.averageR
       ? `Average R: ${baselineMetrics.averageR}R -> ${candidate.metrics.averageR}R.`
       : undefined,
-    candidate.metrics.falsePositiveCount !== baselineMetrics.falsePositiveCount
-      ? `False positives: ${baselineMetrics.falsePositiveCount} -> ${candidate.metrics.falsePositiveCount}.`
+    typeof candidate.metrics.attributedAvoidableLossCount === "number" &&
+    typeof baselineMetrics.attributedAvoidableLossCount === "number" &&
+    candidate.metrics.attributedAvoidableLossCount !== baselineMetrics.attributedAvoidableLossCount
+      ? `Attributed avoidable losses: ${baselineMetrics.attributedAvoidableLossCount} -> ${candidate.metrics.attributedAvoidableLossCount}.`
       : undefined,
     candidate.metrics.readinessStatus !== baselineMetrics.readinessStatus
       ? `Readiness: ${baselineMetrics.readinessStatus} -> ${candidate.metrics.readinessStatus}.`

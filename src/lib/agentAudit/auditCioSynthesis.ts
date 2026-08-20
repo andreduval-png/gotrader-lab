@@ -38,7 +38,9 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
       assumptions: ["CIO synthesis combines only evidence-participating internal agent weights.", "All output remains simulation research."],
       thresholdsUsed: [
         `confidence ${(thesis.confidence * 100).toFixed(0)}%`,
-        `risk/reward ${thesis.simulatedTradePlan.riskReward.toFixed(2)}R`
+        thesis.simulatedTradePlan
+          ? `risk/reward ${thesis.simulatedTradePlan.riskReward.toFixed(2)}R`
+          : "price plan unavailable"
       ],
       confidenceAfter: thesis.confidence,
       finalBias: thesis.finalBias,
@@ -47,14 +49,14 @@ export function auditCioSynthesis(thesis?: TradeThesis, debateMessages: AgentDeb
       decisionRulesApplied: [
         "Synthesize weighted evidence-participating internal agent views.",
         "Exclude abstaining agents from the directional denominator.",
-        "Require invalidation, target, and risk notes.",
+        "Require canonical price geometry before emitting invalidation, target, or entry levels.",
         "Keep output in simulation mode."
       ],
       safetyConstraintsChecked: [
         "Execution authority none",
         "Broker authority none",
         "Readiness override authority none",
-        `trade plan mode ${thesis.simulatedTradePlan.mode}`
+        `trade plan mode ${thesis.simulatedTradePlan?.mode ?? "unavailable"}`
       ],
       possibleFailureModes: [
         "Agent agreement may be fragile.",

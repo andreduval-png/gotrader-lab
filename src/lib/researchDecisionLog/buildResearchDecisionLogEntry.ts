@@ -104,7 +104,7 @@ function buildMetrics(cycle: ResearchCycleRun | undefined): ResearchDecisionMetr
   const metrics = canonicalMetricsForRun(cycle);
   const backtest = cycle?.backtestSummary;
   const trades = metrics?.totalTrades ?? backtest?.totalTrades ?? 0;
-  const falsePositiveCount = finiteNumberOrNull(metrics?.falsePositiveCount);
+  const attributedAvoidableLossCount = finiteNumberOrNull(metrics?.attributedAvoidableLossCount);
 
   return {
     trades,
@@ -112,7 +112,8 @@ function buildMetrics(cycle: ResearchCycleRun | undefined): ResearchDecisionMetr
     averageR: finiteNumberOrNull(metrics?.averageR ?? backtest?.averageR),
     drawdown: finiteNumberOrNull(metrics?.maxDrawdownR ?? backtest?.maxDrawdown),
     profitFactor: finiteNumberOrNull(metrics?.profitFactor ?? backtest?.profitFactor),
-    falsePositiveRate: falsePositiveCount !== null && trades > 0 ? falsePositiveCount / trades : null
+    attributedAvoidableLossRate: attributedAvoidableLossCount !== null && trades > 0 ? attributedAvoidableLossCount / trades : null,
+    falsePositiveRate: attributedAvoidableLossCount !== null && trades > 0 ? attributedAvoidableLossCount / trades : null
   };
 }
 

@@ -20,7 +20,7 @@ const validationSteps = [
 const bestPractices = [
   "Do not chase the highest profit number",
   "Prefer stable average R over one big win",
-  "Watch drawdown, skipped signals, false positives, and confidence calibration",
+  "Watch drawdown, skipped signals, attributed avoidable losses, and confidence calibration",
   "Compare sessions and long/short direction separately",
   "Keep conservative settings as the main benchmark"
 ];

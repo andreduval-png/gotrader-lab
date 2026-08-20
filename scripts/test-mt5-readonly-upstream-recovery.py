@@ -72,6 +72,26 @@ except RuntimeError as error:
 assert failed_state.last_data_error is not None
 assert failed_state.connected is False
 
+
+class InitiallyUnavailableMt5(FakeMt5):
+    def terminal_info(self) -> None:
+        return None
+
+    def initialize(self, **_kwargs: object) -> bool:
+        self.initialize_count += 1
+        return False
+
+
+initially_unavailable_mt5 = InitiallyUnavailableMt5()
+MODULE.mt5 = initially_unavailable_mt5
+startup_state = MODULE.Mt5ReadOnlyState("terminal64.exe")
+assert startup_state.ensure_connected() is False
+startup_health = startup_state.status(probe_terminal=False)
+assert startup_health["processHealth"] == "healthy"
+assert startup_health["connectionStatus"] == "degraded"
+assert startup_health["latestEndpointAvailable"] is False
+assert startup_state.last_error == "MT5 initialize failed (-10005): stale IPC session"
+
 assert MODULE.AUTHORITY == {
     "executionAuthority": "none",
     "brokerAuthority": "none",
@@ -86,6 +106,7 @@ print(
             "reconnectCount": state.reconnect_count,
             "recoveredAtRecorded": state.last_data_recovered_at is not None,
             "exhaustedReadFailedClosed": failed_state.connected is False,
+            "initialIpcFailureStartsDegraded": startup_health["connectionStatus"] == "degraded",
             "authority": MODULE.AUTHORITY,
         },
         indent=2,

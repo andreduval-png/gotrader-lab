@@ -20,7 +20,13 @@ export interface CanonicalTradeMetrics {
   winRate: number;
   realizedR: number;
   averageR: number;
-  /** Stop-hit count — the shared false-positive definition. */
+  /** Directional stop-hit losses. This is not causal false-positive attribution. */
+  stopHitCount: number;
+  /** Aggregate loss estimate. This can differ from observed stop hits in summary-only evidence. */
+  estimatedLossCount: number;
+  /** Losses linked to a qualified discriminating pre-entry cohort, when evaluated. */
+  attributedAvoidableLossCount?: number;
+  /** @deprecated Compatibility field. Zero unless qualified attribution is supplied elsewhere. */
   falsePositiveCount: number;
   edgeStatistics: EdgeStatistics;
   provenance: EdgeProvenance;
@@ -51,12 +57,17 @@ export function summarizeTradeOutcomes(
     winRate: resolved > 0 ? wins / resolved : 0,
     realizedR: round(realizedR, 2),
     averageR: round(realizedR / Math.max(1, trades.length), 2),
-    falsePositiveCount: losses,
+    stopHitCount: losses,
+    estimatedLossCount: losses,
+    falsePositiveCount: 0,
     edgeStatistics: computeEdgeStatistics(rMultiples),
     provenance
   };
 }
 
-/** Shared false-positive count: stop hits only (expired are sample incompleteness, not FP). */
-export const falsePositiveCountFromTrades = (trades: SimulatedTradeRecord[]) =>
+/** Directional stop-hit loss count. Expired outcomes are sample incompleteness. */
+export const stopHitCountFromTrades = (trades: SimulatedTradeRecord[]) =>
   trades.filter((trade) => trade.bias !== "neutral" && trade.outcome === "stop_hit").length;
+
+/** @deprecated Trade outcomes alone cannot establish false-positive attribution. */
+export const falsePositiveCountFromTrades = (_trades: SimulatedTradeRecord[]) => 0;

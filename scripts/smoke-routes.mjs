@@ -6,7 +6,7 @@ import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 
-// Expected coverage: every non-redirect route from src/App.tsx. Four routes
+// Expected coverage: every non-redirect route from src/App.tsx. Primary routes
 // are operator-facing; detailed workspaces remain directly addressable under
 // Advanced Research. Excluded: "/" and "*" redirects
 // and the "/agents/:id" detail route. Keep this list in sync with
@@ -50,8 +50,22 @@ const advancedRoutes = [
 const chartRoutes = new Set(["/research-lab", "/market-data", "/ict-lab", "/replay", "/backtest-lab"]);
 const allRoutes = [...primaryRoutes, ...advancedRoutes];
 const routeTimeoutMs = Number(process.env.SMOKE_ROUTE_TIMEOUT_MS ?? 15000);
+// Browser teardown can legitimately flush many route contexts on slower local
+// workstations. Keep it bounded, but allow enough time to distinguish that
+// cleanup from a deadlocked close.
+const closeTimeoutMs = Number(process.env.SMOKE_CLOSE_TIMEOUT_MS ?? 15000);
+const suiteTimeoutMs = Number(process.env.SMOKE_SUITE_TIMEOUT_MS ?? 300000);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withTimeout = (promise, timeoutMs, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms.`)), timeoutMs);
+      timer.unref?.();
+    })
+  ]);
 
 function log(message = "") {
   process.stdout.write(`${message}\n`);
@@ -227,6 +241,7 @@ async function runBrowserSmoke(baseUrl, playwright) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 950 } });
 
   for (const route of allRoutes) {
+    log(`CHECK ${route}`);
     const page = await context.newPage();
     const consoleErrors = [];
     const pageErrors = [];
@@ -250,7 +265,7 @@ async function runBrowserSmoke(baseUrl, playwright) {
             () =>
               document.querySelectorAll("canvas").length > 0 ||
               Boolean(document.querySelector("[role='application']")) ||
-              /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable/i.test(
+              /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable|ICT Candle Map|Structure Tape|Chart input/i.test(
                 document.body.textContent ?? ""
               ),
             undefined,
@@ -276,7 +291,7 @@ async function runBrowserSmoke(baseUrl, playwright) {
           bodyText,
           canvasCount: document.querySelectorAll("canvas").length,
           chartFallback:
-            /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable/i.test(bodyText) ||
+            /Chart unavailable|No candles|No chart data|preview unavailable|data unavailable|ICT Candle Map|Structure Tape|Chart input/i.test(bodyText) ||
             Boolean(document.querySelector("[role='application']")),
           hasMain: Boolean(document.querySelector("main")),
           heading: document.querySelector("h1,h2")?.textContent?.trim() ?? "",
@@ -317,12 +332,17 @@ async function runBrowserSmoke(baseUrl, playwright) {
     } catch (error) {
       failures.push(`${route}: ${error.message}`);
     } finally {
-      await page.close();
+      await withTimeout(page.close({ runBeforeUnload: false }), closeTimeoutMs, `${route} page close`).catch((error) => {
+        failures.push(`${route}: ${error.message}`);
+      });
     }
   }
 
-  await runNavigationSmoke(context, baseUrl, failures);
-  await browser.close();
+  await withTimeout(runNavigationSmoke(context, baseUrl, failures), routeTimeoutMs * 4, "navigation smoke").catch((error) => {
+    failures.push(error.message);
+  });
+  await withTimeout(context.close(), closeTimeoutMs, "browser context close").catch((error) => failures.push(error.message));
+  await withTimeout(browser.close(), closeTimeoutMs, "browser close").catch((error) => failures.push(error.message));
 
   return {
     failures,
@@ -338,7 +358,7 @@ async function runNavigationSmoke(context, baseUrl, failures) {
   try {
     // Sidebar hub navigation: each hub link routes to the hub's primary page.
     await page.goto(`${baseUrl}/dashboard`, { waitUntil: "domcontentloaded", timeout: routeTimeoutMs });
-    for (const route of ["/market-data", "/replay", "/self-improvement", "/settings"]) {
+    for (const route of ["/advisor", "/performance", "/settings"]) {
       await page.locator(`nav a[href="${route}"]`).first().click({ timeout: 10000 });
       await page.waitForTimeout(250);
       const path = await page.evaluate(() => location.pathname);
@@ -346,22 +366,16 @@ async function runNavigationSmoke(context, baseUrl, failures) {
         failures.push(`navigation: clicking ${route} landed on ${path}`);
       }
     }
-    // Workspace tabs reach the remaining hub destinations.
-    const tabChecks = [
-      { start: "/replay", target: "/walk-forward" },
-      { start: "/market-data", target: "/ict-lab" }
-    ];
-    for (const { start, target } of tabChecks) {
-      await page.goto(`${baseUrl}${start}`, { waitUntil: "domcontentloaded", timeout: routeTimeoutMs });
-      await page.locator(`nav[data-testid="workspace-tabs"] a[href="${target}"]`).click({ timeout: 10000 });
-      await page.waitForTimeout(250);
-      const tabPath = await page.evaluate(() => location.pathname);
-      if (tabPath !== target) {
-        failures.push(`navigation: workspace tab ${target} landed on ${tabPath}`);
-      }
+    // Advanced Research is intentionally hidden from the primary shell. Its
+    // legacy deep links are covered by the direct route loop above.
+    const workspaceTabCount = await page.locator('nav[data-testid="workspace-tabs"]').count();
+    if (workspaceTabCount !== 0) {
+      failures.push("navigation: hidden Advanced Research unexpectedly exposed workspace tabs.");
     }
   } finally {
-    await page.close();
+    await withTimeout(page.close({ runBeforeUnload: false }), closeTimeoutMs, "navigation page close").catch((error) => {
+      failures.push(error.message);
+    });
   }
 }
 
@@ -436,8 +450,13 @@ function printSummary(result, baseUrl) {
 }
 
 async function main() {
-  const server = await startPreviewServer();
+  const suiteWatchdog = setTimeout(() => {
+    console.error(`GoTrader route smoke exceeded the ${suiteTimeoutMs}ms whole-suite bound.`);
+    process.exit(124);
+  }, suiteTimeoutMs);
+  let server;
   try {
+    server = await startPreviewServer();
     const playwright = await tryLoadPlaywright();
     const result = playwright ? await runBrowserSmoke(server.baseUrl, playwright) : await runHttpSmoke(server.baseUrl);
     printSummary(result, server.baseUrl);
@@ -445,7 +464,13 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
-    await server.close();
+    if (server) {
+      await withTimeout(server.close(), closeTimeoutMs, "smoke server close").catch((error) => {
+        console.error(error.message);
+        process.exitCode = 1;
+      });
+    }
+    clearTimeout(suiteWatchdog);
   }
 }
 

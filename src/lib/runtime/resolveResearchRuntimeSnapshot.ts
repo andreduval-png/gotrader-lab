@@ -334,7 +334,7 @@ const displayLabelForRequirement = (item: { id?: string; label: string; passed?:
       case "confidence-calibration":
         return "Confidence calibration too low.";
       case "false-positive-control":
-        return "False positives too high.";
+        return "Attributed avoidable losses exceed the quality gate.";
       case "session-consistency":
         return "Session consistency weak.";
       case "conservative-stability":
@@ -1025,7 +1025,8 @@ export async function resolveResearchRuntimeSnapshot(
         winRate: metrics?.winRate ?? run.backtestSummary?.winRate,
         averageR: metrics?.averageR ?? run.backtestSummary?.averageR,
         maxDrawdownR: metrics?.maxDrawdownR ?? run.backtestSummary?.maxDrawdown,
-        falsePositiveCount: metrics?.falsePositiveCount,
+        attributedAvoidableLossCount: metrics?.attributedAvoidableLossCount,
+        falsePositiveCount: metrics?.attributedAvoidableLossCount,
         readinessScore: metrics?.readinessScore ?? run.researchQualitySummary?.readinessScore ?? run.validationSummary?.readinessScore,
         readinessState: run.readinessSnapshot?.state,
         llmAdvisoryPassed: run.llmRun?.advisoryPassed

@@ -58,6 +58,8 @@ const time = (value?: string) => {
   return parsed.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 };
 
+const words = (value?: string) => value ? value.replace(/_/g, " ") : "Unavailable";
+
 const elapsedTime = (startedAt?: string, completedAt?: string, now = Date.now()) => {
   const startedMs = Date.parse(startedAt ?? "");
   if (!Number.isFinite(startedMs)) return "--:--";
@@ -78,10 +80,10 @@ const normalizedConfidence = (value?: number) => {
 
 const probabilityPresentation = (value?: number) => {
   const normalized = normalizedConfidence(value);
-  if (normalized === undefined) return { label: "Unavailable", tone: "neutral" as const };
-  if (normalized >= 0.7) return { label: "High", tone: "positive" as const };
-  if (normalized >= 0.5) return { label: "Medium", tone: "caution" as const };
-  return { label: "Low", tone: "negative" as const };
+  if (normalized === undefined) return { label: "Unavailable", percentage: "--", tone: "neutral" as const };
+  if (normalized >= 0.7) return { label: "High", percentage: percent(normalized), tone: "positive" as const };
+  if (normalized >= 0.5) return { label: "Medium", percentage: percent(normalized), tone: "caution" as const };
+  return { label: "Low", percentage: percent(normalized), tone: "negative" as const };
 };
 
 const toneClasses = {
@@ -121,6 +123,8 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
   const cycleActive = snapshot.cycle.status === "running" || snapshot.cycle.status === "stopping";
   const cycleElapsed = elapsedTime(snapshot.cycle.startedAt, snapshot.cycle.completedAt, clockNow);
   const probability = probabilityPresentation(snapshot.insight.confidence);
+  const targetProvenance = snapshot.researchPlan.targetProvenance;
+  const targetGateStatus = targetProvenance?.gateStatus ?? "unavailable";
   const cycleHeartbeat = cycleHeartbeatFor(snapshot.cycle.stage);
   const cycleHeartbeatStyle = {
     "--cycle-heartbeat-rgb": cycleHeartbeat.rgb
@@ -286,19 +290,19 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 px-5 py-5 sm:px-6">
             <div>
               <p className={WORKSPACE_SECTION_LABEL}>Research memory</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-100">GoTrader + gbrain inventory</h3>
-              <p className="mt-1 text-xs leading-5 text-slate-500">Native evidence is authoritative; gbrain packets are compact advisory copies.</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-100">Research evidence and agent memory</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Native evidence is authoritative; memory packets are compact advisory copies.</p>
             </div>
             <Badge variant={snapshot.memory.gbrainDeliveryEnabled ? "warning" : "muted"}>
-              gbrain delivery {snapshot.memory.gbrainDeliveryEnabled ? "on" : "off"}
+              local memory delivery {snapshot.memory.gbrainDeliveryEnabled ? "on" : "off"}
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4 xl:grid-cols-2">
             {[
               ["Stored cycles", snapshot.memory.storedEvidenceRecords],
               ["Profile identities", snapshot.memory.profileIdentities],
-              ["gbrain queued", snapshot.memory.gbrainPending],
-              ["gbrain delivered", snapshot.memory.gbrainDelivered]
+              ["Memory queued", snapshot.memory.gbrainPending],
+              ["Memory delivered", snapshot.memory.gbrainDelivered]
             ].map(([label, value]) => (
               <div key={label} className="bg-[#0d1420] px-5 py-4">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">{label}</p>
@@ -344,6 +348,9 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 {snapshot.researchPlan.signal.replace("_", " ")}
               </Badge>
               <Badge variant="muted">{snapshot.researchPlan.status.replace(/_/g, " ")}</Badge>
+              <Badge variant={snapshot.researchPlan.planIdentityStatus === "current" ? "success" : "warning"}>
+                {snapshot.researchPlan.planIdentityStatus.replace(/_/g, " ")}
+              </Badge>
               <Badge variant="warning">Informational only</Badge>
             </div>
           </div>
@@ -354,19 +361,69 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
           ) : null}
 
-          <div className="grid gap-px bg-white/10 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-px bg-white/10 sm:grid-cols-2 2xl:grid-cols-3">
             {[
               { label: "Entry price", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },
               { label: "Stop loss", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
               { label: "Take profit", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
               { label: "Risk / reward", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
-              { label: "Probability", value: `${probability.label} · ${percent(snapshot.insight.confidence)}`, tone: probability.tone }
+              { label: "Probability", value: `${probability.label} · ${probability.percentage}`, tone: probability.tone }
             ].map(({ label, value, tone }) => (
-              <div key={label} className={cn("min-w-0 px-4 py-4", toneClasses[tone])} data-result-tone={tone}>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">{label}</p>
-                <p className="mt-2 truncate font-mono text-base font-semibold tabular-nums" title={String(value)}>{value}</p>
+              <div
+                key={label}
+                className={cn("min-w-0 px-4 py-4", toneClasses[tone])}
+                data-result-tone={tone}
+                data-testid={label === "Probability" ? "operator-plan-probability" : undefined}
+              >
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-white">{label}</p>
+                <p
+                  className="mt-2 whitespace-nowrap font-mono text-sm font-semibold tabular-nums sm:text-base"
+                  data-testid={label === "Probability" ? "operator-plan-probability-value" : undefined}
+                  title={String(value)}
+                >
+                  {value}
+                </p>
               </div>
             ))}
+          </div>
+
+          <div className="border-t border-white/10 px-5 py-4 sm:px-6" data-testid="operator-target-provenance">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-white">Target selection</p>
+                <p className="mt-1 text-xs text-slate-400">Target gate only; overall candidate and readiness gates remain separate.</p>
+              </div>
+              <Badge variant={targetGateStatus === "accepted" ? "success" : targetGateStatus === "rejected" ? "danger" : "muted"}>
+                {words(targetGateStatus)} target
+              </Badge>
+            </div>
+            <div className="mt-4 grid gap-x-5 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Target type", value: words(targetProvenance?.type) },
+                { label: "Source timeframe", value: targetProvenance?.sourceTimeframe ?? "Unavailable" },
+                { label: "Distance", value: typeof targetProvenance?.distancePoints === "number" ? number(targetProvenance.distancePoints, " points") : "Unavailable" },
+                {
+                  label: "RR gate",
+                  value: targetProvenance
+                    ? `${number(targetProvenance.rr, "R")} / ${number(targetProvenance.minimumRR, "R")} minimum`
+                    : "Unavailable"
+                }
+              ].map(({ label, value }) => (
+                <div key={label} className="min-w-0">
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-slate-500">{label}</p>
+                  <p className="mt-1 break-words text-sm font-medium capitalize text-slate-100">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 border-t border-white/10 pt-3 text-xs leading-5 text-slate-400">
+              <span className="font-semibold text-slate-200">Selection reason: </span>
+              {targetProvenance?.selectionReason ?? "No identity-bound target provenance is available for this plan."}
+              {targetProvenance?.rejectionReasons.length ? (
+                <span className="mt-1 block text-rose-300" data-testid="operator-target-rejection-reason">
+                  {targetProvenance.rejectionReasons.join(" ")}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid gap-3 border-t border-white/10 px-5 py-4 sm:grid-cols-3 sm:px-6">
@@ -376,7 +433,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
             <div>
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Account-risk engine</p>
-              <p className="mt-1 text-sm text-amber-200">Not evaluated</p>
+              <p className="mt-1 text-sm text-amber-200">External simulation required</p>
             </div>
             <div>
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-slate-600">Max research risk</p>
@@ -387,7 +444,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               </p>
             </div>
             <p className="text-xs leading-5 text-slate-500 sm:col-span-3">
-              {snapshot.researchPlan.riskScreeningReason} No order is created; sizing and account-risk approval require a separate deterministic simulation evaluation.
+              {snapshot.researchPlan.riskScreeningReason} The browser creates no risk decision, reservation, or order; sizing and account-risk approval require the independent deterministic simulation governor.
             </p>
           </div>
         </section>
@@ -404,7 +461,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               <Badge variant="muted">{snapshot.insight.bias}</Badge>
               <Badge variant="secondary">{snapshot.insight.modelLane}</Badge>
               <Badge variant={probability.tone === "positive" ? "success" : probability.tone === "negative" ? "danger" : probability.tone === "caution" ? "warning" : "muted"}>
-                {probability.label} probability · {percent(snapshot.insight.confidence)}
+                {probability.label} probability · {probability.percentage}
               </Badge>
             </div>
           </div>

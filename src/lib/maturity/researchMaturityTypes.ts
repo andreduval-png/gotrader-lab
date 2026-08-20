@@ -37,6 +37,8 @@ export interface ResearchMaturityCycleInput {
   winRate?: number;
   averageR?: number;
   maxDrawdownR?: number;
+  attributedAvoidableLossCount?: number;
+  /** @deprecated Compatibility alias; not used when attribution is absent. */
   falsePositiveCount?: number;
   readinessScore?: number;
   readinessState?: string;
@@ -73,6 +75,8 @@ export interface ResearchMaturitySummary {
   winRateConsistency: number;
   averageRConsistency: number;
   drawdownConsistency: number;
+  attributedAvoidableLossConsistency?: number;
+  /** @deprecated Compatibility alias for attributedAvoidableLossConsistency. */
   falsePositiveConsistency: number;
   sessionConsistency: number;
   llmAdvisoryPassCount: number;

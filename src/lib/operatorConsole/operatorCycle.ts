@@ -22,12 +22,45 @@ import {
 } from "./operatorConsoleTypes";
 import { prepareOperatorForwardScenario } from "./operatorForwardScenario";
 
-export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v1";
+const LEGACY_OPERATOR_CYCLE_STORAGE_KEYS = ["gotrader.operator-cycle.v2", "gotrader.operator-cycle.v1"];
+const OPERATOR_CYCLE_TAB_STORAGE_KEY = "gotrader.operator-cycle.tab.v1";
+export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v3";
 export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
-// The outer budget must accommodate deep detector validation plus the separately
-// bounded LLM advisory request without misclassifying a successful run as canceled.
-const OPERATOR_RESEARCH_TIMEOUT_MS = 300_000;
+// Expensive research stages have their own bounds. This outer watchdog only
+// intervenes when the autonomous loop stops publishing observable progress.
+const OPERATOR_RESEARCH_STALL_TIMEOUT_MS = 180_000;
+const OPERATOR_CYCLE_HEARTBEAT_MS = 2_000;
+const OPERATOR_CYCLE_STALE_AFTER_MS = 90_000;
 const OPERATOR_RESEARCH_PROFILE = ifvgShallowRetestV4FrozenProfile.profileId;
+const OPERATOR_STOP_ABORT_REASON = "operator_stop_requested";
+const OPERATOR_TIMEOUT_ABORT_REASON = "operator_timeout";
+const OPERATOR_TIMEOUT_MESSAGE = "The guarded research cycle made no observable progress for three minutes and was stopped to keep GoTrader responsive.";
+
+const createOwnerInstanceId = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `operator_owner_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+};
+
+const ownerInstanceId = (() => {
+  if (typeof window === "undefined") return createOwnerInstanceId();
+  const runtimeWindow = window as Window & { __gotraderOperatorCycleOwnerInstanceId?: string };
+  runtimeWindow.__gotraderOperatorCycleOwnerInstanceId ??= createOwnerInstanceId();
+  return runtimeWindow.__gotraderOperatorCycleOwnerInstanceId;
+})();
+const ownerTabId = (() => {
+  if (typeof window === "undefined") return ownerInstanceId;
+  try {
+    const existing = window.sessionStorage.getItem(OPERATOR_CYCLE_TAB_STORAGE_KEY);
+    if (existing) return existing;
+    const created = createOwnerInstanceId();
+    window.sessionStorage.setItem(OPERATOR_CYCLE_TAB_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return ownerInstanceId;
+  }
+})();
 
 const initialState = (): OperatorCycleState => ({
   status: "idle",
@@ -41,14 +74,18 @@ const initialState = (): OperatorCycleState => ({
 
 let memoryState = initialState();
 let activeController: AbortController | undefined;
+let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | undefined;
 
 const sanitize = (state: OperatorCycleState): OperatorCycleState => ({
   cycleId: state.cycleId,
+  ownerTabId: state.ownerTabId,
+  ownerInstanceId: state.ownerInstanceId,
   status: state.status,
   stage: state.stage,
   progressPercent: Math.max(0, Math.min(100, Math.round(state.progressPercent))),
   message: String(state.message ?? "").slice(0, 500),
   startedAt: state.startedAt,
+  heartbeatAt: state.heartbeatAt,
   completedAt: state.completedAt,
   lastError: state.lastError ? String(state.lastError).slice(0, 500) : undefined,
   sourceFingerprint: state.sourceFingerprint,
@@ -67,19 +104,55 @@ const sanitize = (state: OperatorCycleState): OperatorCycleState => ({
   researchOnly: true
 });
 
+const heartbeatIsFresh = (state: OperatorCycleState, now = Date.now()) => {
+  const heartbeatMs = Date.parse(state.heartbeatAt ?? state.startedAt ?? "");
+  return Number.isFinite(heartbeatMs) && now - heartbeatMs <= OPERATOR_CYCLE_STALE_AFTER_MS;
+};
+
 const recoverInterruptedState = (state: OperatorCycleState): OperatorCycleState => {
-  if ((state.status !== "running" && state.status !== "stopping") || activeController) {
+  if (state.status !== "running" && state.status !== "stopping") {
     return state;
   }
+  if (activeController && state.ownerInstanceId === ownerInstanceId) return state;
+  if (state.ownerTabId && state.ownerTabId === ownerTabId && state.ownerInstanceId !== ownerInstanceId) {
+    return sanitize({
+      ...state,
+      status: "canceled",
+      stage: "complete",
+      progressPercent: 100,
+      completedAt: new Date().toISOString(),
+      message: "The browser document was replaced while the research cycle was running. The abandoned cycle was canceled safely.",
+      lastError: "Same-tab document replacement recovered safely; no research gates or authority were changed."
+    });
+  }
+  if (state.ownerInstanceId && state.ownerInstanceId !== ownerInstanceId && heartbeatIsFresh(state)) return state;
   return sanitize({
     ...state,
     status: "canceled",
     stage: "complete",
     progressPercent: 100,
     completedAt: new Date().toISOString(),
-    message: "The previous research cycle was interrupted by a page reload or browser shutdown. Start a new cycle when ready.",
-    lastError: "Interrupted cycle recovered safely; no research gates or authority were changed."
+    message: "The research cycle owner stopped reporting for more than 90 seconds. The stale cycle was canceled safely.",
+    lastError: "Stale cycle ownership recovered safely; no research gates or authority were changed."
   });
+};
+
+const stopHeartbeat = () => {
+  if (heartbeatTimer !== undefined) {
+    globalThis.clearInterval(heartbeatTimer);
+    heartbeatTimer = undefined;
+  }
+};
+
+const startHeartbeat = () => {
+  stopHeartbeat();
+  heartbeatTimer = globalThis.setInterval(() => {
+    if (!activeController || (memoryState.status !== "running" && memoryState.status !== "stopping")) {
+      stopHeartbeat();
+      return;
+    }
+    saveOperatorCycleState({ ...memoryState, heartbeatAt: new Date().toISOString() }, { notify: false });
+  }, OPERATOR_CYCLE_HEARTBEAT_MS);
 };
 
 export const readOperatorCycleState = (): OperatorCycleState => {
@@ -87,11 +160,20 @@ export const readOperatorCycleState = (): OperatorCycleState => {
     return memoryState;
   }
   try {
-    const raw = window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY);
+    const currentRaw = window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY);
+    const legacyRaw = currentRaw
+      ? null
+      : LEGACY_OPERATOR_CYCLE_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean) ?? null;
+    const raw = currentRaw ?? legacyRaw;
     if (!raw) return memoryState;
-    const recovered = recoverInterruptedState(sanitize(JSON.parse(raw) as OperatorCycleState));
+    const parsed = sanitize(JSON.parse(raw) as OperatorCycleState);
+    const recovered = recoverInterruptedState(
+      legacyRaw && (parsed.status === "running" || parsed.status === "stopping")
+        ? { ...parsed, ownerTabId: undefined, ownerInstanceId: undefined, heartbeatAt: undefined }
+        : parsed
+    );
     memoryState = recovered;
-    if (recovered.status === "canceled") {
+    if (legacyRaw || recovered.status === "canceled") {
       window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, JSON.stringify(recovered));
     }
     return recovered;
@@ -100,7 +182,10 @@ export const readOperatorCycleState = (): OperatorCycleState => {
   }
 };
 
-export const saveOperatorCycleState = (state: OperatorCycleState): OperatorCycleState => {
+export const saveOperatorCycleState = (
+  state: OperatorCycleState,
+  options: { notify?: boolean } = {}
+): OperatorCycleState => {
   const compact = sanitize(state);
   memoryState = compact;
   if (typeof window !== "undefined") {
@@ -109,7 +194,9 @@ export const saveOperatorCycleState = (state: OperatorCycleState): OperatorCycle
       throw new Error("Operator cycle state must not contain candle arrays.");
     }
     window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
-    window.dispatchEvent(new CustomEvent(OPERATOR_CYCLE_UPDATED_EVENT, { detail: compact }));
+    if (options.notify !== false) {
+      window.dispatchEvent(new CustomEvent(OPERATOR_CYCLE_UPDATED_EVENT, { detail: compact }));
+    }
   }
   return compact;
 };
@@ -147,10 +234,14 @@ const insightFromPipeline = (result: Awaited<ReturnType<typeof runIctActivateMar
   };
 };
 
-const statusMessageForRun = (run: AutonomousResearchRun) => {
+const statusMessageForRun = (run: AutonomousResearchRun, stoppedByOperator = false) => {
   if (run.status === "failed") return run.stopReasonDetail ?? "The autonomous research pass failed.";
   if (run.status === "paused") return run.stopReasonDetail ?? "The autonomous research pass paused for review.";
-  if (run.status === "canceled") return "Research cycle stopped by the operator.";
+  if (run.status === "canceled") {
+    return stoppedByOperator
+      ? "Research cycle stopped by the operator."
+      : run.stopReasonDetail ?? "The autonomous research pass canceled before completion.";
+  }
   return run.stopReasonDetail ?? "Research cycle completed. Results and decisions are ready for review.";
 };
 
@@ -159,7 +250,10 @@ export const stopOperatorResearchCycle = (): OperatorCycleState => {
   if (current.status !== "running" && current.status !== "stopping") {
     return current;
   }
-  activeController?.abort();
+  if (current.ownerInstanceId !== ownerInstanceId || !activeController) {
+    return current;
+  }
+  activeController.abort(OPERATOR_STOP_ABORT_REASON);
   return updateState(current, {
     status: "stopping",
     message: "Stopping after the current guarded research step completes."
@@ -178,15 +272,19 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
   const cycleId = `operator_cycle_${Date.now()}`;
   let current = saveOperatorCycleState({
     cycleId,
+    ownerTabId,
+    ownerInstanceId,
     status: "running",
     stage: "activating_source",
     progressPercent: stageProgress.activating_source,
     message: "Activating the canonical MT5 read-only research source.",
     startedAt,
+    heartbeatAt: startedAt,
     authority: OPERATOR_AUTHORITY,
     autoApplyAllowed: false,
     researchOnly: true
   });
+  startHeartbeat();
 
   try {
     const activation = await ensureMt5CanonicalResearchSource();
@@ -229,7 +327,8 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       {
         snapshot: activation.snapshot,
         latestResearchState: readLatestResearchState(),
-        saveLatestSummary: true
+        saveLatestSummary: true,
+        cycleId
       },
       {
         onStepUpdate: (step, steps) => {
@@ -277,6 +376,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
 
     let lastAutonomousProgress = -1;
     let lastAutonomousStage = "";
+    let resetResearchStallWatchdog: () => void = () => undefined;
     const autonomousPromise = runAutonomousResearchLoop({
       state: labState,
       signal: controller.signal,
@@ -291,6 +391,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         maxResearchCandles: 1000
       },
       onUpdate: (run) => {
+        resetResearchStallWatchdog();
         const progress = Math.max(0, Math.min(100, run.progress.progressPercent));
         const stage = run.progress.activeStage;
         if (stage === lastAutonomousStage && Math.abs(progress - lastAutonomousProgress) < 5) return;
@@ -303,16 +404,26 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       }
     });
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let watchdogActive = true;
+    let rejectForStall: ((error: Error) => void) | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = globalThis.setTimeout(() => {
-        controller.abort();
-        reject(new Error("The guarded research cycle exceeded five minutes and was stopped to keep GoTrader responsive."));
-      }, OPERATOR_RESEARCH_TIMEOUT_MS);
+      rejectForStall = reject;
     });
+    resetResearchStallWatchdog = () => {
+      if (!watchdogActive) return;
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+      timeoutId = globalThis.setTimeout(() => {
+        watchdogActive = false;
+        controller.abort(OPERATOR_TIMEOUT_ABORT_REASON);
+        rejectForStall?.(new Error(OPERATOR_TIMEOUT_MESSAGE));
+      }, OPERATOR_RESEARCH_STALL_TIMEOUT_MS);
+    };
+    resetResearchStallWatchdog();
     let autonomousRun: Awaited<typeof autonomousPromise>;
     try {
       autonomousRun = await Promise.race([autonomousPromise, timeoutPromise]);
     } finally {
+      watchdogActive = false;
       if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
     }
 
@@ -323,30 +434,36 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     });
     await resolveResearchRuntimeSnapshot({ labState });
 
-    const canceled = controller.signal.aborted || autonomousRun.status === "canceled";
-    const failed = autonomousRun.status === "failed";
+    const stoppedByOperator = controller.signal.reason === OPERATOR_STOP_ABORT_REASON;
+    const timedOut = controller.signal.reason === OPERATOR_TIMEOUT_ABORT_REASON;
+    const canceled = stoppedByOperator || (!timedOut && autonomousRun.status === "canceled");
+    const failed = timedOut || autonomousRun.status === "failed";
     const paused = autonomousRun.status === "paused";
+    const completionMessage = timedOut ? OPERATOR_TIMEOUT_MESSAGE : statusMessageForRun(autonomousRun, stoppedByOperator);
     return updateState(current, {
       status: canceled ? "canceled" : failed ? "failed" : paused ? "blocked" : "completed",
       stage: "complete",
       progressPercent: 100,
       completedAt: new Date().toISOString(),
-      message: statusMessageForRun(autonomousRun),
-      lastError: failed || paused ? statusMessageForRun(autonomousRun) : undefined,
+      message: completionMessage,
+      lastError: failed || paused ? completionMessage : undefined,
       latestInsight
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Research cycle failed unexpectedly.";
-    const canceled = controller.signal.aborted;
+    const stoppedByOperator = controller.signal.reason === OPERATOR_STOP_ABORT_REASON;
+    const timedOut = controller.signal.reason === OPERATOR_TIMEOUT_ABORT_REASON;
+    const failureMessage = timedOut ? OPERATOR_TIMEOUT_MESSAGE : message;
     return updateState(current, {
-      status: canceled ? "canceled" : "failed",
+      status: stoppedByOperator ? "canceled" : "failed",
       stage: "complete",
       progressPercent: 100,
       completedAt: new Date().toISOString(),
-      message: canceled ? "Research cycle stopped by the operator." : message,
-      lastError: canceled ? undefined : message
+      message: stoppedByOperator ? "Research cycle stopped by the operator." : failureMessage,
+      lastError: stoppedByOperator ? undefined : failureMessage
     });
   } finally {
+    stopHeartbeat();
     if (activeController === controller) {
       activeController = undefined;
     }

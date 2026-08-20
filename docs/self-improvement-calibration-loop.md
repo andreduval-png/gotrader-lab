@@ -1,12 +1,12 @@
 # Self-Improvement Calibration Loop
 
-GoTrader AI Lab can package OpenClaw/Hermes-style advisory recommendations into a local calibration proposal, test the proposal against deterministic mock data, compare it with the current baseline, and require user approval before active simulation settings change.
+GoTrader AI Lab converts source-bound research findings into local calibration proposals, tests concrete changes against the active eligible non-mock research source, compares them with the current baseline, and requires user approval before active simulation settings change. The interface is agent-neutral; no specific AI agent is part of the calibration authority.
 
 This workflow is simulation/research only. It does not add broker execution, order placement, readiness overrides, API keys, websocket feeds, Tradovate, TopStep, or live trading.
 
-## How OpenClaw/Hermes Identifies Failures
+## Inputs And Ownership
 
-Advisory agents may flag research weaknesses such as high drawdown, low win rate, weak average R, false positives, poor session performance, confidence calibration gaps, unstable agent weights, or overfitting risk.
+Research-cycle quality attribution, bounded Auto Research, and replay-validated ICT hypotheses may identify weaknesses such as high drawdown, weak average R, stop-hit concentration, attributed avoidable losses, poor session performance, confidence calibration gaps, unstable agent weights, or overfitting risk.
 
 AI Lab converts those findings into a `CalibrationProposal` with:
 
@@ -19,7 +19,7 @@ AI Lab converts those findings into a `CalibrationProposal` with:
 
 ## How Proposals Are Tested
 
-The self-improvement page runs a deterministic validation test with mock OHLC candles only. It compares the proposal with baseline validation metrics:
+Concrete proposals are evaluated on the active eligible canonical candle source. Mock/demo candles are rejected as research evidence. The comparison includes:
 
 - total trades
 - win rate
@@ -27,12 +27,19 @@ The self-improvement page runs a deterministic validation test with mock OHLC ca
 - max drawdown
 - profit factor
 - skipped signals
-- estimated false positives
+- stop-hit count
+- attributed avoidable-loss count
 - confidence calibration
 - readiness score
 - stability score
 
-The proposal is not accepted just because profit improves. It must improve stability or readiness without worsening sample quality.
+The proposal is not accepted just because profit improves. It must improve stability or readiness without worsening sample quality, and its source/profile/parameter identities must match the validation evidence.
+
+## ICT Hypothesis Bridge
+
+ICT hypothesis replay and calibration are separate layers. Replay statuses `promising` and `paper_watchlist_recommended` may create a deterministic draft calibration intent only when the hypothesis and latest validation report have the same non-empty source fingerprint.
+
+The draft contains no invented parameter patch, cannot be approved or auto-applied, and retains none/none/none authority. Bounded Auto Research must produce a concrete candidate for that exact identity before the normal validation and approval flow can begin. Weak, discarded, needs-more-data, missing-validation, and identity-mismatched hypotheses do not enter calibration.
 
 ## One Variable At A Time
 

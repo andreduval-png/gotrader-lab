@@ -32,6 +32,10 @@ export interface CanonicalPerformanceMetrics {
   profitFactor: number | null;
   bestTradeR: number | null;
   worstTradeR: number | null;
+  stopHitCount: number;
+  estimatedLossCount: number;
+  attributedAvoidableLossCount?: number;
+  /** @deprecated Compatibility alias for attributedAvoidableLossCount. */
   falsePositiveCount: number;
   skippedSignals: number;
   confidenceCalibration: number;
@@ -95,7 +99,10 @@ export function buildCanonicalPerformanceMetricsFromRun(
     profitFactor: summary.profitFactor,
     bestTradeR: summary.bestTradeR ?? null,
     worstTradeR: summary.worstTradeR ?? null,
-    falsePositiveCount: validationMetrics?.falsePositiveCount ?? 0,
+    stopHitCount: validationMetrics?.stopHitCount ?? summary.losses ?? 0,
+    estimatedLossCount: validationMetrics?.estimatedLossCount ?? summary.losses ?? 0,
+    attributedAvoidableLossCount: validationMetrics?.attributedAvoidableLossCount,
+    falsePositiveCount: validationMetrics?.attributedAvoidableLossCount ?? 0,
     skippedSignals: summary.skippedSignals,
     confidenceCalibration: validationMetrics?.confidenceCalibration ?? 0,
     readinessScore: validationMetrics?.readinessScore ?? run.validationSummary?.readinessScore ?? 0,
@@ -127,7 +134,9 @@ type MetricKey = keyof Pick<
   | "maxDrawdownR"
   | "profitFactor"
   | "realizedPnL"
-  | "falsePositiveCount"
+  | "stopHitCount"
+  | "estimatedLossCount"
+  | "attributedAvoidableLossCount"
   | "skippedSignals"
   | "confidenceCalibration"
   | "readinessScore"
@@ -141,7 +150,9 @@ const metricKeys: MetricKey[] = [
   "maxDrawdownR",
   "profitFactor",
   "realizedPnL",
-  "falsePositiveCount",
+  "stopHitCount",
+  "estimatedLossCount",
+  "attributedAvoidableLossCount",
   "skippedSignals",
   "confidenceCalibration",
   "readinessScore",
@@ -169,6 +180,11 @@ export function detectCanonicalMetricsMismatch(
     return ["Stored canonical metrics and derived metrics point to different cycle IDs."];
   }
   return metricKeys
-    .filter((key) => !valuesEqual(stored[key], derived[key]))
+    .filter((key) => {
+      if (["stopHitCount", "estimatedLossCount", "attributedAvoidableLossCount"].includes(key) && stored[key] === undefined) {
+        return false;
+      }
+      return !valuesEqual(stored[key], derived[key]);
+    })
     .map((key) => `Canonical ${String(key)} differs from derived latest-cycle summary.`);
 }

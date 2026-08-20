@@ -14,6 +14,8 @@ export const RESULTS_WORKSPACE_AUTHORITY = {
   readinessOverrideAuthority: "none"
 } as const;
 
+export type ResultsEvidenceIdentityStatus = "matched" | "missing" | "unverified" | "mismatch";
+
 export interface ResultsWorkspaceBuildInput {
   runtimeSnapshot?: ResearchRuntimeSnapshot;
   canonicalMetrics?: CanonicalPerformanceMetrics;
@@ -43,9 +45,11 @@ export interface ResultsWorkspaceSnapshot {
     requiredTimeframesLoaded: boolean;
     weeklyBiasStatus: string;
     weeklyBiasDirection: string;
+    activationIdentityStatus: ResultsEvidenceIdentityStatus;
   };
   backtest: {
     status: "available" | "missing";
+    identityStatus: ResultsEvidenceIdentityStatus;
     cycleId?: string;
     totalTrades: number;
     winningTrades: number;
@@ -59,8 +63,9 @@ export interface ResultsWorkspaceSnapshot {
   };
   replay: {
     status: "available" | "missing";
+    identityStatus: ResultsEvidenceIdentityStatus;
     runId?: string;
-    totalSignals: number;
+    totalSignals: number | null;
     targetFirstRate: number | null;
     approvedTargetFirstRate: number | null;
     averageRrAchieved: number | null;
@@ -69,11 +74,12 @@ export interface ResultsWorkspaceSnapshot {
   };
   walkForward: {
     status: string;
+    identityStatus: ResultsEvidenceIdentityStatus;
     runId?: string;
     verdict: string;
-    windows: number;
-    windowsPassed: number;
-    oosTrades: number;
+    windows: number | null;
+    windowsPassed: number | null;
+    oosTrades: number | null;
     oosAverageR: number | null;
     oosLower95: number | null;
     overfitRisk: string;
@@ -81,8 +87,9 @@ export interface ResultsWorkspaceSnapshot {
   };
   monteCarlo: {
     status: "available" | "missing";
+    identityStatus: ResultsEvidenceIdentityStatus;
     robustness: string;
-    usableOutcomes: number;
+    usableOutcomes: number | null;
     medianEndingR: number | null;
     fifthPercentileEndingR: number | null;
     medianMaxDrawdownPct: number | null;
@@ -91,7 +98,9 @@ export interface ResultsWorkspaceSnapshot {
     recommendedMaxRiskPerTradePct: number | null;
   };
   paperDemo: {
+    identityStatus: ResultsEvidenceIdentityStatus;
     candidateCount: number;
+    excludedCandidateCount: number;
     monitoringCount: number;
     blockedCount: number;
     watchlistCount: number;
@@ -102,30 +111,33 @@ export interface ResultsWorkspaceSnapshot {
     brokerConnected: false;
   };
   frozenProfile: {
+    availability: "available" | "unavailable";
     profileId: string;
-    status: "historically_validated_forward_evidence_required";
-    historicalTrades: number;
-    historicalTargetFirstRate: number;
-    historicalAverageR: number;
-    historicalProfitFactor: number;
-    historicalUniqueDates: number;
-    rollingWindowsPassed: number;
-    rollingWindowsTotal: number;
-    oosTrades: number;
-    oosAverageR: number;
-    oosProfitFactor: number;
+    status: "historically_validated_forward_evidence_required" | "no_registered_frozen_evidence";
+    historicalTrades: number | null;
+    historicalTargetFirstRate: number | null;
+    historicalAverageR: number | null;
+    historicalProfitFactor: number | null;
+    historicalUniqueDates: number | null;
+    rollingWindowsPassed: number | null;
+    rollingWindowsTotal: number | null;
+    oosTrades: number | null;
+    oosAverageR: number | null;
+    oosProfitFactor: number | null;
     monteCarloRobustness: string;
-    forwardCompleted: number;
+    forwardCompleted: number | null;
     forwardRequired: number;
-    forwardIndependentDates: number;
-    forwardWindows: number;
+    forwardIndependentDates: number | null;
+    forwardWindows: number | null;
     forwardTargetFirstRate: number | null;
     forwardAverageR: number | null;
     reassessmentEligible: boolean;
     recommendation: string;
   };
   predictions: {
+    identityStatus: ResultsEvidenceIdentityStatus;
     totalForecasts: number;
+    excludedForecasts: number;
     actionableForecasts: number;
     completedForecasts: number;
     pendingForecasts: number;
@@ -139,11 +151,14 @@ export interface ResultsWorkspaceSnapshot {
   validation: {
     setupLabel: string;
     hypothesisStatus: string;
+    chainIdentityStatus: ResultsEvidenceIdentityStatus;
     replayVerdict: string;
     walkForwardVerdict: string;
     evidenceScore: number;
     maturityScore: number;
+    reportedReadinessState: string;
     readinessState: string;
+    readinessIntegrity: "consistent" | "contradictory";
     blockers: string[];
     nextAction: string;
   };

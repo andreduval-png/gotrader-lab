@@ -47,7 +47,7 @@ Options may be placed in ignored `.env.local`:
 | `GOTRADER_UNHEALTHY_RESTART_THRESHOLD` | `3` | Consecutive failed health checks before a tracked unhealthy process is restarted. |
 | `GOTRADER_DASHBOARD_URL` | `http://127.0.0.1:5173/dashboard` | Local page opened after startup. |
 
-The future GoTrader MCP server will be registered with this same supervisor. It will not require a separate operator startup command.
+The GoTrader Research MCP server is registered with this supervisor and requires no separate operator startup command.
 
 ## Commands
 
@@ -71,6 +71,7 @@ npm.cmd run restart:local-stack
 | MT5 read-only market-data upstream | `npm.cmd run mt5:readonly-upstream` | `8000` | Loopback-only symbols, quotes, and candles from the authenticated MT5 Desktop session. |
 | GoTrader MT5 read-only wrapper | `npm.cmd run mt5:readonly-bridge` | `7341` | Safe read-only wrapper. No account/order/position routes. |
 | LLM advisory bridge | `npm.cmd run llm:bridge` | `8787` | Advisory-only local LLM bridge. |
+| GoTrader Research MCP | `npm.cmd run mcp:research:http` | `7332` | Authenticated loopback Streamable HTTP; canonical research reads and validation. |
 
 The MT5 read-only upstream starts when the MT5 terminal executable is available. TradingView MCP is optional and is not started by default.
 
@@ -114,6 +115,7 @@ TradingView MCP uses port `7331` and still requires its own upstream TradingView
 | `7341` | GoTrader MT5 read-only wrapper |
 | `8787` | LLM advisory bridge |
 | `7331` | TradingView MCP bridge, optional |
+| `7332` | GoTrader Research MCP, authenticated loopback Streamable HTTP |
 
 ## Service Order
 
@@ -122,8 +124,9 @@ Startup order:
 1. MT5 read-only market-data upstream, if the terminal executable exists.
 2. GoTrader MT5 read-only wrapper.
 3. LLM advisory bridge.
-4. GoTrader app/Vite.
-5. TradingView MCP bridge, only when `ENABLE_TRADINGVIEW_MCP=true`.
+4. GoTrader Research MCP.
+5. GoTrader app/Vite.
+6. TradingView MCP bridge, only when `ENABLE_TRADINGVIEW_MCP=true`.
 
 ## PID Tracking
 
@@ -160,6 +163,7 @@ The diagnostic checks:
 - MT5 wrapper `/health` on `7341`
 - LLM bridge `/health` on `8787`
 - TradingView MCP `/health` on `7331`
+- GoTrader Research MCP `/health` on `7332`
 
 The diagnostic avoids printing secrets and omits process command lines from its JSON summary.
 

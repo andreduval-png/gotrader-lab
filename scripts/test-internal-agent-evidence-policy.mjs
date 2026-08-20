@@ -158,6 +158,19 @@ assert.equal(synthesis.abstainingAgentCount, 1);
 assert.equal(synthesis.evidenceCoverage, 0.2);
 assert.ok(synthesis.confidence <= 0.4161, "CIO confidence must be capped by evidence coverage");
 
+const missingPriceSynthesis = cio.synthesizeCIO(
+  context().input,
+  { ...ictContext, premiumDiscountZone: { ...ictContext.premiumDiscountZone, currentPrice: 0 } },
+  [core]
+);
+assert.equal(missingPriceSynthesis.finalBias, "neutral", "missing canonical price must fail closed to neutral");
+assert.equal(missingPriceSynthesis.confidence, 0.2);
+assert.equal(missingPriceSynthesis.pricePlan, undefined);
+assert.equal(missingPriceSynthesis.entryZone, undefined);
+assert.equal(missingPriceSynthesis.invalidationLevel, undefined);
+assert.equal(missingPriceSynthesis.targetLiquidity, undefined);
+assert.match(missingPriceSynthesis.riskNotes, /price levels are unavailable/i);
+
 const serialized = JSON.stringify({ core, unavailableBear, participation, synthesis });
 assert.doesNotMatch(serialized, /"(?:rawCandles|candles|account|orders|positions|secrets)"\s*:/i);
 assert.equal("executionAuthority" in synthesis, false);

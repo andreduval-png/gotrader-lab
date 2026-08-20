@@ -348,7 +348,7 @@ export function StrategyValidationView() {
                 <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
                 <CardTitle>Scenario Comparison</CardTitle>
               </div>
-              <CardDescription>Each row is a separate mock-data backtest with a controlled parameter change.</CardDescription>
+              <CardDescription>Each row is a separate source-bound simulation with one controlled parameter change.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

@@ -87,6 +87,16 @@ try {
     : undefined;
   const rangePayload = rangeResponse?.payload && typeof rangeResponse.payload === "object" ? rangeResponse.payload : undefined;
   const rangeCandles = Array.isArray(rangePayload?.candles) ? rangePayload.candles : [];
+  const fromMillis = Date.parse(from);
+  const toMillis = Date.parse(to);
+  const rangeBoundsOk =
+    Number.isFinite(fromMillis) &&
+    Number.isFinite(toMillis) &&
+    rangeCandles.length > 0 &&
+    rangeCandles.every((candle) => {
+      const timestampMillis = Date.parse(candle?.timestamp);
+      return Number.isFinite(timestampMillis) && timestampMillis >= fromMillis && timestampMillis <= toMillis;
+    });
   const mutationProbe = await fetchWithTimeout(endpoint("orders"));
 
   const authorityOk =
@@ -111,7 +121,8 @@ try {
       rangeResponse?.ok === true &&
       rangePayload?.connectionStatus === "connected" &&
       rangeCandles.length > 0 &&
-      rangeCandles.every(isValidCandle));
+      rangeCandles.every(isValidCandle) &&
+      rangeBoundsOk);
 
   result = {
     passed: Boolean(rangeOk && authorityOk && diagnosticsCompact && Number(mutationProbe.status) === 403),
@@ -144,6 +155,7 @@ try {
       : undefined,
     checks: {
       rangeOk,
+      rangeBoundsOk: !liveLatest || rangeBoundsOk,
       authorityOk,
       diagnosticsCompact,
       mutationEndpointBlocked: Number(mutationProbe.status) === 403

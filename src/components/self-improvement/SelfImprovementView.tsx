@@ -81,7 +81,9 @@ const intentLabel = (value?: string) =>
       ? "Research calibration candidate"
       : value === "grinch_profile_calibration_intent"
         ? "Grinch profile calibration intent"
-      : "Manual calibration proposal";
+        : value === "ict_hypothesis_calibration_intent"
+          ? "ICT hypothesis calibration intent"
+          : "Manual calibration proposal";
 const statusVariant = (status?: string) =>
   status === "accepted" ? "success" : status === "rejected" || status === "reverted" ? "danger" : status === "testing" ? "warning" : "muted";
 const readinessVariant = (status?: string) =>
@@ -159,7 +161,8 @@ const MetricsGrid = ({ metrics }: { metrics?: CalibrationProposalMetrics }) => {
     ["Max drawdown", `${formatNumber(metrics.maxDrawdown)}R`],
     ["Profit factor", metrics.profitFactor === null ? "n/a" : formatNumber(metrics.profitFactor)],
     ["Skipped signals", String(metrics.skippedSignals)],
-    ["False positives", String(metrics.falsePositiveCount)],
+    ["Stop-hit losses", String(metrics.stopHitCount ?? metrics.estimatedLossCount ?? "n/a")],
+    ["Attributed avoidable losses", String(metrics.attributedAvoidableLossCount ?? "n/a")],
     ["Confidence calibration", formatPercent(metrics.confidenceCalibration, 1)],
     ["Readiness score", String(metrics.readinessScore)],
     ["Stability score", String(metrics.stabilityScore)]
@@ -308,15 +311,15 @@ const ComparisonTable = ({ before, after }: { before?: CalibrationProposalMetric
       after: after?.skippedSignals,
       format: countFormat,
       direction: "lower",
-      interpretation: "Lower can help, unless weaker filters increase false positives."
+      interpretation: "Lower can help, unless weaker filters increase attributed avoidable losses."
     },
     {
-      label: "False positives",
-      before: before?.falsePositiveCount,
-      after: after?.falsePositiveCount,
+      label: "Attributed avoidable losses",
+      before: before?.attributedAvoidableLossCount,
+      after: after?.attributedAvoidableLossCount,
       format: countFormat,
       direction: "lower",
-      interpretation: "Lower means the proposal is filtering poor theses more cleanly."
+      interpretation: "Lower is favorable only when qualified pre-entry attribution coverage is present."
     },
     {
       label: "Confidence calibration",
@@ -1070,8 +1073,8 @@ export function SelfImprovementView() {
           <p className="text-sm uppercase text-primary">Calibration loop</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-normal">Self-Improvement</h2>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Accept OpenClaw/Hermes-style advisory calibration proposals, test them in simulation, and promote only after
-            they improve stability with explicit user approval.
+            Review source-bound calibration proposals from bounded research and validated hypotheses, test them in
+            simulation, and promote only after they improve stability with explicit user approval.
           </p>
         </div>
         <Badge variant="warning">Simulation research only</Badge>

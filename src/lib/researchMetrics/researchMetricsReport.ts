@@ -35,8 +35,9 @@ const formatToken = (value?: string) => (value ?? "idle").replace(/_/g, " ");
 
 export function buildExpandedResearchMetricRows(snapshot?: ResearchRuntimeSnapshot): ResearchMetricReadoutRow[] {
   const metrics = snapshot?.performance.canonicalPerformanceMetrics;
-  const totalFalsePositiveDenominator = (metrics?.totalTrades ?? 0) + (metrics?.falsePositiveCount ?? 0);
-  const falsePositiveRate = metrics && totalFalsePositiveDenominator > 0 ? metrics.falsePositiveCount / totalFalsePositiveDenominator : undefined;
+  const avoidableLossRate = metrics && typeof metrics.attributedAvoidableLossCount === "number" && metrics.totalTrades > 0
+    ? metrics.attributedAvoidableLossCount / metrics.totalTrades
+    : undefined;
   const drawdownRecovery =
     metrics && metrics.maxDrawdownR > 0 ? Math.max(0, metrics.realizedR) / Math.max(0.01, metrics.maxDrawdownR) : undefined;
   const grinch = snapshot?.latestResearchCycle.activeGrinchProfileSummary;
@@ -61,7 +62,7 @@ export function buildExpandedResearchMetricRows(snapshot?: ResearchRuntimeSnapsh
     { label: "Downside deviation", value: "planned", detail: "Needs downside return distribution" },
     { label: "Risk of ruin", value: "planned", detail: "Monte Carlo engine not wired yet" },
     { label: "Win rate", value: formatPercentMetric(metrics?.winRate), detail: `${metrics?.winningTrades ?? 0}W / ${metrics?.losingTrades ?? 0}L` },
-    { label: "False-positive rate", value: formatPercentMetric(falsePositiveRate), detail: `${metrics?.falsePositiveCount ?? 0} estimated false positives` },
+    { label: "Avoidable-loss rate", value: formatPercentMetric(avoidableLossRate), detail: typeof metrics?.attributedAvoidableLossCount === "number" ? `${metrics.attributedAvoidableLossCount} attributed avoidable losses` : "Attribution unavailable; stop hits are reported separately" },
     { label: "Sample size", value: String(metrics?.totalTrades ?? 0), detail: metrics?.candleWindow ?? "No completed cycle" },
     { label: "Trade frequency", value: metrics ? `${metrics.totalTrades} trades` : "n/a", detail: metrics?.candleWindow ?? "Candle window unavailable" },
     { label: "Timing validity", value: expiredBlocks ? formatPercentMetric(1 - expiredBlocks / setupDenominator) : "not computed", detail: `${expiredBlocks} expired-timing blocks` },

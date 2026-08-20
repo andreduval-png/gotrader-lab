@@ -320,7 +320,22 @@ async function main() {
   assert.ok(initialSteps.every((step) => step.status === "pending"), "initial steps should be pending");
 
   globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead();
-  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract();
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    entryReference: 23100,
+    invalidation: 23150,
+    target: 23000,
+    rrEstimate: 2,
+    targetProvenance: {
+      type: "previous_day_low",
+      sourceTimeframe: "daily",
+      selectionReason: "Advisor signal selected directional liquidity: previous_day_low",
+      distancePoints: 100,
+      rr: 2,
+      minimumRR: 2,
+      gateStatus: "accepted",
+      rejectionReasons: []
+    }
+  });
   globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT = {
     context: {
       researchOnly: true,
@@ -409,6 +424,9 @@ async function main() {
   assert.equal(savedSummaries[0].weeklyBiasStatus, "loaded");
   assert.equal(savedSummaries[0].weeklyBiasDirection, success.summary.weeklyBiasDirection);
   assert.equal(savedSummaries[0].weeklyBiasDirection, "bearish");
+  assert.equal(savedSummaries[0].proposedTargetProvenance.type, "previous_day_low");
+  assert.equal(savedSummaries[0].proposedTargetProvenance.sourceTimeframe, "daily");
+  assert.equal(savedSummaries[0].proposedTargetProvenance.gateStatus, "accepted");
   assert.doesNotMatch(JSON.stringify(savedSummaries[0]), /"(?:candles|rawCandles|rawSnapshots)"\s*:/i);
   assertSafe(success);
   assert.match(suite.summarizeActivateMarketResult(success), /execution disabled/i);

@@ -17,7 +17,7 @@ import {
 import { buildWalkForwardPreflight } from "@/lib/walkForward/walkForwardPreflight";
 import { analyzeWalkForwardStability } from "@/lib/walkForward/stabilityAnalyzer";
 import { computeEdgeStatistics, DEFAULT_MINIMUM_EDGE_SAMPLE } from "@/lib/statistics/edgeStatistics";
-import { falsePositiveCountFromTrades } from "@/lib/statistics/tradeMetrics";
+import { buildValidationScenarioQualityTelemetry } from "@/lib/researchQuality";
 import {
   buildValidationProvenanceIdentity,
   fingerprintValidationParameters
@@ -113,7 +113,7 @@ const metricsFromBacktest = (
 ): WalkForwardWindowMetrics => {
   const confidenceCalibration = confidenceCalibrationFor(result);
   const readinessScore = readinessScoreFor(result, confidenceCalibration, evidenceQualityScore);
-  const falsePositiveCount = falsePositiveCountFromTrades(result.trades);
+  const qualityTelemetry = buildValidationScenarioQualityTelemetry(result);
   const latestGrinchScore = result.summary.grinchSummary?.latestScore;
   const profileProducedTrade = result.summary.grinchSummary?.tradeProfileCounts
     ? ((Object.entries(result.summary.grinchSummary.tradeProfileCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "none") as GrinchActiveProfile)
@@ -124,7 +124,10 @@ const metricsFromBacktest = (
     averageR: round(result.summary.averageR, 2),
     maxDrawdownR: round(result.summary.maxDrawdown, 2),
     profitFactor: result.summary.profitFactor,
-    falsePositiveCount,
+    stopHitCount: qualityTelemetry.stopHitCount,
+    estimatedLossCount: qualityTelemetry.stopHitCount,
+    attributedAvoidableLossCount: qualityTelemetry.attributedStopHitCount,
+    falsePositiveCount: qualityTelemetry.attributedStopHitCount,
     skippedSignals: result.summary.skippedSignals,
     confidenceCalibration,
     readinessScore,

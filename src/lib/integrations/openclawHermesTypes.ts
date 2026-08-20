@@ -117,8 +117,8 @@ export interface AdvisoryCIOThesisSummary {
   confidence: number;
   thesisSummary: string;
   reasoningSummary: string;
-  invalidationLevel: number;
-  targetLiquidity: number;
+  invalidationLevel?: number;
+  targetLiquidity?: number;
 }
 
 export interface AdvisoryRequestPacket {

@@ -4,7 +4,7 @@
 
 GoTrader now separates deterministic research memory from advisory narrative memory.
 
-The native Research Evidence Ledger is the system of record. gbrain is an optional advisory copy. Neither memory layer can approve readiness, apply calibration, or enable execution.
+The native Research Evidence Ledger is the system of record. The AI-agent research-memory outbox is an optional advisory copy that is not tied to a particular agent. A gbrain-compatible writer may consume it, but gbrain is only one adapter. Neither memory layer can approve readiness, apply calibration, or enable execution.
 
 ## Native Evidence Ledger
 
@@ -58,9 +58,9 @@ Auto Research reads the materialized aggregate before its initial bounded candid
 
 Historical ranking cannot change candidate metrics, create evidence, promote readiness, apply calibration, or grant authority.
 
-## gbrain Advisory Outbox
+## AI-Agent Advisory Outbox
 
-Each native evidence record is also converted to the existing compact GoTrader research-memory contract and queued as Markdown for a future local gbrain writer.
+Each native evidence record is converted into all applicable compact packet types: `research_cycle`, `walk_forward`, `self_improvement`, and `gap_analysis`. Packets are queued as Markdown for an operator-managed local AI-agent memory gateway.
 
 - storage: `gotrader.gbrain-memory-outbox.v1`
 - delivery default: `false`
@@ -68,11 +68,11 @@ Each native evidence record is also converted to the existing compact GoTrader r
 - allowed delivery endpoint: loopback only (`127.0.0.1`, `localhost`, or `::1`)
 - browser tokens: prohibited
 
-Suggested gbrain paths are stable, for example:
+Document paths are stable, for example:
 
 `gotrader/research-cycle/<cycleId>.md`
 
-The outbox validator rejects unsafe authority and forbidden account/order/position, credential, raw snapshot, or candle-array fields. The local delivery client sends only the compact Markdown document to an explicitly configured trusted loopback gateway. GoTrader does not embed a gbrain token or connect to a remote gbrain host directly.
+The outbox validator rejects unsafe authority and forbidden account/order/position, credential, raw snapshot, or candle-array fields. The Results/Self-Improvement UI exposes the delivery state, endpoint, explicit enable control, and manual send action. The client sends only compact Markdown documents to a trusted loopback gateway. GoTrader does not embed a gateway token or connect directly to a remote memory host.
 
 ## Authority
 
@@ -94,8 +94,8 @@ Completed research cycle
   -> replay / walk-forward / evidence / maturity gates
 
 Same compact record
-  -> disabled-by-default gbrain outbox
-  -> optional local gbrain search and synthesis
+  -> disabled-by-default AI-agent memory outbox
+  -> optional local memory search and synthesis
   -> advisory hypothesis or draft proposal
   -> GoTrader deterministic validation
 ```
@@ -110,4 +110,4 @@ npm.cmd run test:auto-research-lifetime-memory
 npm.cmd run build
 ```
 
-The focused test verifies append/deduplication, aggregation, gbrain fail-closed defaults, loopback-only delivery, packet exclusions, and none/none/none authority.
+The focused test verifies append/deduplication, aggregation, all supported packet producers, fail-closed defaults, loopback-only delivery, packet exclusions, and none/none/none authority.

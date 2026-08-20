@@ -162,7 +162,7 @@ const readinessBlockerLabel = (requirement: { id?: string; label: string; passed
     case "confidence-calibration":
       return "Confidence calibration too low.";
     case "false-positive-control":
-      return "False positives too high.";
+      return "Attributed avoidable losses exceed the quality gate.";
     case "session-consistency":
       return "Session consistency weak.";
     case "conservative-stability":

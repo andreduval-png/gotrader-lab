@@ -29,7 +29,7 @@ export const requiredLLMAgents: LLMAgentDefinition[] = [
     agentId: "llm-validation-reviewer",
     agentName: "LLM Validation Reviewer",
     required: true,
-    role: "Review validation results, conservative scenario stability, false positives, and confidence calibration."
+    role: "Review validation results, conservative scenario stability, attributed avoidable losses, and confidence calibration."
   },
   {
     agentId: "llm-self-improvement-reviewer",

@@ -62,7 +62,7 @@ const targetProblemFor = (candidate: AutoResearchCandidateResult): CalibrationTa
   if (scores.averageRScore < 50) {
     return "weak_average_r";
   }
-  if (scores.falsePositiveScore < 70) {
+  if ((scores.avoidableLossScore ?? scores.falsePositiveScore) < 70) {
     return "false_positives";
   }
   if (scores.sessionConsistencyScore < 50) {

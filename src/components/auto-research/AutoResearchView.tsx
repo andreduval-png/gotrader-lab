@@ -113,7 +113,7 @@ const metricValue = (candidate: AutoResearchCandidateResult) => ({
   winRate: candidate.metrics?.winRate ?? 0,
   averageR: candidate.metrics?.averageR ?? 0,
   maxDrawdown: candidate.metrics?.maxDrawdown ?? 0,
-  falsePositiveCount: candidate.metrics?.falsePositiveCount ?? 0,
+  attributedAvoidableLossCount: candidate.metrics?.attributedAvoidableLossCount,
   profitFactor: candidate.metrics?.profitFactor ?? null,
   confidenceCalibration: candidate.metrics?.confidenceCalibration ?? 0
 });
@@ -132,7 +132,7 @@ const CandidateTable = ({ candidates }: { candidates: AutoResearchCandidateResul
           <th className="px-3 py-3 text-right font-medium">Win</th>
           <th className="px-3 py-3 text-right font-medium">Avg R</th>
           <th className="px-3 py-3 text-right font-medium">Max DD</th>
-          <th className="px-3 py-3 text-right font-medium">False +</th>
+          <th className="px-3 py-3 text-right font-medium">Avoidable</th>
           <th className="px-3 py-3 text-right font-medium">PF</th>
           <th className="px-3 py-3 font-medium">Readiness</th>
           <th className="px-3 py-3 font-medium">Changed</th>
@@ -197,7 +197,7 @@ const CandidateTable = ({ candidates }: { candidates: AutoResearchCandidateResul
             <td className="px-3 py-3 text-right font-mono tabular-nums">{formatPercent(metrics.winRate, 0)}</td>
             <td className="px-3 py-3 text-right font-mono tabular-nums">{formatSigned(metrics.averageR, 2)}R</td>
             <td className="px-3 py-3 text-right font-mono tabular-nums">{metrics.maxDrawdown.toFixed(2)}R</td>
-            <td className="px-3 py-3 text-right font-mono tabular-nums">{metrics.falsePositiveCount}</td>
+            <td className="px-3 py-3 text-right font-mono tabular-nums">{metrics.attributedAvoidableLossCount ?? "n/a"}</td>
             <td className="px-3 py-3 text-right font-mono tabular-nums">{formatProfitFactor(metrics.profitFactor)}</td>
             <td className="px-3 py-3">
               <Badge variant={readinessState === "Paper-Demo Candidate" ? "success" : readinessState === "Research Ready" ? "warning" : "danger"}>
@@ -1228,7 +1228,7 @@ export function AutoResearchView() {
         <Card>
           <CardHeader>
             <CardTitle>Stability Score Breakdown</CardTitle>
-            <CardDescription>Drawdown, calibration, false positives, and sample quality lead the score.</CardDescription>
+            <CardDescription>Drawdown, calibration, attributed avoidable losses, and sample quality lead the score.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {bestCandidate ? (
@@ -1236,7 +1236,7 @@ export function AutoResearchView() {
                 drawdown: bestCandidate.scoreBreakdown?.drawdownScore ?? 0,
                 averageR: bestCandidate.scoreBreakdown?.averageRScore ?? 0,
                 winRate: bestCandidate.scoreBreakdown?.winRateScore ?? 0,
-                falsePositive: bestCandidate.scoreBreakdown?.falsePositiveScore ?? 0,
+                avoidableLoss: bestCandidate.scoreBreakdown?.avoidableLossScore ?? bestCandidate.scoreBreakdown?.falsePositiveScore ?? 0,
                 confidence: bestCandidate.scoreBreakdown?.confidenceCalibrationScore ?? 0,
                 session: bestCandidate.scoreBreakdown?.sessionConsistencyScore ?? 0,
                 tradeCount: bestCandidate.scoreBreakdown?.tradeCountScore ?? 0,

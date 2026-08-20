@@ -34,18 +34,20 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
   const researchAgentOpinions = runAgents(input, ictContext, candles);
   const cioSynthesis = synthesizeCIO(input, ictContext, researchAgentOpinions);
   const agentOpinions = [...researchAgentOpinions, cioSynthesis.cioOpinion];
-  const plan: SimulatedTradePlan = {
-    id: uid("plan"),
-    symbol: input.symbol,
-    timeframe: input.timeframe,
-    bias: cioSynthesis.finalBias,
-    entryZone: cioSynthesis.entryZone,
-    invalidation: cioSynthesis.invalidationLevel,
-    targetLiquidity: cioSynthesis.targetLiquidity,
-    stopRiskNotes: cioSynthesis.riskNotes,
-    riskReward: cioSynthesis.riskReward,
-    mode: "simulation"
-  };
+  const plan: SimulatedTradePlan | undefined = cioSynthesis.pricePlan
+    ? {
+        id: uid("plan"),
+        symbol: input.symbol,
+        timeframe: input.timeframe,
+        bias: cioSynthesis.finalBias,
+        entryZone: cioSynthesis.pricePlan.entryZone,
+        invalidation: cioSynthesis.pricePlan.invalidationLevel,
+        targetLiquidity: cioSynthesis.pricePlan.targetLiquidity,
+        stopRiskNotes: cioSynthesis.riskNotes,
+        riskReward: cioSynthesis.pricePlan.riskReward,
+        mode: "simulation"
+      }
+    : undefined;
   const createdAt = new Date().toISOString();
   const debateId = uid("debate");
 
@@ -78,9 +80,9 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
     bias: message.stance,
     confidence: message.confidence,
     reasoning: message.message,
-    entryZone: plan.entryZone,
-    invalidation: plan.invalidation,
-    target: plan.targetLiquidity,
+    entryZone: plan?.entryZone,
+    invalidation: plan?.invalidation,
+    target: plan?.targetLiquidity,
     ictTags: message.ictTags,
     createdAt
   }));
@@ -96,9 +98,9 @@ export function generateThesis(input: ThesisInput, state: LabState, candles: Can
     finalBias: cioSynthesis.finalBias,
     confidence: cioSynthesis.confidence,
     thesisSummary: cioSynthesis.thesisSummary,
-    invalidationLevel: plan.invalidation,
-    targetLiquidity: plan.targetLiquidity,
-    riskNotes: plan.stopRiskNotes,
+    invalidationLevel: plan?.invalidation,
+    targetLiquidity: plan?.targetLiquidity,
+    riskNotes: plan?.stopRiskNotes ?? cioSynthesis.riskNotes,
     reasoningSummary: cioSynthesis.reasoningSummary,
     activeAgentCount: cioSynthesis.activeAgentCount,
     abstainingAgentCount: cioSynthesis.abstainingAgentCount,

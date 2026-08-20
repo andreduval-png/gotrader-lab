@@ -6,7 +6,8 @@ import {
   classifyGoTraderReadiness,
   findRecoverableServices,
   gotraderSupervisorAuthority,
-  resolveGoTraderSupervisorOptions
+  resolveGoTraderSupervisorOptions,
+  shouldReplaceBlockedSupervisor
 } from "./gotrader-supervisor-core.mjs";
 
 const diagnostic = ({ id, status = "healthy", portOpen = true, trackedAlive = true, connectionStatus }) => ({
@@ -21,7 +22,8 @@ const healthy = [
   diagnostic({ id: "app" }),
   diagnostic({ id: "mt5-upstream" }),
   diagnostic({ id: "mt5-wrapper", connectionStatus: "connected" }),
-  diagnostic({ id: "llm-bridge" })
+  diagnostic({ id: "llm-bridge" }),
+  diagnostic({ id: "research-mcp" })
 ];
 
 assert.deepEqual(classifyGoTraderReadiness(healthy), {
@@ -50,6 +52,12 @@ const stalled = healthy.map((item) =>
 );
 assert.deepEqual(findRecoverableServices(stalled, undefined, { "mt5-upstream": 2 }, 3), []);
 assert.deepEqual(findRecoverableServices(stalled, undefined, { "mt5-upstream": 3 }, 3), ["mt5-upstream"]);
+
+const nowMs = Date.parse("2026-08-14T04:40:00.000Z");
+assert.equal(shouldReplaceBlockedSupervisor({ status: "ready", recoveryAttempts: 3, updatedAt: "2026-08-14T04:39:00.000Z" }, { nowMs }), false);
+assert.equal(shouldReplaceBlockedSupervisor({ status: "blocked", recoveryAttempts: 3, updatedAt: "2026-08-14T04:39:59.000Z" }, { nowMs }), true);
+assert.equal(shouldReplaceBlockedSupervisor({ status: "blocked", recoveryAttempts: 1, updatedAt: "2026-08-14T04:38:00.000Z" }, { nowMs }), true);
+assert.equal(shouldReplaceBlockedSupervisor({ status: "blocked", recoveryAttempts: 1, updatedAt: "2026-08-14T04:39:59.000Z" }, { nowMs }), false);
 
 const options = resolveGoTraderSupervisorOptions({
   GOTRADER_OPEN_BROWSER: "false",
@@ -83,6 +91,7 @@ console.log(
         "optional advisory configuration classifies degraded",
         "stopped required service classifies blocked and recoverable",
         "tracked unhealthy service restarts only after bounded consecutive failures",
+        "exhausted or stale blocked supervisor is replaced while healthy supervisor is preserved",
         "supervisor intervals are bounded",
         "snapshot excludes credentials and terminal path",
         "authority remains none/none/none"

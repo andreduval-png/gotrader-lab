@@ -13,7 +13,8 @@ export type CalibrationProposalStatus = "proposed" | "testing" | "accepted" | "r
 export type CalibrationProposalIntent =
   | "research_calibration_candidate"
   | "paper_demo_candidate_review"
-  | "grinch_profile_calibration_intent";
+  | "grinch_profile_calibration_intent"
+  | "ict_hypothesis_calibration_intent";
 
 export type CalibrationProposalValidationRequirementId =
   | "ai_research_cycle"
@@ -127,6 +128,13 @@ export interface CalibrationProposalMetrics {
   maxDrawdown: number;
   profitFactor: number | null;
   skippedSignals: number;
+  /** Observed directional stop-hit losses when trade-level telemetry is available. */
+  stopHitCount?: number;
+  /** Aggregate loss estimate derived from summary evidence. */
+  estimatedLossCount?: number;
+  /** Losses associated with qualified discriminating pre-entry cohorts. */
+  attributedAvoidableLossCount?: number;
+  /** @deprecated Persisted compatibility alias. Never infer attribution from this field alone. */
   falsePositiveCount: number;
   confidenceCalibration: number;
   readinessScore: number;

@@ -12,7 +12,7 @@ export function diagnoseAutonomousResearchBlockers(snapshot: ResearchRuntimeSnap
   if ((metrics?.winRate ?? 1) < 0.38) blockers.push("low_win_rate");
   if ((metrics?.averageR ?? 1) < 0.1) blockers.push("low_average_r");
   if ((metrics?.maxDrawdownR ?? 0) > 5) blockers.push("high_drawdown");
-  if ((metrics?.falsePositiveCount ?? 0) > 12) blockers.push("false_positives");
+  if ((metrics?.attributedAvoidableLossCount ?? 0) > 12) blockers.push("false_positives");
   if ((metrics?.totalTrades ?? 0) < 20) blockers.push("insufficient_trades");
   if ((metrics?.confidenceCalibration ?? 1) < 0.6) blockers.push("confidence_calibration_weak");
   if (snapshot.evidence.evidenceQualityScore < 60) blockers.push("evidence_quality_weak");

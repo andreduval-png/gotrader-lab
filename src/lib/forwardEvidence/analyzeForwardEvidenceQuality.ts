@@ -106,7 +106,7 @@ const failureCausesFor = (entries: ForwardEvidenceEntry[]): ForwardEvidenceFailu
       totalLostR: round(Math.abs(row.entries.reduce((sum, entry) => sum + Math.min(0, entry.realizedR ?? 0), 0))),
       sessions: unique(row.entries.map((entry) => entry.qualityContext?.session ?? "Unknown" as ForwardEvidenceSession)),
       sides: unique(row.entries.map((entry) => entry.direction)),
-      directlyAttributed: row.direct,
+      contextAssociated: row.direct,
       evidence: row.evidence
     }))
     .sort((left, right) => right.totalLostR - left.totalLostR || right.invalidationCount - left.invalidationCount);
@@ -208,7 +208,7 @@ export const analyzeForwardEvidenceQuality = (
   const invalidations = completed.filter((entry) => entry.outcome === "invalidation_first");
   const failureCauses = failureCausesFor(completed);
   const attributed = failureCauses
-    .filter((cause) => cause.directlyAttributed)
+    .filter((cause) => cause.contextAssociated)
     .reduce((sum, cause) => sum + cause.invalidationCount, 0);
   const sessionLanes = sessionLanesFor(completed);
   const ranked = sessionLanes
@@ -217,12 +217,12 @@ export const analyzeForwardEvidenceQuality = (
       (right.costAdjustedAverageR05 ?? -99) - (left.costAdjustedAverageR05 ?? -99) ||
       right.completedOutcomes - left.completedOutcomes
     );
-  const topCause = failureCauses.find((cause) => cause.directlyAttributed) ?? failureCauses[0];
+  const topCause = failureCauses.find((cause) => cause.contextAssociated) ?? failureCauses[0];
   const coverage = invalidations.length ? attributed / invalidations.length : 1;
   const nextAction = completed.length < 40
     ? `Collect ${40 - completed.length} more causal post-freeze outcomes before reassessment.`
     : invalidations.length && coverage < 0.9
-      ? "Improve compact pre-entry context until at least 90% of forward invalidations are attributable; do not tune the frozen profile."
+      ? "Improve compact pre-entry context until at least 90% of forward invalidations are context-associated; do not infer causality or tune the frozen profile."
       : ranked[0]?.status === "stable_research"
         ? `Reassess ${ranked[0].session} independently against the unchanged frozen profile and existing readiness gates.`
         : "Keep collecting independent session outcomes; no session lane is mature enough for reassessment.";

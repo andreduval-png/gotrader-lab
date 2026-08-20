@@ -59,6 +59,14 @@ if not exist "%GOTRADER_ROOT%\node_modules\.bin\vite.cmd" (
   )
 )
 
+rem Reuse a healthy existing stack without opening a second supervisor process
+rem against the same redirected log file.
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "try { $response = Invoke-WebRequest -UseBasicParsing -Uri '%GOTRADER_URL%' -TimeoutSec 2; if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) { exit 0 }; exit 1 } catch { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+  echo Existing GoTrader app detected. Reusing the healthy local stack.
+  goto READY
+)
+
 echo [%DATE% %TIME%] Launcher requested start.>>"%GOTRADER_LOG%"
 echo Starting MT5 read-only upstream, wrapper, LLM bridge, Vite app, and supervisor...
 
@@ -78,7 +86,7 @@ if %GOTRADER_WAIT_COUNT% GEQ 60 goto START_TIMEOUT
 if %GOTRADER_WAIT_COUNT% EQU 1 echo Waiting for GoTrader services...
 if %GOTRADER_WAIT_COUNT% EQU 15 echo Still starting. MT5 and Python initialization can take a little longer...
 if %GOTRADER_WAIT_COUNT% EQU 30 echo Checking service recovery and startup logs...
-timeout /t 1 /nobreak >nul
+powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 1" >nul 2>&1
 goto WAIT_FOR_APP
 
 :READY
@@ -92,7 +100,7 @@ echo.
 echo Startup log: %GOTRADER_LOG%
 echo To stop tracked services later, run:
 echo   START-GOTRADER.CMD stop
-timeout /t 3 /nobreak >nul
+powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 1" >nul 2>&1
 exit /b 0
 
 :START_TIMEOUT

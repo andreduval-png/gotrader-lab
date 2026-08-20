@@ -1028,6 +1028,7 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     confidence: adjustedConfidence,
     rrEstimate: recommended.rrEstimate,
     target: recommended.target,
+    targetProvenance: recommended.targetProvenance,
     invalidation: recommended.invalidation,
     bias: recommended.bias.composite,
     smtStatus,
