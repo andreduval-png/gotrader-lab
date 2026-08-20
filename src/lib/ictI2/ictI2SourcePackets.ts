@@ -1,6 +1,6 @@
 import type { IctI2SourcePacket } from "@/lib/ictI2/ictI2Types";
 
-export const ICT_2022_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
+export const ICT_2022_SOURCE_PACKET = Object.freeze({
   packetId: "gotrader.ict.i2.2022.source-rules.v1",
   strategyId: "ict_2022_model_v1",
   version: "1.0.0",
@@ -15,9 +15,9 @@ export const ICT_2022_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
     { ruleId: "causal_visibility", classification: "CANONICAL_GOTRADER_RULE", behavior: "Facts are unavailable before validFrom and future extension cannot rewrite prior state.", material: true, resolution: "I1 causality contract." },
     { ruleId: "smt", classification: "CANONICAL_GOTRADER_RULE", behavior: "SMT is optional context; opposing SMT blocks only when a later profile says so.", material: false, resolution: "Canonical S1 policy adapter; optional in base profile." }
   ]
-});
+} satisfies IctI2SourcePacket);
 
-export const ICT_PO3_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
+export const ICT_PO3_SOURCE_PACKET = Object.freeze({
   packetId: "gotrader.ict.i2.po3.source-rules.v1",
   strategyId: "ict_power_of_three_v1",
   version: "1.0.0",
@@ -31,9 +31,9 @@ export const ICT_PO3_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
     { ruleId: "entry", classification: "RESEARCH_PARAMETER", behavior: "Entry uses first eligible PD array retracement after distribution.", material: true, resolution: "Frozen base profile uses FVG midpoint." },
     { ruleId: "smt", classification: "CANONICAL_GOTRADER_RULE", behavior: "SMT is optional context in the base profile.", material: false, resolution: "Consume only through S1 policy." }
   ]
-});
+} satisfies IctI2SourcePacket);
 
-export const ICT_JUDAS_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
+export const ICT_JUDAS_SOURCE_PACKET = Object.freeze({
   packetId: "gotrader.ict.i2.judas.source-rules.v1",
   strategyId: "ict_judas_swing_v1",
   version: "1.0.0",
@@ -45,7 +45,7 @@ export const ICT_JUDAS_SOURCE_PACKET: IctI2SourcePacket = Object.freeze({
     { ruleId: "reversal_confirmation", classification: "UNRESOLVED", behavior: "Required combination of MSS, displacement, and FVG must be fixed.", material: true, resolution: "Do not infer mandatory confirmation folklore; activation blocked." },
     { ruleId: "london_raid_overlap", classification: "CANONICAL_GOTRADER_RULE", behavior: "A duplicate strategy may not be registered without distinct trigger/session/geometry semantics.", material: true, resolution: "Judas is conceptually broader but not executable; preserve London Raid identities." }
   ]
-});
+} satisfies IctI2SourcePacket);
 
 export const ICT_I2_SOURCE_PACKETS = Object.freeze([
   ICT_2022_SOURCE_PACKET,

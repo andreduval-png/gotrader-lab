@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:ict-2022": "node scripts/test-ict-2022.mjs",
+    "test:ict-2022-causality": "node scripts/test-ict-2022-causality.mjs",
     "dev": "vite --host 127.0.0.1",
     "start:local-stack": "node scripts/start-local-stack.mjs",
     "stop:local-stack": "node scripts/stop-local-stack.mjs",
