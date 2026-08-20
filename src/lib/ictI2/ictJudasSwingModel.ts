@@ -21,16 +21,24 @@ export type IctJudasState =
   | "SOURCE_BLOCKED";
 
 export interface IctJudasParameters {
-  session: "UNRESOLVED";
-  openingReference: "UNRESOLVED";
+  session: "LONDON_0000_TO_0500_NEW_YORK";
+  openingReference: "NEW_YORK_MIDNIGHT_OPEN";
+  manipulationReference: "ASIAN_RANGE_OPPOSITE_HTF_THESIS";
   reversalConfirmation: "UNRESOLVED";
+  entryMode: "UNRESOLVED";
+  stopMode: "UNRESOLVED";
+  targetMode: "UNRESOLVED";
   smtPolicy: "OPTIONAL";
 }
 
 export const ICT_JUDAS_BLOCKED_PARAMETERS: IctJudasParameters = Object.freeze({
-  session: "UNRESOLVED",
-  openingReference: "UNRESOLVED",
+  session: "LONDON_0000_TO_0500_NEW_YORK",
+  openingReference: "NEW_YORK_MIDNIGHT_OPEN",
+  manipulationReference: "ASIAN_RANGE_OPPOSITE_HTF_THESIS",
   reversalConfirmation: "UNRESOLVED",
+  entryMode: "UNRESOLVED",
+  stopMode: "UNRESOLVED",
+  targetMode: "UNRESOLVED",
   smtPolicy: "OPTIONAL"
 });
 
@@ -72,18 +80,18 @@ export const projectIctJudasCurrentRead = (candidate: IctI2ModelCandidate<IctJud
   strategyId: candidate.strategyId,
   state: candidate.state,
   headline: "ICT Judas Swing",
-  detail: "Source semantics are blocked. Session manipulation must not be inferred or presented as an entry signal.",
+  detail: "Session and manipulation semantics are sourced, but executable confirmation and geometry remain blocked.",
   blockers: candidate.blockers,
   authority: candidate.authority
 });
 
 export const ICT_JUDAS_LONDON_RAID_COMPARISON = Object.freeze({
   semanticOverlap: ["session context", "liquidity raid", "reversal/expansion"],
-  sharedFacts: ["SESSION_WINDOW", "LIQUIDITY", "DISPLACEMENT", "MSS", "FVG"],
-  judasSessionModel: "Unresolved; potentially London or New York and tied to an unresolved opening reference.",
+  sharedFacts: ["SESSION_WINDOW", "LIQUIDITY"],
+  judasSessionModel: "London delivery context from New York midnight through 05:00, referenced to midnight open and the Asian range.",
   londonRaidSessionModel: "Existing Nasdaq London Raid / NY Reversal has a fixed London-to-New-York sequence.",
   differentTriggerRules: true,
-  differentEntry: "Unresolved for Judas; existing London Raid entry behavior remains unchanged.",
+  differentEntry: "Unresolved for Judas; no New York reversal or FVG entry is inherited from London Raid.",
   differentTarget: "Unresolved for Judas; no target may be inferred from London Raid.",
   classification: "DISTINCT_CONCEPT_BLOCKED_SOURCE_SEMANTICS",
   alias: false,
@@ -107,17 +115,21 @@ export const ICT_JUDAS_BLOCKED_MODEL: CanonicalIctModel = assertCanonicalModelCo
   requiredTimeframes: ["15m", "5m"],
   preferredTimeframes: ["1h", "1m"],
   optionalTimeframes: ["4h", "1d"],
-  requiredFactTypes: ["SESSION_WINDOW", "LIQUIDITY", "MSS", "DISPLACEMENT", "FVG"],
-  factDependencyIds: ["i1.session-window", "i1.opening-reference-unresolved", "i1.liquidity", "i1.structure"],
+  requiredFactTypes: ["SESSION_WINDOW", "LIQUIDITY"],
+  factDependencyIds: ["i1.session-window", "i1.new-york-midnight-open", "i1.asian-range-liquidity", "c1.higher-timeframe-thesis"],
   narrativePolicyId: "c1.i2.judas-source-blocked.v1",
   smtPolicy: "optional",
   parameterSchema: {
     parameterSchemaId: "gotrader.ict.i2.judas.parameters.v1",
     version: "1.0.0-source-blocked",
     parameters: [
-      { name: "session", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
-      { name: "openingReference", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
+      { name: "session", classification: "SOURCE_DEFINED", allowedValues: ["LONDON_0000_TO_0500_NEW_YORK"] },
+      { name: "openingReference", classification: "SOURCE_DEFINED", allowedValues: ["NEW_YORK_MIDNIGHT_OPEN"] },
+      { name: "manipulationReference", classification: "SOURCE_DEFINED", allowedValues: ["ASIAN_RANGE_OPPOSITE_HTF_THESIS"] },
       { name: "reversalConfirmation", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
+      { name: "entryMode", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
+      { name: "stopMode", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
+      { name: "targetMode", classification: "UNRESOLVED", allowedValues: ["UNRESOLVED"] },
       { name: "smtPolicy", classification: "CANONICAL_GOTRADER_RULE", allowedValues: ["OPTIONAL"] }
     ]
   },

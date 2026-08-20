@@ -21,6 +21,12 @@ export interface IctI2SourcePacket {
   strategyId: string;
   version: string;
   status: "RESOLVED_FOR_RESEARCH" | "BLOCKED_SOURCE_SEMANTICS";
+  sources?: readonly {
+    sourceId: string;
+    sourceType: "DIRECT" | "TRANSCRIPT_AID" | "SECONDARY_AMBIGUITY_CHECK";
+    title: string;
+    url: string;
+  }[];
   rules: readonly IctI2SourceRule[];
 }
 

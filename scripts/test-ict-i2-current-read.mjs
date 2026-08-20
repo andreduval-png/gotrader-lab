@@ -12,7 +12,7 @@ assert.equal(envelope.executionAllowed, false);
 assert.equal(envelope.researchValidated, false);
 assert(envelope.projections.some((projection) => projection.headline === "ICT 2022 Model"));
 assert(envelope.projections.some((projection) => projection.headline === "Power of Three"));
-assert(envelope.projections.find((projection) => projection.headline === "ICT Judas Swing").detail.includes("Source semantics are blocked"));
+assert(envelope.projections.find((projection) => projection.headline === "ICT Judas Swing").detail.includes("geometry remain blocked"));
 assert(envelope.projections.every((projection) => projection.authority.executionAuthority === "none"));
 assert(!JSON.stringify(envelope).includes('"candles"'));
 

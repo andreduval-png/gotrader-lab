@@ -38,11 +38,26 @@ export const ICT_JUDAS_SOURCE_PACKET = Object.freeze({
   strategyId: "ict_judas_swing_v1",
   version: "1.0.0",
   status: "BLOCKED_SOURCE_SEMANTICS",
+  sources: [
+    { sourceId: "ict-judas-direct-2017-12-10", sourceType: "DIRECT", title: "ICT Forex - Understanding The ICT Judas Swing", url: "https://www.youtube.com/watch?v=xJMbva8SjzE" },
+    { sourceId: "ict-judas-transcript-aid", sourceType: "TRANSCRIPT_AID", title: "Third-party transcript of the direct Judas Swing lesson", url: "https://info.quagmyre.com/xwiki/bin/view/Forex/The-Inner-Circle-Trader/srt/ICT-Market-Maker-Primer-Course-12-Understanding-The-ICT-Judas-Swing-srt/" }
+  ],
   rules: [
-    { ruleId: "causal_shape", classification: "SOURCE_DEFINED", behavior: "Opening context precedes deceptive liquidity raid, reversal confirmation, and real expansion.", material: true, resolution: "Conceptual order is sufficiently distinct from a generic raid." },
-    { ruleId: "session_window", classification: "UNRESOLVED", behavior: "Exact eligible London or New York window is required.", material: true, resolution: "No accepted source packet fixes the window; activation blocked." },
-    { ruleId: "opening_reference", classification: "UNRESOLVED", behavior: "Midnight, daily, or session open must be selected.", material: true, resolution: "Repository evidence does not establish one canonical reference; activation blocked." },
-    { ruleId: "reversal_confirmation", classification: "UNRESOLVED", behavior: "Required combination of MSS, displacement, and FVG must be fixed.", material: true, resolution: "Do not infer mandatory confirmation folklore; activation blocked." },
+    { ruleId: "target_market_session", classification: "SOURCE_DEFINED", behavior: "The direct lesson teaches London-session foreign exchange delivery.", material: true, resolution: "Do not conflate the source model with Nasdaq London Raid / New York Reversal." },
+    { ruleId: "session_window", classification: "SOURCE_DEFINED", behavior: "The manipulation is sought from 00:00 through 05:00 New York in London delivery context.", material: true, resolution: "Use I1 canonical New York time and DST semantics." },
+    { ruleId: "opening_reference", classification: "SOURCE_DEFINED", behavior: "The New York midnight open is the opening reference.", material: true, resolution: "Use the canonical opening reference; never broker wall clock." },
+    { ruleId: "reference_liquidity", classification: "SOURCE_DEFINED", behavior: "The established Asian range high and low provide reference liquidity.", material: true, resolution: "Consume I1 canonical liquidity rather than a Judas-specific detector." },
+    { ruleId: "manipulation", classification: "SOURCE_DEFINED", behavior: "The initial move is opposite the higher-timeframe thesis, crosses the midnight open, and hunts stops or a key price level at the thesis-opposing Asian boundary.", material: true, resolution: "Bullish attacks sellside/Asian low; bearish attacks buyside/Asian high." },
+    { ruleId: "htf_bias", classification: "SOURCE_DEFINED", behavior: "A higher-timeframe directional premise determines which initial move is deceptive.", material: true, resolution: "No setup exists when the directional thesis is unavailable." },
+    { ruleId: "mss_requirement", classification: "SOURCE_DEFINED", behavior: "MSS is not a mandatory gate in the direct Judas lesson.", material: false, resolution: "Do not import MSS from another model." },
+    { ruleId: "displacement_requirement", classification: "SOURCE_DEFINED", behavior: "Energetic movement is descriptive, but a canonical displacement fact is not mandated.", material: false, resolution: "Do not import a numeric displacement threshold." },
+    { ruleId: "fvg_requirement", classification: "SOURCE_DEFINED", behavior: "FVG is not a mandatory gate in the direct Judas lesson.", material: false, resolution: "Do not import an FVG retracement entry." },
+    { ruleId: "reversal_confirmation", classification: "UNRESOLVED", behavior: "Aggressive movement away is taught without a deterministic causal close or threshold.", material: true, resolution: "Activation remains blocked until a reviewable confirmation rule is sourced." },
+    { ruleId: "entry_condition", classification: "UNRESOLVED", behavior: "An example entry near the attacked Asian boundary does not define a complete symmetric entry contract.", material: true, resolution: "Do not invent confirmation-close, FVG, OTE, or PD-array entry semantics." },
+    { ruleId: "stop_condition", classification: "UNRESOLVED", behavior: "The lesson does not specify deterministic model invalidation.", material: true, resolution: "A vague pip allowance cannot be a canonical stop." },
+    { ruleId: "target_condition", classification: "UNRESOLVED", behavior: "Directional daily delivery is taught without an exact canonical objective.", material: true, resolution: "Do not substitute arbitrary fixed R or another model's target." },
+    { ruleId: "expiry", classification: "CANONICAL_GOTRADER_RULE", behavior: "Any later executable profile must expire at its canonical session boundary and never chase a missed entry.", material: false, resolution: "Use I1 time facts and ENTRY_MISSED semantics." },
+    { ruleId: "smt", classification: "CANONICAL_GOTRADER_RULE", behavior: "SMT is optional S1-owned context and is not required by the direct lesson.", material: false, resolution: "No model-local SMT calculation." },
     { ruleId: "london_raid_overlap", classification: "CANONICAL_GOTRADER_RULE", behavior: "A duplicate strategy may not be registered without distinct trigger/session/geometry semantics.", material: true, resolution: "Judas is conceptually broader but not executable; preserve London Raid identities." }
   ]
 } satisfies IctI2SourcePacket);

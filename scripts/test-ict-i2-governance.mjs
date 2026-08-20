@@ -14,7 +14,7 @@ assert(baselines.every((manifest) => manifest.metrics === null && manifest.resea
 assert.equal(ict.executableIctI2Registry().length, 2);
 assert.equal(ict.ICT_2022_CANONICAL_MODEL.parameterSchema.parameters.length, 6);
 assert.equal(ict.ICT_PO3_CANONICAL_MODEL.parameterSchema.parameters.length, 7);
-assert.equal(ict.ICT_JUDAS_BLOCKED_MODEL.parameterSchema.parameters.length, 4);
+assert.equal(ict.ICT_JUDAS_BLOCKED_MODEL.parameterSchema.parameters.length, 8);
 
 const requiredDocs = [
   "i2-source-rule-classification.md",
