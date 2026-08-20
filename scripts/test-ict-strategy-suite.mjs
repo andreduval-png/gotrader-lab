@@ -11,8 +11,15 @@ const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const currentOpportunityRoot = path.join(projectRoot, "src", "lib", "currentOpportunity");
 const mt5Root = path.join(projectRoot, "src", "lib", "integrations", "mt5");
 const forwardScenarioRoot = path.join(projectRoot, "src", "lib", "forwardScenario");
+const ictCanonicalRoot = path.join(projectRoot, "src", "lib", "ictCanonical");
+const tradeGeometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-strategy-suite-test");
 const sourceFiles = [
+  { root: ictCanonicalRoot, file: "canonicalIctTypes.ts" },
+  { root: ictCanonicalRoot, file: "canonicalIctIdentity.ts" },
+  { root: tradeGeometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: tradeGeometryRoot, file: "targetSelection.ts" },
+  { root: tradeGeometryRoot, file: "canonicalTradeGeometry.ts" },
   { root: currentOpportunityRoot, file: "currentOpportunityTypes.ts" },
   { root: currentOpportunityRoot, file: "buildCurrentOpportunityContext.ts" },
   { root: forwardScenarioRoot, file: "forwardScenarioTypes.ts" },
@@ -108,6 +115,7 @@ const sourceFiles = [
 ];
 
 function compileSuiteForNode() {
+  fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
   for (const { file, root } of sourceFiles) {
     const sourcePath = path.join(root, file);
@@ -134,6 +142,9 @@ function compileSuiteForNode() {
       .replace(/from\s+'..\/ict-strategy-suite\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"@\/lib\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
       .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
