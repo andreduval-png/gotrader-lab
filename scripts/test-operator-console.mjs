@@ -224,7 +224,7 @@ async function main() {
   assert.equal(bullish.researchPlan.entryPrice, 100);
 
   const namedCandidateWithoutDetectedModel = buildOperatorConsoleSnapshot({
-    activation: {
+    activation: activationIdentity({
       researchSide: "long",
       proposedEntryPrice: 100,
       proposedStopLoss: 97,
@@ -233,7 +233,7 @@ async function main() {
       currentOpportunitySummary: {
         topOpportunity: { side: "long", status: "valid_candidate", setupName: "liquidity sweep reversal" }
       }
-    }
+    })
   });
   assert.equal(namedCandidateWithoutDetectedModel.researchPlan.status, "complete");
   assert.equal(namedCandidateWithoutDetectedModel.researchPlan.setup, "liquidity sweep reversal");
