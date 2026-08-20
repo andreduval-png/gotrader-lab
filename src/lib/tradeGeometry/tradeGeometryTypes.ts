@@ -84,6 +84,8 @@ export interface CanonicalTargetCandidate {
   internalExternalClass?: "INTERNAL" | "EXTERNAL";
   structuralAlignment?: string;
   liquidityClass?: string;
+  distanceFromEntry?: number;
+  availableRR?: number;
 }
 
 export interface CanonicalTargetPolicy {
@@ -173,3 +175,20 @@ export interface CanonicalGeometryProjection {
   displayKind: "ACTIONABLE_GEOMETRY" | "RESEARCH_GEOMETRY";
 }
 
+export type TargetSelectionFailure =
+  | "NO_VALID_TARGET"
+  | "TARGET_CONSUMED"
+  | "GEOMETRY_POLICY_MISMATCH";
+
+export type CanonicalTargetSelection =
+  | {
+      selected: CanonicalTargetCandidate;
+      selectionRole: "PRIMARY" | "EXPLICIT_FALLBACK";
+      evaluatedCandidates: readonly CanonicalTargetCandidate[];
+    }
+  | {
+      selected?: undefined;
+      failure: TargetSelectionFailure;
+      blocker: string;
+      evaluatedCandidates: readonly CanonicalTargetCandidate[];
+    };

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:trade-geometry-no-chase": "node scripts/test-trade-geometry-no-chase.mjs",
+    "test:trade-geometry-targets": "node scripts/test-trade-geometry-targets.mjs",
     "dev": "vite --host 127.0.0.1",
     "start:local-stack": "node scripts/start-local-stack.mjs",
     "stop:local-stack": "node scripts/stop-local-stack.mjs",
