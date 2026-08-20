@@ -1,6 +1,7 @@
 export * from "@/lib/ictCanonical/canonicalBlocks";
 export * from "@/lib/ictCanonical/canonicalFactBuilder";
 export * from "@/lib/ictCanonical/canonicalIctCausality";
+export * from "@/lib/ictCanonical/canonicalLegacyCompatibility";
 export * from "@/lib/ictCanonical/canonicalIctIdentity";
 export * from "@/lib/ictCanonical/canonicalIctModelContract";
 export * from "@/lib/ictCanonical/canonicalIctOwnership";
@@ -12,3 +13,4 @@ export * from "@/lib/ictCanonical/canonicalRangePd";
 export * from "@/lib/ictCanonical/canonicalStructure";
 export * from "@/lib/ictCanonical/canonicalSwingLiquidity";
 export * from "@/lib/ictCanonical/canonicalTime";
+export * from "@/lib/ictCanonical/legacyCompatibility";

@@ -134,6 +134,7 @@
     "test:metric-semantics": "node scripts/test-metric-semantics.mjs",
     "test:gotrader-system-coordination": "node scripts/test-gotrader-system-coordination.mjs",
     "test:ict-current-read-flow": "node scripts/test-ict-current-read-flow.mjs",
+    "test:ict-canonical-facts": "node scripts/test-ict-canonical-facts.mjs",
     "test:ict-reference-accuracy": "node scripts/test-ict-reference-accuracy.mjs",
     "test:source-depth-consistency": "node scripts/test-source-depth-consistency.mjs",
     "test:top-down-timeframe-context": "node scripts/test-top-down-timeframe-context.mjs",

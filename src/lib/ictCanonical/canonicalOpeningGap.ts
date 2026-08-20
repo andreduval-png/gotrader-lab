@@ -12,7 +12,14 @@ import { getTimingDateKey, resolveSessionTimeMapping } from "@/lib/sessions";
 export const CANONICAL_OPENING_GAP_CALENDAR_POLICY = Object.freeze({
   policyId: "gotrader.canonical.opening-gap.new-york-calendar",
   policyVersion: "1.0.0",
-  timeAuthorityId: "gotrader.sessions.iana-america-new-york"
+  timeAuthorityId: "gotrader.sessions.iana-america-new-york",
+  boundaryHandling: {
+    weekends: "PRIOR_CLOSE_TO_NEXT_OBSERVED_OPEN",
+    holidays: "REQUIRES_ACCEPTED_SOURCE_CALENDAR_FOR_CLASSIFICATION",
+    earlyCloses: "REQUIRES_ACCEPTED_SOURCE_CALENDAR_FOR_CLASSIFICATION",
+    maintenance: "ADJACENT_CANDLES_DO_NOT_IMPLY_A_CALENDAR_GAP",
+    dst: "IANA_AMERICA_NEW_YORK"
+  }
 });
 
 const weekKey = (dateKey: string) => {

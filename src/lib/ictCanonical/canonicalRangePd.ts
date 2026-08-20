@@ -187,7 +187,8 @@ export const buildCanonicalOteZone = (
 type CanonicalArraySource = CanonicalFvgFact | CanonicalFvgTransitionFact | CanonicalBprFact | CanonicalBlockFact | CanonicalOteZoneFact;
 
 export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[]): CanonicalPdArrayFact[] =>
-  facts.map((source) => {
+  facts.flatMap((source) => {
+    if (source.factType === "FVG_TRANSITION" && source.transitionType !== "INVERTED") return [];
     const pdArrayType = source.factType === "FVG"
       ? "FVG"
       : source.factType === "FVG_TRANSITION"
@@ -204,7 +205,7 @@ export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[])
       ? source.factType === "OTE_ZONE" ? source.direction : "neutral"
       : source.direction;
     const factId = canonicalFactId("PD_ARRAY", { sourceFactId: source.factId, pdArrayType });
-    return {
+    return [{
       ...canonicalFactBase({
         factId,
         factType: "PD_ARRAY",
@@ -228,5 +229,5 @@ export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[])
       direction,
       priceRange: [Math.min(...prices), Math.max(...prices)],
       sourceFactId: source.factId
-    };
+    }];
   });
