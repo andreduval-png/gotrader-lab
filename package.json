@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:trade-geometry-no-chase": "node scripts/test-trade-geometry-no-chase.mjs",
     "test:ict-2022": "node scripts/test-ict-2022.mjs",
     "test:ict-2022-causality": "node scripts/test-ict-2022-causality.mjs",
     "test:ict-po3": "node scripts/test-ict-po3.mjs",
