@@ -1,62 +1,54 @@
 # I0 Canonical Concept Audit
 
-## Classification Rules
+"Yes" below means substantive deterministic code exists, not that canonical ownership is settled. "Conditional"
+causality means the fact is safe only when exposed at confirmation time rather than backdated to its pivot.
 
-`FULLY_IMPLEMENTED` requires deterministic typed facts, causal timestamps, tests, and at least one governed
-consumer. `PARTIAL` means useful logic exists but identity, canonical ownership, or complete semantics are missing.
-`CONCEPT_ONLY` means labels or context exist without a canonical detector. `MISSING` means no substantive source
-implementation was found.
+| Concept | Canonical implementation | File/function | Causal | MTF | BT2-compatible | Duplicates / consumers | Action |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Liquidity pools | Yes, ownership partial | ictStrategySuiteHelpers.detectLiquidityPools; ict/detectLiquidityPools | Conditional | Yes | Yes as fact | Suite, current opportunity, advisor, market episodes | CONSOLIDATE |
+| External liquidity | Partial | pool/target selection and findNearestDrawOnLiquidity | Yes | Partial | Yes | CMD, IFVG, LRS, session raid | CONSOLIDATE |
+| Internal liquidity / IRL | Partial | FVG/BPR/PD hierarchy used implicitly | Yes | Partial | Yes | No stable IRL identity | CREATE canonical identity |
+| ERL | Partial | external pool/target facts | Yes | Partial | Yes | No stable ERL identity | CREATE canonical identity |
+| IRL/ERL transition | No | None | No | No | No | Requested delivery models | CREATE |
+| Swing highs/lows | Yes, duplicated | detectSwingHighs/Lows; ict/detectSwings | Conditional | Yes | Conditional | Most structure/liquidity consumers | CONSOLIDATE |
+| Equal highs/lows | Yes, ownership partial | detectEqualHighs/Lows | Conditional | Partial | Conditional | Liquidity pool construction | CONSOLIDATE |
+| Fair Value Gap | Yes, duplicated | detectFairValueGap; ict/detectFVG | Yes on closed third candle | Yes | Yes | IFVG, Silver Bullet, session raid, advisor | CONSOLIDATE |
+| Inverse FVG | Yes at model layer | IFVG v1-v4 detectors | Yes when inversion close is frozen | Yes | Yes via accepted adapter | Current opportunity and research | REUSE |
+| Balanced Price Range | Partial | ict/pdArrayHierarchy | Yes on closed overlaps | Partial | Yes as fact | PD hierarchy only | CONSOLIDATE |
+| Order Block | Yes, duplicated | detectOrderBlock; Phase 2 classifications | Conditional | Yes | Yes as fact | Advisor, B&B, OSOK, hierarchy | CONSOLIDATE |
+| Breaker Block | Partial | detectBreakerBlock; Phase 2 classification | Conditional | Partial | Yes as fact | Session raid and taxonomy | CONSOLIDATE |
+| Mitigation Block | Partial | detectMitigationBlock; Phase 2 classification | Conditional | Partial | Yes as fact | Taxonomy/context | CONSOLIDATE |
+| MSS | Yes | ict/detectMSS plus strategy-local checks | Conditional | Yes | Yes | Turtle Soup, session raid, narrative | CONSOLIDATE |
+| CISD / change in delivery | Yes at strategy layer | CISD detector/profile | Yes | Yes | Yes via accepted adapter | Current opportunity, registry | REUSE |
+| Displacement | Yes, duplicated | detectDisplacement and strategy-specific measurements | Yes | Yes | Yes | CMD, Silver Bullet, session raid, advisor | CONSOLIDATE |
+| Premium/discount | Yes, duplicated | classifyPremiumDiscount; ict/detectPremiumDiscount | Yes | Yes | Yes as context | OTE placeholder, advisor, hierarchy | CONSOLIDATE |
+| Dealing range/equilibrium | Yes, duplicated | calculateDealingRange; dealing-range modules | Conditional | Yes | Yes as context | Advisor, PD hierarchy, Model One | CONSOLIDATE |
+| OTE | Partial | ict/modelOnePowerThree; registry placeholder | Conditional | Partial | No complete model | PO3 context only | CREATE model after fact consolidation |
+| PD Arrays | Yes as context | ict/pdArrayHierarchy; universal recognition | Conditional | Yes | Yes as facts | Current Read/advisor/recognition | REUSE context |
+| SMT | Yes on S1 branch | S1 multi-asset artifact; legacy SMT projections in primary | Yes with peer timestamps | Yes | Yes as context | Shadow only; peer freshness/certification blocked | CONSOLIDATE on S1 |
+| Killzones/session windows | Yes, duplicated | groupCandlesBySession, session tagger, strategy clocks | Yes | Yes | Yes as filter | Silver Bullet, raid, advisor | CONSOLIDATE |
+| ICT macros | Partial | session/news timing windows | Yes | Partial | Yes as filter | No canonical macro schedule/version | CREATE schedule contract |
+| NDOG fact | Partial, corrected | calculateNewDayOpeningGap | Yes on first eligible closed bar | Partial | Yes as fact | Opening-price equilibrium overlaps | CONSOLIDATE clock/identity |
+| NWOG fact | Partial, corrected | calculateNewWeekOpeningGap | Yes on first eligible closed bar | Partial | Yes as fact | Sunday-open references overlap | CONSOLIDATE clock/identity |
+| Draw on liquidity | Partial | findNearestDrawOnLiquidity; C1 liquidity path | Yes | Yes | Yes as context | Strategy-local target policies | CONSOLIDATE policy inputs |
+| Accumulation/manipulation/distribution | Partial | CMD profiles, modelOnePowerThree, session narrative | Conditional | Yes | Partial | AMD catalog row is concept-only | CONSOLIDATE facts |
+| Market-maker accumulation/distribution | Partial concepts | Grinch/consolidation and CMD context | Conditional | Partial | No complete models | MMBM/MMSM/MMXM absent | CREATE models later |
 
-| Canonical concept | Status | Current source and limitation |
-| --- | --- | --- |
-| Swing highs/lows | FULLY_IMPLEMENTED | Canonical and suite helper implementations exist; duplicate ownership remains |
-| Equal highs/lows | PARTIAL | Suite helper detects pools; no single V2 canonical identity across consumers |
-| Buy-side/sell-side liquidity pools | FULLY_IMPLEMENTED | Typed pool and sweep facts exist, with strategy consumers |
-| External/internal liquidity | PARTIAL | External targets are used; IRL/ERL taxonomy and transition identity are not canonical |
-| IRL to ERL / ERL to IRL | MISSING | No complete deterministic transition model found |
-| Liquidity sweep/raid/reclaim | FULLY_IMPLEMENTED | Multiple causal detectors plus LRS state-machine semantics |
-| Fair value gap | FULLY_IMPLEMENTED | Canonical and suite detectors, IFVG consumers, tests |
-| Inverse FVG | FULLY_IMPLEMENTED | Four executable IFVG profiles and canonical adapter coverage |
-| Balanced Price Range | PARTIAL | `pdArrayHierarchy` forms BPR and source docs mention it; no complete standalone contract |
-| Order block | FULLY_IMPLEMENTED | Base and Phase 2 taxonomy detectors; ownership is duplicated |
-| Breaker block | PARTIAL | Classification exists; no complete standalone strategy model |
-| Mitigation block | PARTIAL | Classification and narrative use exist; not a complete strategy |
-| Rejection/propulsion/vacuum blocks | PARTIAL | Taxonomy/helper classifications only |
-| Market structure shift | FULLY_IMPLEMENTED | Canonical structure event and multiple strategy consumers |
-| CISD | FULLY_IMPLEMENTED | First-class executable strategy |
-| Displacement | FULLY_IMPLEMENTED | Typed detector and core confluence input |
-| Premium/discount | FULLY_IMPLEMENTED | Dealing-range facts and consumers; duplicate calculators remain |
-| Dealing range/equilibrium | FULLY_IMPLEMENTED | Canonical range and equilibrium facts exist |
-| OTE | PARTIAL | Model One/Power Three logic uses OTE context; registry strategy is a placeholder |
-| PD array hierarchy | FULLY_IMPLEMENTED | Ranked FVG/BPR/block/open references exist as context |
-| Draw on liquidity | PARTIAL | Targets and narrative fields exist; no universal canonical draw-selection contract |
-| SMT divergence | IMPLEMENTED_BUT_NOT_RUNTIME_WIRED | S1 canonical engine accepted in shadow; live peers stale and peer certificates missing |
-| Sessions/killzones | FULLY_IMPLEMENTED | Strategy-specific windows and session facts exist |
-| ICT macro timing windows | PARTIAL | Session/news windows exist, but no complete canonical macro schedule model |
-| NDOG/NWOG | MISSING | No substantive deterministic implementation found |
-| TGIF setup | MISSING | No substantive deterministic implementation found |
-| Consolidation/manipulation/distribution | PARTIAL | Session narrative and CMD models exist; general AMD registry entry is concept-only |
-| Market-maker accumulation/distribution | PARTIAL | Grinch/consolidation semantics exist; MMBM/MMSM/MMXM are not canonical models |
-| Opening-price equilibrium | FULLY_IMPLEMENTED | Sunday and 12AM open references are typed Grinch context facts |
-| Liquidity void / low-resistance run | PARTIAL | Helper detectors exist; canonical identity and model ownership are incomplete |
+## Causality Gate
 
-## Causality Findings
+1. A detector receives only closed candles available at decision time. Outcome candles are introduced only after an
+   immutable candidate is frozen.
+2. Symmetric swing algorithms inspect right-hand candles. Their pivot is not knowable at the pivot timestamp; the
+   canonical fact needs confirmedAt or validFrom, and every consumer must filter on it.
+3. Session high/low, liquidity state, FVG inversion/mitigation, block status, and dealing range must be computed from
+   the causal prefix, never from the completed session/day.
+4. Generic replay preserves the broad historical/future boundary, and outcome scoring treats same-bar stop/target
+   ambiguity conservatively. This does not prove every concept detector causal.
+5. No concept enters the canonical library without positive, negative, edge, forming-candle, truncation, and
+   future-extension-invariance fixtures.
 
-- The replay path builds detector input from candles ending at the decision index, then evaluates future candles
-  separately. This is the correct broad boundary.
-- BT2-compatible strategy adapters must accept only closed-candle facts valid at the decision time. LRS explicitly
-  filters by causal time and `validFrom`.
-- Swing confirmation needs an explicit confirmation time. S1 uses `confirmedAtUtc`; older swing helpers infer
-  pivots using right-hand candles and therefore must not be treated as known at the pivot timestamp.
-- Outcome scoring uses future candles only after a candidate is frozen. Same-bar target/stop ambiguity is scored
-  stop-first, which is conservative.
-- Strategy geometry must come from the detector/canonical adapter. Generic replay fallbacks that synthesize target
-  multiples are analysis assumptions, not native model truth, and must be labeled as such.
-- Forming candles, receipt time, browser state, and UI text must never enter a canonical candidate identity.
+## Ownership Decision
 
-## Canonical Ownership Decision
-
-Future work must not add another helper set. V2 canonical facts should own swing, liquidity, displacement, FVG,
-dealing-range, session, and structure identities. Legacy suite helpers remain compatibility adapters until each
-consumer has parity evidence. C1/C1.1 owns narrative projection, not detector eligibility. S1 owns canonical SMT
-after its operational gates pass. BT2 alone owns simulated fills, costs, expiry, and same-bar ambiguity.
+I1 must select one typed owner for each primitive fact, freeze legacy output, and prove parity before consumer
+migration. C1/C1.1 owns narrative projection, S1 owns SMT context, strategy detectors own setup semantics and native
+geometry, BT2 owns fills/costs/ambiguity/outcomes, and UI surfaces own none of those.

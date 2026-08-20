@@ -2,46 +2,72 @@
 
 ```mermaid
 flowchart TD
-  A["Certified or fresh read-only OHLCV"] --> B["Canonical closed-candle facts"]
-  B --> B1["Structure: swings, BOS, MSS, CISD"]
-  B --> B2["Liquidity: pools, sweep, reclaim, targets"]
-  B --> B3["Imbalance: FVG, IFVG, BPR, void"]
-  B --> B4["Blocks: OB, breaker, mitigation taxonomy"]
-  B --> B5["Time: session, killzone, opens, news risk"]
-  B1 --> C["Derived market context"]
-  B2 --> C
-  B3 --> C
-  B4 --> C
-  B5 --> C
-  C --> C1["C1/C1.1 narrative context"]
-  C --> C2["S1 SMT context"]
-  C --> C3["PD hierarchy and draw context"]
-  C1 --> D["Registered strategy detector"]
-  C2 --> D
-  C3 --> D
-  D --> E["Immutable candidate: identity, side, geometry, blockers"]
-  E --> F["Canonical strategy adapter"]
-  F --> G["BT2 request"]
-  G --> H["BT2 fills, costs, ambiguity, expiry, ledger seal"]
-  H --> I["Identity-bound validation and research quality"]
-  I --> J["Results / Current Read / Advisor presentation"]
+  A["Certified closed-candle source"] --> B["Canonical timestamped facts"]
+  B --> L["Liquidity: pools, IRL, ERL, sweeps, reclaim"]
+  B --> S["Structure: swings, BOS, MSS, CISD"]
+  B --> I["Imbalance: FVG, IFVG, BPR, void"]
+  B --> O["Blocks: OB, breaker, mitigation"]
+  B --> T["Time: sessions, killzones, macros, NDOG, NWOG"]
+  B --> R["Range: dealing range, equilibrium, premium/discount"]
+  L --> D["Draw and delivery context"]
+  S --> D
+  I --> D
+  O --> D
+  T --> D
+  R --> D
+  D --> C1["C1/C1.1 narrative"]
+  D --> S1["S1 SMT artifact"]
+  D --> P["PD hierarchy"]
+  L --> M2022["2022 model"]
+  I --> M2022
+  S --> M2022
+  R --> OTE["OTE model"]
+  I --> OTE
+  T --> PO3["PO3 / AMD / Judas"]
+  L --> PO3
+  S --> PO3
+  D --> MM["MMBM / MMSM / MMXM"]
+  I --> U["Unicorn / Breaker+FVG"]
+  O --> U
+  T --> G["NDOG / NWOG / TGIF"]
+  L --> X["IRL-to-ERL / ERL-to-IRL"]
+  I --> X
+  C1 --> Q["Registered strategy detector"]
+  S1 --> Q
+  P --> Q
+  M2022 --> Q
+  OTE --> Q
+  PO3 --> Q
+  MM --> Q
+  U --> Q
+  G --> Q
+  X --> Q
+  Q --> C["Immutable candidate and native geometry"]
+  C --> AD["Lossless canonical adapter"]
+  AD --> BT2["BT2 fills, costs, ambiguity, outcome"]
+  BT2 --> E["Identity-bound evidence"]
+  E --> UI["Results / Current Read / Advisor"]
 ```
+
+## Shared Dependency Estimate
+
+I1 has eight shared ownership packages: time identity, swing/structure, liquidity/IRL/ERL, imbalance, block taxonomy,
+dealing-range/PD hierarchy, C1 projection contract, and S1 projection contract. A ninth cross-cutting package is the
+strategy model/adapter identity contract. Reusing these nine packages avoids detector forks across roughly twenty
+requested model names.
 
 ## Boundary Rules
 
-- Data adapters may normalize timestamps and symbols but may not create ICT direction.
-- Canonical facts are timestamped and closed-candle causal.
-- Context can block or qualify a setup; it cannot manufacture detector geometry.
-- Strategy detectors own setup semantics and native entry/stop/target intent.
-- Adapters are lossless and fail closed.
-- BT2 owns simulation mechanics and ledger truth.
-- Evidence binds strategy, profile, parameters, source, dataset/certificate, code, and run.
-- Presentation reads immutable records and labels unavailable or historical data honestly.
+- Facts are closed-candle causal and expose validFrom/confirmedAt where recognition needs later candles.
+- C1/C1.1 provides structuralBias, currentFlowDirection, setupMaturationDirection, retracementState,
+  continuationState, and liquidity path. Strategies declare policy; they do not rebuild flat timeframe voting.
+- S1 is the only SMT owner. Models declare disabled, optional, required, or opposing-blocks.
+- Strategies own detection, state progression, blockers, expiry, and geometry intent.
+- Adapters are lossless and fail closed. BT2 owns fills, spread, slippage, commission, same-bar ordering, and outcome.
+- Evidence and UI may not repair, override, or reinterpret a detector identity.
 
-## Current Dependency Gaps
+## Critical Path
 
-- Duplicate fact implementations prevent a single canonical lineage across all strategies.
-- C1/C1.1 adoption is limited to Current Read.
-- S1 cannot supply accepted live/historical context until peer freshness/certification passes.
-- Several strategy catalog rows terminate at recognition or placeholder layers.
-- Results and readiness remediation remain separate product-integrity slices and are not solved by this audit.
+Canonical time/swing/liquidity identity precedes IRL/ERL, opening-gap models, 2022, PO3, MMXM, and TGIF. Block and FVG
+parity precedes Unicorn. Dealing-range parity precedes OTE. Charter work remains off the graph until source packets
+resolve whether its labels map to existing nodes.

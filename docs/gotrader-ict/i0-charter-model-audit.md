@@ -1,38 +1,33 @@
 # I0 Charter Model Audit
 
-## Result
+The repository contains no authoritative, versioned definition packet mapping "Charter Models 1-12" to causal
+rules. Searchable labels, transcript fragments, model numbers, Grinch names, or holding horizons are insufficient.
 
-The repository does not contain an authoritative, versioned definition packet for Charter Models 1 through 12.
-No model may be inferred from a label, video transcript fragment, Grinch phase name, or a superficially similar
-detector. The safe classification is therefore `INSUFFICIENT_DEFINITION` for every Charter model.
+| Charter label | Intended responsibility | Existing equivalent | Materially distinct causal rules | Classification |
+| --- | --- | --- | --- | --- |
+| Charter 1 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 2 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 3 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 4 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 5 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 6 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 7 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 8 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 9 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 10 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 11 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
+| Charter 12 | Unresolved: no authoritative packet in repo | No equivalence claim permitted | Unknown | INSUFFICIENT_DEFINITION |
 
-| Charter model | Repository classification | Implementation claim |
-| --- | --- | --- |
-| Charter 1 | INSUFFICIENT_DEFINITION | None |
-| Charter 2 | INSUFFICIENT_DEFINITION | None |
-| Charter 3 | INSUFFICIENT_DEFINITION | None |
-| Charter 4 | INSUFFICIENT_DEFINITION | None |
-| Charter 5 | INSUFFICIENT_DEFINITION | None |
-| Charter 6 | INSUFFICIENT_DEFINITION | None |
-| Charter 7 | INSUFFICIENT_DEFINITION | None |
-| Charter 8 | INSUFFICIENT_DEFINITION | None |
-| Charter 9 | INSUFFICIENT_DEFINITION | None |
-| Charter 10 | INSUFFICIENT_DEFINITION | None |
-| Charter 11 | INSUFFICIENT_DEFINITION | None |
-| Charter 12 | INSUFFICIENT_DEFINITION | None |
+This is a taxonomy limitation, not twelve missing implementations. Creating twelve arbitrary strategies would
+violate I0.
 
-## Required Definition Packet
+## Definition Packet Gate
 
-Before I6 can authorize any Charter implementation, each model needs a source-bound specification containing:
+Each Charter label needs an accepted source citation, canonical name, market/timeframe/session scope, ordered facts
+with confirmation timestamps, long/short path, entry/invalidation/target/expiry, no-trade conditions, C1 policy,
+S1 policy, behavior-changing parameters, and positive/negative/near-miss/lookahead examples.
 
-- canonical name, source citation, and disambiguation from aliases;
-- market, timeframe, session, and timezone scope;
-- ordered causal facts and confirmation timing;
-- direction, entry, invalidation, target hierarchy, expiry, and no-trade conditions;
-- optional versus required confluence, including SMT policy;
-- positive, negative, near-miss, forming, and future-fact examples;
-- parameter ownership and allowed research ranges;
-- relationship to existing models to prevent duplicate implementations.
-
-Until that packet exists, Charter labels must not appear as implemented strategies, readiness evidence, or Results
-attribution.
+The definition review must then classify it as DISTINCT_MODEL, PROFILE_OF_EXISTING_MODEL,
+COMPOSITE_OF_CANONICAL_FACTS, ALREADY_COVERED, or remain INSUFFICIENT_DEFINITION. Only DISTINCT_MODEL may receive a
+new strategy ID. Profiles reuse the parent detector with a versioned profile identity; composites reuse canonical
+facts and still require proof of a unique end-to-end sequence.
