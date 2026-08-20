@@ -76,5 +76,18 @@ const fallback = selectCanonicalTarget({
 });
 assert.equal(fallback.selectionRole, "EXPLICIT_FALLBACK");
 
-console.log("trade geometry target-selection tests passed");
+const multiTarget = selectCanonicalTarget({
+  direction: "LONG",
+  entryPrice: 100,
+  stopPrice: 98,
+  asOf,
+  policy: { ...policy, primaryTargetId: "primary" },
+  candidates: [
+    candidate("tp1", "INTERNAL_LIQUIDITY", 101),
+    candidate("primary", "PRIMARY_DRAW_ON_LIQUIDITY", 106)
+  ]
+});
+assert.equal(multiTarget.selected?.targetId, "primary", "partial TP1 must not replace the primary decision target");
+assert.equal(multiTarget.selected?.availableRR, 3);
 
+console.log("trade geometry target-selection tests passed");

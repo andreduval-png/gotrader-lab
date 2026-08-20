@@ -78,6 +78,13 @@ const invalidDirection = geometry.buildCanonicalTradeGeometry({
 });
 assert.equal(invalidDirection.status, "GEOMETRY_DIRECTION_INVALID");
 
+const targetTooClose = geometry.buildCanonicalTradeGeometry({
+  ...base,
+  candidateId: "fixture-b",
+  targetCandidates: [{ ...base.targetCandidates[0], price: 100 }]
+});
+assert.equal(targetTooClose.status, "TARGET_TOO_CLOSE");
+
 const precise = geometry.buildCanonicalTradeGeometry({
   ...base,
   candidateId: "fixture-precision",
@@ -89,6 +96,8 @@ assert.equal(precise.actionable, false, "threshold comparison must use full prec
 
 const zeroRisk = geometry.buildCanonicalTradeGeometry({ ...base, candidateId: "zero-risk", stop: { ...base.stop, price: 100 } });
 assert.equal(zeroRisk.status, "GEOMETRY_DIRECTION_INVALID");
+const nanEntry = geometry.buildCanonicalTradeGeometry({ ...base, candidateId: "nan-entry", entry: { ...base.entry, intendedPrice: Number.NaN } });
+assert.equal(nanEntry.status, "INVALID_ENTRY");
 
 assert.equal(typeof actionable.geometryId, "string");
 assert.equal(Object.isFrozen(actionable), true);
