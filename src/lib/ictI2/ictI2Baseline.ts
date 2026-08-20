@@ -31,7 +31,7 @@ export interface IctI2BaselineManifest {
   strategyId: string;
   profileId: string;
   parameterHash: string;
-  status: "COMPLETED_DESCRIPTIVE" | "BLOCKED_DATASET_UNAVAILABLE" | "BLOCKED_SOURCE_SEMANTICS";
+  status: "COMPLETED_DESCRIPTIVE" | "BLOCKED_DATASET_UNAVAILABLE" | "DEFERRED_CONCURRENCY" | "BLOCKED_SOURCE_SEMANTICS";
   dataset: IctI2DatasetIdentity | null;
   metrics: IctI2BaselineMetrics | null;
   blockers: readonly string[];
@@ -39,15 +39,21 @@ export interface IctI2BaselineManifest {
   researchValidated: false;
 }
 
+export const ICT_I2_QUALIFIED_DATASET: IctI2DatasetIdentity = Object.freeze({
+  datasetCertificateId: "sha256:7ffa32b773a0f3d347997d20dc9796f8bd27a48fbbfd4315cafec23d28bcb193",
+  datasetId: "sha256:aee24dc3d7e95759c0a58039c9a97985a63dd8014dd3ab9d9e843badeb09640d",
+  datasetChecksum: "sha256:4e51534035ca982a217ba64ec4438f7c2d7d7d19c7f0c1a0b6dff57b4539a0be"
+});
+
 export const ICT_I2_BASELINE_MANIFESTS: readonly IctI2BaselineManifest[] = Object.freeze([
   {
     strategyId: "ict_2022_model_v1",
     profileId: "ict_2022_base_research_v1",
     parameterHash: parameterHash("gotrader.ict.i2.2022.parameters.v1", ICT_2022_BASE_PARAMETERS),
-    status: "BLOCKED_DATASET_UNAVAILABLE",
-    dataset: null,
+    status: "DEFERRED_CONCURRENCY",
+    dataset: ICT_I2_QUALIFIED_DATASET,
     metrics: null,
-    blockers: ["No accepted certified dataset identity with required 1h/15m/5m coverage exists in the I2 worktree."],
+    blockers: ["The qualified two-year USTECH/MNQ-alias dataset covers 1h/15m/5m; the baseline is deferred while bounded R1 family-v4 owns historical-run resource admission."],
     tuned: false,
     researchValidated: false
   },
@@ -55,10 +61,10 @@ export const ICT_I2_BASELINE_MANIFESTS: readonly IctI2BaselineManifest[] = Objec
     strategyId: "ict_power_of_three_v1",
     profileId: "po3_external_liquidity_base_v1",
     parameterHash: parameterHash("gotrader.ict.i2.po3.parameters.v1", ICT_PO3_BASE_PARAMETERS),
-    status: "BLOCKED_DATASET_UNAVAILABLE",
-    dataset: null,
+    status: "DEFERRED_CONCURRENCY",
+    dataset: ICT_I2_QUALIFIED_DATASET,
     metrics: null,
-    blockers: ["No accepted certified dataset identity with required 15m/5m coverage exists in the I2 worktree."],
+    blockers: ["The qualified two-year USTECH/MNQ-alias dataset covers 15m/5m; the baseline is deferred while bounded R1 family-v4 owns historical-run resource admission."],
     tuned: false,
     researchValidated: false
   },
@@ -69,7 +75,7 @@ export const ICT_I2_BASELINE_MANIFESTS: readonly IctI2BaselineManifest[] = Objec
     status: "BLOCKED_SOURCE_SEMANTICS",
     dataset: null,
     metrics: null,
-    blockers: ["Session window, opening reference, and reversal confirmation are unresolved."],
+    blockers: ["Reversal confirmation, entry, stop, and target semantics remain unresolved."],
     tuned: false,
     researchValidated: false
   }
