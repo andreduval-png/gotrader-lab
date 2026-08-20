@@ -228,6 +228,10 @@ const researchPlanFor = (
         ? "partial"
         : "unavailable";
   const signal = complete && planCoherence === "coherent" && !candidateRejected && !riskBlocked ? (side === "long" ? "BUY" : "SELL") : "NO_TRADE";
+  const setupName = activation?.modelName
+    ?? currentCandidate?.setupName
+    ?? activation?.opportunityType
+    ?? (complete ? `${side}_research_plan` : undefined);
 
   return {
     status,
@@ -235,7 +239,7 @@ const researchPlanFor = (
     cycleId: currentActivation.cycleId,
     currentReadEvaluatedAt: currentActivation.currentReadEvaluatedAt,
     currentCandidateId: currentActivation.currentCandidateId,
-    setup: clean(activation?.modelName, "No qualified research plan").replace(/_/g, " "),
+    setup: clean(setupName, "No qualified research plan").replace(/_/g, " "),
     side,
     setupDirection,
     signal,

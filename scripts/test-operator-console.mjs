@@ -223,6 +223,22 @@ async function main() {
   assert.deepEqual(bullish.researchPlan.entryZone, { lower: 99, upper: 101 });
   assert.equal(bullish.researchPlan.entryPrice, 100);
 
+  const namedCandidateWithoutDetectedModel = buildOperatorConsoleSnapshot({
+    activation: {
+      researchSide: "long",
+      proposedEntryPrice: 100,
+      proposedStopLoss: 97,
+      proposedTakeProfit: 106,
+      proposedRiskReward: 2,
+      currentOpportunitySummary: {
+        topOpportunity: { side: "long", status: "valid_candidate", setupName: "liquidity sweep reversal" }
+      }
+    }
+  });
+  assert.equal(namedCandidateWithoutDetectedModel.researchPlan.status, "complete");
+  assert.equal(namedCandidateWithoutDetectedModel.researchPlan.setup, "liquidity sweep reversal");
+  assert.notEqual(namedCandidateWithoutDetectedModel.researchPlan.setup, "No qualified research plan");
+
   const flatPlan = buildOperatorConsoleSnapshot({
     activation: activationIdentity({
       modelName: "flat_test",
