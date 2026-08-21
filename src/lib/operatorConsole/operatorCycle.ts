@@ -26,15 +26,18 @@ const LEGACY_OPERATOR_CYCLE_STORAGE_KEYS = ["gotrader.operator-cycle.v2", "gotra
 const OPERATOR_CYCLE_TAB_STORAGE_KEY = "gotrader.operator-cycle.tab.v1";
 export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v3";
 export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
-// Expensive research stages have their own bounds. This outer watchdog only
-// intervenes when the autonomous loop stops publishing observable progress.
+// Tactical operator cycles have both a liveness watchdog and an absolute wall-clock budget.
+// Deep-history research stays in Advanced Research Lab.
 const OPERATOR_RESEARCH_STALL_TIMEOUT_MS = 180_000;
+const OPERATOR_CYCLE_MAX_DURATION_MS = 300_000;
 const OPERATOR_CYCLE_HEARTBEAT_MS = 2_000;
 const OPERATOR_CYCLE_STALE_AFTER_MS = 90_000;
 const OPERATOR_RESEARCH_PROFILE = ifvgShallowRetestV4FrozenProfile.profileId;
 const OPERATOR_STOP_ABORT_REASON = "operator_stop_requested";
 const OPERATOR_TIMEOUT_ABORT_REASON = "operator_timeout";
 const OPERATOR_TIMEOUT_MESSAGE = "The guarded research cycle made no observable progress for three minutes and was stopped to keep GoTrader responsive.";
+const OPERATOR_DEADLINE_ABORT_REASON = "operator_deadline";
+const OPERATOR_DEADLINE_MESSAGE = "The Operator Console cycle reached its five-minute tactical budget and stopped safely. Use Advanced Research Lab for deep-history validation.";
 
 const createOwnerInstanceId = () => {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -268,6 +271,15 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
 
   const controller = new AbortController();
   activeController = controller;
+  let rejectForDeadline: ((error: Error) => void) | undefined;
+  const deadlinePromise = new Promise<never>((_, reject) => {
+    rejectForDeadline = reject;
+  });
+  void deadlinePromise.catch(() => undefined);
+  const deadlineTimer = globalThis.setTimeout(() => {
+    controller.abort(OPERATOR_DEADLINE_ABORT_REASON);
+    rejectForDeadline?.(new Error(OPERATOR_DEADLINE_MESSAGE));
+  }, OPERATOR_CYCLE_MAX_DURATION_MS);
   const startedAt = new Date().toISOString();
   const cycleId = `operator_cycle_${Date.now()}`;
   let current = saveOperatorCycleState({
@@ -306,12 +318,14 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     }
 
     if (controller.signal.aborted) {
+      const deadlineReached = controller.signal.reason === OPERATOR_DEADLINE_ABORT_REASON;
       return updateState(current, {
-        status: "canceled",
+        status: deadlineReached ? "failed" : "canceled",
         stage: "complete",
         progressPercent: 100,
         completedAt: new Date().toISOString(),
-        message: "Research cycle stopped before market analysis began."
+        message: deadlineReached ? OPERATOR_DEADLINE_MESSAGE : "Research cycle stopped before market analysis began.",
+        lastError: deadlineReached ? OPERATOR_DEADLINE_MESSAGE : undefined
       });
     }
 
@@ -357,12 +371,14 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     }
 
     if (controller.signal.aborted) {
+      const deadlineReached = controller.signal.reason === OPERATOR_DEADLINE_ABORT_REASON;
       return updateState(current, {
-        status: "canceled",
+        status: deadlineReached ? "failed" : "canceled",
         stage: "complete",
         progressPercent: 100,
         completedAt: new Date().toISOString(),
-        message: "Research cycle stopped after the current market read.",
+        message: deadlineReached ? OPERATOR_DEADLINE_MESSAGE : "Research cycle stopped after the current market read.",
+        lastError: deadlineReached ? OPERATOR_DEADLINE_MESSAGE : undefined,
         latestInsight
       });
     }
@@ -388,7 +404,8 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         runLlmAdvisory: true,
         autoApplyPolicyEnabled: false,
         researchStrategyProfile: OPERATOR_RESEARCH_PROFILE,
-        maxResearchCandles: 1000
+        maxResearchCandles: 1000,
+        validationDepth: "tactical"
       },
       onUpdate: (run) => {
         resetResearchStallWatchdog();
@@ -421,7 +438,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     resetResearchStallWatchdog();
     let autonomousRun: Awaited<typeof autonomousPromise>;
     try {
-      autonomousRun = await Promise.race([autonomousPromise, timeoutPromise]);
+      autonomousRun = await Promise.race([autonomousPromise, timeoutPromise, deadlinePromise]);
     } finally {
       watchdogActive = false;
       if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
@@ -436,10 +453,15 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
 
     const stoppedByOperator = controller.signal.reason === OPERATOR_STOP_ABORT_REASON;
     const timedOut = controller.signal.reason === OPERATOR_TIMEOUT_ABORT_REASON;
-    const canceled = stoppedByOperator || (!timedOut && autonomousRun.status === "canceled");
-    const failed = timedOut || autonomousRun.status === "failed";
+    const deadlineReached = controller.signal.reason === OPERATOR_DEADLINE_ABORT_REASON;
+    const canceled = stoppedByOperator || (!timedOut && !deadlineReached && autonomousRun.status === "canceled");
+    const failed = timedOut || deadlineReached || autonomousRun.status === "failed";
     const paused = autonomousRun.status === "paused";
-    const completionMessage = timedOut ? OPERATOR_TIMEOUT_MESSAGE : statusMessageForRun(autonomousRun, stoppedByOperator);
+    const completionMessage = deadlineReached
+      ? OPERATOR_DEADLINE_MESSAGE
+      : timedOut
+        ? OPERATOR_TIMEOUT_MESSAGE
+        : statusMessageForRun(autonomousRun, stoppedByOperator);
     return updateState(current, {
       status: canceled ? "canceled" : failed ? "failed" : paused ? "blocked" : "completed",
       stage: "complete",
@@ -453,7 +475,8 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     const message = error instanceof Error ? error.message : "Research cycle failed unexpectedly.";
     const stoppedByOperator = controller.signal.reason === OPERATOR_STOP_ABORT_REASON;
     const timedOut = controller.signal.reason === OPERATOR_TIMEOUT_ABORT_REASON;
-    const failureMessage = timedOut ? OPERATOR_TIMEOUT_MESSAGE : message;
+    const deadlineReached = controller.signal.reason === OPERATOR_DEADLINE_ABORT_REASON;
+    const failureMessage = deadlineReached ? OPERATOR_DEADLINE_MESSAGE : timedOut ? OPERATOR_TIMEOUT_MESSAGE : message;
     return updateState(current, {
       status: stoppedByOperator ? "canceled" : "failed",
       stage: "complete",
@@ -463,6 +486,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       lastError: stoppedByOperator ? undefined : failureMessage
     });
   } finally {
+    globalThis.clearTimeout(deadlineTimer);
     stopHeartbeat();
     if (activeController === controller) {
       activeController = undefined;

@@ -93,11 +93,11 @@ const statusFromStopReason = (reason?: AutonomousResearchStopReason): Autonomous
       ? "canceled"
       : reason === "active_research_source_ineligible"
         ? "paused"
+      : reason === "llm_advisory_offline" || reason === "llm_advisory_unavailable"
+        ? "completed_with_warnings"
       : reason === "regime_mismatch_detected" ||
           reason === "evidence_quality_too_low" ||
-          reason === "walk_forward_repeatedly_failed" ||
-          reason === "llm_advisory_offline" ||
-          reason === "llm_advisory_unavailable"
+          reason === "walk_forward_repeatedly_failed"
         ? "paused"
         : "completed";
 
@@ -736,6 +736,7 @@ export async function runAutonomousResearchLoop({
         maxResearchCandles:
           settings.maxResearchCandles ??
           (frozenProfile ? 1000 : settings.advancedFullResearchMode ? undefined : 500),
+        validationDepth: settings.validationDepth ?? "frozen_profile",
         backtestConfig: frozenBacktestConfig,
         maxAdaptivePasses: settings.advancedFullResearchMode ? undefined : 0,
         autoResearchTimeoutMs: settings.advancedFullResearchMode ? undefined : AUTONOMOUS_RESEARCH_TIMEOUT_MS,

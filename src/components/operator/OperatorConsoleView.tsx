@@ -268,6 +268,11 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 </p>
               </div>
             </div>
+            {!snapshot.source.researchEligible ? (
+              <p className="mt-3 text-xs leading-5 text-amber-200" data-testid="operator-source-preflight-note">
+                This cycle will stop at source preflight unless MT5 read-only activation succeeds. A setup outcome on mock data can be reviewed, but it cannot qualify a research plan or become research evidence.
+              </p>
+            ) : null}
           </div>
         </div>
       </section>

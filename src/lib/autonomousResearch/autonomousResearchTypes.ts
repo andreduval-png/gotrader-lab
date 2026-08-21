@@ -107,6 +107,7 @@ export interface AutonomousResearchSettings {
   autoApplyPolicyEnabled: boolean;
   researchStrategyProfile?: BacktestStrategyProfile;
   maxResearchCandles?: number;
+  validationDepth?: "tactical" | "frozen_profile";
 }
 
 export interface AutonomousPerformancePhaseTiming {

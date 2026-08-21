@@ -679,6 +679,7 @@ export async function runResearchCycle({
   searchMode = "standard",
   maxCandidateCount = 10,
   maxResearchCandles,
+  validationDepth = "frozen_profile",
   backtestConfig,
   candleWindowSettings,
   advancedFullResearchMode = false,
@@ -846,6 +847,7 @@ export async function runResearchCycle({
     performanceMode: activeCandleSource.performanceMode,
     researchPreset,
     advancedFullResearchMode,
+    validationDepth,
     effectiveSearchMode,
     effectiveMaxCandidateCount,
     heavyAuditSkipped,
@@ -1403,7 +1405,7 @@ export async function runResearchCycle({
       let validationSourceLabel = activeResearchCandleSource.sourceLabel;
       let validationBrokerSymbol = mt5ReadOnlyFeed?.brokerSymbol;
 
-      if (frozenProfile && activeResearchCandleSource.sourceMode === "mt5_read_only") {
+      if (frozenProfile && activeResearchCandleSource.sourceMode === "mt5_read_only" && validationDepth === "frozen_profile") {
         setStep("validation", {
           status: "running",
           summary: `Loading explicit ${frozenProfile.historicalValidationDays}-day MT5 history for the frozen detector profile.`
@@ -1472,6 +1474,11 @@ export async function runResearchCycle({
             `Explicit MT5 history returned only ${historicalCandles.length.toLocaleString()} pre-cutoff candles; detector-specific validation stayed on the tactical source.`
           ];
         }
+      } else if (frozenProfile && activeResearchCandleSource.sourceMode === "mt5_read_only") {
+        run.candleWindowWarnings = [
+          ...(run.candleWindowWarnings ?? []),
+          `Tactical validation used the bounded ${researchCandles.length.toLocaleString()}-candle current-source window. Frozen ${frozenProfile.historicalValidationDays}-day history remains available from Advanced Research Lab.`
+        ];
       }
       const cycleValidationProvenance = buildValidationProvenanceIdentity({
         strategyProfile: activeConfig.strategyProfile,

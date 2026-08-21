@@ -612,6 +612,12 @@ async function main() {
     "operator cycle must route its guarded validation through the selected frozen profile"
   );
   assert.match(cycleSource, /maxResearchCandles:\s*1000/, "IFVG v4 operator validation must retain its bounded 1,000-candle window");
+  assert.match(cycleSource, /validationDepth:\s*"tactical"/, "operator cycles must not launch frozen-profile deep-history validation");
+  assert.match(cycleSource, /OPERATOR_CYCLE_MAX_DURATION_MS\s*=\s*300_000/, "operator cycles must have a five-minute absolute budget");
+  assert.match(cycleSource, /OPERATOR_DEADLINE_ABORT_REASON\s*=\s*"operator_deadline"/, "deadline exits must remain distinct from operator cancellation");
+  assert.match(cycleSource, /Use Advanced Research Lab for deep-history validation/, "deadline guidance must route deep validation to the correct surface");
+  assert.match(cycleSource, /Promise\.race\(\[autonomousPromise, timeoutPromise, deadlinePromise\]\)/, "the hard deadline must settle the operator cycle even while progress continues");
+  assert.match(cycleSource, /clearTimeout\(deadlineTimer\)/, "the absolute deadline timer must be released on every terminal path");
   assert.match(
     cycleSource,
     /publishClosedMt5ReadOnlyCandles\(activatedFeed\)/,
@@ -706,6 +712,11 @@ async function main() {
   );
   assert.match(
     autonomousSource,
+    /reason === "llm_advisory_offline" \|\| reason === "llm_advisory_unavailable"[\s\S]*?\? "completed_with_warnings"/,
+    "an optional LLM advisory outage must preserve completed deterministic results as a warning"
+  );
+  assert.match(
+    autonomousSource,
     /frozenProfile\s*\?\s*1000\s*:\s*settings\.advancedFullResearchMode\s*\?\s*undefined\s*:\s*500/,
     "bounded autonomous cycles must use 1,000 candles only for a frozen profile and 500 otherwise"
   );
@@ -727,6 +738,17 @@ async function main() {
   assert.match(validationSource, /runValidationSuiteAsync/, "research validation must expose a cooperative runner");
   assert.match(validationSource, /setTimeout\(resolve, 0\)/, "cooperative validation must yield between scenarios");
 
+  assert.match(
+    researchCycleSource,
+    /validationDepth\s*===\s*"frozen_profile"/,
+    "deep MT5 history must require an explicit frozen-profile validation scope"
+  );
+  assert.match(
+    researchCycleSource,
+    /Tactical validation used the bounded/,
+    "tactical validation must report that deep history was intentionally deferred"
+  );
+
   const walkForwardResolver = fs.readFileSync(
     path.join(projectRoot, "src", "lib", "walkForward", "walkForwardSourceResolver.ts"),
     "utf8"
@@ -740,6 +762,8 @@ async function main() {
     path.join(projectRoot, "src", "components", "operator", "OperatorConsoleView.tsx"),
     "utf8"
   );
+  assert.match(operatorViewSource, /operator-source-preflight-note/, "the operator UI must explain source preflight before a blocked cycle");
+  assert.match(operatorViewSource, /mock data can be reviewed, but it cannot qualify a research plan/, "profitable mock outcomes must not be presented as qualified research evidence");
   assert.match(
     operatorViewSource,
     /data-testid="operator-cycle-heartbeat"/,

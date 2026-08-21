@@ -145,7 +145,8 @@ export const compactAutonomousResearchRun = (
       runLlmAdvisory: run.settings.runLlmAdvisory,
       autoApplyPolicyEnabled: run.settings.autoApplyPolicyEnabled === true,
       researchStrategyProfile: run.settings.researchStrategyProfile,
-      maxResearchCandles: run.settings.maxResearchCandles
+      maxResearchCandles: run.settings.maxResearchCandles,
+      validationDepth: run.settings.validationDepth
     },
     currentIteration: run.currentIteration,
     progress: {

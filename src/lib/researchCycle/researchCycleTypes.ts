@@ -276,6 +276,7 @@ export interface ResearchCycleRun {
   performanceMode?: ResearchPerformanceMode;
   researchPreset?: "mock" | "safe" | "standard" | "advanced";
   advancedFullResearchMode?: boolean;
+  validationDepth?: "tactical" | "frozen_profile";
   effectiveSearchMode?: AutoResearchSearchMode;
   effectiveMaxCandidateCount?: number;
   heavyAuditSkipped?: boolean;
@@ -336,6 +337,8 @@ export interface ResearchCycleRunOptions {
   searchMode?: AutoResearchSearchMode;
   maxCandidateCount?: number;
   maxResearchCandles?: number;
+  /** Tactical cycles validate only their bounded source window; frozen-profile runs may load explicit deep history. */
+  validationDepth?: "tactical" | "frozen_profile";
   backtestConfig?: BacktestConfig;
   candleWindowSettings?: Partial<CandleWindowSettings>;
   advancedFullResearchMode?: boolean;
