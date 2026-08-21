@@ -21,7 +21,8 @@ import {
   latestResearchCycleRun,
   loadResearchCycleState,
   RESEARCH_CYCLE_UPDATED_EVENT,
-  runResearchCycle
+  runResearchCycle,
+  saveResearchCycleRun
 } from "@/lib/researchCycle";
 import type { ResearchCycleRun, ResearchCycleStepResult, ResearchCycleStepStatus } from "@/lib/researchCycle";
 import { prioritizeReadinessRequirements } from "@/lib/readiness";
@@ -65,6 +66,49 @@ import { formatDateTime } from "./dashboardFormatters";
 type ResearchCycleControlProps = {
   state: LabState;
   onCycleUpdate?: () => void;
+};
+
+const DASHBOARD_TACTICAL_CYCLE_MAX_DURATION_MS = 300_000;
+const DASHBOARD_ADVANCED_CYCLE_MAX_DURATION_MS = 1_200_000;
+const DASHBOARD_CYCLE_DEADLINE_ABORT_REASON = "dashboard_cycle_deadline";
+
+const deadlineMessageFor = (advancedFullResearchMode: boolean) =>
+  advancedFullResearchMode
+    ? "Advanced research reached its 20-minute browser budget and stopped safely. Reduce the data window or candidate count before retrying."
+    : "Research reached its five-minute tactical budget and stopped safely. Use Advanced full research mode only when deep-history validation is intentional.";
+
+const deadlineRunFor = (run: ResearchCycleRun, message: string): ResearchCycleRun => {
+  const completedAt = new Date().toISOString();
+  const runningStep = safeArray(run.steps).find((step) => step.status === "running");
+  return {
+    ...run,
+    status: "failed",
+    completedAt,
+    failedStepId: runningStep?.stepId ?? run.failedStepId,
+    failedStepDetails: message,
+    nextRecommendedAction: message,
+    resultSummary: message,
+    steps: safeArray(run.steps).map((step) =>
+      step.status === "running"
+        ? { ...step, status: "failed", completedAt, summary: "Cycle budget reached.", error: message }
+        : step.status === "pending"
+          ? { ...step, status: "skipped", completedAt, summary: "Skipped after the cycle budget was reached." }
+          : step
+    )
+  };
+};
+
+const loadBoundedResearchCycleState = () => {
+  const state = loadResearchCycleState();
+  const run = latestResearchCycleRun(state);
+  if (run?.status !== "running") return state;
+  const startedAt = Date.parse(run.startedAt);
+  const maxDurationMs = run.validationDepth === "frozen_profile"
+    ? DASHBOARD_ADVANCED_CYCLE_MAX_DURATION_MS
+    : DASHBOARD_TACTICAL_CYCLE_MAX_DURATION_MS;
+  if (Number.isFinite(startedAt) && Date.now() - startedAt <= maxDurationMs) return state;
+  const message = deadlineMessageFor(run.validationDepth === "frozen_profile");
+  return saveResearchCycleRun(deadlineRunFor(run, message));
 };
 
 const statusVariant = (status?: ResearchCycleRun["status"]) =>
@@ -221,7 +265,7 @@ const fallbackImportActivation: ImportedCandleActivationState = {
 };
 
 export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleControlProps) {
-  const [cycleState, setCycleState] = useState(() => loadResearchCycleState());
+  const [cycleState, setCycleState] = useState(() => loadBoundedResearchCycleState());
   const [activeRun, setActiveRun] = useState<ResearchCycleRun>();
   const [activeCalibration, setActiveCalibration] = useState(() => loadActiveResearchCalibration());
   const [activeConfigResolution, setActiveConfigResolution] = useState(() => resolveActiveBacktestConfig());
@@ -341,7 +385,7 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
   useEffect(() => {
     let mounted = true;
     const refresh = () => {
-      setCycleState(loadResearchCycleState());
+      setCycleState(loadBoundedResearchCycleState());
       setAutoResearchState(loadAutoResearchState());
       setActiveCalibration(loadActiveResearchCalibration());
       setActiveConfigResolution(resolveActiveBacktestConfig());
@@ -431,13 +475,32 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
     setBusy(true);
     setActiveRun(undefined);
     setLiveCheckpoint(undefined);
+    setDataSourceMessage("");
     const controller = new AbortController();
     setAbortController(controller);
+    const deadlineMessage = deadlineMessageFor(advancedFullResearchMode);
+    const deadlineMs = advancedFullResearchMode
+      ? DASHBOARD_ADVANCED_CYCLE_MAX_DURATION_MS
+      : DASHBOARD_TACTICAL_CYCLE_MAX_DURATION_MS;
+    let deadlineReached = false;
+    let rejectForDeadline: ((error: Error) => void) | undefined;
+    let latestSnapshot: ResearchCycleRun | undefined;
+    const deadlinePromise = new Promise<never>((_, reject) => {
+      rejectForDeadline = reject;
+    });
+    void deadlinePromise.catch(() => undefined);
+    const deadlineTimer = window.setTimeout(() => {
+      deadlineReached = true;
+      controller.abort(DASHBOARD_CYCLE_DEADLINE_ABORT_REASON);
+      rejectForDeadline?.(new Error(deadlineMessage));
+    }, deadlineMs);
     try {
-      const result = await runResearchCycle({
+      const cyclePromise = runResearchCycle({
         state,
         searchMode: effectiveSearchMode,
         maxCandidateCount: effectiveCandidateLimit,
+        maxResearchCandles: advancedFullResearchMode ? undefined : 1000,
+        validationDepth: advancedFullResearchMode ? "frozen_profile" : "tactical",
         candleWindowSettings: activeCandleSource.appliedSettings,
         advancedFullResearchMode,
         skipHeavyAudit: activeCandleSource.mode === "imported" && !advancedFullResearchMode,
@@ -449,17 +512,31 @@ export function ResearchCycleControl({ state, onCycleUpdate }: ResearchCycleCont
         },
         signal: controller.signal,
         onUpdate: (run) => {
+          latestSnapshot = run;
+          if (deadlineReached) return;
           setActiveRun(run);
           setLiveCheckpoint(run.autoResearchCheckpoint);
           onCycleUpdate?.();
         }
       });
+      const result = await Promise.race([cyclePromise, deadlinePromise]);
       setActiveRun(result);
       setCycleState(loadResearchCycleState());
       setActiveCalibration(loadActiveResearchCalibration());
       setActiveConfigResolution(resolveActiveBacktestConfig());
       onCycleUpdate?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Research cycle failed unexpectedly.";
+      if (deadlineReached && latestSnapshot) {
+        const terminalRun = deadlineRunFor(latestSnapshot, deadlineMessage);
+        const savedState = saveResearchCycleRun(terminalRun);
+        setActiveRun(terminalRun);
+        setCycleState(savedState);
+      }
+      setDataSourceMessage(deadlineReached ? deadlineMessage : message);
+      onCycleUpdate?.();
     } finally {
+      window.clearTimeout(deadlineTimer);
       setBusy(false);
       setAbortController(undefined);
       setLiveCheckpoint(undefined);

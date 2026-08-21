@@ -590,6 +590,10 @@ async function main() {
     path.join(projectRoot, "src", "lib", "researchCycle", "runResearchCycle.ts"),
     "utf8"
   );
+  const dashboardCycleSource = fs.readFileSync(
+    path.join(projectRoot, "src", "components", "dashboard", "ResearchCycleControl.tsx"),
+    "utf8"
+  );
   const activateMarketSource = fs.readFileSync(
     path.join(projectRoot, "src", "lib", "ict-strategy-suite", "ictActivateMarketPipeline.ts"),
     "utf8"
@@ -618,6 +622,17 @@ async function main() {
   assert.match(cycleSource, /Use Advanced Research Lab for deep-history validation/, "deadline guidance must route deep validation to the correct surface");
   assert.match(cycleSource, /Promise\.race\(\[autonomousPromise, timeoutPromise, deadlinePromise\]\)/, "the hard deadline must settle the operator cycle even while progress continues");
   assert.match(cycleSource, /clearTimeout\(deadlineTimer\)/, "the absolute deadline timer must be released on every terminal path");
+  assert.match(dashboardCycleSource, /DASHBOARD_TACTICAL_CYCLE_MAX_DURATION_MS\s*=\s*300_000/, "dashboard tactical cycles must stop within five minutes");
+  assert.match(dashboardCycleSource, /DASHBOARD_ADVANCED_CYCLE_MAX_DURATION_MS\s*=\s*1_200_000/, "explicit advanced dashboard cycles must stop within twenty minutes");
+  assert.match(
+    dashboardCycleSource,
+    /validationDepth:\s*advancedFullResearchMode\s*\?\s*"frozen_profile"\s*:\s*"tactical"/,
+    "normal dashboard cycles must not silently expand into frozen-profile deep history"
+  );
+  assert.match(dashboardCycleSource, /Promise\.race\(\[cyclePromise, deadlinePromise\]\)/, "dashboard deadlines must settle the UI even when nested work is still returning");
+  assert.match(dashboardCycleSource, /saveResearchCycleRun\(terminalRun\)/, "dashboard deadline results must be persisted instead of leaving a running checkpoint");
+  assert.match(dashboardCycleSource, /loadBoundedResearchCycleState/, "dashboard load must recover a stale running cycle");
+  assert.match(dashboardCycleSource, /run\?\.status !== "running"/, "stale recovery must leave terminal results unchanged");
   assert.match(
     cycleSource,
     /publishClosedMt5ReadOnlyCandles\(activatedFeed\)/,
@@ -757,6 +772,15 @@ async function main() {
   const importedPosition = walkForwardResolver.indexOf("const importedOrMockSource");
   assert(cachedMt5Position >= 0 && importedPosition > cachedMt5Position, "walk-forward must resolve active MT5 before imported history");
   assert.match(walkForwardResolver, /SOURCE_RESOLUTION_TIMEOUT_MS\s*=\s*8_000/, "walk-forward source resolution must be bounded");
+  assert.match(walkForwardResolver, /signal\?:\s*AbortSignal/, "deep-history source resolution must accept cooperative cancellation");
+  assert.match(walkForwardResolver, /if \(options\.signal\?\.aborted\) throw error/, "deep-history cancellation must not be swallowed as a tactical fallback");
+
+  const mt5ClientSource = fs.readFileSync(
+    path.join(projectRoot, "src", "lib", "integrations", "mt5", "mt5ReadOnlyClient.ts"),
+    "utf8"
+  );
+  assert.match(mt5ClientSource, /request\.signal\?\.throwIfAborted\(\)/, "chunked MT5 history must stop between date windows");
+  assert.match(mt5ClientSource, /signal\?\.addEventListener\("abort", abortFromCaller/, "an active MT5 range request must inherit cycle cancellation");
 
   const operatorViewSource = fs.readFileSync(
     path.join(projectRoot, "src", "components", "operator", "OperatorConsoleView.tsx"),

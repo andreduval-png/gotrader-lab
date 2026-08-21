@@ -36,6 +36,7 @@ export interface ResolvedWalkForwardCandleSource extends PreparedCandleSource {
 export interface LoadWalkForwardCandleSourceOptions {
   allowMt5DeepHistory?: boolean;
   requestedLookbackDays?: number;
+  signal?: AbortSignal;
 }
 
 const SOURCE_RESOLUTION_TIMEOUT_MS = 8_000;
@@ -116,7 +117,8 @@ const preparedDeepMt5Source = async (
     limitPerChunk: 5000,
     lookbackDays: requestedLookbackDays,
     symbol: requestedSymbol,
-    timeframe
+    timeframe,
+    signal: options.signal
   }, settings);
 
   if (!history.candles.length || history.summary.depthStatus !== "sufficient") {
@@ -197,7 +199,12 @@ export async function loadPreparedCanonicalWalkForwardCandleSource(
   const mt5Canonical = canonicalSourceFromMt5ReadOnlyFeed(mt5Feed);
   if (mt5Feed?.activeForResearch && mt5Canonical?.eligibility.walkForward) {
     if (options.allowMt5DeepHistory && mt5Feed) {
-      const deepSource = await preparedDeepMt5Source(mt5Feed, settingsInput, options).catch(() => undefined);
+      let deepSource: ResolvedWalkForwardCandleSource | undefined;
+      try {
+        deepSource = await preparedDeepMt5Source(mt5Feed, settingsInput, options);
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+      }
       if (deepSource) {
         return deepSource;
       }

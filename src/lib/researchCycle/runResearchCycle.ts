@@ -1418,8 +1418,10 @@ export async function runResearchCycle({
           advancedMode: true
         }, {
           allowMt5DeepHistory: true,
-          requestedLookbackDays: frozenProfile.historicalValidationDays
+          requestedLookbackDays: frozenProfile.historicalValidationDays,
+          signal
         });
+        throwIfCanceled();
         const cutoff = Date.parse(frozenProfile.validationCutoff);
         const historicalCandles = deepSource.candles.filter((candle) => {
           const timestamp = Date.parse(candle.timestamp);

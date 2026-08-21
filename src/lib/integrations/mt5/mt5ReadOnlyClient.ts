@@ -153,8 +153,14 @@ const selectedBrokerSymbol = (
   settingsBrokerSymbol?: string
 ) => requestBrokerSymbol?.trim() || settingsBrokerSymbol?.trim() || defaultSettings.brokerSymbolOverride;
 
-const fetchJson = async <T>(url: string): Promise<T> => {
+const fetchJson = async <T>(url: string, signal?: AbortSignal): Promise<T> => {
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(signal?.reason);
+  if (signal?.aborted) {
+    abortFromCaller();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
   const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, {
@@ -167,6 +173,7 @@ const fetchJson = async <T>(url: string): Promise<T> => {
     return (await response.json()) as T;
   } finally {
     globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromCaller);
   }
 };
 
@@ -357,6 +364,7 @@ export interface Mt5ReadOnlyDateRangeRequest {
   symbol: string;
   timeframe: string;
   to: string;
+  signal?: AbortSignal;
 }
 
 export interface Mt5ReadOnlyChunkedHistoryRequest {
@@ -368,6 +376,7 @@ export interface Mt5ReadOnlyChunkedHistoryRequest {
   symbol: string;
   timeframe: string;
   to?: string;
+  signal?: AbortSignal;
 }
 
 export interface Mt5ReadOnlyHistoryChunk {
@@ -446,7 +455,8 @@ export async function fetchMt5CandlesByDateRange(
         from: request.from,
         to: request.to,
         limit: safeLimit
-      })
+      }),
+      request.signal
     );
     const candles = normalizeAndDeduplicateCandles(Array.isArray(payload.candles) ? payload.candles : []);
     return {
@@ -500,14 +510,17 @@ export async function fetchMt5CandlesInChunks(
   const chunks: Mt5ReadOnlyHistoryChunk[] = [];
   const candles: Mt5ReadOnlyCandlesResponse["candles"] = [];
   for (const window of windows) {
+    request.signal?.throwIfAborted();
     const response = await fetchMt5CandlesByDateRange({
       brokerSymbol,
       from: window.from,
       limit: limitPerChunk,
       symbol: request.symbol,
       timeframe: request.timeframe,
-      to: window.to
+      to: window.to,
+      signal: request.signal
     }, settings);
+    request.signal?.throwIfAborted();
     chunks.push({
       from: window.from,
       to: window.to,
