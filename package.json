@@ -16,6 +16,7 @@
     "test:g2-1-activate-market": "node scripts/test-ict-activate-market-pipeline.mjs",
     "test:g2-1-signal-contract": "node scripts/test-ict-signal-contract.mjs",
     "test:g2-1-operator-console": "node scripts/test-operator-console.mjs",
+    "test:g2-2-final-geometry": "node scripts/test-g2-2-final-geometry-acceptance.mjs",
     "dev": "vite --host 127.0.0.1",
     "start:local-stack": "node scripts/start-local-stack.mjs",
     "stop:local-stack": "node scripts/stop-local-stack.mjs",

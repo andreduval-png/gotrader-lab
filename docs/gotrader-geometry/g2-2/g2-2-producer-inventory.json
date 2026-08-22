@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "gotrader-g2-2-producer-inventory-v1",
+  "baselineCommit": "7b7e912bf043a54dd4bbf823b79fb9c259d05b7f",
+  "baselineTree": "5c40ccfec11ddaf98f30e1d2ed11ae9d0d8521d7",
+  "entries": [
+    { "name": "ICT 2022", "owner": "ict2022Model", "classification": "CANONICAL_DIRECT", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Power of Three deterministic objective", "owner": "ictPowerOfThreeModel", "classification": "CANONICAL_DIRECT", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "MMBM", "owner": "marketMakerModelCore", "classification": "CANONICAL_DIRECT", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "MMSM", "owner": "marketMakerModelCore", "classification": "CANONICAL_DIRECT", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Liquidity Reclaim Scalper", "owner": "lrsR1", "classification": "CANONICAL_DIRECT", "actionabilityMode": "ISOLATED_RESEARCH_LANE" },
+    { "name": "IFVG v1", "owner": "ictIfvg", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "IFVG v2", "owner": "ictIfvgFilteredV2", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "IFVG v3", "owner": "ictIfvgFreshRetestV3", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "ACTIVE_RESEARCH_PROFILE" },
+    { "name": "IFVG v4", "owner": "ictIfvgShallowRetestV4", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Silver Bullet v1", "owner": "ictSilverBullet", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Silver Bullet v2", "owner": "ictSilverBulletV2", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Turtle Soup", "owner": "ictTurtleSoup", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "CISD", "owner": "ictCisd", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "London Raid v1", "owner": "ictSessionRaidReversal", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "London Raid v2", "owner": "ictSessionRaidReversalV2", "classification": "CANONICAL_LOSSLESS_ADAPTER", "actionabilityMode": "RESEARCH_ONLY" },
+    { "name": "Bread and Butter buy", "owner": "ictPhase2BreadAndButter", "classification": "SOURCE_BLOCKED", "actionabilityMode": "NONE" },
+    { "name": "Bread and Butter sell", "owner": "ictPhase2BreadAndButter", "classification": "SOURCE_BLOCKED", "actionabilityMode": "NONE" },
+    { "name": "OSOK", "owner": "ictPhase2OneShotOneKill", "classification": "SOURCE_BLOCKED", "actionabilityMode": "NONE" },
+    { "name": "PO3 ambiguous or HOD/LOD objective", "owner": "ictPowerOfThreeModel", "classification": "SOURCE_BLOCKED", "actionabilityMode": "NONE" },
+    { "name": "CMD High Displacement v2", "owner": "ictCmdHighDisplacementV2", "classification": "SOURCE_BLOCKED", "actionabilityMode": "NONE", "blockerClass": "LEGACY_GEOMETRY_NOT_MIGRATED" },
+    { "name": "Judas Swing", "owner": "ictJudasSwingModel", "classification": "NON_EXECUTABLE", "actionabilityMode": "NONE" },
+    { "name": "MMXM", "owner": "ictMmxmFramework", "classification": "NON_EXECUTABLE", "actionabilityMode": "NONE" },
+    { "name": "Market map and phase 1/2 advisor", "owner": "ictAdvisorEngine", "classification": "NON_EXECUTABLE", "actionabilityMode": "NONE" }
+  ]
+}
