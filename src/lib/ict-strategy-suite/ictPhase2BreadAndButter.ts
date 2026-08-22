@@ -1,5 +1,6 @@
 import type { IctAdvisorSignal } from "./ictAdvisorTypes";
 import {
+  addApprovedProfileDecision,
   buildPhase2BaseSignal,
   buildPhase2MarketContext,
   selectBestOrderBlockCandidate,
@@ -26,6 +27,38 @@ const confluenceReasons = ({
     !blockMatches ? `Order-block direction does not support a ${side} Bread & Butter model.` : ""
   ].filter(Boolean);
 
+const BREAD_AND_BUTTER_SOURCE_BLOCKERS = Object.freeze([
+  "BREAD_AND_BUTTER_PD_ARRAY_PRECEDENCE_SOURCE_BLOCKED",
+  "BREAD_AND_BUTTER_CANONICAL_IRL_ERL_IDENTITY_REQUIRED",
+  "BREAD_AND_BUTTER_STRUCTURAL_RETRACEMENT_SWING_REQUIRED"
+]);
+
+const sourceBlockedBreadAndButter = (signal: IctAdvisorSignal, direction: "LONG" | "SHORT"): IctAdvisorSignal => addApprovedProfileDecision({
+  ...signal,
+  decision: "no_trade",
+  entryZone: undefined,
+  entryReference: undefined,
+  invalidation: undefined,
+  target: undefined,
+  targetProvenance: undefined,
+  rrEstimate: undefined,
+  noTradeReasons: Array.from(new Set([...signal.noTradeReasons, ...BREAD_AND_BUTTER_SOURCE_BLOCKERS])),
+  strategyGeometryIntent: {
+    status: "SOURCE_BLOCKED",
+    strategyId: signal.strategyId,
+    strategyVersion: "phase-2-source-gate-v1",
+    direction,
+    geometryPolicyId: "gotrader.g2-1.bread-and-butter.source-native",
+    geometryPolicyVersion: "1.0.0",
+    entryPolicyId: "bread-and-butter.irl-pd-array-retracement.source-blocked",
+    stopPolicyId: "bread-and-butter.structural-retracement-swing.required",
+    targetPolicyId: "bread-and-butter.daily-erl-or-profile-bounded-objective.required",
+    targetPrecedencePolicyId: "bread-and-butter.pd-array-precedence.source-blocked",
+    unresolvedRules: BREAD_AND_BUTTER_SOURCE_BLOCKERS,
+    supportingFactIds: []
+  }
+});
+
 export const evaluateIctPhase2BreadAndButterBuy = (context: IctPhase2SignalContext): IctAdvisorSignal => {
   const market = buildPhase2MarketContext(context);
   const orderBlock = selectBestOrderBlockCandidate({ candles: context.candles, primaryTimeframe: context.primaryTimeframe });
@@ -38,7 +71,7 @@ export const evaluateIctPhase2BreadAndButterBuy = (context: IctPhase2SignalConte
     side: "long"
   });
   const valid = noTradeReasons.length === 0;
-  return buildPhase2BaseSignal({
+  return sourceBlockedBreadAndButter(buildPhase2BaseSignal({
     confidence: valid ? Math.min(0.82, 0.56 + (orderBlock?.confidence ?? 0) * 0.28) : Math.min(0.36, 0.16 + (orderBlock?.confidence ?? 0) * 0.2),
     context: market,
     decision: valid ? "research_only" : "no_trade",
@@ -53,7 +86,7 @@ export const evaluateIctPhase2BreadAndButterBuy = (context: IctPhase2SignalConte
     riskNotes: [
       "Bread & Butter buy requires bullish directional agreement, order-block evidence, sweep, and displacement before profile review."
     ]
-  });
+  }), "LONG");
 };
 
 export const evaluateIctPhase2BreadAndButterSell = (context: IctPhase2SignalContext): IctAdvisorSignal => {
@@ -68,7 +101,7 @@ export const evaluateIctPhase2BreadAndButterSell = (context: IctPhase2SignalCont
     side: "short"
   });
   const valid = noTradeReasons.length === 0;
-  return buildPhase2BaseSignal({
+  return sourceBlockedBreadAndButter(buildPhase2BaseSignal({
     confidence: valid ? Math.min(0.82, 0.56 + (orderBlock?.confidence ?? 0) * 0.28) : Math.min(0.36, 0.16 + (orderBlock?.confidence ?? 0) * 0.2),
     context: market,
     decision: valid ? "research_only" : "no_trade",
@@ -83,7 +116,7 @@ export const evaluateIctPhase2BreadAndButterSell = (context: IctPhase2SignalCont
     riskNotes: [
       "Bread & Butter sell requires bearish directional agreement, order-block evidence, sweep, and displacement before profile review."
     ]
-  });
+  }), "SHORT");
 };
 
 export const evaluateIctPhase2OrderBlockTaxonomy = (context: IctPhase2SignalContext): IctAdvisorSignal => {

@@ -246,6 +246,14 @@ async function main() {
   assert.equal(sell.strategyId, "ict-bread-and-butter-sell");
   assert.equal(osok.strategyId, "ict-one-shot-one-kill");
   assert.ok(["research_only", "no_trade"].includes(osok.decision), "OSOK must only emit research_only or no_trade");
+  for (const signal of [buy, sell, osok]) {
+    assert.equal(signal.decision, "no_trade", `${signal.strategyId} must fail closed until source-native geometry identities exist`);
+    assert.equal(signal.entryZone, undefined, `${signal.strategyId} must not publish a generic midpoint entry`);
+    assert.equal(signal.invalidation, undefined, `${signal.strategyId} must not publish recent-bar invalidation as structural geometry`);
+    assert.equal(signal.target, undefined, `${signal.strategyId} must not publish nearest liquidity as its native objective`);
+    assert.equal(signal.rrEstimate, undefined, `${signal.strategyId} must not publish R:R for source-blocked geometry`);
+    assert.equal(signal.strategyGeometryIntent?.status, "SOURCE_BLOCKED");
+  }
 
   const advisorSignals = suite.buildIctAdvisorSignals({
     brokerSymbol: "USTECH",

@@ -9,11 +9,18 @@ import {
 } from "./ictStrategySuiteHelpers";
 import type { IctAdvisorSignal } from "./ictAdvisorTypes";
 import {
+  addApprovedProfileDecision,
   buildPhase2BaseSignal,
   buildPhase2MarketContext,
   selectBestOrderBlockCandidate,
   type IctPhase2SignalContext
 } from "./ictPhase2OrderBlocks";
+
+const OSOK_SOURCE_BLOCKERS = Object.freeze([
+  "OSOK_CANONICAL_WEEKLY_OBJECTIVE_REQUIRED",
+  "OSOK_CANONICAL_PD_ARRAY_ENTRY_REQUIRED",
+  "OSOK_STRUCTURAL_INVALIDATION_IDENTITY_REQUIRED"
+]);
 
 export const evaluateIctPhase2OneShotOneKill = (context: IctPhase2SignalContext): IctAdvisorSignal => {
   const market = buildPhase2MarketContext(context);
@@ -70,25 +77,28 @@ export const evaluateIctPhase2OneShotOneKill = (context: IctPhase2SignalContext)
       "OSOK is the strictest Phase 2 research model and cannot bypass approved setup, evidence, maturity, or readiness gates."
     ]
   });
-  const profileStatus = signal.approvedProfileDecision?.status;
-  if (
-    valid &&
-    profileStatus !== "approved_research_candidate" &&
-    profileStatus !== "paper_watchlist_candidate" &&
-    profileStatus !== "watchlist_candidate"
-  ) {
-    return {
-      ...signal,
-      decision: "no_trade",
-      side: "flat",
-      setup: "no_trade",
-      noTradeReasons: Array.from(
-        new Set([
-          ...signal.noTradeReasons,
-          `OSOK failed approved setup profile review: ${profileStatus ?? "unknown"}.`
-        ])
-      )
-    };
-  }
-  return signal;
+  return addApprovedProfileDecision({
+    ...signal,
+    decision: "no_trade",
+    entryZone: undefined,
+    entryReference: undefined,
+    invalidation: undefined,
+    target: undefined,
+    targetProvenance: undefined,
+    rrEstimate: undefined,
+    noTradeReasons: Array.from(new Set([...signal.noTradeReasons, ...OSOK_SOURCE_BLOCKERS])),
+    strategyGeometryIntent: {
+      status: "SOURCE_BLOCKED",
+      strategyId: signal.strategyId,
+      strategyVersion: "phase-2-source-gate-v1",
+      direction: expectedDirection === "bullish" ? "LONG" : expectedDirection === "bearish" ? "SHORT" : undefined,
+      geometryPolicyId: "gotrader.g2-1.osok.source-native",
+      geometryPolicyVersion: "1.0.0",
+      entryPolicyId: "osok.planned-opportunity-pd-array.required",
+      stopPolicyId: "osok.structural-invalidation.required",
+      targetPolicyId: "osok.predetermined-weekly-objective.required",
+      unresolvedRules: OSOK_SOURCE_BLOCKERS,
+      supportingFactIds: []
+    }
+  });
 };
