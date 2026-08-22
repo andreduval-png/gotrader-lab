@@ -424,9 +424,7 @@ async function main() {
   assert.equal(savedSummaries[0].weeklyBiasStatus, "loaded");
   assert.equal(savedSummaries[0].weeklyBiasDirection, success.summary.weeklyBiasDirection);
   assert.equal(savedSummaries[0].weeklyBiasDirection, "bearish");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.type, "previous_day_low");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.sourceTimeframe, "daily");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.gateStatus, "accepted");
+  assert.equal(savedSummaries[0].proposedTargetProvenance, undefined, "signal-only geometry must not be promoted into the plan");
   assert.doesNotMatch(JSON.stringify(savedSummaries[0]), /"(?:candles|rawCandles|rawSnapshots)"\s*:/i);
   assertSafe(success);
   assert.match(suite.summarizeActivateMarketResult(success), /execution disabled/i);
@@ -637,9 +635,9 @@ async function main() {
     { saveLatestSummary: () => undefined }
   );
   assert.equal(rejectedWithCanonicalEntry.summary.proposedCandidateStatus, "rejected");
-  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryPrice, 23124.75);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryPrice, undefined);
   assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryZone, undefined);
-  assert.equal(rejectedWithCanonicalEntry.summary.proposedStopLoss, 23156.25);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedStopLoss, undefined);
   assertSafe(rejectedWithCanonicalEntry);
 
   globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
@@ -664,8 +662,8 @@ async function main() {
     undefined,
     { saveLatestSummary: () => undefined }
   );
-  assert.equal(mismatchedScannerCandidate.summary.researchSide, "short");
-  assert.equal(mismatchedScannerCandidate.summary.proposedEntryPrice, 23100);
+  assert.equal(mismatchedScannerCandidate.summary.researchSide, "long", "scanner candidate owns side; signal fallback is ignored");
+  assert.equal(mismatchedScannerCandidate.summary.proposedEntryPrice, undefined);
   assert.equal(mismatchedScannerCandidate.summary.proposedCandidateStatus, "rejected");
   assertSafe(mismatchedScannerCandidate);
 

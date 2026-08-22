@@ -65,6 +65,18 @@ const currentReadFixture = (overrides = {}) => ({
   bestPhase2Setup: "ict-bread-and-butter-buy",
   bestSetup: "ict-bread-and-butter-buy",
   side: "long",
+  geometryMode: "canonical",
+  canonicalGeometry: {
+    schemaVersion: "gotrader.trade-geometry.v1", geometryVersion: "g2.1.0", geometryId: "signal-geometry-fixture",
+    logicalGeometryKey: "signal-logical-fixture", strategyId: "ict-2022-model", strategyVersion: "test", candidateId: "signal-candidate-fixture",
+    direction: "LONG", entry: { model: "NATIVE", intendedPrice: 30519.5, lifecycleStatus: "WAITING_FOR_ENTRY" },
+    stop: { model: "NATIVE", price: 30490.25, structuralInvalidation: true },
+    target: { model: "NATIVE", price: 30625.5, targetId: "target", targetType: "DRAW_ON_LIQUIDITY", selectionRole: "PRIMARY", policyId: "native", policyVersion: "1" },
+    targetPolicy: { policyId: "native", policyVersion: "1", primaryTargetType: "DRAW_ON_LIQUIDITY", primaryTargetId: "target", allowedFallbackTargetTypes: [] },
+    riskDistance: 29.25, rewardDistance: 106, theoreticalRR: 2.3, minimumRequiredRR: 2, geometryValid: true, actionable: true,
+    status: "VALID_ACTIONABLE", blockers: [], warnings: [], sourceFingerprint: "signal_contract_fixture_fp",
+    authority: { execution: "none", broker: "none", production: "none" }
+  },
   approvedStatus: "approved_research_candidate",
   modelQualityLane: "approved",
   paperWatchlistEligible: false,
@@ -163,8 +175,8 @@ async function main() {
   const approved = suite.buildIctResearchSignalFromCurrentRead(currentReadFixture(), latestStateFixture("strong"));
   assert.equal(approved.status, "approved_research_signal");
   assert.equal(approved.side, "long");
-  assert.equal(approved.entryZone.low, 30510.25);
-  assert.equal(approved.entryZone.high, 30528.75);
+  assert.equal(approved.entryZone.low, 30519.5);
+  assert.equal(approved.entryZone.high, 30519.5);
   assert.equal(approved.monteCarlo.robustnessRating, "strong");
   assert.equal(approved.monteCarlo.riskOfRuinPct, 2.4);
   assert.equal(approved.monteCarlo.recommendedMaxRiskPerTradePct, 0.35);
