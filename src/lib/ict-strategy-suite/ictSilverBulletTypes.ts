@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/types";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctSilverBulletSessionId = "london_open" | "new_york_am" | "new_york_pm";
 export type IctSilverBulletSide = "long" | "short" | "flat";
@@ -93,6 +94,7 @@ export interface IctSilverBulletCandidate {
   stop?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   blockers: string[];
   warnings: string[];
   presentConditions: string[];

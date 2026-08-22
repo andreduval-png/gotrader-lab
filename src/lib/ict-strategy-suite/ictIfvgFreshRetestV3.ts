@@ -1,5 +1,6 @@
 import { evaluateIctIfvg } from "./ictIfvg";
 import type { IctIfvgCandidate, IctIfvgInput } from "./ictIfvgTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -37,6 +38,7 @@ export interface IctIfvgFreshRetestV3Assessment {
   signalFresh: boolean;
   eligible: boolean;
   blockers: string[];
+  geometry?: CanonicalTradeGeometry;
   researchOnly: true;
   authority: typeof authority;
 }
@@ -61,6 +63,7 @@ export interface IctIfvgFreshRetestV3CompactAssessment {
   invalidation?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   blockers: string[];
   missingConditions: string[];
   nextAction: string;
@@ -135,6 +138,7 @@ export const compactIctIfvgFreshRetestV3Assessment = (
     invalidation: candidate.stop,
     target: candidate.target,
     rr: candidate.rr,
+    geometry: assessment.geometry,
     blockers: Array.from(new Set(assessment.blockers)).slice(0, 8),
     missingConditions: Array.from(new Set(candidate.missingConditions)).slice(0, 8),
     nextAction,

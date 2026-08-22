@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/types";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctCisdSide = "long" | "short" | "flat";
 export type IctCisdDeliveryDirection = "bullish" | "bearish" | "mixed" | "unknown";
@@ -86,6 +87,7 @@ export interface IctCisdCandidate {
   stop?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   blockers: string[];
   warnings: string[];
   presentConditions: string[];

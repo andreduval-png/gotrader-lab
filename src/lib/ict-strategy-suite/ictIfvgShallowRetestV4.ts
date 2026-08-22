@@ -1,5 +1,6 @@
 import { assessIctIfvgFreshRetestV3 } from "./ictIfvgFreshRetestV3";
 import type { IctIfvgCandidate, IctIfvgInput } from "./ictIfvgTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -32,6 +33,7 @@ export interface IctIfvgShallowRetestV4Assessment {
   shallowRetest: boolean;
   eligible: boolean;
   blockers: string[];
+  geometry?: CanonicalTradeGeometry;
   nextAction: string;
   researchOnly: true;
   paperDemoEligible: false;

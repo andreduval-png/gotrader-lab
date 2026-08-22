@@ -1,5 +1,6 @@
 import type { Candle } from "@/lib/types";
 import type { IctTradeConstructionResult } from "./ictTradeConstructionTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctIfvgSide = "long" | "short" | "flat";
 export type IctIfvgOriginalDirection = "bullish" | "bearish";
@@ -90,6 +91,7 @@ export interface IctIfvgCandidate {
   stop?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   tradeConstruction?: IctTradeConstructionResult;
   htfAlignment: IctIfvgHtfAlignment;
   htfDirections: string[];
