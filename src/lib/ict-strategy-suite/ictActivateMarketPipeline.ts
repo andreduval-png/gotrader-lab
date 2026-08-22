@@ -25,6 +25,7 @@ import type {
   IctActivateMarketStep,
   IctActivateMarketStepId
 } from "./ictActivateMarketPipelineTypes";
+import { projectCanonicalTradeGeometry } from "../tradeGeometry";
 
 const LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v1";
 export const ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v2";
@@ -211,6 +212,9 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
         : undefined,
       proposedCandidateStatus: typeof parsed.proposedCandidateStatus === "string"
         ? parsed.proposedCandidateStatus as IctActivateMarketLatestSummary["proposedCandidateStatus"]
+        : undefined,
+      proposedGeometry: parsed.proposedGeometry && typeof parsed.proposedGeometry === "object"
+        ? parsed.proposedGeometry as IctActivateMarketLatestSummary["proposedGeometry"]
         : undefined,
       proposedEntryPrice: asFiniteNumber(parsed.proposedEntryPrice),
       proposedEntryZone:
@@ -513,6 +517,7 @@ const buildLatestSummary = (
   selfImprovementHypothesisReason: result.summary.selfImprovementHypothesisReason,
   researchSide: result.summary.researchSide,
   proposedCandidateStatus: result.summary.proposedCandidateStatus,
+  proposedGeometry: result.summary.proposedGeometry,
   proposedEntryPrice: result.summary.proposedEntryPrice,
   proposedEntryZone: result.summary.proposedEntryZone,
   proposedStopLoss: result.summary.proposedStopLoss,
@@ -921,15 +926,33 @@ export async function runIctActivateMarketPipeline(
     const currentCandidate = currentRead?.currentOpportunitySummary?.topOpportunity
       ?? currentRead?.currentOpportunitySummary?.topNearMiss
       ?? currentRead?.currentOpportunitySummary?.topRejected;
-    const planSide = signalContract?.side ?? currentRead?.side;
-    const matchingCandidate = currentCandidate && currentCandidate.side === planSide
-      ? currentCandidate
+    const currentCandidateProjection = currentCandidate?.geometry
+      ? projectCanonicalTradeGeometry(currentCandidate.geometry)
       : undefined;
+    const detectorOwnsPlan = Boolean(
+      currentCandidateProjection &&
+      (currentCandidate?.side === "long" || currentCandidate?.side === "short")
+    );
+    const planSide = currentCandidate?.side ?? "flat";
+    const matchingCandidate = currentCandidate;
     const signalCandidateStatus = signalContract?.status === "rejected_signal"
       ? "rejected" as const
       : signalContract?.status === "no_signal"
         ? "no_trade" as const
         : undefined;
+    const candidateProjection = currentCandidateProjection;
+    const candidateTargetProvenance = detectorOwnsPlan && matchingCandidate?.geometry?.target
+      ? {
+          type: matchingCandidate.geometry.target.targetType,
+          sourceTimeframe: matchingCandidate.geometry.target.ownerTimeframe,
+          selectionReason: `Detector-owned target from ${matchingCandidate.geometry.target.policyId}.`,
+          distancePoints: matchingCandidate.geometry.rewardDistance,
+          rr: matchingCandidate.geometry.theoreticalRR,
+          minimumRR: matchingCandidate.geometry.minimumRequiredRR ?? 2,
+          gateStatus: matchingCandidate.geometry.actionable ? "accepted" as const : "rejected" as const,
+          rejectionReasons: matchingCandidate.geometry.blockers.slice()
+        }
+      : undefined;
     return {
       researchOnly: true,
       status,
@@ -992,17 +1015,15 @@ export async function runIctActivateMarketPipeline(
         recommendedMaxRiskReason: latestMonteCarlo.recommendedMaxRiskReason,
         researchSide: planSide,
         proposedCandidateStatus: matchingCandidate?.status ?? signalCandidateStatus,
-        proposedEntryPrice: signalContract?.entryReference
-          ?? signalContract?.entryZone?.midpoint
-          ?? currentRead?.entryReference
-          ?? matchingCandidate?.entry,
-        proposedEntryZone: signalContract?.entryZone
-          ? { lower: signalContract.entryZone.low, upper: signalContract.entryZone.high }
+        proposedGeometry: matchingCandidate?.geometry,
+        proposedEntryPrice: candidateProjection?.intendedEntry,
+        proposedEntryZone: candidateProjection
+          ? { lower: candidateProjection.intendedEntry, upper: candidateProjection.intendedEntry }
           : undefined,
-        proposedStopLoss: signalContract?.invalidation,
-        proposedTakeProfit: signalContract?.target,
-        proposedTargetProvenance: signalContract?.targetProvenance,
-        proposedRiskReward: signalContract?.rrEstimate,
+        proposedStopLoss: candidateProjection?.intendedStop,
+        proposedTakeProfit: candidateProjection?.intendedTarget,
+        proposedTargetProvenance: candidateTargetProvenance,
+        proposedRiskReward: candidateProjection?.theoreticalRR,
         riskScreeningStatus: currentRead?.riskStatus,
         riskScreeningReason: currentRead?.riskReason,
         nextAction: operatorWorkflow?.recommendedAction ?? currentRead?.nextAction,

@@ -27,6 +27,7 @@ import type {
   IctSessionModelState,
   IctSessionNarrativeProfile
 } from "./ictSessionNarrativeTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctResearchSignalStatus =
   | "approved_research_signal"
@@ -85,6 +86,11 @@ export interface IctResearchSignal {
   setup?: string;
   phase?: "phase_1" | "phase_2" | "combined";
   side: IctSide;
+  geometryMode: "canonical" | "unavailable";
+  canonicalGeometry?: CanonicalTradeGeometry;
+  canonicalGeometryId?: string;
+  geometryStatus?: CanonicalTradeGeometry["status"];
+  actionable: boolean;
   entryReference?: number;
   entryZone?: IctResearchSignalEntryZone;
   invalidation?: number;

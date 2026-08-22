@@ -1,4 +1,5 @@
 import type { IctCurrentRead, IctReadinessSummary } from "./ictCurrentReadTypes";
+import type { CanonicalTradeGeometry } from "../tradeGeometry";
 import type { IctAdvisorPacket } from "./ictAdvisorTypes";
 import type {
   IctAnalysisDepthStatus,
@@ -119,6 +120,7 @@ export interface IctActivateMarketLatestSummary {
   selfImprovementHypothesisReason?: string;
   researchSide?: IctCurrentRead["side"];
   proposedCandidateStatus?: CurrentOpportunity["status"];
+  proposedGeometry?: CanonicalTradeGeometry;
   proposedEntryPrice?: number;
   proposedEntryZone?: { lower: number; upper: number };
   proposedStopLoss?: number;
@@ -226,6 +228,7 @@ export interface IctActivateMarketResult {
     recommendedMaxRiskReason?: string;
     researchSide?: IctCurrentRead["side"];
     proposedCandidateStatus?: CurrentOpportunity["status"];
+    proposedGeometry?: CanonicalTradeGeometry;
     proposedEntryPrice?: number;
     proposedEntryZone?: { lower: number; upper: number };
     proposedStopLoss?: number;

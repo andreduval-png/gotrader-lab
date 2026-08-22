@@ -80,10 +80,19 @@ const phaseFor = (currentRead: IctCurrentRead): IctResearchSignal["phase"] => {
   return currentRead.bestPhase2Setup ? "phase_2" : currentRead.bestPhase1Setup ? "phase_1" : undefined;
 };
 
+const canonicalEntryZone = (currentRead: IctCurrentRead): IctResearchSignalEntryZone | undefined => {
+  const entry = currentRead.canonicalGeometry?.entry.intendedPrice;
+  return finite(entry) ? { low: entry, high: entry, midpoint: entry, type: "canonical_geometry_entry" } : undefined;
+};
+
 const buildBlockingReasons = (currentRead: IctCurrentRead) =>
   unique([
     !isDirectionalSide(currentRead.side) ? "Signal is flat or non-directional." : undefined,
-    !parseEntryZone(currentRead.entryZone) ? "Missing entry." : undefined,
+    !canonicalEntryZone(currentRead) ? "Missing canonical entry." : undefined,
+    !currentRead.canonicalGeometry ? "Canonical source-native geometry is unavailable." : undefined,
+    currentRead.canonicalGeometry && !currentRead.canonicalGeometry.actionable
+      ? `Canonical geometry is non-actionable: ${formatToken(currentRead.canonicalGeometry.status)}.`
+      : undefined,
     !finite(currentRead.target) ? "Missing target." : undefined,
     !finite(currentRead.invalidation) ? "Missing invalidation." : undefined,
     !finite(currentRead.rrEstimate) ? "Missing RR estimate." : undefined,
@@ -111,13 +120,14 @@ export const classifyResearchSignalStatus = (
   if (currentRead.approvedStatus === "no_trade" || currentRead.side === "flat") return "no_signal";
   const blockers = buildBlockingReasons(currentRead);
   const hasCriticalBlocker = blockers.some((reason) =>
-    /Missing entry|Missing target|Missing invalidation|Risk governor|SMT\/relative strength rejects|rejected|data is missing|data is unavailable/i.test(reason)
+    /Missing canonical entry|Canonical source-native geometry|non-actionable|Missing target|Missing invalidation|Risk governor|SMT\/relative strength rejects|rejected|data is missing|data is unavailable/i.test(reason)
   );
   if (currentRead.approvedStatus === "rejected_candidate" || hasCriticalBlocker) return "rejected_signal";
   if (
     currentRead.approvedStatus === "approved_research_candidate" &&
     isDirectionalSide(currentRead.side) &&
-    Boolean(parseEntryZone(currentRead.entryZone)) &&
+    Boolean(canonicalEntryZone(currentRead)) &&
+    currentRead.canonicalGeometry?.actionable === true &&
     finite(currentRead.target) &&
     finite(currentRead.invalidation) &&
     finite(currentRead.rrEstimate) &&
@@ -129,7 +139,8 @@ export const classifyResearchSignalStatus = (
   if (
     currentRead.approvedStatus === "paper_watchlist_candidate" &&
     isDirectionalSide(currentRead.side) &&
-    Boolean(parseEntryZone(currentRead.entryZone)) &&
+    Boolean(canonicalEntryZone(currentRead)) &&
+    currentRead.canonicalGeometry?.actionable === true &&
     finite(currentRead.target) &&
     finite(currentRead.invalidation) &&
     finite(currentRead.rrEstimate) &&
@@ -249,12 +260,17 @@ export const buildIctResearchSignalFromCurrentRead = (
     setup: currentRead.bestSetup,
     phase: phaseFor(currentRead),
     side: currentRead.side,
-    entryReference: currentRead.entryReference,
-    entryZone: parseEntryZone(currentRead.entryZone),
-    invalidation: currentRead.invalidation,
-    target: currentRead.target,
+    geometryMode: currentRead.geometryMode,
+    canonicalGeometry: currentRead.canonicalGeometry,
+    canonicalGeometryId: currentRead.canonicalGeometry?.geometryId,
+    geometryStatus: currentRead.canonicalGeometry?.status,
+    actionable: currentRead.canonicalGeometry?.actionable === true,
+    entryReference: currentRead.canonicalGeometry?.entry.intendedPrice,
+    entryZone: canonicalEntryZone(currentRead),
+    invalidation: currentRead.canonicalGeometry?.stop.price,
+    target: currentRead.canonicalGeometry?.target?.price,
     targetProvenance: currentRead.targetProvenance,
-    rrEstimate: currentRead.rrEstimate,
+    rrEstimate: currentRead.canonicalGeometry?.theoreticalRR,
     confidence: currentRead.confidence,
     approvedProfileStatus: currentRead.approvedStatus,
     modelQualityLane: currentRead.modelQualityLane,
