@@ -21,6 +21,7 @@ import type {
   IctReadinessSummary
 } from "./ictCurrentReadTypes";
 import type { IctAnalysisTimeframe } from "./ictMarketAnalysisContextTypes";
+import { projectCanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -606,6 +607,7 @@ export const buildUnavailableIctCurrentRead = (
   weeklyBiasReason: "W1 context unavailable from MT5 range endpoint.",
   htfTimeframes: [],
   dataStatus: "unavailable",
+  geometryMode: "unavailable",
   side: "flat",
   approvedStatus: "no_trade",
   modelQualityLane: "no_trade",
@@ -946,6 +948,11 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
       }
     })
   );
+  const canonicalCandidate = currentOpportunityScan.summary.topOpportunity
+    ?? currentOpportunityScan.summary.topNearMiss
+    ?? currentOpportunityScan.summary.topRejected;
+  const canonicalGeometry = canonicalCandidate?.geometry;
+  const canonicalProjection = canonicalGeometry ? projectCanonicalTradeGeometry(canonicalGeometry) : undefined;
 
   const currentRead: IctCurrentRead = {
     researchOnly: true,
@@ -976,7 +983,7 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     bestPhase1Setup: bestPhase1?.setup,
     bestPhase2Setup: bestPhase2?.setup,
     bestSetup: recommended.setup,
-    side: recommended.side,
+    side: canonicalGeometry ? (canonicalGeometry.direction === "LONG" ? "long" : "short") : recommended.side,
     approvedStatus: packet.approvedProfileDecision.status,
     modelQualityLane,
     universalRecognition,
@@ -1026,10 +1033,22 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     executionAllowed: false,
     approvalScore: packet.approvedProfileDecision.approvalScore,
     confidence: adjustedConfidence,
-    rrEstimate: recommended.rrEstimate,
-    target: recommended.target,
-    targetProvenance: recommended.targetProvenance,
-    invalidation: recommended.invalidation,
+    rrEstimate: canonicalProjection?.theoreticalRR,
+    canonicalGeometry,
+    geometryMode: canonicalGeometry ? "canonical" : "unavailable",
+    geometryStatus: canonicalGeometry?.status,
+    target: canonicalProjection?.intendedTarget,
+    targetProvenance: canonicalGeometry?.target ? {
+      type: canonicalGeometry.target.targetType,
+      sourceTimeframe: canonicalGeometry.target.ownerTimeframe,
+      selectionReason: `Canonical detector-owned target from ${canonicalGeometry.target.policyId}.`,
+      distancePoints: canonicalGeometry.rewardDistance,
+      rr: canonicalGeometry.theoreticalRR,
+      minimumRR: canonicalGeometry.minimumRequiredRR ?? 2,
+      gateStatus: canonicalGeometry.actionable ? "accepted" : "rejected",
+      rejectionReasons: [...canonicalGeometry.blockers]
+    } : undefined,
+    invalidation: canonicalProjection?.intendedStop,
     bias: recommended.bias.composite,
     smtStatus,
     riskStatus,
@@ -1038,8 +1057,8 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     liquiditySwept: liquidityLabel(recommended.liquiditySwept),
     fvgStatus: fvgStatusFor(recommended),
     displacementStatus: displacementStatusFor(recommended),
-    entryReference: recommended.entryReference ?? recommended.entryZone?.midpoint,
-    entryZone: entryZoneLabel(recommended.entryZone),
+    entryReference: canonicalProjection?.intendedEntry,
+    entryZone: canonicalProjection ? `${canonicalProjection.intendedEntry} to ${canonicalProjection.intendedEntry}` : undefined,
     ...latestResearchSummaryFor(latestState, packet),
     sessionNarrativeProfile,
     sessionDirectionalRead: packet.sessionNarrative?.directionalRead ?? packet.compactSummary.sessionDirectionalRead,
