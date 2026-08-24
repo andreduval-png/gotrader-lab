@@ -307,7 +307,8 @@ const ifvgFilteredV2Opportunity = (context: CurrentOpportunityContext): CurrentO
   return opportunity(context, {
     strategyId: "ifvg_filtered_v2_research",
     model: "IFVG filtered v2",
-    status,
+    status: "diagnostic_context",
+    classification: "diagnostic",
     setupName: "IFVG filtered v2 - clean retest displacement",
     thesis:
       "Filtered IFVG v2 is the current best IFVG research profile: clean retest plus displacement confirmation, then replay and walk-forward before any Paper-Demo consideration.",
@@ -561,6 +562,7 @@ const strategyDiagnostics = (context: CurrentOpportunityContext): CurrentOpportu
       ],
       nextAction: "Use the causal IFVG fresh-retest v3 profile instead of promoting raw IFVG v1."
     }),
+    ifvgFilteredV2Opportunity(context),
     ifvgFreshRetestV3Opportunity(context),
     opportunity(context, {
       strategyId: "market_map_only_diagnostic_v1",

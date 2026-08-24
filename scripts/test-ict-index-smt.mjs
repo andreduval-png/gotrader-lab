@@ -12,6 +12,13 @@ const mt5Root = path.join(projectRoot, "src", "lib", "integrations", "mt5");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-index-smt-test");
 const sourceFiles = [
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: sourceRoot, file: "ictTradeConstruction.ts" },
+  { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvgProducerPolicy.ts" },
+  { root: sourceRoot, file: "ictIfvg.ts" },
+  { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
+  { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
   { root: sourceRoot, file: "ictGrinchModelTypes.ts" },
@@ -29,6 +36,14 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictMonteCarloTypes.ts" },
   { root: sourceRoot, file: "ictLatestResearchStateTypes.ts" },
   { root: sourceRoot, file: "ictLatestResearchState.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContextTypes.ts" },
+  { root: sourceRoot, file: "ictMarketAnalysisContext.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognitionTypes.ts" },
+  { root: sourceRoot, file: "ictUniversalRecognition.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetectionTypes.ts" },
+  { root: sourceRoot, file: "ictOpportunityDetection.ts" },
+  { root: sourceRoot, file: "ictSelfImprovementTypes.ts" },
+  { root: sourceRoot, file: "ictSelfImprovement.ts" },
   { root: sourceRoot, file: "ictSignalContractTypes.ts" },
   { root: sourceRoot, file: "ictSignalContract.ts" },
   { root: sourceRoot, file: "ictPaperSignalSimulatorTypes.ts" },
@@ -39,6 +54,8 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictAdvisorJournal.ts" },
   { root: sourceRoot, file: "ictStrategySuiteHelpers.ts" },
   { root: sourceRoot, file: "ictSessionNarrative.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: sourceRoot, file: "ictSessionRaidReversal.ts" },
   { root: sourceRoot, file: "ictStrategySuiteEngines.ts" },
   { root: sourceRoot, file: "ictPhase2OrderBlocks.ts" },
   { root: sourceRoot, file: "ictPhase2BreadAndButter.ts" },
@@ -60,8 +77,7 @@ const sourceFiles = [
   { root: mt5Root, file: "mt5SymbolSettings.ts" },
   { root: mt5Root, file: "mt5ReadOnlyNormalizer.ts" },
   { root: mt5Root, file: "mt5ReadOnlyDepth.ts" },
-  { root: mt5Root, file: "mt5ReadOnlyClient.ts" },
-  { root: sourceRoot, file: "index.ts" }
+  { root: mt5Root, file: "mt5ReadOnlyClient.ts" }
 ];
 
 function compileSuiteForNode() {
@@ -88,8 +104,16 @@ function compileSuiteForNode() {
       .replace(/from\s+'@\/lib\/integrations\/mt5\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/candleSources"/g, 'from "./candleSourcesStub.mjs"')
       .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const withRuntimeStubs = rewritten
+      .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
+      .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withRuntimeStubs, "utf8");
   }
+  fs.writeFileSync(path.join(outRoot, "index.mjs"), sourceFiles.filter(({ root }) => root === sourceRoot).map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`).join("\n"), "utf8");
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -101,6 +125,9 @@ export async function listCanonicalCandleSourceSummaries() {
 `,
     "utf8"
   );
+  fs.writeFileSync(path.join(outRoot, "currentOpportunityStub.mjs"), "export function buildCurrentOpportunityContext(input) { return input; }\nexport function detectCurrentOpportunities() { return { summary: { total: 0 }, opportunities: [] }; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export function projectCanonicalTradeGeometry() { return undefined; }\n", "utf8");
 }
 
 const candle = (id, timestamp, open, high, low, close, symbol = "MNQ") => ({

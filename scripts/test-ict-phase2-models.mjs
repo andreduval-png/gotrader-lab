@@ -15,6 +15,7 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvgProducerPolicy.ts" },
   { root: sourceRoot, file: "ictIfvg.ts" },
   { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
   { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
@@ -108,7 +109,10 @@ function compileSuiteForNode() {
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const withGeometryStub = rewritten
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withGeometryStub, "utf8");
   }
   fs.writeFileSync(
     path.join(outRoot, "index.mjs"),
@@ -141,6 +145,23 @@ export function detectCurrentOpportunities() {
   fs.writeFileSync(
     path.join(outRoot, "forwardScenarioStub.mjs"),
     "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "tradeGeometryStub.mjs"),
+    `export function projectCanonicalTradeGeometry(geometry) {
+  return {
+    geometryId: geometry.geometryId,
+    status: geometry.status,
+    intendedEntry: geometry.entry?.intendedPrice,
+    intendedStop: geometry.stop?.price,
+    intendedTarget: geometry.target?.price,
+    theoreticalRR: geometry.theoreticalRR,
+    geometryValid: geometry.geometryValid,
+    actionable: geometry.actionable,
+    displayKind: geometry.actionable ? "ACTIONABLE_GEOMETRY" : "RESEARCH_GEOMETRY"
+  };
+}\n`,
     "utf8"
   );
 }

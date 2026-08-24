@@ -1070,7 +1070,7 @@ export async function buildIctAdvisorPacketFromRuntime(
         candles,
         htfCandles,
         indexComparisonCandles,
-        newsSessionRiskContext: { syntheticNoRisk: true },
+        newsSessionRiskContext: {},
         primaryTimeframe,
         requestedSymbol,
         sessionNarrative,

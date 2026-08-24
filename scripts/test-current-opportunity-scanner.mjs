@@ -48,7 +48,8 @@ function compileForNode() {
     const dependenciesRewritten = rewritten
       .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+"..\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), dependenciesRewritten, "utf8");
   }
 }
@@ -302,14 +303,14 @@ async function main() {
   };
   const detectorScan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: detectorPacket, currentRead: deepRead }));
   const blockedSilverBullet = detectorScan.opportunities.find((item) => item.strategyId === "silver_bullet_v1");
-  assert.equal(blockedSilverBullet.status, "rejected", "detector blocker must control Silver Bullet status");
+  assert.equal(blockedSilverBullet.status, "near_miss", "later Silver Bullet detector packets remain outside INT-1 runtime ownership");
   assert.equal(blockedSilverBullet.entry, undefined, "blocked detector must not inherit generic market-read entry");
   assert.equal(blockedSilverBullet.target, undefined, "blocked detector must not inherit generic market-read target");
   const cisdCandidate = detectorScan.opportunities.find((item) => item.strategyId === "cisd_v1");
-  assert.equal(cisdCandidate.status, "valid_candidate", "complete detector-owned CISD geometry should surface as a research candidate");
-  assert.equal(cisdCandidate.entry, 30500);
-  assert.equal(cisdCandidate.invalidation, 30550);
-  assert.equal(cisdCandidate.target, 30400);
+  assert.equal(cisdCandidate.status, "forming", "later CISD detector packets remain diagnostic/forming in INT-1");
+  assert.equal(cisdCandidate.entry, undefined);
+  assert.equal(cisdCandidate.invalidation, undefined);
+  assert.equal(cisdCandidate.target, undefined);
   assertSafe(suite, detectorScan);
 
   const tightStopPacket = {
@@ -336,7 +337,7 @@ async function main() {
     suite.buildCurrentOpportunityContext({ packet: tightStopPacket, currentRead: deepRead })
   );
   const tightStopCandidate = tightStopScan.opportunities.find((item) => item.strategyId === "cisd_v1");
-  assert.equal(tightStopCandidate.status, "near_miss", "raw sub-point geometry must fail closed");
+  assert.equal(tightStopCandidate.status, "forming", "out-of-scope raw detector geometry must remain non-actionable");
   assert.ok(tightStopCandidate.missingConditions.includes("canonical_geometry_unavailable"));
   assert.equal(tightStopCandidate.geometry, undefined, "invalid risk must not become canonical geometry");
   assert.equal(tightStopCandidate.entry, undefined, "invalid risk must not publish an entry plan");
@@ -376,13 +377,9 @@ async function main() {
   const v4Scan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: v4Packet, currentRead: deepRead }));
   const activeV4 = v4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v4_candidate");
   const comparativeV3 = v4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
-  assert.equal(activeV4.status, "valid_candidate", "complete eligible v4 geometry should own the active IFVG research lane");
-  assert.equal(activeV4.geometry?.actionable, true);
-  assert.equal(activeV4.entry, 30500);
-  assert.equal(activeV4.invalidation, 30540);
-  assert.equal(activeV4.target, 30400);
-  assert.equal(comparativeV3.classification, "diagnostic", "v3 must remain comparative context when v4 is active");
-  assert.ok(v4Scan.summary.validCandidateCount >= 1);
+  assert.equal(activeV4, undefined, "v4 research packets must not be promoted into the live v3 opportunity lane");
+  assert.ok(comparativeV3, "the authoritative v3 lane remains separately identified");
+  assert.equal(v4Scan.summary.validCandidateCount, 0);
   assertSafe(suite, v4Scan);
 
   const chasingV4Packet = {
@@ -406,8 +403,7 @@ async function main() {
     suite.buildCurrentOpportunityContext({ packet: chasingV4Packet, currentRead: deepRead })
   );
   const chasingV4 = chasingV4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v4_candidate");
-  assert.equal(chasingV4.status, "valid_candidate", "downstream projection must preserve producer-owned canonical geometry");
-  assert.equal(chasingV4.geometry?.geometryId, "ifvg_fresh_retest_v4_candidate-geometry-fixture");
+  assert.equal(chasingV4, undefined, "v4 research geometry must not enter the live opportunity path");
   assertSafe(suite, chasingV4Scan);
 
   const missingTargetRead = {

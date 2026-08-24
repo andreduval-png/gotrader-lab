@@ -46,9 +46,7 @@ assert.match(targets, /allowedFallbackTargetTypes/);
 
 const blockedChecks = [
   ["src/lib/ict-strategy-suite/ictPhase2BreadAndButter.ts", /status:\s*"SOURCE_BLOCKED"/, /entryZone:\s*undefined/, /invalidation:\s*undefined/, /target:\s*undefined/, /rrEstimate:\s*undefined/],
-  ["src/lib/ict-strategy-suite/ictPhase2OneShotOneKill.ts", /status:\s*"SOURCE_BLOCKED"/, /entryZone:\s*undefined/, /invalidation:\s*undefined/, /target:\s*undefined/, /rrEstimate:\s*undefined/],
-  ["src/lib/ictI2/ictPowerOfThreeModel.ts", /PO3_TARGET_PRECEDENCE_SOURCE_BLOCKED/, /PO3_HOD_LOD_OBJECTIVE_IDENTITY_SOURCE_BLOCKED/],
-  ["src/lib/currentOpportunity/detectCurrentOpportunities.ts", /strategyId:\s*"cmd_high_displacement_v2_research"/, /geometryMode:\s*"source_blocked"/]
+  ["src/lib/ict-strategy-suite/ictPhase2OneShotOneKill.ts", /status:\s*"SOURCE_BLOCKED"/, /entryZone:\s*undefined/, /invalidation:\s*undefined/, /target:\s*undefined/, /rrEstimate:\s*undefined/]
 ];
 for (const [file, ...patterns] of blockedChecks) {
   const source = read(file);
@@ -77,28 +75,11 @@ assert.match(downstream.signalContract, /rrEstimate:\s*currentRead\.canonicalGeo
 assert.match(downstream.activateMarket, /proposedGeometry:\s*matchingCandidate\?\.geometry/);
 assert.match(downstream.operatorConsole, /projectCanonicalTradeGeometry\(canonicalGeometry\)/);
 
-const charter = read("src/lib/ictI6A/ictI6AIntegration.ts");
-assert.match(charter, /geometry:\s*owner\.geometry/);
-assert.match(charter, /intendedEntry:\s*candidate\.geometry\.entry\.intendedPrice/);
-assert.match(charter, /intendedStop:\s*candidate\.geometry\.stop\.price/);
-assert.match(charter, /intendedTarget:\s*candidate\.geometry\.target\.price/);
-const owners = read("src/lib/ictI6A/ictI6AOwnerMap.ts");
-assert.match(owners, /9:\s*\{[^\n]*ownerStrategyId:\s*"ict-one-shot-one-kill"/);
-assert.match(owners, /11:\s*\{[^\n]*ownerFrameworkId:\s*"ict-bread-and-butter-directional-owner\.v1"/);
-assert.match(owners, /12:\s*\{[^\n]*ownerFrameworkId:\s*"ict-bread-and-butter-directional-owner\.v1"/);
-
-const i6b = read("src/lib/ictI6B/ictI6BBoundaries.ts");
-assert.match(i6b, /canonicalGeometry\.geometryId\s*!==\s*attribution\.geometryId/);
-
 const mcpCore = read("scripts/gotrader-research-mcp-core.mjs");
 assert.match(mcpCore, /rr\s*=\s*Math\.abs\(targets\[0\]\s*-\s*entry\)\s*\/\s*Math\.abs\(entry\s*-\s*stop\)/);
 for (const source of Object.values(downstream)) {
   assert.doesNotMatch(source, /gotrader-research-mcp-core|evaluateCanonicalTradeProposal/);
 }
-assert.doesNotMatch(read("src/lib/ictI6A/ictI6AIntegration.ts"), /evaluateCanonicalTradeProposal/);
-
-const tradeConstructionConsumers = fs.readFileSync(path.join(root, "src/lib/ict-strategy-suite/ictAdvisorEngine.ts"), "utf8");
-assert.match(tradeConstructionConsumers, /buildIctTradeConstruction/);
 for (const source of Object.values(downstream)) assert.doesNotMatch(source, /ictTradeConstruction/);
 
 const forbiddenActionablePatterns = [

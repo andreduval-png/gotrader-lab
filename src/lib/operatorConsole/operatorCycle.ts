@@ -25,6 +25,7 @@ import { prepareOperatorForwardScenario } from "./operatorForwardScenario";
 const LEGACY_OPERATOR_CYCLE_STORAGE_KEYS = ["gotrader.operator-cycle.v2", "gotrader.operator-cycle.v1"];
 const OPERATOR_CYCLE_TAB_STORAGE_KEY = "gotrader.operator-cycle.tab.v1";
 export const OPERATOR_CYCLE_STORAGE_KEY = "gotrader.operator-cycle.v3";
+export const OPERATOR_CYCLE_SESSION_STORAGE_KEY = "gotrader.operator-cycle.v3.session";
 export const OPERATOR_CYCLE_UPDATED_EVENT = "gotrader:operator-cycle-updated";
 // Expensive research stages have their own bounds. This outer watchdog only
 // intervenes when the autonomous loop stops publishing observable progress.
@@ -160,7 +161,8 @@ export const readOperatorCycleState = (): OperatorCycleState => {
     return memoryState;
   }
   try {
-    const currentRaw = window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY);
+    const sessionRaw = window.sessionStorage.getItem(OPERATOR_CYCLE_SESSION_STORAGE_KEY);
+    const currentRaw = sessionRaw ?? window.localStorage.getItem(OPERATOR_CYCLE_STORAGE_KEY);
     const legacyRaw = currentRaw
       ? null
       : LEGACY_OPERATOR_CYCLE_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean) ?? null;
@@ -174,7 +176,12 @@ export const readOperatorCycleState = (): OperatorCycleState => {
     );
     memoryState = recovered;
     if (legacyRaw || recovered.status === "canceled") {
-      window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, JSON.stringify(recovered));
+      try {
+        window.sessionStorage.setItem(OPERATOR_CYCLE_SESSION_STORAGE_KEY, JSON.stringify(recovered));
+        window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, JSON.stringify(recovered));
+      } catch {
+        // The in-memory state remains authoritative for the active document.
+      }
     }
     return recovered;
   } catch {
@@ -193,7 +200,16 @@ export const saveOperatorCycleState = (
     if (/"candles"\s*:/i.test(serialized)) {
       throw new Error("Operator cycle state must not contain candle arrays.");
     }
-    window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
+    try {
+      window.sessionStorage.setItem(OPERATOR_CYCLE_SESSION_STORAGE_KEY, serialized);
+    } catch {
+      // In-memory state remains available when browser storage is unavailable.
+    }
+    try {
+      window.localStorage.setItem(OPERATOR_CYCLE_STORAGE_KEY, serialized);
+    } catch {
+      // A full origin must not turn a heartbeat into a failed research cycle.
+    }
     if (options.notify !== false) {
       window.dispatchEvent(new CustomEvent(OPERATOR_CYCLE_UPDATED_EVENT, { detail: compact }));
     }
@@ -304,6 +320,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
     if (activatedFeed?.candles.length) {
       publishClosedMt5ReadOnlyCandles(activatedFeed);
     }
+    const canonicalSourceFingerprint = activation.snapshot.marketData.activeResearchSource.fingerprint;
 
     if (controller.signal.aborted) {
       return updateState(current, {
@@ -319,7 +336,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
       stage: "building_market_read",
       progressPercent: stageProgress.building_market_read,
       message: "Building the multi-timeframe ICT market read.",
-      sourceFingerprint: activation.source.sourceFingerprint
+      sourceFingerprint: canonicalSourceFingerprint
     });
 
     let lastPipelineProgressBucket = -1;
@@ -385,7 +402,7 @@ export async function runOperatorResearchCycle(labState: LabState): Promise<Oper
         noImprovementStop: 1,
         safeImportedDataMode: true,
         advancedFullResearchMode: false,
-        runLlmAdvisory: true,
+        runLlmAdvisory: false,
         autoApplyPolicyEnabled: false,
         researchStrategyProfile: OPERATOR_RESEARCH_PROFILE,
         maxResearchCandles: 1000

@@ -29,6 +29,7 @@ import { projectCanonicalTradeGeometry } from "../tradeGeometry";
 
 const LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v1";
 export const ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY = "gotrader.ict-activate-market.latest.v2";
+let latestSummaryMemory: IctActivateMarketLatestSummary | undefined;
 export const ICT_ACTIVATE_MARKET_UPDATED_EVENT = "gotrader:ict-activate-market-updated";
 
 const authority = {
@@ -157,23 +158,24 @@ export const markActivationStepFailed = (steps: IctActivateMarketStep[], id: Ict
   });
 
 const defaultSaveLatestSummary = (summary: IctActivateMarketLatestSummary) => {
+  latestSummaryMemory = summary;
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
   try {
     window.localStorage.setItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY, JSON.stringify(summary));
-    window.dispatchEvent(new CustomEvent(ICT_ACTIVATE_MARKET_UPDATED_EVENT, { detail: { summary } }));
   } catch {
     // Activation summary persistence must never block the operator workflow.
   }
+  window.dispatchEvent(new CustomEvent(ICT_ACTIVATE_MARKET_UPDATED_EVENT, { detail: { summary } }));
 };
 
 export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummary | undefined => {
-  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return undefined;
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return latestSummaryMemory;
   try {
     const raw = window.localStorage.getItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY)
       ?? window.localStorage.getItem(LEGACY_ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY);
     const parsed = JSON.parse(raw ?? "null");
-    if (!parsed?.researchOnly) return undefined;
-    return {
+    if (!parsed?.researchOnly) return latestSummaryMemory;
+    const summary: IctActivateMarketLatestSummary = {
       activationTimestamp: String(parsed.activationTimestamp ?? now()),
       cycleId: typeof parsed.cycleId === "string" ? parsed.cycleId : undefined,
       sourceFingerprint: typeof parsed.sourceFingerprint === "string" ? parsed.sourceFingerprint : undefined,
@@ -255,8 +257,10 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
       authority,
       safety
     };
+    latestSummaryMemory = summary;
+    return summary;
   } catch {
-    return undefined;
+    return latestSummaryMemory;
   }
 };
 

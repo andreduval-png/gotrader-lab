@@ -228,6 +228,18 @@ async function main() {
   });
   assertHas(belowMinimumIndexStop.blockers, "stop_too_tight");
 
+  for (const distance of [3.999, 1.29]) {
+    const belowBoundary = buildIctTradeConstruction({
+      ...base,
+      side: "short",
+      entry: 23000,
+      stop: 23000 + distance,
+      target: 22988
+    });
+    assertHas(belowBoundary.blockers, "stop_too_tight");
+    assert.equal(belowBoundary.valid, false);
+  }
+
   const chasedShort = buildIctTradeConstruction({
     ...base,
     side: "short",
