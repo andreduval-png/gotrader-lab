@@ -334,9 +334,9 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 <p className={WORKSPACE_SECTION_LABEL}>Research trade plan</p>
                 <h3 className="mt-2 truncate text-lg font-semibold capitalize text-slate-100">{snapshot.researchPlan.setup}</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  {snapshot.researchPlan.entryPriceMethod === "rr_implied_recovery"
-                    ? "Entry recovered from the stored stop, target, and R:R geometry."
-                    : "Deterministic entry from the latest compact current read."}
+                  {snapshot.researchPlan.entryPriceMethod === "canonical_geometry"
+                    ? "Canonical producer geometry."
+                    : "No actionable canonical geometry."}
                 </p>
               </div>
             </div>

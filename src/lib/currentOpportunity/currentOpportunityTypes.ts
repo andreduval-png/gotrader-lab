@@ -110,10 +110,6 @@ export interface CurrentOpportunityContext {
   invalidation?: number;
   target?: number;
   rrEstimate?: number;
-  geometry?: CanonicalTradeGeometry;
-  geometryMode: "canonical" | "source_blocked" | "unavailable";
-  geometryStatus?: CanonicalTradeGeometry["status"];
-  actionable: boolean;
   confidence?: number;
   htfAlignmentStatus?: string;
   htfConflictReason?: string;
@@ -154,6 +150,10 @@ export interface CurrentOpportunity {
   invalidation?: number;
   target?: number;
   rrEstimate?: number;
+  geometry?: CanonicalTradeGeometry;
+  geometryMode: "canonical" | "source_blocked" | "unavailable";
+  geometryStatus?: CanonicalTradeGeometry["status"];
+  actionable: boolean;
   confidence: number;
   requiredValidation: CurrentOpportunityRequiredValidation[];
   blockers: string[];

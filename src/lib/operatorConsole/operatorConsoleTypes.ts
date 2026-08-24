@@ -146,7 +146,7 @@ export interface OperatorResearchPlanSummary {
   geometryStatus?: string;
   geometryValid?: boolean;
   actionable?: boolean;
-  displayKind?: "ACTIONABLE_PLAN" | "RESEARCH_GEOMETRY";
+  displayKind?: "ACTIONABLE_GEOMETRY" | "RESEARCH_GEOMETRY";
   stopLoss?: number;
   takeProfit?: number;
   targetProvenance?: {
