@@ -33,7 +33,11 @@ function compileForNode() {
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"\.\.\/currentOpportunity"/g, 'from "./currentOpportunity.mjs"')
-      .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'");
+      .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometry.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometry.mjs'")
+      .replace(/from\s+"\.\.\/tradeGeometry"/g, 'from "./tradeGeometry.mjs"')
+      .replace(/from\s+'\.\.\/tradeGeometry'/g, "from './tradeGeometry.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return { compactSummary: {} }; }\n", "utf8");
@@ -45,6 +49,7 @@ function compileForNode() {
   fs.writeFileSync(path.join(outRoot, "ictCurrentRead.mjs"), "export function buildIctCurrentReadFromPacket() { return globalThis.__ACTIVATE_MARKET_TEST_READ; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictMarketAnalysisContext.mjs"), "export async function buildIctMarketAnalysisContextBundle() { return globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictSignalContract.mjs"), "export function buildIctResearchSignalFromCurrentRead() { return globalThis.__ACTIVATE_MARKET_TEST_SIGNAL; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "tradeGeometry.mjs"), "export function projectCanonicalTradeGeometry(geometry) { return geometry ? { intendedEntry: geometry.entry?.intendedPrice, intendedStop: geometry.stop?.price, intendedTarget: geometry.target?.price, theoreticalRR: geometry.theoreticalRR } : undefined; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictCmdPaperTracking.mjs"), "export function evaluateCmdPaperTrackingEligibility() { return globalThis.__ACTIVATE_MARKET_TEST_CMD_ELIGIBILITY; }\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "currentOpportunity.mjs"),

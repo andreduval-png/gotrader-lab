@@ -274,7 +274,7 @@ export const buildIctResearchSignalFromCurrentRead = (
     confidence: currentRead.confidence,
     approvedProfileStatus: currentRead.approvedStatus,
     modelQualityLane: currentRead.modelQualityLane,
-    paperWatchlistEligible: currentRead.paperWatchlistEligible,
+    paperWatchlistEligible: status === "watchlist_signal" && currentRead.paperWatchlistEligible,
     paperWatchlistReason: currentRead.paperWatchlistReason,
     paperWatchlistEvidenceSummary: currentRead.paperWatchlistEvidenceSummary,
     cmdIndependentDateGateRequired: currentRead.cmdIndependentDateGateRequired,
