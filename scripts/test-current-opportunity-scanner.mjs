@@ -20,6 +20,12 @@ const sourceFiles = [
   { root: sourceRoot, file: "buildCurrentOpportunityContext.ts" },
   { root: ictSourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: ictSourceRoot, file: "ictTradeConstruction.ts" },
+  { root: ictSourceRoot, file: "ictIfvgProducerPolicy.ts" },
+  { root: ictSourceRoot, file: "ictIfvgTypes.ts" },
+  { root: ictSourceRoot, file: "ictIfvg.ts" },
+  { root: ictSourceRoot, file: "ictDetectorCanonicalGeometry.ts" },
+  { root: ictSourceRoot, file: "ictIfvgFreshRetestV3.ts" },
+  { root: ictSourceRoot, file: "ictSignalContract.ts" },
   { root: sourceRoot, file: "detectCurrentOpportunities.ts" },
   { root: sourceRoot, file: "currentOpportunityStore.ts" },
   { root: sourceRoot, file: "index.ts" }
@@ -180,9 +186,37 @@ function assertDiagnosticContextOnly(item) {
   assert.equal(item.rrEstimate, undefined, "diagnostic rows should not expose RR");
 }
 
+const ifvgIso = (minute) => new Date(Date.UTC(2026, 5, 12, 13, 30 + minute)).toISOString();
+const ifvgCandle = (minute, open, high, low, close, volume = 100) => ({
+  timestamp: ifvgIso(minute), open, high, low, close, volume
+});
+const ifvgOverlap = (startMinute, count, base = 100) => Array.from({ length: count }, (_, index) => {
+  const open = base + (index % 3) * 0.12;
+  const close = base + ((index + 1) % 3) * 0.12;
+  return ifvgCandle(startMinute + index * 5, open, base + 1.2, base - 1.2, close, 150 + index);
+});
+const liveIfvgCandles = () => [
+  ...ifvgOverlap(-30, 6),
+  ...ifvgOverlap(0, 10),
+  ifvgCandle(50, 101, 104, 96, 97),
+  ifvgCandle(55, 97, 99, 95.5, 96.8),
+  ifvgCandle(60, 93, 94, 90, 91),
+  ifvgCandle(65, 91, 93.4, 90.5, 92.2),
+  ifvgCandle(70, 92.5, 98.6, 92.2, 98),
+  ifvgCandle(75, 98, 99.2, 97.2, 98.8),
+  ifvgCandle(80, 98.8, 100.2, 98.2, 99.8),
+  ifvgCandle(85, 99.6, 100, 94.8, 95.6)
+];
+const liveIfvgContext = {
+  "15m": [ifvgCandle(-120, 90, 93, 89, 92), ifvgCandle(-105, 92, 98, 91, 97), ifvgCandle(-90, 97, 102, 96, 101)],
+  "1h": [ifvgCandle(-240, 88, 94, 87, 93), ifvgCandle(-180, 93, 103, 92, 101)]
+};
+
 async function main() {
   compileForNode();
   const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")));
+  const ifvgV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")));
+  const signalContract = await import(pathToFileURL(path.join(outRoot, "ictSignalContract.mjs")));
 
   const tacticalContext = suite.buildCurrentOpportunityContext({ packet: basePacket, currentRead: baseRead });
   const tacticalScan = suite.detectCurrentOpportunities(tacticalContext);
@@ -256,6 +290,85 @@ async function main() {
   assert.equal(deepScan.summary.validationLookbackDays, 88.95, "compact chart depth must not mask deeper validated range history");
   assert.equal(deepScan.summary.validCandidateCount, 0, "raw compact geometry must not become a valid candidate");
   assertSafe(suite, deepScan);
+
+  const liveIfvgInput = {
+    sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5|ES|ES|5m|int-1-1-live",
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    timeframe: "5m",
+    candles: liveIfvgCandles(),
+    contextCandles: liveIfvgContext
+  };
+  const liveIfvgAssessment = ifvgV3.assessIctIfvgFreshRetestV3(liveIfvgInput);
+  const liveIfvgCompact = ifvgV3.compactIctIfvgFreshRetestV3Assessment(liveIfvgAssessment);
+  assert.equal(liveIfvgAssessment.candidate.strategyId, "ifvg_v1", "the actual base detector must execute");
+  assert.ok(liveIfvgCompact.geometry?.actionable, "the live compact v3 assessment must retain canonical geometry");
+  const liveIfvgPacket = {
+    ...deepPacket,
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    activeSource: {
+      ...deepPacket.activeSource,
+      sourceFingerprint: liveIfvgInput.sourceFingerprint,
+      sourceStatus: { ...deepPacket.activeSource.sourceStatus, isProxyInstrument: false }
+    },
+    compactSummary: {
+      ...deepPacket.compactSummary,
+      ifvgFreshRetestV3: liveIfvgCompact
+    }
+  };
+  const liveIfvgReadContext = {
+    ...deepRead,
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    side: "long",
+    debug: { ...deepRead.debug, sourceFingerprint: liveIfvgInput.sourceFingerprint }
+  };
+  const liveIfvgScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: liveIfvgPacket, currentRead: liveIfvgReadContext })
+  );
+  const liveIfvgOpportunity = liveIfvgScan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
+  assert.equal(liveIfvgOpportunity?.status, "valid_candidate");
+  assert.equal(liveIfvgOpportunity?.geometry?.geometryId, liveIfvgCompact.geometry.geometryId);
+  assert.equal(liveIfvgOpportunity?.entry, liveIfvgCompact.geometry.entry.intendedPrice);
+  assert.equal(liveIfvgOpportunity?.invalidation, liveIfvgCompact.geometry.stop.price);
+  assert.equal(liveIfvgOpportunity?.target, liveIfvgCompact.geometry.target.price);
+  assert.equal(liveIfvgOpportunity?.rrEstimate, liveIfvgCompact.geometry.theoreticalRR);
+  const liveIfvgCurrentRead = {
+    ...liveIfvgReadContext,
+    approvedStatus: "approved_research_candidate",
+    modelQualityLane: "approved",
+    bestSetup: "ifvg_fresh_retest_v3_research",
+    side: "long",
+    canonicalGeometry: liveIfvgOpportunity.geometry,
+    geometryMode: "canonical",
+    geometryStatus: liveIfvgOpportunity.geometry.status,
+    entryReference: liveIfvgOpportunity.entry,
+    invalidation: liveIfvgOpportunity.invalidation,
+    target: liveIfvgOpportunity.target,
+    rrEstimate: liveIfvgOpportunity.rrEstimate,
+    confidence: 0.74,
+    riskStatus: "allow",
+    topReasons: ["Live canonical IFVG v3 candidate."],
+    opportunityBlockers: [],
+    opportunityMissingEvidence: [],
+    currentOpportunitySummary: liveIfvgScan.summary,
+    currentOpportunities: liveIfvgScan.opportunities
+  };
+  const liveIfvgSignal = signalContract.buildIctResearchSignalFromCurrentRead(liveIfvgCurrentRead);
+  assert.equal(liveIfvgSignal.canonicalGeometryId, liveIfvgCompact.geometry.geometryId);
+  assert.equal(liveIfvgSignal.entryReference, liveIfvgCompact.geometry.entry.intendedPrice);
+  assert.equal(liveIfvgSignal.invalidation, liveIfvgCompact.geometry.stop.price);
+  assert.equal(liveIfvgSignal.target, liveIfvgCompact.geometry.target.price);
+  assert.equal(liveIfvgSignal.rrEstimate, liveIfvgCompact.geometry.theoreticalRR);
+  assert.equal(liveIfvgSignal.executionAllowed, false);
+  assert.deepEqual(liveIfvgSignal.authority, {
+    executionAuthority: "none",
+    brokerAuthority: "none",
+    readinessOverrideAuthority: "none"
+  });
+  assertSafe(suite, liveIfvgScan);
 
   const lowRrRead = {
     ...deepRead,
@@ -453,6 +566,28 @@ async function main() {
       shallow: shallowScan.summary,
       deep: deepScan.summary,
       mockValidCandidates: mockScan.summary.validCandidateCount
+    },
+    liveIfvgV3: {
+      candidateId: liveIfvgCompact.candidateId,
+      geometryId: liveIfvgCompact.geometry.geometryId,
+      producer: {
+        entry: liveIfvgCompact.geometry.entry.intendedPrice,
+        stop: liveIfvgCompact.geometry.stop.price,
+        target: liveIfvgCompact.geometry.target.price,
+        theoreticalRR: liveIfvgCompact.geometry.theoreticalRR
+      },
+      currentOpportunity: {
+        entry: liveIfvgOpportunity.entry,
+        stop: liveIfvgOpportunity.invalidation,
+        target: liveIfvgOpportunity.target,
+        theoreticalRR: liveIfvgOpportunity.rrEstimate
+      },
+      signal: {
+        entry: liveIfvgSignal.entryReference,
+        stop: liveIfvgSignal.invalidation,
+        target: liveIfvgSignal.target,
+        theoreticalRR: liveIfvgSignal.rrEstimate
+      }
     },
     authority: tacticalScan.authority
   }, null, 2));

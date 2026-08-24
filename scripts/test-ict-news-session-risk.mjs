@@ -114,6 +114,11 @@ function compileSuiteForNode() {
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withRuntimeStubs, "utf8");
   }
   fs.writeFileSync(
+    path.join(outRoot, "ictDetectorCanonicalGeometry.mjs"),
+    "export function adaptIfvgNativeGeometry() { return undefined; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
     path.join(outRoot, "index.mjs"),
     sourceFiles
       .filter(({ root }) => root === sourceRoot)

@@ -99,6 +99,8 @@
     "test:ict-cisd": "node scripts/test-ict-cisd.mjs",
     "test:cisd-performance": "node scripts/test-cisd-performance.mjs",
     "test:ict-ifvg": "node scripts/test-ict-ifvg.mjs",
+    "test:int-1-1-ifvg-live-canonical-geometry": "node scripts/test-ict-ifvg.mjs",
+    "test:int-1-1-ifvg-plan-e2e": "node scripts/test-int-1-1-ifvg-plan-e2e.mjs",
     "test:ifvg-performance": "node scripts/test-ifvg-performance.mjs",
     "test:ifvg-expectancy-classifier": "node scripts/test-ifvg-expectancy-classifier.mjs",
     "test:ifvg-filter-variants": "node scripts/test-ifvg-filter-variants.mjs",

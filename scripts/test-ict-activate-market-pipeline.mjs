@@ -97,6 +97,34 @@ const safety = {
   secretsExcluded: true
 };
 
+const canonicalIfvgGeometry = {
+  schemaVersion: "gotrader.trade-geometry.v1",
+  geometryVersion: "g2.1.0",
+  geometryId: "ifvg-v3-live-canonical-geometry",
+  logicalGeometryKey: "ifvg-v3-live-logical-geometry",
+  strategyId: "ifvg_fresh_retest_v3_research",
+  strategyVersion: "v3",
+  profileId: "ifvg_fresh_retest_v3_research",
+  profileVersion: "v3",
+  candidateId: "ifvg-v3-live-candidate",
+  direction: "SHORT",
+  entry: { model: "IFVG_NATIVE_MIDPOINT_RETEST", intendedPrice: 23100, lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED" },
+  stop: { model: "IFVG_NATIVE_FULL_GAP_INVALIDATION", price: 23104, structuralInvalidation: true },
+  target: { model: "EXTERNAL_LIQUIDITY", price: 23092, targetId: "ifvg-v3-target", targetType: "EXTERNAL_LIQUIDITY", selectionRole: "PRIMARY", policyId: "ifvg_fresh_retest_v3_research.native-liquidity-target", policyVersion: "v3" },
+  targetPolicy: { policyId: "ifvg_fresh_retest_v3_research.native-liquidity-target", policyVersion: "v3", primaryTargetType: "EXTERNAL_LIQUIDITY", primaryTargetId: "ifvg-v3-target", allowedFallbackTargetTypes: [] },
+  riskDistance: 4,
+  rewardDistance: 8,
+  theoreticalRR: 2,
+  minimumRequiredRR: 2,
+  geometryValid: true,
+  actionable: true,
+  status: "VALID_ACTIONABLE",
+  blockers: [],
+  warnings: [],
+  sourceFingerprint: "mt5_ustech_5m_1000_fp",
+  authority: { execution: "none", broker: "none", production: "none" }
+};
+
 const activeSource = (overrides = {}) => ({
   provider: "mt5_read_only",
   symbol: "MNQ",
@@ -433,6 +461,48 @@ async function main() {
   assert.doesNotMatch(JSON.stringify(savedSummaries[0]), /"(?:candles|rawCandles|rawSnapshots)"\s*:/i);
   assertSafe(success);
   assert.match(suite.summarizeActivateMarketResult(success), /execution disabled/i);
+
+  const canonicalIfvgOpportunity = {
+    id: "ifvg-v3-live-opportunity",
+    strategyId: "ifvg_fresh_retest_v3_research",
+    status: "valid_candidate",
+    side: "short",
+    geometry: canonicalIfvgGeometry,
+    entry: 23100,
+    invalidation: 23104,
+    target: 23092,
+    rrEstimate: 2
+  };
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    side: "short",
+    currentOpportunitySummary: {
+      topOpportunity: canonicalIfvgOpportunity
+    },
+    currentOpportunities: [canonicalIfvgOpportunity]
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    status: "approved_research_signal",
+    side: "short",
+    canonicalGeometry: canonicalIfvgGeometry,
+    canonicalGeometryId: canonicalIfvgGeometry.geometryId,
+    entryReference: 23100,
+    invalidation: 23104,
+    target: 23092,
+    rrEstimate: 2
+  });
+  const canonicalIfvgResult = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.notEqual(canonicalIfvgResult.status, "failed");
+  assert.equal(canonicalIfvgResult.summary.proposedGeometry?.geometryId, canonicalIfvgGeometry.geometryId);
+  assert.equal(canonicalIfvgResult.summary.proposedEntryPrice, 23100);
+  assert.equal(canonicalIfvgResult.summary.proposedStopLoss, 23104);
+  assert.equal(canonicalIfvgResult.summary.proposedTakeProfit, 23092);
+  assert.equal(canonicalIfvgResult.summary.proposedRiskReward, 2);
+  assert.equal(canonicalIfvgResult.summary.executionAllowed, false);
+  assertSafe(canonicalIfvgResult);
 
   const queuedHypothesis = {
     researchOnly: true,

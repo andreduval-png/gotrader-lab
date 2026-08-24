@@ -45,6 +45,16 @@ const nativeRiskAccepted = (candidate: NativeGeometryCandidate) => {
   return true;
 };
 
+const ifvgNativeRiskAccepted = (candidate: IctIfvgCandidate) => {
+  if (!complete(candidate)) return false;
+  const riskDistance = candidate.side === "long"
+    ? candidate.entry! - candidate.stop!
+    : candidate.stop! - candidate.entry!;
+  if (!(riskDistance > 0)) return false;
+  const symbol = `${candidate.requestedSymbol ?? ""} ${candidate.brokerSymbol ?? ""}`.toUpperCase();
+  return !/MNQ|USTECH|US100|(?:^|\s)NQ(?:\s|$)/.test(symbol) || riskDistance >= 4;
+};
+
 export const adaptIfvgNativeGeometry = ({
   candidate,
   strategyId,
@@ -60,7 +70,7 @@ export const adaptIfvgNativeGeometry = ({
   profileVersion?: string;
   researchOnly: boolean;
 }): CanonicalTradeGeometry | undefined => {
-  if (!nativeRiskAccepted(candidate)) return undefined;
+  if (!ifvgNativeRiskAccepted(candidate)) return undefined;
   const direction = directionFor(candidate.side as "long" | "short");
   const targetId = canonicalFingerprint({
     strategyId,
@@ -69,13 +79,7 @@ export const adaptIfvgNativeGeometry = ({
     targetPrice: candidate.target,
     targetSource: candidate.liquidityTarget?.source
   });
-  const candidateId = canonicalFingerprint({
-    strategyId,
-    sourceFingerprint: candidate.sourceFingerprint,
-    inversion: candidate.inversionCandle?.timestamp,
-    retest: candidate.retestCandle?.timestamp,
-    entry: candidate.entry
-  });
+  const candidateId = candidate.candidateId;
   return buildCanonicalTradeGeometry({
     strategyId,
     strategyVersion,
@@ -89,7 +93,9 @@ export const adaptIfvgNativeGeometry = ({
       sourceFactId: candidate.retestCandle?.timestamp,
       ownerTimeframe: candidate.timeframe,
       validFrom: candidate.retestCandle?.timestamp,
-      lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED"
+      lifecycleStatus: candidate.entryLifecycleStatus === "entry_missed"
+        ? "ENTRY_MISSED"
+        : "ENTRY_TOUCHED_NOT_FILLED"
     },
     stop: {
       model: "IFVG_NATIVE_FULL_GAP_INVALIDATION",

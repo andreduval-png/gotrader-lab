@@ -1,6 +1,7 @@
 import { evaluateIctIfvg } from "./ictIfvg";
 import type { IctIfvgCandidate, IctIfvgInput } from "./ictIfvgTypes";
 import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import { adaptIfvgNativeGeometry } from "./ictDetectorCanonicalGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -102,6 +103,14 @@ export const assessIctIfvgFreshRetestV3 = (
     isClean ? undefined : "clean_retest_required",
     isFresh ? undefined : "stale_retest_signal"
   ].filter((item): item is string => Boolean(item));
+  const geometry = adaptIfvgNativeGeometry({
+    candidate: detected,
+    strategyId: "ifvg_fresh_retest_v3_research",
+    strategyVersion: "v3",
+    profileId: "ifvg_fresh_retest_v3_research",
+    profileVersion: "v3",
+    researchOnly: blockers.length > 0
+  });
 
   return {
     strategyId: "ifvg_fresh_retest_v3_research",
@@ -111,6 +120,7 @@ export const assessIctIfvgFreshRetestV3 = (
     signalFresh: isFresh,
     eligible: blockers.length === 0,
     blockers,
+    geometry,
     researchOnly: true,
     authority
   };
@@ -156,7 +166,7 @@ export const compactIctIfvgFreshRetestV3Assessment = (
     signalFresh: assessment.signalFresh,
     entryLifecycleStatus: candidate.entryLifecycleStatus,
     geometryEligible: candidate.geometryEligible,
-    actionable: assessment.eligible,
+    actionable: Boolean(assessment.eligible && assessment.geometry?.actionable),
     geometryPolicyId: candidate.geometryPolicyId,
     stopSource: candidate.stopSource,
     stopDistance: candidate.stopDistance,
