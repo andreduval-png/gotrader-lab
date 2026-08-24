@@ -22,10 +22,9 @@
 
 44. Final HEAD: recorded after commit. 45. Final tree: recorded after commit. 46. Worktree must be clean after commit. 47. Primary remained at `d665288ecde763d103a59387584f3cdfd16f8c95`. 48. No push.
 
-49. Yes, canonical geometry is live-path wired. 50. Combined INT-1/INT-1.1 is merge-ready subject to the stated legacy harness/browser-state limitations. 51. Remaining limits: absent inherited BT2 test module, eligible browser card not seeded, no execution/broker/readiness authority, and v4 remains research-only. 52. Next gate: `INT_2_PRIMARY_MERGE_AND_POST_MERGE_ACCEPTANCE_READY`; do not start automatically.
+49. Yes, canonical geometry is live-path wired. 50. No: the combined candidate is not yet merge-ready because strict browser-visible eligible-plan acceptance was not available. 51. Remaining limits: absent inherited BT2 test module, eligible browser card not visually proven against a naturally eligible current cycle, no execution/broker/readiness authority, and v4 remains research-only. 52. Next gate: `INT_1_CANONICAL_LIVE_PATH_REMEDIATION_REQUIRED`; do not start INT-2 automatically.
 
 ## Status
 
-INT-1.1 PASSED  
-LIVE CANONICAL GEOMETRY PRODUCER WIRING ACCEPTED  
-INT-1 PRIMARY INTEGRATION CANDIDATE NOW MERGE-READY
+INT-1.1 PARTIAL  
+LIVE CANONICAL GEOMETRY PATH REMAINS INCOMPLETE
