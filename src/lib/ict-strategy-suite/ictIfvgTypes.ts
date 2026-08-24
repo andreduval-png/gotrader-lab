@@ -1,6 +1,7 @@
 import type { Candle } from "@/lib/types";
 import type { IctTradeConstructionResult } from "./ictTradeConstructionTypes";
 import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import type { IctIfvgEntryLifecycleStatus } from "./ictIfvgProducerPolicy";
 
 export type IctIfvgSide = "long" | "short" | "flat";
 export type IctIfvgOriginalDirection = "bullish" | "bearish";
@@ -80,6 +81,19 @@ export interface IctIfvgCandidate {
   timeframe: "5m" | "15m" | string;
   contextTimeframes: string[];
   latestCandleTimestamp?: string;
+  candidateId: string;
+  candidateDetectedAt: string;
+  entryIntentCreatedAt?: string;
+  currentMarketTimestamp?: string;
+  entryLifecycleStatus: IctIfvgEntryLifecycleStatus;
+  entryMissedAt?: string;
+  setupDetected: boolean;
+  geometryEligible: boolean;
+  actionable: boolean;
+  geometryPolicyId: "ifvg_distal_edge_buffer_and_retracement_limit_v1";
+  stopSource?: "ifvg_distal_edge_plus_buffer";
+  stopBuffer?: number;
+  stopDistance?: number;
   side: IctIfvgSide;
   originalFvgDirection?: IctIfvgOriginalDirection;
   ifvgBounds?: IctIfvgBounds;

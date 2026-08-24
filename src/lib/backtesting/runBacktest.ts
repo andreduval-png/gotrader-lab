@@ -21,6 +21,7 @@ import { assessIctCmdHighDisplacementV2 } from "@/lib/ict-strategy-suite/ictCmdH
 import { assessIctIfvgFilteredV2 } from "@/lib/ict-strategy-suite/ictIfvgFilteredV2";
 import { assessIctIfvgFreshRetestV3 } from "@/lib/ict-strategy-suite/ictIfvgFreshRetestV3";
 import { assessIctIfvgShallowRetestV4 } from "@/lib/ict-strategy-suite/ictIfvgShallowRetestV4";
+import { findIctIfvgRetracementFillOffset } from "@/lib/ict-strategy-suite/ictIfvgProducerPolicy";
 import { buildMarketContext } from "@/lib/marketData";
 import { classifyMarketRegime } from "@/lib/regime";
 import { summarizeTradeOutcomes } from "@/lib/statistics/tradeMetrics";
@@ -504,6 +505,7 @@ const scoreIfvgFilteredTrade = ({
   candles,
   config,
   profileId,
+  fillOffset,
   qualityContext
 }: {
   candidate: ReturnType<typeof assessIctIfvgFilteredV2>["candidate"];
@@ -511,6 +513,7 @@ const scoreIfvgFilteredTrade = ({
   candles: Candle[];
   config: ResolvedBacktestConfig;
   profileId: "ifvg_filtered_v2_research" | "ifvg_fresh_retest_v3_research" | "ifvg_fresh_retest_v4_candidate";
+  fillOffset: number;
   qualityContext?: SimulatedTradeRecord["qualityContext"];
 }): SimulatedTradeRecord | undefined => {
   if (
@@ -529,18 +532,19 @@ const scoreIfvgFilteredTrade = ({
   const direction = candidate.side === "long" ? 1 : -1;
   const future = candles.slice(decisionIndex + 1, decisionIndex + 1 + config.maxBarsToResolveTrade);
   if (!future.length) return undefined;
+  const activeFuture = future.slice(fillOffset);
 
   let outcome: SimulatedTradeRecord["outcome"] = "expired";
-  let exitIndex = decisionIndex + future.length;
-  let exitCandle = future.at(-1)!;
-  for (let offset = 0; offset < future.length; offset += 1) {
-    const candle = future[offset];
+  let exitIndex = decisionIndex + fillOffset + activeFuture.length;
+  let exitCandle = activeFuture.at(-1)!;
+  for (let offset = 0; offset < activeFuture.length; offset += 1) {
+    const candle = activeFuture[offset];
     const stopHit = candidate.side === "long" ? candle.low <= stop : candle.high >= stop;
     const targetHit = candidate.side === "long" ? candle.high >= target : candle.low <= target;
     if (stopHit || targetHit) {
       // Same-bar ambiguity is scored stop-first to avoid optimistic replay bias.
       outcome = stopHit ? "stop_hit" : "target_hit";
-      exitIndex = decisionIndex + offset + 1;
+      exitIndex = decisionIndex + fillOffset + offset + 1;
       exitCandle = candle;
       break;
     }
@@ -567,9 +571,10 @@ const scoreIfvgFilteredTrade = ({
         : Math.max(-1, Math.min(targetR, markR)) - frictionR,
     3
   );
-  const favorable = future.map((candle) => direction > 0 ? candle.high - entry : entry - candle.low);
-  const adverse = future.map((candle) => direction > 0 ? entry - candle.low : candle.high - entry);
-  const openedAt = candles[decisionIndex]?.timestamp ?? candidate.retestCandle?.timestamp ?? new Date().toISOString();
+  const favorable = activeFuture.map((candle) => direction > 0 ? candle.high - entry : entry - candle.low);
+  const adverse = activeFuture.map((candle) => direction > 0 ? entry - candle.low : candle.high - entry);
+  const entryIndex = decisionIndex + fillOffset + 1;
+  const openedAt = candles[entryIndex]?.timestamp ?? new Date().toISOString();
   const bias = candidate.side === "long" ? "bullish" as const : "bearish" as const;
 
   return {
@@ -583,7 +588,7 @@ const scoreIfvgFilteredTrade = ({
     bias,
     confidence: 0.75,
     decisionIndex,
-    entryIndex: decisionIndex,
+    entryIndex,
     exitIndex,
     openedAt,
     resolvedAt: exitCandle.timestamp,
@@ -694,11 +699,35 @@ const runIfvgResearchBacktest = (
       continue;
     }
 
+    const future = sample.slice(decisionIndex + 1, decisionIndex + 1 + resolved.maxBarsToResolveTrade);
+    const fillOffset = assessment.candidate.side === "flat" || !Number.isFinite(assessment.candidate.entry)
+      ? -1
+      : findIctIfvgRetracementFillOffset({
+          side: assessment.candidate.side,
+          entry: assessment.candidate.entry!,
+          candles: future
+        });
+    if (fillOffset < 0) {
+      blockerCounts.ENTRY_NOT_RETRACED = (blockerCounts.ENTRY_NOT_RETRACED ?? 0) + 1;
+      skippedSignals.push({
+        id: `bt_ifvg_entry_not_retraced_${decisionIndex}`,
+        decisionIndex,
+        timestamp: sample[decisionIndex].timestamp,
+        reason: "ENTRY_NOT_RETRACED",
+        bias: assessment.candidate.side === "long" ? "bullish" : assessment.candidate.side === "short" ? "bearish" : "neutral",
+        confidence: 0,
+        confluenceScore: 0,
+        sessionLabel: tagSession(sample[decisionIndex]).label
+      });
+      continue;
+    }
+
     const trade = scoreIfvgFilteredTrade({
       candidate: assessment.candidate,
       decisionIndex,
       candles: sample,
       config: resolved,
+      fillOffset,
       profileId: resolved.strategyProfile === "ifvg_fresh_retest_v4_candidate"
         ? "ifvg_fresh_retest_v4_candidate"
         : resolved.strategyProfile === "ifvg_fresh_retest_v3_research"

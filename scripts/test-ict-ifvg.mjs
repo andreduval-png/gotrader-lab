@@ -12,6 +12,7 @@ const outRoot = path.join(projectRoot, ".gotrader", "ict-ifvg-test");
 const sourceFiles = [
   "ictTradeConstructionTypes.ts",
   "ictTradeConstruction.ts",
+  "ictIfvgProducerPolicy.ts",
   "ictIfvgTypes.ts",
   "ictIfvg.ts",
   "ictIfvgFilteredV2.ts",
@@ -216,13 +217,21 @@ async function main() {
   const filteredV2 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFilteredV2.mjs")).href);
   const freshRetestV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")).href);
   const shallowRetestV4 = await import(pathToFileURL(path.join(outRoot, "ictIfvgShallowRetestV4.mjs")).href);
+  const producerPolicy = await import(pathToFileURL(path.join(outRoot, "ictIfvgProducerPolicy.mjs")).href);
 
   const base = {
     sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5|ES|ES|5m|ifvg_fixture",
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    timeframe: "5m"
+  };
+
+  const mnqBase = {
+    ...base,
     sourceFingerprint: "mt5|MNQ|USTECH|5m|ifvg_fixture",
     requestedSymbol: "MNQ",
-    brokerSymbol: "USTECH",
-    timeframe: "5m"
+    brokerSymbol: "USTECH"
   };
 
   const long = ifvg.evaluateIctIfvg({ ...base, candles: validLongIfvg(), contextCandles: contextBullish });
@@ -236,10 +245,41 @@ async function main() {
   assert.ok(long.rr >= 2);
   assert.equal(long.tradeConstruction.valid, true);
   assert.equal(long.tradeConstruction.entryModelType, "ifvg");
+  assert.equal(long.geometryPolicyId, "ifvg_distal_edge_buffer_and_retracement_limit_v1");
+  assert.equal(long.stopSource, "ifvg_distal_edge_plus_buffer");
+  assert.equal(long.setupDetected, true);
+  assert.equal(long.geometryEligible, true);
+  assert.equal(long.entryLifecycleStatus, "waiting_for_entry");
   assert.ok(long.stop < long.ifvgBounds.low, "long IFVG stop must be below IFVG bottom");
   assert.equal(long.canCreateValidationChainEntry, true);
   assert.equal(ifvg.ictIfvgCanQueueValidation(long), true);
   assertSafe(long);
+
+  const tightMnq = ifvg.evaluateIctIfvg({ ...mnqBase, candles: validLongIfvg(), contextCandles: contextBullish });
+  assert.equal(tightMnq.setupDetected, true);
+  assert.equal(tightMnq.geometryEligible, false);
+  assert.equal(tightMnq.actionable, false);
+  assert.equal(tightMnq.blockers.includes("STOP_DISTANCE_TOO_SMALL"), true);
+  assert.equal(tightMnq.stopDistance < 4, true);
+  assert.equal(tightMnq.stopSource, "ifvg_distal_edge_plus_buffer");
+  assert.equal(tightMnq.stop, long.stop, "MNQ viability must not widen the source-native stop");
+  assert.equal(tightMnq.target, long.target, "MNQ viability must not stretch the source-native target");
+  assertSafe(tightMnq);
+
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "short", entry: 100, currentPrice: 101.29 }), "entry_missed");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "short", entry: 100, currentPrice: 99 }), "waiting_for_entry");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "long", entry: 100, currentPrice: 98.71 }), "entry_missed");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "long", entry: 100, currentPrice: 101 }), "waiting_for_entry");
+  assert.equal(producerPolicy.findIctIfvgRetracementFillOffset({
+    side: "short",
+    entry: 100,
+    candles: [{ high: 99.5, low: 98 }, { high: 100.25, low: 99 }]
+  }), 1);
+  assert.equal(producerPolicy.findIctIfvgRetracementFillOffset({
+    side: "long",
+    entry: 100,
+    candles: [{ high: 102, low: 100.5 }, { high: 101, low: 99.75 }]
+  }), 1);
 
   const filteredLongCandles = validFilteredLongIfvg();
   const filteredLongBase = ifvg.evaluateIctIfvg({ ...base, candles: filteredLongCandles, contextCandles: contextBullish });
@@ -267,6 +307,8 @@ async function main() {
   assertSafe(freshLong);
   const compactFreshLong = freshRetestV3.compactIctIfvgFreshRetestV3Assessment(freshLong);
   assert.equal(compactFreshLong.strategyId, "ifvg_fresh_retest_v3_research");
+  assert.equal(compactFreshLong.candidateId, filteredLongBase.candidateId);
+  assert.equal(compactFreshLong.geometryPolicyId, "ifvg_distal_edge_buffer_and_retracement_limit_v1");
   assert.equal(compactFreshLong.canCreateValidationChainEntry, true);
   assert.equal(compactFreshLong.sourceFingerprint, base.sourceFingerprint);
   assert.doesNotMatch(JSON.stringify(compactFreshLong), /"candles"\s*:|"rawCandles"\s*:|"retestCandle"\s*:/i);
@@ -441,6 +483,16 @@ async function main() {
       deepBlocked: !deepV4.eligible,
       paperDemoEligible: shallowV4.paperDemoEligible,
       researchOnly: shallowV4.researchOnly
+    },
+    mnqTightStopRegression: {
+      candidateId: tightMnq.candidateId,
+      entry: tightMnq.entry,
+      stop: tightMnq.stop,
+      target: tightMnq.target,
+      stopDistance: tightMnq.stopDistance,
+      rr: tightMnq.rr,
+      stopSource: tightMnq.stopSource,
+      blockers: tightMnq.blockers
     },
     authority: authorityNone,
     safety: {
