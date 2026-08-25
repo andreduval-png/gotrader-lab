@@ -16,6 +16,7 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictIfvgTypes.ts" },
   { root: sourceRoot, file: "ictIfvgProducerPolicy.ts" },
+  { root: sourceRoot, file: "ictDetectorCanonicalGeometry.ts" },
   { root: sourceRoot, file: "ictIfvg.ts" },
   { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
   { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
@@ -110,7 +111,11 @@ function compileSuiteForNode() {
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
-      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'")
+      .replace(/from\s+"@\/lib\/ictCanonical\/canonicalIctIdentity"/g, 'from "./canonicalGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/ictCanonical\/canonicalIctIdentity'/g, "from './canonicalGeometryStub.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry\/canonicalTradeGeometry'/g, "from './canonicalGeometryStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withRuntimeStubs, "utf8");
   }
   fs.writeFileSync(path.join(outRoot, "index.mjs"), sourceFiles.filter(({ root }) => root === sourceRoot).map(({ file }) => `export * from "./${file.replace(/\.ts$/, ".mjs")}";`).join("\n"), "utf8");
@@ -128,6 +133,11 @@ export async function listCanonicalCandleSourceSummaries() {
   fs.writeFileSync(path.join(outRoot, "currentOpportunityStub.mjs"), "export function buildCurrentOpportunityContext(input) { return input; }\nexport function detectCurrentOpportunities() { return { summary: { total: 0 }, opportunities: [] }; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export function projectCanonicalTradeGeometry() { return undefined; }\n", "utf8");
+  fs.writeFileSync(
+    path.join(outRoot, "canonicalGeometryStub.mjs"),
+    "export function canonicalFingerprint(value) { return JSON.stringify(value); }\nexport function buildCanonicalTradeGeometry() { return undefined; }\n",
+    "utf8"
+  );
 }
 
 const candle = (id, timestamp, open, high, low, close, symbol = "MNQ") => ({
