@@ -83,6 +83,9 @@ export interface IctResearchSignal {
   weeklyBiasReason?: string;
   htfTimeframes: string[];
   strategyId?: string;
+  strategyVersion?: string;
+  profileId?: string;
+  candidateId?: string;
   setup?: string;
   phase?: "phase_1" | "phase_2" | "combined";
   side: IctSide;

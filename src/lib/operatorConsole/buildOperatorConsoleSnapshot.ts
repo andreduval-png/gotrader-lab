@@ -231,6 +231,41 @@ const researchPlanFor = (
   };
 };
 
+const candidatePlansFor = (
+  activation: IctActivateMarketLatestSummary | undefined,
+  sourceFingerprint: string | undefined,
+  cycle: OperatorCycleState
+): OperatorConsoleSnapshot["candidatePlans"] => {
+  if (!activation?.cycleId || !activation.sourceFingerprint || !activation.currentReadEvaluatedAt) return [];
+  if (cycle.cycleId && activation.cycleId !== cycle.cycleId) return [];
+  if (sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint) return [];
+  return (activation.candidatePlans ?? []).map((plan) => {
+    const complete = finite(plan.entry) && finite(plan.stop) && finite(plan.target) && finite(plan.riskReward);
+    const signal = complete && plan.actionable
+      ? plan.side === "long" ? "BUY" as const : plan.side === "short" ? "SELL" as const : "NO_TRADE" as const
+      : "NO_TRADE" as const;
+    return {
+      strategyId: plan.strategyId,
+      strategyVersion: plan.strategyVersion,
+      profileId: plan.profileId,
+      candidateId: plan.candidateId,
+      candidateState: plan.candidateState,
+      setup: plan.setupName.replace(/_/g, " "),
+      side: plan.side,
+      status: plan.status,
+      signal,
+      geometryId: plan.geometryId,
+      entryPrice: plan.entry,
+      stopLoss: plan.stop,
+      takeProfit: plan.target,
+      riskReward: plan.riskReward,
+      actionable: signal !== "NO_TRADE",
+      blocker: plan.blockers[0],
+      contextIdentity: plan.contextIdentity
+    };
+  });
+};
+
 const insightFor = (
   runtime: ResearchRuntimeSnapshot | undefined,
   activation: IctActivateMarketLatestSummary | undefined,
@@ -409,6 +444,8 @@ export const buildOperatorConsoleSnapshot = ({
     },
     memory,
     researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint, cycle),
+    candidatePlans: candidatePlansFor(activation, canonicalSource?.fingerprint, cycle),
+    canonicalSetupConflict: activation?.canonicalSetupConflict ?? "NONE",
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,
     autoApplyAllowed: false,

@@ -170,6 +170,26 @@ export interface OperatorResearchPlanSummary {
   executionAllowed: false;
 }
 
+export interface OperatorCandidatePlanSummary {
+  strategyId: string;
+  strategyVersion?: string;
+  profileId?: string;
+  candidateId: string;
+  candidateState?: string;
+  setup: string;
+  side: "long" | "short" | "flat";
+  status: string;
+  signal: "BUY" | "SELL" | "NO_TRADE";
+  geometryId?: string;
+  entryPrice?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskReward?: number;
+  actionable: boolean;
+  blocker?: string;
+  contextIdentity?: string;
+}
+
 export interface OperatorConsoleSnapshot {
   generatedAt: string;
   source: OperatorSourceSummary;
@@ -180,6 +200,8 @@ export interface OperatorConsoleSnapshot {
   prediction: OperatorPredictionSummary;
   memory: OperatorMemorySummary;
   researchPlan: OperatorResearchPlanSummary;
+  candidatePlans: OperatorCandidatePlanSummary[];
+  canonicalSetupConflict: "NONE" | "CONFLICTING_CANONICAL_SETUPS";
   decisions: OperatorDecision[];
   authority: OperatorAuthority;
   autoApplyAllowed: false;

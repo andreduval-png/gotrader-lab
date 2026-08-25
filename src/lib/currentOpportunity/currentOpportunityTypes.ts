@@ -1,6 +1,7 @@
 import type { IctSessionRaidReversalNarrative } from "../ict-strategy-suite/ictSessionRaidReversalTypes";
 import type { IctIfvgFreshRetestV3CompactAssessment } from "../ict-strategy-suite/ictIfvgFreshRetestV3";
 import type { CanonicalTradeGeometry } from "../tradeGeometry";
+import type { IctCoreCandidateCollection } from "@/lib/ictI2";
 
 export type CurrentOpportunityStatus =
   | "valid_candidate"
@@ -39,6 +40,9 @@ export type CurrentOpportunityStrategyId =
   | "ifvg_v1"
   | "ifvg_filtered_v2_research"
   | "ifvg_fresh_retest_v3_research"
+  | "ict_2022_model_v1"
+  | "ict_power_of_three_v1"
+  | "ict_judas_swing_v1"
   | "nasdaq_london_raid_ny_reversal_v1"
   | "market_map_only_diagnostic_v1";
 
@@ -120,6 +124,7 @@ export interface CurrentOpportunityContext {
   sessionDirectionalRead?: string;
   sessionRaidReversal?: IctSessionRaidReversalNarrative;
   ifvgFreshRetestV3?: IctIfvgFreshRetestV3CompactAssessment;
+  coreIctCandidates?: IctCoreCandidateCollection;
   fvgStatus?: string;
   displacementStatus?: string;
   drawOnLiquidity?: string;
@@ -135,7 +140,12 @@ export interface CurrentOpportunityContext {
 
 export interface CurrentOpportunity {
   id: string;
+  candidateId: string;
   strategyId: CurrentOpportunityStrategyId;
+  strategyVersion?: string;
+  profileId?: string;
+  candidateState?: string;
+  contextIdentity?: string;
   model: string;
   symbol: string;
   brokerSymbol: string;
@@ -185,6 +195,7 @@ export interface CurrentOpportunitySummary {
   marketMapOnlyCount: number;
   regimeContextCount: number;
   noTradeContextCount: number;
+  canonicalSetupConflict: "NONE" | "CONFLICTING_CANONICAL_SETUPS";
   topOpportunity?: CurrentOpportunity;
   topNearMiss?: CurrentOpportunity;
   topRejected?: CurrentOpportunity;

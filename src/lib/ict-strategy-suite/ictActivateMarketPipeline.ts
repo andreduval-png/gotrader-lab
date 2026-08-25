@@ -19,6 +19,7 @@ import { runIctAdvisorPacket } from "./runIctAdvisorPacket";
 import type {
   IctActivateMarketCallbacks,
   IctActivateMarketLatestSummary,
+  IctActivateMarketCandidatePlan,
   IctActivateMarketOperatorWorkflow,
   IctActivateMarketResult,
   IctActivateMarketStatus,
@@ -181,6 +182,37 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
       sourceFingerprint: typeof parsed.sourceFingerprint === "string" ? parsed.sourceFingerprint : undefined,
       currentReadEvaluatedAt: typeof parsed.currentReadEvaluatedAt === "string" ? parsed.currentReadEvaluatedAt : undefined,
       currentCandidateId: typeof parsed.currentCandidateId === "string" ? parsed.currentCandidateId : undefined,
+      candidatePlans: Array.isArray(parsed.candidatePlans)
+        ? parsed.candidatePlans
+            .filter((plan: unknown): plan is Record<string, unknown> => Boolean(plan && typeof plan === "object"))
+            .filter((plan: Record<string, unknown>) => typeof plan.strategyId === "string" && typeof plan.candidateId === "string")
+            .map((plan: Record<string, unknown>) => ({
+              strategyId: plan.strategyId as IctActivateMarketCandidatePlan["strategyId"],
+              strategyVersion: typeof plan.strategyVersion === "string" ? plan.strategyVersion : undefined,
+              profileId: typeof plan.profileId === "string" ? plan.profileId : undefined,
+              candidateId: String(plan.candidateId),
+              candidateState: typeof plan.candidateState === "string" ? plan.candidateState : undefined,
+              setupName: typeof plan.setupName === "string" ? plan.setupName : String(plan.strategyId),
+              side: ["long", "short", "flat"].includes(String(plan.side))
+                ? plan.side as IctActivateMarketCandidatePlan["side"]
+                : "flat",
+              status: String(plan.status ?? "needs_more_data") as IctActivateMarketCandidatePlan["status"],
+              geometryId: typeof plan.geometryId === "string" ? plan.geometryId : undefined,
+              geometry: plan.geometry && typeof plan.geometry === "object"
+                ? plan.geometry as IctActivateMarketCandidatePlan["geometry"]
+                : undefined,
+              entry: asFiniteNumber(plan.entry),
+              stop: asFiniteNumber(plan.stop),
+              target: asFiniteNumber(plan.target),
+              riskReward: asFiniteNumber(plan.riskReward),
+              actionable: plan.actionable === true,
+              blockers: asList(plan.blockers),
+              contextIdentity: typeof plan.contextIdentity === "string" ? plan.contextIdentity : undefined
+            }))
+        : undefined,
+      canonicalSetupConflict: parsed.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+        ? "CONFLICTING_CANONICAL_SETUPS"
+        : "NONE",
       requestedSymbol: String(parsed.requestedSymbol ?? "MNQ"),
       brokerSymbol: String(parsed.brokerSymbol ?? "USTECH"),
       primaryTimeframe: String(parsed.primaryTimeframe ?? "5m"),
@@ -492,6 +524,8 @@ const buildLatestSummary = (
     ?? result.currentRead?.currentOpportunitySummary?.topNearMiss
     ?? result.currentRead?.currentOpportunitySummary?.topRejected
   )?.id,
+  candidatePlans: result.summary.candidatePlans,
+  canonicalSetupConflict: result.summary.canonicalSetupConflict,
   requestedSymbol: result.requestedSymbol,
   brokerSymbol: result.brokerSymbol,
   primaryTimeframe: result.primaryTimeframe,
@@ -957,6 +991,36 @@ export async function runIctActivateMarketPipeline(
           rejectionReasons: matchingCandidate.geometry.blockers.slice()
         }
       : undefined;
+    const integratedStrategyIds = new Set([
+      "ifvg_fresh_retest_v3_research",
+      "ict_2022_model_v1",
+      "ict_power_of_three_v1",
+      "ict_judas_swing_v1"
+    ]);
+    const candidatePlans: IctActivateMarketCandidatePlan[] = (currentRead?.currentOpportunities ?? [])
+      .filter((candidate) => integratedStrategyIds.has(candidate.strategyId))
+      .map((candidate) => {
+        const projection = candidate.geometry ? projectCanonicalTradeGeometry(candidate.geometry) : undefined;
+        return {
+          strategyId: candidate.strategyId,
+          strategyVersion: candidate.strategyVersion,
+          profileId: candidate.profileId,
+          candidateId: candidate.candidateId,
+          candidateState: candidate.candidateState,
+          setupName: candidate.setupName,
+          side: candidate.side,
+          status: candidate.status,
+          geometryId: projection?.geometryId,
+          geometry: candidate.geometry,
+          entry: projection?.intendedEntry,
+          stop: projection?.intendedStop,
+          target: projection?.intendedTarget,
+          riskReward: projection?.theoreticalRR,
+          actionable: Boolean(candidate.actionable && projection?.actionable),
+          blockers: [...new Set([...(candidate.blockers ?? []), ...(candidate.missingConditions ?? [])])].slice(0, 8),
+          contextIdentity: candidate.contextIdentity
+        };
+      });
     return {
       researchOnly: true,
       status,
@@ -989,6 +1053,8 @@ export async function runIctActivateMarketPipeline(
         opportunityLaneRecommendation: currentRead?.opportunityLaneRecommendation,
         opportunityNextAction: currentRead?.opportunityNextAction,
         currentOpportunitySummary: currentRead?.currentOpportunitySummary,
+        candidatePlans,
+        canonicalSetupConflict: currentRead?.currentOpportunitySummary?.canonicalSetupConflict,
         recognitionTier: currentRead?.recognitionTier,
         scalpStatus: currentRead?.scalpStatus,
         pdArrayFocus: currentRead?.pdArrayFocus,

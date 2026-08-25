@@ -8,6 +8,8 @@ import { hydrateActiveMt5ReadOnlyCandleFeed } from "../integrations/mt5/mt5ReadO
 import { mt5ReadOnlyCandlesToGoTraderCandles } from "../integrations/mt5/mt5ReadOnlyNormalizer";
 import type { ResearchRuntimeSnapshot } from "../runtime";
 import type { Candle } from "../types";
+import type { Timeframe } from "../types";
+import { buildIctCoreRuntimeCandidates } from "../ictI2";
 import {
   buildCurrentOpportunityContext,
   detectCurrentOpportunities
@@ -1142,6 +1144,20 @@ export async function buildIctAdvisorPacketFromRuntime(
         })
       )
     : undefined;
+  const coreIctSourceFingerprint = activeSource?.fingerprint ?? sourceSummary.fingerprint;
+  const coreIctAsOf = ifvgDetectorCandles.at(-1)?.timestamp ?? new Date().toISOString();
+  const coreIctCandidates = buildIctCoreRuntimeCandidates({
+    candlesByTimeframe: {
+      "5m": ifvgDetectorCandles,
+      "15m": (ifvgContextSources.M15 ?? ifvgContextSources["15m"] ?? []),
+      "1h": (ifvgContextSources.H1 ?? ifvgContextSources["1h"] ?? []),
+      "4h": (ifvgContextSources.H4 ?? ifvgContextSources["4h"] ?? []),
+      "1d": (ifvgContextSources.D1 ?? ifvgContextSources["1d"] ?? [])
+    } as Partial<Record<Timeframe, Candle[]>>,
+    symbol: requestedSymbol,
+    asOf: coreIctAsOf,
+    sourceFingerprint: coreIctSourceFingerprint
+  });
   const packet: IctAdvisorPacket = {
     packetId: createId("ict_advisor_packet"),
     source: "gotrader_ict_strategy_suite",
@@ -1233,6 +1249,7 @@ export async function buildIctAdvisorPacketFromRuntime(
       pdArrayCount: universalRecognition.pdArrays.length,
       recognitionOpportunitySummary: universalRecognition.opportunitySummary,
       ifvgFreshRetestV3,
+      coreIctCandidates,
       hydrationSource: analysis.hydrationSource,
       hydrationWarning: analysis.hydrationWarning,
       noTradeReasonCount: recommendedSignal.noTradeReasons.length + (analysis.hydrationWarning ? 1 : 0)

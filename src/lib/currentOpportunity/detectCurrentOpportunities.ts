@@ -152,9 +152,15 @@ const opportunity = (
     geometryMode === "source_blocked" ? "source_native_geometry_unresolved" : undefined
   ], finalClassification);
   const publishGeometry = Boolean(geometryProjection && finalClassification !== "diagnostic");
+  const generatedId = createId("current_opp", `${patch.strategyId}:${patch.setupName}:${context.generatedAt}:${finalStatus}`);
   return {
-    id: createId("current_opp", `${patch.strategyId}:${patch.setupName}:${context.generatedAt}:${finalStatus}`),
+    id: patch.id ?? generatedId,
+    candidateId: patch.candidateId ?? patch.id ?? generatedId,
     strategyId: patch.strategyId,
+    strategyVersion: patch.strategyVersion,
+    profileId: patch.profileId,
+    candidateState: patch.candidateState,
+    contextIdentity: patch.contextIdentity,
     model: patch.model,
     symbol: context.requestedSymbol,
     brokerSymbol: context.brokerSymbol,
@@ -190,6 +196,50 @@ const opportunity = (
     authority
   };
 };
+
+const coreIctOpportunities = (context: CurrentOpportunityContext): CurrentOpportunity[] =>
+  (context.coreIctCandidates?.candidates ?? []).map((candidate) => {
+    const executable = candidate.role === "PRIMARY_EXECUTABLE_RESEARCH";
+    const status: CurrentOpportunityStatus = candidate.actionable
+      ? "valid_candidate"
+      : candidate.canonicalGeometry
+        ? "rejected"
+        : executable && !["SEARCHING", "SOURCE_BLOCKED"].includes(candidate.state)
+          ? "forming"
+          : "diagnostic_context";
+    const label = candidate.strategyId === "ict_2022_model_v1"
+      ? "ICT 2022 Model"
+      : candidate.strategyId === "ict_power_of_three_v1"
+        ? "Power of Three"
+        : "Judas Swing";
+    return opportunity(context, {
+      id: candidate.candidateId,
+      candidateId: candidate.candidateId,
+      strategyId: candidate.strategyId,
+      strategyVersion: candidate.strategyVersion,
+      profileId: candidate.profileId,
+      candidateState: candidate.state,
+      contextIdentity: candidate.contextIdentity,
+      model: label,
+      status,
+      classification: executable ? undefined : "diagnostic",
+      setupName: candidate.strategyId,
+      thesis: executable
+        ? `Canonical ${label} state ${candidate.state}; geometry remains owned by ${candidate.strategyId}.`
+        : `${label} context state ${candidate.state}; no source-complete trade geometry is authorized.`,
+      side: candidate.direction === "none" ? "flat" : candidate.direction,
+      timeframe: candidate.timeframe,
+      geometry: candidate.canonicalGeometry,
+      geometryMode: candidate.canonicalGeometry ? "canonical" : candidate.role === "PRIMARY_EXECUTABLE_RESEARCH" ? "unavailable" : "source_blocked",
+      blockers: [...candidate.blockers],
+      missingConditions: candidate.geometryEligible ? [] : [candidate.blockers[0]],
+      nextAction: candidate.actionable
+        ? "Preserve this research candidate for replay and evidence validation."
+        : candidate.role === "PRIMARY_EXECUTABLE_RESEARCH"
+          ? `Wait for the next causal ${label} state; do not complete missing geometry downstream.`
+          : "Context only; source-blocked geometry cannot create a plan or BT2 request."
+    });
+  });
 
 const baseBlockersFor = (context: CurrentOpportunityContext) =>
   unique([
@@ -583,7 +633,10 @@ const strategyDiagnostics = (context: CurrentOpportunityContext): CurrentOpportu
 const summarize = (context: CurrentOpportunityContext, opportunities: CurrentOpportunity[]): CurrentOpportunitySummary => {
   const sorted = opportunities.slice().sort((left, right) => statusRank[right.status] - statusRank[left.status] || right.confidence - left.confidence);
   const count = (status: CurrentOpportunityStatus) => opportunities.filter((item) => item.status === status).length;
-  const topOpportunity = sorted.find((item) => item.classification !== "diagnostic" && (item.status === "valid_candidate" || item.status === "forming"));
+  const canonicalSetupConflict = context.coreIctCandidates?.conflict ?? "NONE";
+  const topOpportunity = canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+    ? undefined
+    : sorted.find((item) => item.classification !== "diagnostic" && (item.status === "valid_candidate" || item.status === "forming"));
   const topNearMiss = sorted.find((item) => item.status === "near_miss");
   const topRejected = sorted.find((item) => item.status === "rejected");
   const topDiagnostic = sorted.find((item) => item.classification === "diagnostic");
@@ -615,11 +668,14 @@ const summarize = (context: CurrentOpportunityContext, opportunities: CurrentOpp
     marketMapOnlyCount: count("market_map_only"),
     regimeContextCount: count("regime_context"),
     noTradeContextCount: count("no_trade_context"),
+    canonicalSetupConflict,
     topOpportunity,
     topNearMiss,
     topRejected,
     topBlocker,
-    nextAction: topOpportunity?.nextAction ?? topNearMiss?.nextAction ?? topDiagnostic?.nextAction ?? "Run Activate Market with explicit MT5 90-day context.",
+    nextAction: canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+      ? "Conflicting canonical setups are preserved; no automatic trade selector is authorized."
+      : topOpportunity?.nextAction ?? topNearMiss?.nextAction ?? topDiagnostic?.nextAction ?? "Run Activate Market with explicit MT5 90-day context.",
     rangeHistoryAvailable: context.sourceDepth.rangeHistoryAvailable,
     validationLookbackDays: context.sourceDepth.validationLookbackDays,
     authority,
@@ -629,7 +685,12 @@ const summarize = (context: CurrentOpportunityContext, opportunities: CurrentOpp
 
 export const detectCurrentOpportunities = (context: CurrentOpportunityContext): CurrentOpportunityScan => {
   const sessionRaid = sessionRaidReversalOpportunity(context);
-  const opportunities = [primaryOpportunity(context), ...(sessionRaid ? [sessionRaid] : []), ...strategyDiagnostics(context)].sort(
+  const opportunities = [
+    ...coreIctOpportunities(context),
+    primaryOpportunity(context),
+    ...(sessionRaid ? [sessionRaid] : []),
+    ...strategyDiagnostics(context)
+  ].sort(
     (left, right) => statusRank[right.status] - statusRank[left.status] || right.confidence - left.confidence
   );
   const summary = summarize(context, opportunities);

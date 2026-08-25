@@ -91,6 +91,10 @@ export interface IctCurrentRead {
   bestPhase1Setup?: string;
   bestPhase2Setup?: string;
   bestSetup?: string;
+  activeStrategyId?: string;
+  activeStrategyVersion?: string;
+  activeProfileId?: string;
+  activeCandidateId?: string;
   side: IctSide;
   approvedStatus: IctApprovedCandidateStatus;
   modelQualityLane: IctModelQualityLane;

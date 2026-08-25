@@ -361,6 +361,31 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
           ) : null}
 
+          {snapshot.candidatePlans.length ? (
+            <div className="grid gap-px border-b border-white/10 bg-white/10 sm:grid-cols-2" data-testid="operator-canonical-candidates">
+              {snapshot.candidatePlans.map((candidate) => (
+                <div key={candidate.candidateId} className="min-w-0 bg-[#0d1420] px-5 py-4 sm:px-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold capitalize text-slate-100">{candidate.setup}</p>
+                      <p className="mt-1 truncate font-mono text-[0.65rem] text-slate-500" title={candidate.geometryId ?? candidate.candidateId}>
+                        {candidate.strategyId.replace(/_/g, " ")}
+                      </p>
+                    </div>
+                    <Badge variant={candidate.signal === "NO_TRADE" ? "muted" : "success"}>{candidate.signal.replace("_", " ")}</Badge>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-3 font-mono text-xs tabular-nums text-slate-300">
+                    <span>E {price(candidate.entryPrice)}</span>
+                    <span>S {price(candidate.stopLoss)}</span>
+                    <span>T {price(candidate.takeProfit)}</span>
+                    <span>{number(candidate.riskReward, "R")}</span>
+                  </div>
+                  {candidate.blocker ? <p className="mt-2 truncate text-xs text-amber-200" title={candidate.blocker}>{words(candidate.blocker)}</p> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-px bg-white/10 sm:grid-cols-2 2xl:grid-cols-3">
             {[
               { label: "Entry price", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },

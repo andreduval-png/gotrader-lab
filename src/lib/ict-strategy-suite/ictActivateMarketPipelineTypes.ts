@@ -85,12 +85,34 @@ export interface IctActivateMarketOperatorWorkflow {
   executionAllowed: false;
 }
 
+export interface IctActivateMarketCandidatePlan {
+  strategyId: CurrentOpportunity["strategyId"];
+  strategyVersion?: string;
+  profileId?: string;
+  candidateId: string;
+  candidateState?: string;
+  setupName: string;
+  side: CurrentOpportunity["side"];
+  status: CurrentOpportunity["status"];
+  geometryId?: string;
+  geometry?: CanonicalTradeGeometry;
+  entry?: number;
+  stop?: number;
+  target?: number;
+  riskReward?: number;
+  actionable: boolean;
+  blockers: string[];
+  contextIdentity?: string;
+}
+
 export interface IctActivateMarketLatestSummary {
   activationTimestamp: string;
   cycleId?: string;
   sourceFingerprint?: string;
   currentReadEvaluatedAt?: string;
   currentCandidateId?: string;
+  candidatePlans?: IctActivateMarketCandidatePlan[];
+  canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
   requestedSymbol: string;
   brokerSymbol: string;
   primaryTimeframe: string;
@@ -198,6 +220,8 @@ export interface IctActivateMarketResult {
     opportunityLaneRecommendation?: IctOpportunityLaneRecommendation;
     opportunityNextAction?: string;
     currentOpportunitySummary?: CurrentOpportunitySummary;
+    candidatePlans?: IctActivateMarketCandidatePlan[];
+    canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
     recognitionTier?: IctCurrentRead["recognitionTier"];
     scalpStatus?: IctCurrentRead["scalpStatus"];
     pdArrayFocus?: string;

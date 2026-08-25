@@ -953,6 +953,17 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     ?? currentOpportunityScan.summary.topRejected;
   const canonicalGeometry = canonicalCandidate?.geometry;
   const canonicalProjection = canonicalGeometry ? projectCanonicalTradeGeometry(canonicalGeometry) : undefined;
+  const integratedCandidateIds = new Set([
+    "ifvg_fresh_retest_v3_research",
+    "ict_2022_model_v1",
+    "ict_power_of_three_v1",
+    "ict_judas_swing_v1"
+  ]);
+  const integratedCandidates = currentOpportunityScan.opportunities.filter((candidate) => integratedCandidateIds.has(candidate.strategyId));
+  const compactCurrentOpportunities = [
+    ...integratedCandidates,
+    ...currentOpportunityScan.opportunities.filter((candidate) => !integratedCandidateIds.has(candidate.strategyId))
+  ].slice(0, 12);
 
   const currentRead: IctCurrentRead = {
     researchOnly: true,
@@ -982,7 +993,11 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     htfStatus: htfStatusFor(packet),
     bestPhase1Setup: bestPhase1?.setup,
     bestPhase2Setup: bestPhase2?.setup,
-    bestSetup: recommended.setup,
+    bestSetup: canonicalCandidate?.setupName ?? recommended.setup,
+    activeStrategyId: canonicalCandidate?.strategyId,
+    activeStrategyVersion: canonicalCandidate?.strategyVersion,
+    activeProfileId: canonicalCandidate?.profileId,
+    activeCandidateId: canonicalCandidate?.candidateId,
     side: canonicalGeometry ? (canonicalGeometry.direction === "LONG" ? "long" : "short") : recommended.side,
     approvedStatus: packet.approvedProfileDecision.status,
     modelQualityLane,
@@ -999,7 +1014,7 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     recognitionOpportunitySummary: universalRecognition.opportunitySummary,
     opportunitySummary: universalRecognition.opportunitySummary,
     currentOpportunitySummary: currentOpportunityScan.summary,
-    currentOpportunities: currentOpportunityScan.opportunities.slice(0, 8),
+    currentOpportunities: compactCurrentOpportunities,
     opportunityDetected,
     opportunity: recognizedOpportunity,
     opportunityType: recognizedOpportunity.type,
