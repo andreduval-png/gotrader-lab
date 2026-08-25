@@ -3,8 +3,10 @@ import { assessIctIfvgFreshRetestV3, compactIctIfvgFreshRetestV3Assessment } fro
 import { runIctActivateMarketPipeline, readLatestActivateMarketSummary } from "@/lib/ict-strategy-suite/ictActivateMarketPipeline";
 import { buildIctCurrentReadFromPacket } from "@/lib/ict-strategy-suite/ictCurrentRead";
 import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite/ictAdvisorTypes";
-import type { IctMarketAnalysisContextBundle } from "@/lib/ict-strategy-suite/ictMarketAnalysisContextTypes";
+import type { IctAnalysisTimeframe, IctAnalysisTimeframeRole, IctMarketAnalysisContextBundle } from "@/lib/ict-strategy-suite/ictMarketAnalysisContextTypes";
 import { evaluateIct2022Model, buildIctCoreCandidateCollection } from "@/lib/ictI2";
+import type { IctCoreDetectionInput } from "@/lib/ictI2";
+import type { Candle, Timeframe } from "@/lib/types";
 import { buildOperatorConsoleSnapshot } from "./buildOperatorConsoleSnapshot";
 import { OPERATOR_AUTHORITY } from "./operatorConsoleTypes";
 import { readOperatorCycleState, saveOperatorCycleState } from "./operatorCycle";
@@ -13,7 +15,10 @@ const CYCLE_ID = "int-3a-2-production-conflict";
 const SOURCE_FINGERPRINT = "mt5|ES|ES|5m|int-1-1-live";
 const ICT_SOURCE_FINGERPRINT = "mt5|ES|ES|5m|int-3a-1";
 const at = (minute: number) => new Date(Date.UTC(2026, 5, 12, 13, 30 + minute)).toISOString();
-const candle = (minute: number, open: number, high: number, low: number, close: number, volume = 100) => ({
+const candle = (minute: number, open: number, high: number, low: number, close: number, volume = 100, timeframe: Timeframe = "5m"): Candle => ({
+  id: `int3a2-${timeframe}-${minute}`,
+  symbol: "ES",
+  timeframe,
   timestamp: at(minute), open, high, low, close, volume
 });
 const overlap = (startMinute: number, count: number, base = 100) => Array.from({ length: count }, (_, index) => {
@@ -35,8 +40,8 @@ const ifvgCandles = () => [
   candle(85, 99.6, 100, 94.8, 95.6)
 ];
 const contextCandles = {
-  "15m": [candle(-120, 90, 93, 89, 92), candle(-105, 92, 98, 91, 97), candle(-90, 97, 102, 96, 101)],
-  "1h": [candle(-240, 88, 94, 87, 93), candle(-180, 93, 103, 92, 101)]
+  "15m": [candle(-120, 90, 93, 89, 92, 100, "15m"), candle(-105, 92, 98, 91, 97, 100, "15m"), candle(-90, 97, 102, 96, 101, 100, "15m")],
+  "1h": [candle(-240, 88, 94, 87, 93, 100, "1h"), candle(-180, 93, 103, 92, 101, 100, "1h")]
 };
 
 const ictAuthority = {
@@ -55,7 +60,7 @@ const factBase = (factId: string, factType: string, minute: number, timeframe = 
   authority: ictAuthority
 });
 
-const ict2022ShortInput = () => ({
+const ict2022ShortInput = (): IctCoreDetectionInput => ({
   facts: [
     { ...factBase("ict-target", "LIQUIDITY", 0, "1h"), liquidityId: "ict-target-liquidity", side: "SELL_SIDE_LIQUIDITY", liquidityClass: "EXTERNAL", sourceStructureIds: ["target-swing"], ownerTimeframe: "1h", price: 89, status: "AVAILABLE" },
     { ...factBase("ict-draw", "DRAW_ON_LIQUIDITY", 0, "1h"), drawId: "ict-primary-draw", direction: "bearish", targetLiquidityId: "ict-target-liquidity", targetClass: "EXTERNAL", ownerTimeframe: "1h", distance: 10, structuralRelevance: 75, available: true, consumed: false, selectionPolicyVersion: "1", nearestLiquidityId: "ict-target-liquidity" },
@@ -63,7 +68,7 @@ const ict2022ShortInput = () => ({
     { ...factBase("ict-displacement", "DISPLACEMENT", 10), displacementId: "ict-displacement", direction: "bearish", startCandleId: "ict-5", endCandleId: "ict-10", bodySize: 4, baselineBodySize: 2, bodyMultiple: 2, measurementPolicyId: "int-3a-2-acceptance" },
     { ...factBase("ict-mss", "MSS", 15), mssId: "ict-mss", direction: "bearish", brokenStructureId: "ict-swing", breakCandleId: "ict-15", displacementId: "ict-displacement", breakPrice: 100 },
     { ...factBase("ict-fvg", "FVG", 20), fvgId: "ict-fvg", direction: "bearish", proximalPrice: 101, distalPrice: 100, midpoint: 100.5, originCandleIds: ["ict-10", "ict-15", "ict-20"], fvgState: "OPEN", filledPercentage: 0 }
-  ],
+  ] as unknown as IctCoreDetectionInput["facts"],
   candlesByTimeframe: { "5m": [{ id: "ict-retrace", symbol: "ES", timeframe: "5m", timestamp: at(25), open: 101, high: 101.2, low: 100.4, close: 100.8, volume: 100 }] },
   asOf: at(25), sourceFingerprint: ICT_SOURCE_FINGERPRINT,
   narrative: { structural: "bearish", intermediate: "bullish", execution: "bullish", liquidityPath: "sellside", structuralTimeframe: "1h", intermediateTimeframe: "15m", executionTimeframe: "5m", policyId: "gotrader.ict.c1-1.hierarchical-roles.v1", policyVersion: "1.0.0" },
@@ -98,7 +103,6 @@ const controlledRuntime = async (): Promise<ResearchRuntimeSnapshot> => {
       activeResearchSourceLabel: source.sourceLabel,
       chartDisplayCandleCount: source.candleCount,
       researchDataFingerprint: SOURCE_FINGERPRINT,
-      sourceFingerprint: SOURCE_FINGERPRINT,
       symbol: "ES",
       contract: "ES",
       timeframe: "5m",
@@ -109,6 +113,21 @@ const controlledRuntime = async (): Promise<ResearchRuntimeSnapshot> => {
   };
 };
 
+const analysisTimeframe = (
+  timeframe: IctAnalysisTimeframe,
+  candleCount: number,
+  availableLookbackDays: number,
+  role: IctAnalysisTimeframeRole
+) => ({
+  timeframe,
+  requestedLookbackDays: 90,
+  availableLookbackDays,
+  candleCount,
+  dataDepthStatus: "sufficient" as const,
+  sourceMethod: "int3a2_controlled_acceptance",
+  role
+});
+
 const controlledBundle = (): IctMarketAnalysisContextBundle => ({
   context: {
     researchOnly: true,
@@ -117,25 +136,25 @@ const controlledBundle = (): IctMarketAnalysisContextBundle => ({
     displayTimeframe: "5m",
     displayTimeframeRole: "chart_display_reference_only",
     analysisTimeframes: [
-      { timeframe: "M5", candleCount: 17_799, availableLookbackDays: 88.95 },
-      { timeframe: "M15", candleCount: 5_933, availableLookbackDays: 88.95 },
-      { timeframe: "H1", candleCount: 1_484, availableLookbackDays: 88.95 },
-      { timeframe: "H4", candleCount: 371, availableLookbackDays: 88.95 },
-      { timeframe: "D1", candleCount: 90, availableLookbackDays: 90 },
-      { timeframe: "W1", candleCount: 18, availableLookbackDays: 90 }
+      analysisTimeframe("M5", 17_799, 88.95, "confirmation_refinement"),
+      analysisTimeframe("M15", 5_933, 88.95, "session_model"),
+      analysisTimeframe("H1", 1_484, 88.95, "bias_and_dealing_range"),
+      analysisTimeframe("H4", 371, 88.95, "htf_bias"),
+      analysisTimeframe("D1", 90, 90, "daily_bias"),
+      analysisTimeframe("W1", 18, 90, "weekly_bias")
     ],
     analysisTimeframesRequested: ["W1", "D1", "H4", "H1", "M15", "M5"],
     analysisTimeframesLoaded: ["W1", "D1", "H4", "H1", "M15", "M5"],
     requiredTimeframesLoaded: true,
     chartDisplayCandleCount: 1_000,
     analysisDepthStatus: "sufficient",
-    multiTimeframeContextStatus: "complete",
+    multiTimeframeContextStatus: "built",
     analysisTimeframesUsed: ["W1", "D1", "H4", "H1", "M15", "M5"],
     missingTimeframes: [],
     htfBiasSource: ["W1", "D1", "H4", "H1"],
     sessionModelSourceTimeframe: "M15",
     confirmationSourceTimeframe: "M5",
-    weeklyBiasStatus: "available",
+    weeklyBiasStatus: "loaded",
     weeklyBiasDirection: "bullish",
     weeklyBiasReason: "Controlled acceptance metadata supplies sufficient top-down context.",
     warnings: ["INT-3A.2 deterministic acceptance input."],
