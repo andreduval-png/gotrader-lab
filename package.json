@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:int-3a-core-models": "node scripts/test-int-3a-core-models.mjs",
     "test:trade-geometry-no-chase": "node scripts/test-trade-geometry-no-chase.mjs",
     "test:trade-geometry-targets": "node scripts/test-trade-geometry-targets.mjs",
     "test:trade-geometry": "node scripts/test-trade-geometry.mjs",
