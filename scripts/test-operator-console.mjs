@@ -43,12 +43,19 @@ assert.doesNotMatch(snapshot, /Math\.abs\([^\n]*(?:entry|stop|target)/);
 assert.match(snapshot, /planIdentityStatus === "current"/);
 assert.match(snapshot, /source_mismatch/);
 assert.match(snapshot, /candidate_mismatch/);
+assert.match(snapshot, /candidatePlansFor/);
+assert.match(snapshot, /plan\.strategyId/);
+assert.match(snapshot, /plan\.candidateId/);
+assert.match(snapshot, /plan\.geometryId/);
 
 assert.match(view, /Research trade plan/i);
 assert.match(view, /researchPlan\.entryPrice/);
 assert.match(view, /researchPlan\.stopLoss/);
 assert.match(view, /researchPlan\.takeProfit/);
 assert.match(view, /researchPlan\.riskReward/);
+assert.match(view, /operator-canonical-candidates/);
+assert.match(view, /candidate\.strategyId/);
+assert.match(view, /candidate\.geometryId\s*\?\?\s*candidate\.candidateId/);
 
 console.log(JSON.stringify({
   status: "passed",
@@ -56,5 +63,6 @@ console.log(JSON.stringify({
   quotaSafeCycleState: true,
   inMemoryActivationSummary: true,
   canonicalGeometryOnly: true,
+  multiCandidateIdentityPreserved: true,
   executionAuthority: "none"
 }, null, 2));

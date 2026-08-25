@@ -49,7 +49,7 @@ function compileForNode() {
   fs.writeFileSync(path.join(outRoot, "ictCurrentRead.mjs"), "export function buildIctCurrentReadFromPacket() { return globalThis.__ACTIVATE_MARKET_TEST_READ; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictMarketAnalysisContext.mjs"), "export async function buildIctMarketAnalysisContextBundle() { return globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictSignalContract.mjs"), "export function buildIctResearchSignalFromCurrentRead() { return globalThis.__ACTIVATE_MARKET_TEST_SIGNAL; }\n", "utf8");
-  fs.writeFileSync(path.join(outRoot, "tradeGeometry.mjs"), "export function projectCanonicalTradeGeometry(geometry) { return geometry ? { intendedEntry: geometry.entry?.intendedPrice, intendedStop: geometry.stop?.price, intendedTarget: geometry.target?.price, theoreticalRR: geometry.theoreticalRR } : undefined; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "tradeGeometry.mjs"), "export function projectCanonicalTradeGeometry(geometry) { return geometry ? { geometryId: geometry.geometryId, intendedEntry: geometry.entry?.intendedPrice, intendedStop: geometry.stop?.price, intendedTarget: geometry.target?.price, theoreticalRR: geometry.theoreticalRR, geometryValid: geometry.geometryValid, actionable: geometry.actionable, status: geometry.status, displayKind: geometry.actionable ? 'ACTIONABLE_GEOMETRY' : 'RESEARCH_GEOMETRY' } : undefined; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictCmdPaperTracking.mjs"), "export function evaluateCmdPaperTrackingEligibility() { return globalThis.__ACTIVATE_MARKET_TEST_CMD_ELIGIBILITY; }\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "currentOpportunity.mjs"),
@@ -464,9 +464,17 @@ async function main() {
 
   const canonicalIfvgOpportunity = {
     id: "ifvg-v3-live-opportunity",
+    candidateId: "ifvg-v3-live-candidate",
     strategyId: "ifvg_fresh_retest_v3_research",
+    strategyVersion: "v3",
+    profileId: "ifvg_fresh_retest_v3_research",
+    candidateState: "ACTIVE",
+    setupName: "IFVG fresh-retest v3",
     status: "valid_candidate",
     side: "short",
+    actionable: true,
+    blockers: [],
+    missingConditions: [],
     geometry: canonicalIfvgGeometry,
     entry: 23100,
     invalidation: 23104,
@@ -501,8 +509,68 @@ async function main() {
   assert.equal(canonicalIfvgResult.summary.proposedStopLoss, 23104);
   assert.equal(canonicalIfvgResult.summary.proposedTakeProfit, 23092);
   assert.equal(canonicalIfvgResult.summary.proposedRiskReward, 2);
+  assert.equal(canonicalIfvgResult.summary.candidatePlans.length, 1);
+  assert.equal(canonicalIfvgResult.summary.candidatePlans[0].candidateId, "ifvg-v3-live-candidate");
+  assert.equal(canonicalIfvgResult.summary.candidatePlans[0].geometryId, canonicalIfvgGeometry.geometryId);
   assert.equal(canonicalIfvgResult.summary.executionAllowed, false);
   assertSafe(canonicalIfvgResult);
+
+  const ict2022Geometry = {
+    ...canonicalIfvgGeometry,
+    geometryId: "ict-2022-long-canonical-geometry",
+    logicalGeometryKey: "ict-2022-long-logical-geometry",
+    strategyId: "ict_2022_model_v1",
+    strategyVersion: "1.0.0",
+    profileId: "ict_2022_model_v1_research",
+    profileVersion: "1.0.0",
+    candidateId: "ict-2022-long-candidate",
+    direction: "LONG",
+    entry: { model: "POST_MSS_FVG_MIDPOINT_RETRACE", intendedPrice: 23090, lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED" },
+    stop: { model: "OPPOSING_RAID_EXTREME", price: 23080, structuralInvalidation: true },
+    target: { ...canonicalIfvgGeometry.target, price: 23120, targetId: "ict-2022-primary-draw", policyId: "ict_2022_model_v1.primary_external_draw" },
+    riskDistance: 10,
+    rewardDistance: 30,
+    theoreticalRR: 3,
+    minimumRequiredRR: 2
+  };
+  const ict2022Opportunity = {
+    ...canonicalIfvgOpportunity,
+    id: "ict-2022-long-opportunity",
+    candidateId: "ict-2022-long-candidate",
+    strategyId: "ict_2022_model_v1",
+    strategyVersion: "1.0.0",
+    profileId: "ict_2022_model_v1_research",
+    setupName: "ICT 2022 Model",
+    side: "long",
+    geometry: ict2022Geometry,
+    entry: 23090,
+    invalidation: 23080,
+    target: 23120,
+    rrEstimate: 3
+  };
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    side: "flat",
+    canonicalGeometry: undefined,
+    currentOpportunitySummary: {
+      canonicalSetupConflict: "CONFLICTING_CANONICAL_SETUPS"
+    },
+    currentOpportunities: [canonicalIfvgOpportunity, ict2022Opportunity]
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({ status: "no_signal", side: "flat", canonicalGeometry: undefined });
+  const conflictResult = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.equal(conflictResult.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(conflictResult.summary.proposedGeometry, undefined, "conflicts must not create a synthetic primary plan");
+  assert.deepEqual(
+    conflictResult.summary.candidatePlans.map((plan) => [plan.strategyId, plan.candidateId, plan.geometryId, plan.entry, plan.stop, plan.target, plan.riskReward]),
+    [
+      ["ifvg_fresh_retest_v3_research", "ifvg-v3-live-candidate", "ifvg-v3-live-canonical-geometry", 23100, 23104, 23092, 2],
+      ["ict_2022_model_v1", "ict-2022-long-candidate", "ict-2022-long-canonical-geometry", 23090, 23080, 23120, 3]
+    ]
+  );
 
   const queuedHypothesis = {
     researchOnly: true,

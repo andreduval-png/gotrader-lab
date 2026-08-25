@@ -108,6 +108,8 @@ function compileSuiteForNode() {
     const withRuntimeStubs = rewritten
       .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/ictI2"/g, 'from "./ictI2Stub.mjs"')
+      .replace(/from\s+'..\/ictI2'/g, "from './ictI2Stub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
@@ -132,6 +134,7 @@ export async function listCanonicalCandleSourceSummaries() {
   );
   fs.writeFileSync(path.join(outRoot, "currentOpportunityStub.mjs"), "export function buildCurrentOpportunityContext(input) { return input; }\nexport function detectCurrentOpportunities() { return { summary: { total: 0 }, opportunities: [] }; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictI2Stub.mjs"), "export function buildIctCoreRuntimeCandidates() { return undefined; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export function projectCanonicalTradeGeometry() { return undefined; }\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "canonicalGeometryStub.mjs"),

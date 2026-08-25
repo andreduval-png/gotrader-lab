@@ -24,7 +24,9 @@ const files = [
   ["src/lib/ictI2/ict2022Model.ts", "ict2022Model.mjs"],
   ["src/lib/ictI2/ictPowerOfThreeModel.ts", "ictPowerOfThreeModel.mjs"],
   ["src/lib/ictI2/ictJudasSwingModel.ts", "ictJudasSwingModel.mjs"],
-  ["src/lib/ictI2/ictI2Collection.ts", "ictI2Collection.mjs"]
+  ["src/lib/ictI2/ictI2Collection.ts", "ictI2Collection.mjs"],
+  ["src/lib/currentOpportunity/currentOpportunityTypes.ts", "currentOpportunityTypes.mjs"],
+  ["src/lib/currentOpportunity/detectCurrentOpportunities.ts", "detectCurrentOpportunities.mjs"]
 ];
 
 for (const [sourceName, outputName] of files) {
@@ -39,7 +41,9 @@ for (const [sourceName, outputName] of files) {
     .replace(/from\s+["']@\/lib\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
     .replace(/from\s+["']@\/lib\/tradeGeometry\/entryLifecycle["']/g, 'from "./entryLifecycle.mjs"')
     .replace(/from\s+["']@\/lib\/tradeGeometry\/strategyGeometryIntent["']/g, 'from "./strategyGeometryIntent.mjs"')
-    .replace(/from\s+["']@\/lib\/ictI2\/([^"']+)["']/g, (_match, name) => `from "./${name}.mjs"`);
+    .replace(/from\s+["']@\/lib\/ictI2\/([^"']+)["']/g, (_match, name) => `from "./${name}.mjs"`)
+    .replace(/from\s+["']\.\.\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
+    .replace(/from\s+["']\.\/currentOpportunityTypes["']/g, 'from "./currentOpportunityTypes.mjs"');
   fs.writeFileSync(path.join(out, outputName), js, "utf8");
 }
 
@@ -47,6 +51,7 @@ const model2022 = await import(`${pathToFileURL(path.join(out, "ict2022Model.mjs
 const po3 = await import(`${pathToFileURL(path.join(out, "ictPowerOfThreeModel.mjs")).href}?v=${Date.now()}`);
 const judas = await import(`${pathToFileURL(path.join(out, "ictJudasSwingModel.mjs")).href}?v=${Date.now()}`);
 const collection = await import(`${pathToFileURL(path.join(out, "ictI2Collection.mjs")).href}?v=${Date.now()}`);
+const currentOpportunity = await import(`${pathToFileURL(path.join(out, "detectCurrentOpportunities.mjs")).href}?v=${Date.now()}`);
 
 const authority = {
   executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none",
@@ -130,5 +135,35 @@ const short = model2022.evaluateIct2022Model(ictFixture("bearish"));
 const conflict = collection.buildIctCoreCandidateCollection({ generatedAt: at(25), sourceFingerprint: "fixture-source", candidates: [long, short] });
 assert.equal(conflict.candidates.length, 2);
 assert.equal(conflict.conflict, "CONFLICTING_CANONICAL_SETUPS");
+
+const opportunityContext = (coreIctCandidates) => ({
+  generatedAt: at(25), requestedSymbol: "NQ", brokerSymbol: "USTECH", primaryTimeframe: "5m",
+  contextTimeframes: ["1h", "15m", "5m"], sourceProvider: "mt5_read_only", sourceFingerprint: "fixture-source",
+  isMockOrSample: false, isResearchActive: true, isProxyInstrument: true,
+  opportunityBlockers: [], opportunityMissingEvidence: [], topReasons: [], confidence: 0.8,
+  timeframeRoleSummary: [
+    { timeframe: "H1", role: "structural", status: "loaded" },
+    { timeframe: "M15", role: "intermediate", status: "loaded" },
+    { timeframe: "M5", role: "execution", status: "loaded" }
+  ],
+  coreIctCandidates, analysisTimeframesUsed: ["H1", "M15", "M5"], missingTimeframes: [],
+  sourceDepth: {
+    tacticalLatestCandleCount: 1000, sessionContextAvailable: true, swingContextDays: 90,
+    validationLookbackDays: 90, validationContextAvailable: true, rangeHistoryAvailable: true,
+    analysisDepthStatus: "sufficient", depthPolicyStatus: "validation_context_ready", depthWarnings: []
+  }
+});
+const conflictScan = currentOpportunity.detectCurrentOpportunities(opportunityContext(conflict));
+assert.equal(conflictScan.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+assert.equal(conflictScan.summary.topOpportunity, undefined);
+assert.deepEqual(
+  conflictScan.opportunities.slice(0, 2).map((candidate) => [candidate.candidateId, candidate.geometry?.geometryId]),
+  [[long.candidateId, long.canonicalGeometry.geometryId], [short.candidateId, short.canonicalGeometry.geometryId]]
+);
+
+const sameDirection = collection.buildIctCoreCandidateCollection({ generatedAt: at(25), sourceFingerprint: "fixture-source", candidates: [long, { ...long, candidateId: `${long.candidateId}-second` }] });
+const sameDirectionScan = currentOpportunity.detectCurrentOpportunities(opportunityContext(sameDirection));
+assert.equal(sameDirectionScan.summary.canonicalSetupConflict, "NONE");
+assert.equal(sameDirectionScan.opportunities.filter((candidate) => candidate.strategyId === "ict_2022_model_v1").length, 2);
 
 console.log(JSON.stringify({ status: "passed", ict2022Directions: 2, po3: po3Result.state, judas: judasResult.state, conflict: conflict.conflict }, null, 2));

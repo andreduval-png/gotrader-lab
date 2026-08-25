@@ -109,6 +109,8 @@ function compileSuiteForNode() {
       .replace(/from\s+'..\/candleSources'/g, "from './candleSourcesStub.mjs'")
       .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
+      .replace(/from\s+"..\/ictI2"/g, 'from "./ictI2Stub.mjs"')
+      .replace(/from\s+'..\/ictI2'/g, "from './ictI2Stub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
@@ -138,6 +140,8 @@ export const detectCurrentOpportunities = () => ({
     "utf8"
   );
   fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export const buildForwardScenarioMapFromCurrentRead = () => undefined;\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictI2Stub.mjs"), "export const buildIctCoreRuntimeCandidates = () => undefined;\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictDetectorCanonicalGeometry.mjs"), "export const adaptIfvgNativeGeometry = () => undefined;\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export const projectCanonicalTradeGeometry = () => undefined;\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "index.mjs"),
