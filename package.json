@@ -10,6 +10,7 @@
     "test:int-3a-1-operator-conflict": "node scripts/test-int-3a-1-operator-conflict.mjs",
     "test:int-3a-2-production-conflict": "node scripts/test-int-3a-1-operator-conflict.mjs && node scripts/test-current-opportunity-scanner.mjs && node scripts/test-ict-activate-market-pipeline.mjs",
     "test:int-3a-2-production-browser": "node scripts/test-int-3a-2-production-browser.mjs",
+    "test:ict-mmbm": "node scripts/test-ict-mmbm.mjs",
     "test:trade-geometry-no-chase": "node scripts/test-trade-geometry-no-chase.mjs",
     "test:trade-geometry-targets": "node scripts/test-trade-geometry-targets.mjs",
     "test:trade-geometry": "node scripts/test-trade-geometry.mjs",
