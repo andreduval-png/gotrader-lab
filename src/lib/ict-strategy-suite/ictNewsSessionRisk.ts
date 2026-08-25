@@ -50,7 +50,7 @@ const riskRank: Record<IctNewsRiskLevel, number> = {
 const maxRisk = (levels: IctNewsRiskLevel[]): IctNewsRiskLevel =>
   levels.length
     ? levels.slice().sort((left, right) => riskRank[right] - riskRank[left])[0]
-    : "none";
+    : "unknown";
 
 const normalizeImpact = (impact?: string): IctEconomicEventRisk["impact"] => {
   const normalized = String(impact ?? "unknown").toLowerCase();
@@ -306,7 +306,13 @@ const actionFor = ({
 }): IctRiskGovernorAction => {
   if (blockingEvents.length || newsRiskLevel === "blocked" || newsRiskLevel === "high") return "reject_candidate";
   if (context.sessionRiskState === "avoid") return "no_trade";
-  if (cautionEvents.length || newsRiskLevel === "medium" || context.sessionRiskState === "caution" || context.sessionRiskState === "unknown") {
+  if (
+    cautionEvents.length ||
+    newsRiskLevel === "medium" ||
+    newsRiskLevel === "unknown" ||
+    context.sessionRiskState === "caution" ||
+    context.sessionRiskState === "unknown"
+  ) {
     return "downgrade_to_watchlist";
   }
   return "allow";
@@ -363,7 +369,7 @@ export const evaluateNewsSessionRisk = (
   });
   const extraNotes = [
     context.syntheticNoRisk ? "Synthetic no-news-risk context is active; use this only for historical replay when a calendar is unavailable." : "",
-    !context.syntheticNoRisk && !allEvents.length ? "No economic calendar or macro-risk window was supplied; governor used session risk only." : "",
+    !context.syntheticNoRisk && !allEvents.length ? "No economic calendar or macro-risk window was supplied; news risk remains unknown." : "",
     context.spreadState === "extreme" ? "Extreme spread state supplied; candidate should be blocked by downstream risk review." : "",
     context.volatilityState === "extreme" ? "Extreme volatility state supplied; candidate should be blocked by downstream risk review." : ""
   ].filter(Boolean);

@@ -10,6 +10,7 @@ import type {
   IctWeeklyBiasStatus
 } from "./ictMarketAnalysisContextTypes";
 import type { IctMonteCarloRobustnessRating } from "./ictMonteCarloTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 import type {
   IctDetectedOpportunity,
   IctOpportunityDirection,
@@ -111,6 +112,9 @@ export interface IctCurrentRead {
   approvalScore?: number;
   confidence?: number;
   rrEstimate?: number;
+  canonicalGeometry?: CanonicalTradeGeometry;
+  geometryMode: "canonical" | "unavailable";
+  geometryStatus?: CanonicalTradeGeometry["status"];
   target?: number;
   targetProvenance?: IctTargetProvenance;
   invalidation?: number;

@@ -23,11 +23,13 @@ const safety = {
   secretsExcluded: true as const
 };
 
+export const ICT_INDEX_RISK_POLICY_ID = "ict_index_risk_policy_v1" as const;
+
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const rounded = (value: number, decimals = 4) => Number(value.toFixed(decimals));
 const unique = <T extends string>(values: T[]) => Array.from(new Set(values));
 
-const defaultRiskModelFor = (input: IctTradeConstructionInput): Required<Pick<IctRiskModel, "minimumRR" | "preferredRR" | "maximumRR">> & Pick<IctRiskModel, "maxStopDistance" | "pointSize" | "pointValue" | "strategyId"> => {
+const defaultRiskModelFor = (input: IctTradeConstructionInput): Required<Pick<IctRiskModel, "minimumRR" | "preferredRR" | "maximumRR">> & Pick<IctRiskModel, "minStopDistance" | "maxStopDistance" | "pointSize" | "pointValue" | "strategyId"> => {
   const id = input.strategyId?.toLowerCase() ?? "";
   const symbol = `${input.symbol ?? ""} ${input.brokerSymbol ?? ""}`.toUpperCase();
   const minimumRR =
@@ -38,10 +40,14 @@ const defaultRiskModelFor = (input: IctTradeConstructionInput): Required<Pick<Ic
   const maxStopDistance =
     input.maxStopDistance ??
     (symbol.includes("USTECH") || symbol.includes("MNQ") || symbol.includes("NQ") || symbol.includes("US100") ? 50 : undefined);
+  const minStopDistance =
+    input.minStopDistance ??
+    (symbol.includes("USTECH") || symbol.includes("MNQ") || symbol.includes("NQ") || symbol.includes("US100") ? 4 : undefined);
   return {
     minimumRR,
     preferredRR,
     maximumRR,
+    minStopDistance,
     maxStopDistance,
     pointSize: input.pointSize,
     pointValue: input.pointValue,
@@ -98,7 +104,9 @@ const nextActionFor = (blockers: IctTradeConstructionBlocker[]) => {
   if (blockers.includes("invalidation_missing")) return "Define a structure-based stop or invalidation before calculating RR.";
   if (blockers.includes("structure_bounds_missing")) return "Attach compact FVG/OB/mitigation/breaker structure bounds before validating stop placement.";
   if (blockers.includes("stop_not_beyond_structure")) return "Move invalidation beyond the compact structure boundary.";
+  if (blockers.includes("stop_too_tight")) return "Wait for structure that supports a stop beyond the minimum market-noise distance.";
   if (blockers.includes("stop_too_wide")) return "Wait for a tighter structure stop; do not widen the candidate arbitrarily.";
+  if (blockers.includes("entry_chases_price")) return "Wait for price to retrace into the entry array; do not chase a spent setup.";
   if (blockers.includes("rr_below_minimum") || blockers.includes("target_too_close")) return "Wait for a cleaner target or tighter invalidation so RR meets the model minimum.";
   if (blockers.includes("invalid_price_order")) return "Rebuild entry, target, and invalidation with the correct directional price order.";
   if (blockers.includes("source_missing")) return "Use an active canonical research source with a fingerprint before validation.";
@@ -130,6 +138,11 @@ export const validateIctTradeConstruction = (input: IctTradeConstructionInput): 
     if (input.side === "short" && stop <= boundary) blockers.push("stop_not_beyond_structure");
   }
 
+  if (finite(input.entry) && finite(input.currentPrice)) {
+    if (input.side === "long" && input.entry > input.currentPrice) blockers.push("entry_chases_price");
+    if (input.side === "short" && input.entry < input.currentPrice) blockers.push("entry_chases_price");
+  }
+
   let riskDistance: number | undefined;
   let targetDistance: number | undefined;
   let rr: number | undefined;
@@ -143,6 +156,7 @@ export const validateIctTradeConstruction = (input: IctTradeConstructionInput): 
       targetDistance = rounded(targetDistance);
       rr = rounded(targetDistance / riskDistance);
       const maxStopDistance = maxStopDistanceAsPrice(risk, symbolText);
+      if (finite(risk.minStopDistance) && riskDistance < risk.minStopDistance) blockers.push("stop_too_tight");
       if (finite(maxStopDistance) && riskDistance > maxStopDistance) blockers.push("stop_too_wide");
       if (finite(maxStopDistance) && input.maxStopDistance === undefined) warnings.push("max_stop_distance_inferred_from_symbol");
       if (finite(risk.maxStopDistance) && !finite(input.pointSize) && /EURUSD|GBPUSD|USDJPY|AUDUSD|USDCAD|USDCHF|NZDUSD/i.test(symbolText)) {
@@ -176,6 +190,7 @@ export const validateIctTradeConstruction = (input: IctTradeConstructionInput): 
     preferredRR: risk.preferredRR,
     maximumRR: risk.maximumRR,
     maxStopDistance: risk.maxStopDistance,
+    minStopDistance: risk.minStopDistance,
     blockers: compactBlockers,
     warnings: unique(warnings),
     nextAction: nextActionFor(compactBlockers),

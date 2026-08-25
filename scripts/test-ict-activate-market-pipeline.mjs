@@ -33,7 +33,11 @@ function compileForNode() {
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"\.\.\/currentOpportunity"/g, 'from "./currentOpportunity.mjs"')
-      .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'");
+      .replace(/from\s+'\.\.\/currentOpportunity'/g, "from './currentOpportunity.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometry.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometry.mjs'")
+      .replace(/from\s+"\.\.\/tradeGeometry"/g, 'from "./tradeGeometry.mjs"')
+      .replace(/from\s+'\.\.\/tradeGeometry'/g, "from './tradeGeometry.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(path.join(outRoot, "ictAdvisorEngine.mjs"), "export async function buildIctAdvisorPacketFromRuntime() { return { compactSummary: {} }; }\n", "utf8");
@@ -45,6 +49,7 @@ function compileForNode() {
   fs.writeFileSync(path.join(outRoot, "ictCurrentRead.mjs"), "export function buildIctCurrentReadFromPacket() { return globalThis.__ACTIVATE_MARKET_TEST_READ; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictMarketAnalysisContext.mjs"), "export async function buildIctMarketAnalysisContextBundle() { return globalThis.__ACTIVATE_MARKET_TEST_MARKET_CONTEXT; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictSignalContract.mjs"), "export function buildIctResearchSignalFromCurrentRead() { return globalThis.__ACTIVATE_MARKET_TEST_SIGNAL; }\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "tradeGeometry.mjs"), "export function projectCanonicalTradeGeometry(geometry) { return geometry ? { intendedEntry: geometry.entry?.intendedPrice, intendedStop: geometry.stop?.price, intendedTarget: geometry.target?.price, theoreticalRR: geometry.theoreticalRR } : undefined; }\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "ictCmdPaperTracking.mjs"), "export function evaluateCmdPaperTrackingEligibility() { return globalThis.__ACTIVATE_MARKET_TEST_CMD_ELIGIBILITY; }\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "currentOpportunity.mjs"),
@@ -90,6 +95,34 @@ const safety = {
   orderDataExcluded: true,
   positionDataExcluded: true,
   secretsExcluded: true
+};
+
+const canonicalIfvgGeometry = {
+  schemaVersion: "gotrader.trade-geometry.v1",
+  geometryVersion: "g2.1.0",
+  geometryId: "ifvg-v3-live-canonical-geometry",
+  logicalGeometryKey: "ifvg-v3-live-logical-geometry",
+  strategyId: "ifvg_fresh_retest_v3_research",
+  strategyVersion: "v3",
+  profileId: "ifvg_fresh_retest_v3_research",
+  profileVersion: "v3",
+  candidateId: "ifvg-v3-live-candidate",
+  direction: "SHORT",
+  entry: { model: "IFVG_NATIVE_MIDPOINT_RETEST", intendedPrice: 23100, lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED" },
+  stop: { model: "IFVG_NATIVE_FULL_GAP_INVALIDATION", price: 23104, structuralInvalidation: true },
+  target: { model: "EXTERNAL_LIQUIDITY", price: 23092, targetId: "ifvg-v3-target", targetType: "EXTERNAL_LIQUIDITY", selectionRole: "PRIMARY", policyId: "ifvg_fresh_retest_v3_research.native-liquidity-target", policyVersion: "v3" },
+  targetPolicy: { policyId: "ifvg_fresh_retest_v3_research.native-liquidity-target", policyVersion: "v3", primaryTargetType: "EXTERNAL_LIQUIDITY", primaryTargetId: "ifvg-v3-target", allowedFallbackTargetTypes: [] },
+  riskDistance: 4,
+  rewardDistance: 8,
+  theoreticalRR: 2,
+  minimumRequiredRR: 2,
+  geometryValid: true,
+  actionable: true,
+  status: "VALID_ACTIONABLE",
+  blockers: [],
+  warnings: [],
+  sourceFingerprint: "mt5_ustech_5m_1000_fp",
+  authority: { execution: "none", broker: "none", production: "none" }
 };
 
 const activeSource = (overrides = {}) => ({
@@ -424,12 +457,52 @@ async function main() {
   assert.equal(savedSummaries[0].weeklyBiasStatus, "loaded");
   assert.equal(savedSummaries[0].weeklyBiasDirection, success.summary.weeklyBiasDirection);
   assert.equal(savedSummaries[0].weeklyBiasDirection, "bearish");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.type, "previous_day_low");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.sourceTimeframe, "daily");
-  assert.equal(savedSummaries[0].proposedTargetProvenance.gateStatus, "accepted");
+  assert.equal(savedSummaries[0].proposedTargetProvenance, undefined, "signal-only geometry must not be promoted into the plan");
   assert.doesNotMatch(JSON.stringify(savedSummaries[0]), /"(?:candles|rawCandles|rawSnapshots)"\s*:/i);
   assertSafe(success);
   assert.match(suite.summarizeActivateMarketResult(success), /execution disabled/i);
+
+  const canonicalIfvgOpportunity = {
+    id: "ifvg-v3-live-opportunity",
+    strategyId: "ifvg_fresh_retest_v3_research",
+    status: "valid_candidate",
+    side: "short",
+    geometry: canonicalIfvgGeometry,
+    entry: 23100,
+    invalidation: 23104,
+    target: 23092,
+    rrEstimate: 2
+  };
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    side: "short",
+    currentOpportunitySummary: {
+      topOpportunity: canonicalIfvgOpportunity
+    },
+    currentOpportunities: [canonicalIfvgOpportunity]
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    status: "approved_research_signal",
+    side: "short",
+    canonicalGeometry: canonicalIfvgGeometry,
+    canonicalGeometryId: canonicalIfvgGeometry.geometryId,
+    entryReference: 23100,
+    invalidation: 23104,
+    target: 23092,
+    rrEstimate: 2
+  });
+  const canonicalIfvgResult = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.notEqual(canonicalIfvgResult.status, "failed");
+  assert.equal(canonicalIfvgResult.summary.proposedGeometry?.geometryId, canonicalIfvgGeometry.geometryId);
+  assert.equal(canonicalIfvgResult.summary.proposedEntryPrice, 23100);
+  assert.equal(canonicalIfvgResult.summary.proposedStopLoss, 23104);
+  assert.equal(canonicalIfvgResult.summary.proposedTakeProfit, 23092);
+  assert.equal(canonicalIfvgResult.summary.proposedRiskReward, 2);
+  assert.equal(canonicalIfvgResult.summary.executionAllowed, false);
+  assertSafe(canonicalIfvgResult);
 
   const queuedHypothesis = {
     researchOnly: true,
@@ -637,9 +710,9 @@ async function main() {
     { saveLatestSummary: () => undefined }
   );
   assert.equal(rejectedWithCanonicalEntry.summary.proposedCandidateStatus, "rejected");
-  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryPrice, 23124.75);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryPrice, undefined);
   assert.equal(rejectedWithCanonicalEntry.summary.proposedEntryZone, undefined);
-  assert.equal(rejectedWithCanonicalEntry.summary.proposedStopLoss, 23156.25);
+  assert.equal(rejectedWithCanonicalEntry.summary.proposedStopLoss, undefined);
   assertSafe(rejectedWithCanonicalEntry);
 
   globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
@@ -664,8 +737,8 @@ async function main() {
     undefined,
     { saveLatestSummary: () => undefined }
   );
-  assert.equal(mismatchedScannerCandidate.summary.researchSide, "short");
-  assert.equal(mismatchedScannerCandidate.summary.proposedEntryPrice, 23100);
+  assert.equal(mismatchedScannerCandidate.summary.researchSide, "long", "scanner candidate owns side; signal fallback is ignored");
+  assert.equal(mismatchedScannerCandidate.summary.proposedEntryPrice, undefined);
   assert.equal(mismatchedScannerCandidate.summary.proposedCandidateStatus, "rejected");
   assertSafe(mismatchedScannerCandidate);
 

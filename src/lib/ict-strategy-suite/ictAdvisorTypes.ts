@@ -6,6 +6,7 @@ import type {
   IctPhase2Setup,
   IctPhase2StrategyId
 } from "./ictPhase2Types";
+import type { StrategyGeometryIntent } from "@/lib/tradeGeometry";
 import type { IctSmtSignal } from "./ictIndexSmtTypes";
 import type { IctIndexSmtJournalEvent } from "./ictIndexSmtTypes";
 import type {
@@ -145,6 +146,7 @@ export interface IctAdvisorSignal {
   target?: number;
   targetProvenance?: IctTargetProvenance;
   rrEstimate?: number;
+  strategyGeometryIntent?: StrategyGeometryIntent;
   setup: IctAdvisorSetup;
   summary: string;
   noTradeReasons: string[];

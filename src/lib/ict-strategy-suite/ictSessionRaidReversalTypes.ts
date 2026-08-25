@@ -1,4 +1,5 @@
 import type { IctTradeConstructionBlocker } from "./ictTradeConstructionTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctSessionRaidReversalNarrativeId = "nasdaq_london_raid_ny_reversal_v1";
 export type IctSessionRaidReversalStrategyId = "session_raid_reversal_v1";
@@ -105,6 +106,7 @@ export interface IctSessionRaidReversalValidationSeed {
   invalidation?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   sourceFingerprint?: string;
 }
 
@@ -130,6 +132,7 @@ export interface IctSessionRaidReversalNarrative {
   invalidation?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   tradeConstructionBlockers: IctTradeConstructionBlocker[];
   blockers: string[];
   missingConditions: string[];

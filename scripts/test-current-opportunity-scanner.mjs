@@ -11,16 +11,28 @@ const sourceRoot = path.join(projectRoot, "src", "lib", "currentOpportunity");
 const ictSourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const outRoot = path.join(projectRoot, ".gotrader", "current-opportunity-scanner-test");
 const sourceFiles = [
+  { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctTypes.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctIdentity.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "tradeGeometryTypes.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "targetSelection.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "canonicalTradeGeometry.ts" },
   { root: sourceRoot, file: "currentOpportunityTypes.ts" },
   { root: sourceRoot, file: "buildCurrentOpportunityContext.ts" },
   { root: ictSourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: ictSourceRoot, file: "ictTradeConstruction.ts" },
+  { root: ictSourceRoot, file: "ictIfvgProducerPolicy.ts" },
+  { root: ictSourceRoot, file: "ictIfvgTypes.ts" },
+  { root: ictSourceRoot, file: "ictIfvg.ts" },
+  { root: ictSourceRoot, file: "ictDetectorCanonicalGeometry.ts" },
+  { root: ictSourceRoot, file: "ictIfvgFreshRetestV3.ts" },
+  { root: ictSourceRoot, file: "ictSignalContract.ts" },
   { root: sourceRoot, file: "detectCurrentOpportunities.ts" },
   { root: sourceRoot, file: "currentOpportunityStore.ts" },
   { root: sourceRoot, file: "index.ts" }
 ];
 
 function compileForNode() {
+  fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
   for (const { root, file } of sourceFiles) {
     const sourcePath = path.join(root, file);
@@ -39,7 +51,12 @@ function compileForNode() {
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/ict-strategy-suite\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'..\/ict-strategy-suite\/([^']+)'/g, "from './$1.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const dependenciesRewritten = rewritten
+      .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+"..\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), dependenciesRewritten, "utf8");
   }
 }
 
@@ -80,6 +97,24 @@ const basePacket = {
   },
   approvedProfileDecision: { status: "no_trade" }
 };
+
+const canonicalGeometry = ({ strategyId, direction, entry, stop, target, rr = 2.5, actionable = true }) => ({
+  schemaVersion: "gotrader.trade-geometry.v1",
+  geometryVersion: "g2.1.0",
+  geometryId: `${strategyId}-geometry-fixture`,
+  logicalGeometryKey: `${strategyId}-logical-fixture`,
+  strategyId,
+  strategyVersion: "test",
+  candidateId: `${strategyId}-candidate-fixture`,
+  direction,
+  entry: { model: "NATIVE_TEST_ENTRY", intendedPrice: entry, lifecycleStatus: "WAITING_FOR_ENTRY" },
+  stop: { model: "NATIVE_TEST_STOP", price: stop, structuralInvalidation: true },
+  target: { model: "NATIVE_TEST_TARGET", price: target, targetId: "target-fixture", targetType: "DRAW_ON_LIQUIDITY", selectionRole: "PRIMARY", policyId: "native-test", policyVersion: "1" },
+  targetPolicy: { policyId: "native-test", policyVersion: "1", primaryTargetType: "DRAW_ON_LIQUIDITY", primaryTargetId: "target-fixture", allowedFallbackTargetTypes: [] },
+  riskDistance: Math.abs(entry - stop), rewardDistance: Math.abs(target - entry), theoreticalRR: rr, minimumRequiredRR: 2,
+  geometryValid: true, actionable, status: actionable ? "VALID_ACTIONABLE" : "VALID_BELOW_RR_THRESHOLD", blockers: [], warnings: [],
+  sourceFingerprint: "mt5_fp_current", authority: { execution: "none", broker: "none", production: "none" }
+});
 
 const baseRead = {
   requestedSymbol: "MNQ",
@@ -151,9 +186,37 @@ function assertDiagnosticContextOnly(item) {
   assert.equal(item.rrEstimate, undefined, "diagnostic rows should not expose RR");
 }
 
+const ifvgIso = (minute) => new Date(Date.UTC(2026, 5, 12, 13, 30 + minute)).toISOString();
+const ifvgCandle = (minute, open, high, low, close, volume = 100) => ({
+  timestamp: ifvgIso(minute), open, high, low, close, volume
+});
+const ifvgOverlap = (startMinute, count, base = 100) => Array.from({ length: count }, (_, index) => {
+  const open = base + (index % 3) * 0.12;
+  const close = base + ((index + 1) % 3) * 0.12;
+  return ifvgCandle(startMinute + index * 5, open, base + 1.2, base - 1.2, close, 150 + index);
+});
+const liveIfvgCandles = () => [
+  ...ifvgOverlap(-30, 6),
+  ...ifvgOverlap(0, 10),
+  ifvgCandle(50, 101, 104, 96, 97),
+  ifvgCandle(55, 97, 99, 95.5, 96.8),
+  ifvgCandle(60, 93, 94, 90, 91),
+  ifvgCandle(65, 91, 93.4, 90.5, 92.2),
+  ifvgCandle(70, 92.5, 98.6, 92.2, 98),
+  ifvgCandle(75, 98, 99.2, 97.2, 98.8),
+  ifvgCandle(80, 98.8, 100.2, 98.2, 99.8),
+  ifvgCandle(85, 99.6, 100, 94.8, 95.6)
+];
+const liveIfvgContext = {
+  "15m": [ifvgCandle(-120, 90, 93, 89, 92), ifvgCandle(-105, 92, 98, 91, 97), ifvgCandle(-90, 97, 102, 96, 101)],
+  "1h": [ifvgCandle(-240, 88, 94, 87, 93), ifvgCandle(-180, 93, 103, 92, 101)]
+};
+
 async function main() {
   compileForNode();
   const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")));
+  const ifvgV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")));
+  const signalContract = await import(pathToFileURL(path.join(outRoot, "ictSignalContract.mjs")));
 
   const tacticalContext = suite.buildCurrentOpportunityContext({ packet: basePacket, currentRead: baseRead });
   const tacticalScan = suite.detectCurrentOpportunities(tacticalContext);
@@ -225,8 +288,236 @@ async function main() {
   assert.equal(deepScan.summary.rangeHistoryAvailable, true, "90-day range metadata should be used");
   assert.equal(deepScan.summary.depthStatus, "validation_context_ready");
   assert.equal(deepScan.summary.validationLookbackDays, 88.95, "compact chart depth must not mask deeper validated range history");
-  assert.ok(deepScan.summary.validCandidateCount >= 1, "approved compact candidate with full structure should become valid_candidate");
+  assert.equal(deepScan.summary.validCandidateCount, 0, "raw compact geometry must not become a valid candidate");
   assertSafe(suite, deepScan);
+
+  const liveIfvgInput = {
+    sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5|ES|ES|5m|int-1-1-live",
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    timeframe: "5m",
+    candles: liveIfvgCandles(),
+    contextCandles: liveIfvgContext
+  };
+  const liveIfvgAssessment = ifvgV3.assessIctIfvgFreshRetestV3(liveIfvgInput);
+  const liveIfvgCompact = ifvgV3.compactIctIfvgFreshRetestV3Assessment(liveIfvgAssessment);
+  assert.equal(liveIfvgAssessment.candidate.strategyId, "ifvg_v1", "the actual base detector must execute");
+  assert.ok(liveIfvgCompact.geometry?.actionable, "the live compact v3 assessment must retain canonical geometry");
+  const liveIfvgPacket = {
+    ...deepPacket,
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    activeSource: {
+      ...deepPacket.activeSource,
+      sourceFingerprint: liveIfvgInput.sourceFingerprint,
+      sourceStatus: { ...deepPacket.activeSource.sourceStatus, isProxyInstrument: false }
+    },
+    compactSummary: {
+      ...deepPacket.compactSummary,
+      ifvgFreshRetestV3: liveIfvgCompact
+    }
+  };
+  const liveIfvgReadContext = {
+    ...deepRead,
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    side: "long",
+    debug: { ...deepRead.debug, sourceFingerprint: liveIfvgInput.sourceFingerprint }
+  };
+  const liveIfvgScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: liveIfvgPacket, currentRead: liveIfvgReadContext })
+  );
+  const liveIfvgOpportunity = liveIfvgScan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
+  assert.equal(liveIfvgOpportunity?.status, "valid_candidate");
+  assert.equal(liveIfvgOpportunity?.geometry?.geometryId, liveIfvgCompact.geometry.geometryId);
+  assert.equal(liveIfvgOpportunity?.entry, liveIfvgCompact.geometry.entry.intendedPrice);
+  assert.equal(liveIfvgOpportunity?.invalidation, liveIfvgCompact.geometry.stop.price);
+  assert.equal(liveIfvgOpportunity?.target, liveIfvgCompact.geometry.target.price);
+  assert.equal(liveIfvgOpportunity?.rrEstimate, liveIfvgCompact.geometry.theoreticalRR);
+  const liveIfvgCurrentRead = {
+    ...liveIfvgReadContext,
+    approvedStatus: "approved_research_candidate",
+    modelQualityLane: "approved",
+    bestSetup: "ifvg_fresh_retest_v3_research",
+    side: "long",
+    canonicalGeometry: liveIfvgOpportunity.geometry,
+    geometryMode: "canonical",
+    geometryStatus: liveIfvgOpportunity.geometry.status,
+    entryReference: liveIfvgOpportunity.entry,
+    invalidation: liveIfvgOpportunity.invalidation,
+    target: liveIfvgOpportunity.target,
+    rrEstimate: liveIfvgOpportunity.rrEstimate,
+    confidence: 0.74,
+    riskStatus: "allow",
+    topReasons: ["Live canonical IFVG v3 candidate."],
+    opportunityBlockers: [],
+    opportunityMissingEvidence: [],
+    currentOpportunitySummary: liveIfvgScan.summary,
+    currentOpportunities: liveIfvgScan.opportunities
+  };
+  const liveIfvgSignal = signalContract.buildIctResearchSignalFromCurrentRead(liveIfvgCurrentRead);
+  assert.equal(liveIfvgSignal.canonicalGeometryId, liveIfvgCompact.geometry.geometryId);
+  assert.equal(liveIfvgSignal.entryReference, liveIfvgCompact.geometry.entry.intendedPrice);
+  assert.equal(liveIfvgSignal.invalidation, liveIfvgCompact.geometry.stop.price);
+  assert.equal(liveIfvgSignal.target, liveIfvgCompact.geometry.target.price);
+  assert.equal(liveIfvgSignal.rrEstimate, liveIfvgCompact.geometry.theoreticalRR);
+  assert.equal(liveIfvgSignal.executionAllowed, false);
+  assert.deepEqual(liveIfvgSignal.authority, {
+    executionAuthority: "none",
+    brokerAuthority: "none",
+    readinessOverrideAuthority: "none"
+  });
+  assertSafe(suite, liveIfvgScan);
+
+  const lowRrRead = {
+    ...deepRead,
+    target: 30450,
+    rrEstimate: 1.2
+  };
+  const lowRrScan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: deepPacket, currentRead: lowRrRead }));
+  const lowRrCandidate = lowRrScan.opportunities.find((item) => item.strategyId === "ict_cmd_short_paper_watchlist_v1");
+  assert.ok(lowRrCandidate, "low-RR CMD opportunity should remain visible for diagnosis");
+  assert.equal(lowRrCandidate.status, "near_miss", "source-blocked CMD remains a non-actionable research thesis");
+  assert.equal(lowRrCandidate.geometry, undefined);
+  assert.equal(lowRrScan.summary.validCandidateCount, 0, "low-RR opportunity must not become promotable");
+  assertSafe(suite, lowRrScan);
+
+  const detectorPacket = {
+    ...deepPacket,
+    detectorAssessments: {
+      activeIfvgProfileId: "ifvg_fresh_retest_v3_research",
+      silverBulletV1: {
+        strategyId: "silver_bullet_v1",
+        status: "blocked_no_context_alignment",
+        side: "flat",
+        timeframe: "1m",
+        blockers: ["blocked_no_context_alignment"],
+        missingConditions: ["context_alignment"],
+        compactSummary: "Silver Bullet detector blocked: no context alignment.",
+        canCreateValidationChainEntry: false
+      },
+      cisdV1: {
+        strategyId: "cisd_v1",
+        status: "candidate",
+        side: "short",
+        timeframe: "5m",
+        entry: 30500,
+        stop: 30550,
+        target: 30400,
+        rr: 2,
+        geometry: canonicalGeometry({ strategyId: "cisd_v1", direction: "SHORT", entry: 30500, stop: 30550, target: 30400, rr: 2 }),
+        blockers: [],
+        missingConditions: [],
+        compactSummary: "CISD detector candidate with complete geometry.",
+        canCreateValidationChainEntry: true
+      }
+    }
+  };
+  const detectorScan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: detectorPacket, currentRead: deepRead }));
+  const blockedSilverBullet = detectorScan.opportunities.find((item) => item.strategyId === "silver_bullet_v1");
+  assert.equal(blockedSilverBullet.status, "near_miss", "later Silver Bullet detector packets remain outside INT-1 runtime ownership");
+  assert.equal(blockedSilverBullet.entry, undefined, "blocked detector must not inherit generic market-read entry");
+  assert.equal(blockedSilverBullet.target, undefined, "blocked detector must not inherit generic market-read target");
+  const cisdCandidate = detectorScan.opportunities.find((item) => item.strategyId === "cisd_v1");
+  assert.equal(cisdCandidate.status, "forming", "later CISD detector packets remain diagnostic/forming in INT-1");
+  assert.equal(cisdCandidate.entry, undefined);
+  assert.equal(cisdCandidate.invalidation, undefined);
+  assert.equal(cisdCandidate.target, undefined);
+  assertSafe(suite, detectorScan);
+
+  const tightStopPacket = {
+    ...deepPacket,
+    detectorAssessments: {
+      activeIfvgProfileId: "ifvg_fresh_retest_v3_research",
+      cisdV1: {
+        strategyId: "cisd_v1",
+        status: "candidate",
+        side: "short",
+        timeframe: "5m",
+        entry: 30500,
+        stop: 30500.75,
+        target: 30490,
+        rr: 13.3333,
+        blockers: [],
+        missingConditions: [],
+        compactSummary: "CISD detector candidate with a sub-point stop.",
+        canCreateValidationChainEntry: true
+      }
+    }
+  };
+  const tightStopScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: tightStopPacket, currentRead: deepRead })
+  );
+  const tightStopCandidate = tightStopScan.opportunities.find((item) => item.strategyId === "cisd_v1");
+  assert.equal(tightStopCandidate.status, "forming", "out-of-scope raw detector geometry must remain non-actionable");
+  assert.ok(tightStopCandidate.missingConditions.includes("canonical_geometry_unavailable"));
+  assert.equal(tightStopCandidate.geometry, undefined, "invalid risk must not become canonical geometry");
+  assert.equal(tightStopCandidate.entry, undefined, "invalid risk must not publish an entry plan");
+  assert.equal(tightStopCandidate.invalidation, undefined, "invalid risk must not publish a stop plan");
+  assert.equal(tightStopCandidate.target, undefined, "invalid risk must not publish a target plan");
+  assert.equal(tightStopCandidate.rrEstimate, undefined, "invalid risk must not publish inflated RR");
+  assert.equal(
+    tightStopScan.opportunities.some((item) => item.strategyId === "cisd_v1" && item.status === "valid_candidate"),
+    false
+  );
+  assertSafe(suite, tightStopScan);
+
+  const v4Packet = {
+    ...deepPacket,
+    detectorAssessments: {
+      activeIfvgProfileId: "ifvg_fresh_retest_v4_candidate",
+      ifvgShallowRetestV4: {
+        strategyId: "ifvg_fresh_retest_v4_candidate",
+        candidate: {
+          status: "candidate",
+          side: "short",
+          timeframe: "5m",
+          entry: 30500,
+          stop: 30540,
+          target: 30400,
+          rr: 2.5,
+          blockers: [],
+          missingConditions: []
+        },
+        eligible: true,
+        geometry: canonicalGeometry({ strategyId: "ifvg_fresh_retest_v4_candidate", direction: "SHORT", entry: 30500, stop: 30540, target: 30400, rr: 2.5 }),
+        blockers: [],
+        nextAction: "Queue deterministic replay for the active v4 profile."
+      }
+    }
+  };
+  const v4Scan = suite.detectCurrentOpportunities(suite.buildCurrentOpportunityContext({ packet: v4Packet, currentRead: deepRead }));
+  const activeV4 = v4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v4_candidate");
+  const comparativeV3 = v4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v3_research");
+  assert.equal(activeV4, undefined, "v4 research packets must not be promoted into the live v3 opportunity lane");
+  assert.ok(comparativeV3, "the authoritative v3 lane remains separately identified");
+  assert.equal(v4Scan.summary.validCandidateCount, 0);
+  assertSafe(suite, v4Scan);
+
+  const chasingV4Packet = {
+    ...v4Packet,
+    activeSource: { ...v4Packet.activeSource, currentPrice: 30520 },
+    detectorAssessments: {
+      ...v4Packet.detectorAssessments,
+      ifvgShallowRetestV4: {
+        ...v4Packet.detectorAssessments.ifvgShallowRetestV4,
+        candidate: {
+          ...v4Packet.detectorAssessments.ifvgShallowRetestV4.candidate,
+          entry: 30500,
+          stop: 30540,
+          target: 30400,
+          rr: 2.5
+        }
+      }
+    }
+  };
+  const chasingV4Scan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: chasingV4Packet, currentRead: deepRead })
+  );
+  const chasingV4 = chasingV4Scan.opportunities.find((item) => item.strategyId === "ifvg_fresh_retest_v4_candidate");
+  assert.equal(chasingV4, undefined, "v4 research geometry must not enter the live opportunity path");
+  assertSafe(suite, chasingV4Scan);
 
   const missingTargetRead = {
     ...deepRead,
@@ -275,6 +566,28 @@ async function main() {
       shallow: shallowScan.summary,
       deep: deepScan.summary,
       mockValidCandidates: mockScan.summary.validCandidateCount
+    },
+    liveIfvgV3: {
+      candidateId: liveIfvgCompact.candidateId,
+      geometryId: liveIfvgCompact.geometry.geometryId,
+      producer: {
+        entry: liveIfvgCompact.geometry.entry.intendedPrice,
+        stop: liveIfvgCompact.geometry.stop.price,
+        target: liveIfvgCompact.geometry.target.price,
+        theoreticalRR: liveIfvgCompact.geometry.theoreticalRR
+      },
+      currentOpportunity: {
+        entry: liveIfvgOpportunity.entry,
+        stop: liveIfvgOpportunity.invalidation,
+        target: liveIfvgOpportunity.target,
+        theoreticalRR: liveIfvgOpportunity.rrEstimate
+      },
+      signal: {
+        entry: liveIfvgSignal.entryReference,
+        stop: liveIfvgSignal.invalidation,
+        target: liveIfvgSignal.target,
+        theoreticalRR: liveIfvgSignal.rrEstimate
+      }
     },
     authority: tacticalScan.authority
   }, null, 2));

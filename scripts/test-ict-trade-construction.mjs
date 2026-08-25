@@ -200,6 +200,66 @@ async function main() {
   });
   assertHas(wideStop.blockers, "stop_too_wide");
 
+  const tinyIndexStop = buildIctTradeConstruction({
+    ...base,
+    side: "short",
+    entry: 23000,
+    stop: 23001,
+    target: 22988
+  });
+  assertHas(tinyIndexStop.blockers, "stop_too_tight");
+
+  const exactMinimumIndexStop = buildIctTradeConstruction({
+    ...base,
+    side: "short",
+    entry: 23000,
+    stop: 23004,
+    target: 22992
+  });
+  assertNotHas(exactMinimumIndexStop.blockers, "stop_too_tight");
+  assert.equal(exactMinimumIndexStop.valid, true);
+
+  const belowMinimumIndexStop = buildIctTradeConstruction({
+    ...base,
+    side: "short",
+    entry: 23000,
+    stop: 23003.99,
+    target: 22992
+  });
+  assertHas(belowMinimumIndexStop.blockers, "stop_too_tight");
+
+  for (const distance of [3.999, 1.29]) {
+    const belowBoundary = buildIctTradeConstruction({
+      ...base,
+      side: "short",
+      entry: 23000,
+      stop: 23000 + distance,
+      target: 22988
+    });
+    assertHas(belowBoundary.blockers, "stop_too_tight");
+    assert.equal(belowBoundary.valid, false);
+  }
+
+  const chasedShort = buildIctTradeConstruction({
+    ...base,
+    side: "short",
+    entry: 22990,
+    currentPrice: 23000,
+    stop: 23010,
+    target: 22950
+  });
+  assertHas(chasedShort.blockers, "entry_chases_price");
+
+  const pendingShortRetrace = buildIctTradeConstruction({
+    ...base,
+    side: "short",
+    entry: 23010,
+    currentPrice: 23000,
+    stop: 23020,
+    target: 22980
+  });
+  assertNotHas(pendingShortRetrace.blockers, "entry_chases_price");
+
   const invalidPriceOrder = buildIctTradeConstruction({
     ...base,
     entry: 100,

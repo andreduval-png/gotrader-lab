@@ -1,5 +1,7 @@
 import { evaluateIctIfvg } from "./ictIfvg";
 import type { IctIfvgCandidate, IctIfvgInput } from "./ictIfvgTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import { adaptIfvgNativeGeometry } from "./ictDetectorCanonicalGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -37,13 +39,19 @@ export interface IctIfvgFreshRetestV3Assessment {
   signalFresh: boolean;
   eligible: boolean;
   blockers: string[];
+  geometry?: CanonicalTradeGeometry;
   researchOnly: true;
   authority: typeof authority;
 }
 
 export interface IctIfvgFreshRetestV3CompactAssessment {
   strategyId: "ifvg_fresh_retest_v3_research";
+  candidateId: string;
   generatedAt: string;
+  candidateDetectedAt: string;
+  entryIntentCreatedAt?: string;
+  currentMarketTimestamp?: string;
+  entryMissedAt?: string;
   requestedSymbol?: string;
   brokerSymbol?: string;
   sourceProvider?: string;
@@ -56,11 +64,19 @@ export interface IctIfvgFreshRetestV3CompactAssessment {
   cleanRetest: boolean;
   signalAgeBars?: number;
   signalFresh: boolean;
+  entryLifecycleStatus: IctIfvgCandidate["entryLifecycleStatus"];
+  geometryEligible: boolean;
+  actionable: boolean;
+  geometryPolicyId: IctIfvgCandidate["geometryPolicyId"];
+  stopSource?: IctIfvgCandidate["stopSource"];
+  stopDistance?: number;
   eligible: boolean;
   entry?: number;
   invalidation?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
+  ifvgBounds?: { low: number; high: number };
   blockers: string[];
   missingConditions: string[];
   nextAction: string;
@@ -87,6 +103,14 @@ export const assessIctIfvgFreshRetestV3 = (
     isClean ? undefined : "clean_retest_required",
     isFresh ? undefined : "stale_retest_signal"
   ].filter((item): item is string => Boolean(item));
+  const geometry = adaptIfvgNativeGeometry({
+    candidate: detected,
+    strategyId: "ifvg_fresh_retest_v3_research",
+    strategyVersion: "v3",
+    profileId: "ifvg_fresh_retest_v3_research",
+    profileVersion: "v3",
+    researchOnly: blockers.length > 0
+  });
 
   return {
     strategyId: "ifvg_fresh_retest_v3_research",
@@ -96,6 +120,7 @@ export const assessIctIfvgFreshRetestV3 = (
     signalFresh: isFresh,
     eligible: blockers.length === 0,
     blockers,
+    geometry,
     researchOnly: true,
     authority
   };
@@ -107,6 +132,10 @@ export const compactIctIfvgFreshRetestV3Assessment = (
   const candidate = assessment.candidate;
   const nextAction = assessment.eligible
     ? "Queue replay validation for IFVG fresh-retest v3; recognition is not evidence."
+    : candidate.entryLifecycleStatus === "entry_missed"
+      ? "The retracement-limit entry was missed; do not chase or resurrect this candidate."
+      : candidate.blockers.includes("STOP_DISTANCE_TOO_SMALL")
+        ? "Keep the IFVG as research context only; its source-native stop is below the symbol-policy minimum."
     : !candidate.inversionCandle
       ? "Wait for a fully inverted, unused FVG."
       : !assessment.cleanRetest
@@ -117,7 +146,12 @@ export const compactIctIfvgFreshRetestV3Assessment = (
 
   return {
     strategyId: assessment.strategyId,
+    candidateId: candidate.candidateId,
     generatedAt: candidate.generatedAt,
+    candidateDetectedAt: candidate.candidateDetectedAt,
+    entryIntentCreatedAt: candidate.entryIntentCreatedAt,
+    currentMarketTimestamp: candidate.currentMarketTimestamp,
+    entryMissedAt: candidate.entryMissedAt,
     requestedSymbol: candidate.requestedSymbol,
     brokerSymbol: candidate.brokerSymbol,
     sourceProvider: candidate.sourceProvider,
@@ -130,11 +164,21 @@ export const compactIctIfvgFreshRetestV3Assessment = (
     cleanRetest: assessment.cleanRetest,
     signalAgeBars: assessment.signalAgeBars,
     signalFresh: assessment.signalFresh,
+    entryLifecycleStatus: candidate.entryLifecycleStatus,
+    geometryEligible: candidate.geometryEligible,
+    actionable: Boolean(assessment.eligible && assessment.geometry?.actionable),
+    geometryPolicyId: candidate.geometryPolicyId,
+    stopSource: candidate.stopSource,
+    stopDistance: candidate.stopDistance,
     eligible: assessment.eligible,
     entry: candidate.entry,
     invalidation: candidate.stop,
     target: candidate.target,
     rr: candidate.rr,
+    geometry: assessment.geometry,
+    ifvgBounds: candidate.ifvgBounds
+      ? { low: candidate.ifvgBounds.low, high: candidate.ifvgBounds.high }
+      : undefined,
     blockers: Array.from(new Set(assessment.blockers)).slice(0, 8),
     missingConditions: Array.from(new Set(candidate.missingConditions)).slice(0, 8),
     nextAction,

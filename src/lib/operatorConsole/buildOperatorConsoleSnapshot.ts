@@ -2,6 +2,7 @@ import type { AutonomousResearchRun } from "@/lib/autonomousResearch";
 import type { IctActivateMarketLatestSummary } from "@/lib/ict-strategy-suite/ictActivateMarketPipelineTypes";
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
 import type { ValidationChainEntry } from "@/lib/validationChain";
+import { projectCanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 import {
   OPERATOR_AUTHORITY,
@@ -41,31 +42,6 @@ const clean = (value: unknown, fallback: string) => {
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const roundedPrice = (value: number) => Number(value.toFixed(5));
-
-const impliedEntryFor = ({
-  side,
-  stopLoss,
-  takeProfit,
-  riskReward
-}: {
-  side: "long" | "short" | "flat";
-  stopLoss?: number;
-  takeProfit?: number;
-  riskReward?: number;
-}) => {
-  if ((side !== "long" && side !== "short") || !finite(stopLoss) || !finite(takeProfit) || !finite(riskReward) || riskReward <= 0) {
-    return undefined;
-  }
-  const entry = (takeProfit + riskReward * stopLoss) / (1 + riskReward);
-  const geometryValid = side === "long"
-    ? stopLoss < entry && entry < takeProfit
-    : takeProfit < entry && entry < stopLoss;
-  if (!geometryValid) return undefined;
-  const reproducedRiskReward = Math.abs(takeProfit - entry) / Math.abs(entry - stopLoss);
-  return Math.abs(reproducedRiskReward - riskReward) <= Math.max(0.01, riskReward * 0.005)
-    ? roundedPrice(entry)
-    : undefined;
-};
 
 const providerFor = (runtime?: ResearchRuntimeSnapshot) =>
   clean(runtime?.marketData.activeResearchSource.provider, runtime?.marketData.activeDataSource ?? "unavailable");
@@ -154,63 +130,38 @@ const researchPlanFor = (
     };
   }
   const currentActivation = activation!;
-  const stopLoss = activation?.proposedStopLoss;
-  const takeProfit = activation?.proposedTakeProfit;
-  const levelImpliedSide = finite(stopLoss) && finite(takeProfit) && stopLoss !== takeProfit
-    ? stopLoss < takeProfit ? "long" as const : "short" as const
-    : undefined;
+  const canonicalGeometry = activation?.proposedGeometry;
+  const canonicalProjection = canonicalGeometry ? projectCanonicalTradeGeometry(canonicalGeometry) : undefined;
+  const stopLoss = canonicalProjection?.intendedStop;
+  const takeProfit = canonicalProjection?.intendedTarget;
   const candidateSide = currentCandidate?.side;
-  const side = activation?.researchSide === "long" || activation?.researchSide === "short" || activation?.researchSide === "flat"
-    ? activation.researchSide
-    : candidateSide === "long" || candidateSide === "short"
-      ? candidateSide
-      : levelImpliedSide ?? "flat";
-  const proposedEntryZone = activation?.proposedEntryZone;
-  const entryZone = proposedEntryZone && finite(proposedEntryZone.lower) && finite(proposedEntryZone.upper)
-    ? {
-        lower: Math.min(proposedEntryZone.lower, proposedEntryZone.upper),
-        upper: Math.max(proposedEntryZone.lower, proposedEntryZone.upper)
-      }
+  const side = canonicalGeometry
+    ? canonicalGeometry.direction === "LONG" ? "long" as const : "short" as const
+    : candidateSide === "long" || candidateSide === "short" ? candidateSide : "flat" as const;
+  const entryZone = canonicalProjection
+    ? { lower: canonicalProjection.intendedEntry, upper: canonicalProjection.intendedEntry }
     : undefined;
   const directional = side === "long" || side === "short";
-  const riskReward = activation?.proposedRiskReward;
+  const riskReward = canonicalProjection?.theoreticalRR;
   const candidateMatchesSide = candidateSide === side || candidateSide === undefined;
-  const canonicalEntryPrice = activation?.proposedEntryPrice ?? (candidateMatchesSide ? currentCandidate?.entry : undefined);
-  const recoveredEntryPrice = impliedEntryFor({ side, stopLoss, takeProfit, riskReward });
-  const entryPrice = directional && finite(canonicalEntryPrice)
-    ? roundedPrice(canonicalEntryPrice)
-    : directional && entryZone
-      ? roundedPrice((entryZone.lower + entryZone.upper) / 2)
-      : recoveredEntryPrice;
+  const entryPrice = directional && finite(canonicalProjection?.intendedEntry)
+    ? roundedPrice(canonicalProjection.intendedEntry)
+    : undefined;
   const complete =
     directional &&
     finite(entryPrice) &&
     finite(stopLoss) &&
     finite(takeProfit) &&
     finite(riskReward);
-  const geometryCoherent = !complete
-    ? undefined
-    : side === "long"
-      ? stopLoss < entryPrice && entryPrice < takeProfit
-      : side === "short"
-        ? takeProfit < entryPrice && entryPrice < stopLoss
-        : false;
-  const reproducedRiskReward = complete && geometryCoherent
-    ? Math.abs(takeProfit - entryPrice) / Math.abs(entryPrice - stopLoss)
-    : undefined;
-  const riskRewardCoherent = reproducedRiskReward === undefined || !finite(riskReward)
-    ? undefined
-    : Math.abs(reproducedRiskReward - riskReward) <= Math.max(0.15, riskReward * 0.1);
-  const planCoherence = geometryCoherent === false || riskRewardCoherent === false
+  const geometryCoherent = canonicalProjection?.geometryValid;
+  const planCoherence = geometryCoherent === false
     ? "incoherent" as const
     : complete
       ? "coherent" as const
       : "incomplete" as const;
   const planCoherenceReason = geometryCoherent === false
     ? `${side === "long" ? "Bullish" : "Bearish"} direction conflicts with entry, stop-loss, and take-profit geometry.`
-    : riskRewardCoherent === false
-      ? "The stated risk/reward does not match the entry, stop-loss, and take-profit prices."
-      : complete
+    : complete
         ? "Direction, entry, stop-loss, take-profit, and risk/reward are mutually coherent."
         : "A complete directional price structure is not available.";
   const setupDirection = planCoherence === "incoherent"
@@ -227,7 +178,10 @@ const researchPlanFor = (
       : hasAnyLevel
         ? "partial"
         : "unavailable";
-  const signal = complete && planCoherence === "coherent" && !candidateRejected && !riskBlocked ? (side === "long" ? "BUY" : "SELL") : "NO_TRADE";
+  const signal = complete && planCoherence === "coherent" && canonicalProjection?.actionable && !candidateRejected && !riskBlocked
+    ? (side === "long" ? "BUY" : "SELL")
+    : "NO_TRADE";
+  const overallActionable = Boolean(canonicalProjection?.actionable && planIdentityStatus === "current" && signal !== "NO_TRADE");
   const setupName = activation?.modelName
     ?? currentCandidate?.setupName
     ?? activation?.opportunityType
@@ -243,19 +197,20 @@ const researchPlanFor = (
     side,
     setupDirection,
     signal,
-    planSource: activation?.proposedEntryPrice !== undefined ? "signal_contract" : finite(entryPrice) ? "legacy_recovery" : "unavailable",
+    planSource: canonicalProjection ? "canonical_geometry" : "unavailable",
     planCoherence,
     planCoherenceReason,
     candidateStatus,
     entryZone,
     entryPrice,
-    entryPriceMethod: finite(canonicalEntryPrice)
-      ? "canonical_candidate"
-      : entryZone && finite(entryPrice)
-        ? "zone_midpoint"
-        : finite(recoveredEntryPrice)
-          ? "rr_implied_recovery"
-        : undefined,
+    entryPriceMethod: canonicalProjection ? "canonical_geometry" : undefined,
+    geometryId: canonicalProjection?.geometryId,
+    geometryStatus: canonicalProjection?.status,
+    geometryValid: canonicalProjection?.geometryValid,
+    actionable: overallActionable,
+    displayKind: canonicalProjection
+      ? overallActionable ? canonicalProjection.displayKind : "RESEARCH_GEOMETRY"
+      : undefined,
     stopLoss,
     takeProfit,
     targetProvenance: activation?.proposedTargetProvenance,

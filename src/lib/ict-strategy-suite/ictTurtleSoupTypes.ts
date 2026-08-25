@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/types";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctTurtleSoupSessionId = "london_open" | "new_york_open";
 export type IctTurtleSoupSide = "long" | "short" | "flat";
@@ -84,6 +85,7 @@ export interface IctTurtleSoupCandidate {
   stop?: number;
   target?: number;
   rr?: number;
+  geometry?: CanonicalTradeGeometry;
   blockers: string[];
   warnings: string[];
   presentConditions: string[];

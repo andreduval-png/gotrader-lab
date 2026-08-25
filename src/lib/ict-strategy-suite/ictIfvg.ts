@@ -1,6 +1,10 @@
 import type { Candle } from "@/lib/types";
 import { buildIctTradeConstruction } from "./ictTradeConstruction";
 import type { IctTradeConstructionBlocker, IctTradeConstructionResult } from "./ictTradeConstructionTypes";
+import {
+  IFVG_PRODUCER_GEOMETRY_POLICY_ID,
+  resolveIctIfvgEntryLifecycle
+} from "./ictIfvgProducerPolicy";
 import type {
   IctIfvgBounds,
   IctIfvgCandidate,
@@ -53,6 +57,8 @@ interface InternalIfvgCandidate {
   stop?: number;
   target?: number;
   rr?: number;
+  stopBuffer?: number;
+  currentPrice?: number;
   tradeConstruction?: IctTradeConstructionResult;
   liquidityTarget?: IctIfvgLiquidityTarget;
   htfAlignment: IctIfvgHtfAlignment;
@@ -308,7 +314,9 @@ const messageForTradeConstructionBlocker = (blocker: IctTradeConstructionBlocker
   if (blocker === "rr_unavailable") return "rr_unavailable";
   if (blocker === "rr_below_minimum") return "rr_below_minimum";
   if (blocker === "target_too_close") return "target_too_close";
+  if (blocker === "stop_too_tight") return "STOP_DISTANCE_TOO_SMALL";
   if (blocker === "stop_too_wide") return "stop_too_wide";
+  if (blocker === "entry_chases_price") return "ENTRY_MISSED";
   if (blocker === "stop_not_beyond_structure") return "stop_not_beyond_structure";
   if (blocker === "invalid_price_order") return "invalid_price_order";
   if (blocker === "structure_bounds_missing") return "structure_bounds_missing";
@@ -323,6 +331,8 @@ const missingConditionForTradeConstructionBlocker = (blocker: IctTradeConstructi
   if (blocker === "entry_missing") return "entry_missing";
   if (blocker === "rr_unavailable") return "rr_unavailable";
   if (blocker === "rr_below_minimum" || blocker === "target_too_close") return "minimum_2r";
+  if (blocker === "stop_too_tight") return "STOP_DISTANCE_TOO_SMALL";
+  if (blocker === "entry_chases_price") return "ENTRY_MISSED";
   return blocker;
 };
 
@@ -426,7 +436,8 @@ const findInternalCandidate = (
       sourceFingerprint: input.sourceFingerprint,
       minimumRR: 2,
       preferredRR: 3,
-      authority: authorityNone
+      authority: authorityNone,
+      currentPrice: candles.at(-1)?.close
     });
     const rr = tradeConstruction.rr;
     if (!liquidityTarget || target === undefined) {
@@ -453,6 +464,8 @@ const findInternalCandidate = (
       stop,
       target,
       rr,
+      stopBuffer,
+      currentPrice: candles.at(-1)?.close,
       tradeConstruction,
       liquidityTarget,
       htfAlignment: alignment,
@@ -491,7 +504,9 @@ const statusForBlocker = (blocker: string | undefined): IctIfvgStatus => {
       "rr_unavailable",
       "rr_below_minimum",
       "target_too_close",
+      "STOP_DISTANCE_TOO_SMALL",
       "stop_too_wide",
+      "ENTRY_MISSED",
       "stop_not_beyond_structure",
       "invalid_price_order",
       "structure_bounds_missing",
@@ -516,12 +531,29 @@ const buildCandidate = (input: {
   htfAlignment?: IctIfvgHtfAlignment;
   htfDirections?: string[];
 }): IctIfvgCandidate => {
+  const currentPrice = input.internal?.currentPrice;
+  const entryLifecycleStatus = resolveIctIfvgEntryLifecycle({
+    side: input.internal?.side ?? "flat",
+    entry: input.internal?.entry,
+    currentPrice
+  });
+  const geometryEligible = input.internal?.tradeConstruction?.valid === true;
   const canCreateValidationChainEntry =
     input.status === "replay_required" &&
     input.blockers.length === 0 &&
     input.internal?.tradeConstruction?.valid === true &&
     input.source.sourceProvider !== "mock" &&
     input.source.sourceProvider !== "sample";
+  const candidateId = [
+    "ifvg",
+    input.source.requestedSymbol ?? "unknown",
+    input.source.brokerSymbol ?? "unknown",
+    input.source.timeframe ?? "5m",
+    input.internal?.originalFvg.createdBy.timestamp ?? "none",
+    input.internal?.inversionCandle?.timestamp ?? "none",
+    input.internal?.retestCandle?.timestamp ?? "none",
+    input.internal?.side ?? "flat"
+  ].join("|");
   const sideText = input.internal?.side ?? "flat";
   const compactSummary = canCreateValidationChainEntry
     ? `IFVG ${sideText} replay-required on ${input.source.timeframe ?? "n/a"}; RR ${input.internal?.rr?.toFixed(2) ?? "n/a"}.`
@@ -540,6 +572,19 @@ const buildCandidate = (input: {
       .filter(([, candles]) => candles?.length)
       .map(([timeframe]) => timeframe),
     latestCandleTimestamp: input.latestCandleTimestamp,
+    candidateId,
+    candidateDetectedAt: input.generatedAt,
+    entryIntentCreatedAt: input.internal?.retestCandle?.timestamp,
+    currentMarketTimestamp: input.latestCandleTimestamp,
+    entryLifecycleStatus,
+    entryMissedAt: entryLifecycleStatus === "entry_missed" ? input.latestCandleTimestamp : undefined,
+    setupDetected: Boolean(input.internal?.originalFvg),
+    geometryEligible,
+    actionable: canCreateValidationChainEntry,
+    geometryPolicyId: IFVG_PRODUCER_GEOMETRY_POLICY_ID,
+    stopSource: input.internal?.stop === undefined ? undefined : "ifvg_distal_edge_plus_buffer",
+    stopBuffer: input.internal?.stopBuffer,
+    stopDistance: input.internal?.tradeConstruction?.riskDistance,
     side: input.internal?.side ?? "flat",
     originalFvgDirection: input.internal?.originalFvgDirection,
     ifvgBounds: input.internal?.originalFvg.bounds,

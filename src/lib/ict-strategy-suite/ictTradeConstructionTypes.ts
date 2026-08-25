@@ -17,7 +17,9 @@ export type IctTradeConstructionBlocker =
   | "rr_unavailable"
   | "rr_below_minimum"
   | "target_too_close"
+  | "stop_too_tight"
   | "stop_too_wide"
+  | "entry_chases_price"
   | "stop_not_beyond_structure"
   | "invalid_price_order"
   | "unrealistic_rr"
@@ -35,6 +37,7 @@ export interface IctRiskModel {
   preferredRR?: number;
   maximumRR?: number;
   maxStopDistance?: number;
+  minStopDistance?: number;
   pointValue?: number;
   pointSize?: number;
   strategyId?: string;
@@ -76,6 +79,7 @@ export interface IctTradeConstructionInput extends IctRiskModel {
   symbol?: string;
   brokerSymbol?: string;
   timeframe?: string;
+  currentPrice?: number;
   sourceFingerprint?: string;
   authority?: IctTradeConstructionAuthorityInput;
 }
@@ -94,6 +98,7 @@ export interface IctTradeConstructionResult {
   preferredRR: number;
   maximumRR: number;
   maxStopDistance?: number;
+  minStopDistance?: number;
   blockers: IctTradeConstructionBlocker[];
   warnings: IctTradeConstructionWarning[];
   nextAction: string;

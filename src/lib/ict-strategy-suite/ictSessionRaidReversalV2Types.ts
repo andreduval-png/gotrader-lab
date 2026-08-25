@@ -3,6 +3,7 @@ import type {
   IctSessionRaidReversalInput,
   IctSessionRaidReversalNarrative
 } from "./ictSessionRaidReversalTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 export type IctSessionRaidReversalV2StrategyId = "nasdaq_london_raid_ny_reversal_v2_filtered_research";
 
@@ -74,6 +75,7 @@ export interface IctSessionRaidReversalV2Evaluation {
   replayRequired: true;
   paperDemoEligible: false;
   walkForwardReady: false;
+  geometry?: CanonicalTradeGeometry;
   telemetry: IctSessionRaidReversalV2Telemetry;
   nextAction: string;
   authority: IctSessionRaidReversalAuthority;

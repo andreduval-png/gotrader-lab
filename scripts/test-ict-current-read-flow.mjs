@@ -50,6 +50,7 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvgProducerPolicy.ts" },
   { root: sourceRoot, file: "ictIfvg.ts" },
   { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
   { root: sourceRoot, file: "ictReplayValidation.ts" },
@@ -109,7 +110,9 @@ function compileSuiteForNode() {
       .replace(/from\s+"..\/currentOpportunity"/g, 'from "./currentOpportunityStub.mjs"')
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
-      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
+      .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
   fs.writeFileSync(
@@ -135,6 +138,7 @@ export const detectCurrentOpportunities = () => ({
     "utf8"
   );
   fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export const buildForwardScenarioMapFromCurrentRead = () => undefined;\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export const projectCanonicalTradeGeometry = () => undefined;\n", "utf8");
   fs.writeFileSync(
     path.join(outRoot, "index.mjs"),
     `export * from "./ictAdvisorEngine.mjs";
@@ -377,9 +381,12 @@ async function main() {
     topReasons: ["CMD paper-watchlist - paper-test only."]
   };
   const paperWatchlistSignal = suite.buildIctResearchSignalFromCurrentRead(paperWatchlistRead);
-  assert.equal(paperWatchlistSignal.status, "watchlist_signal");
+  assert.equal(paperWatchlistSignal.status, "rejected_signal");
   assert.equal(paperWatchlistSignal.modelQualityLane, "paper_watchlist");
-  assert.equal(paperWatchlistSignal.paperWatchlistEligible, true);
+  assert.equal(paperWatchlistSignal.paperWatchlistEligible, false);
+  assert.equal(paperWatchlistSignal.entryReference, undefined);
+  assert.equal(paperWatchlistSignal.target, undefined);
+  assert.equal(paperWatchlistSignal.invalidation, undefined);
   assert.match(paperWatchlistSignal.reasons.join(" "), /CMD paper-watchlist|paper-test/i);
 
   process.stdout.write("GoTrader ICT current-read flow test passed.\n");

@@ -8,7 +8,7 @@ import type {
   CurrentOpportunityStrategyId,
   CurrentOpportunitySummary
 } from "./currentOpportunityTypes";
-import { buildIctTradeConstruction } from "../ict-strategy-suite/ictTradeConstruction";
+import { projectCanonicalTradeGeometry } from "../tradeGeometry/canonicalTradeGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -111,37 +111,6 @@ const classificationFor = (
 const filterDiagnosticTradeLabels = (values: Array<string | undefined>, classification: CurrentOpportunityClassification) =>
   classification === "diagnostic" ? values.filter((value) => !tradeConstructionBlockerLabels.has(value ?? "")) : values;
 
-const tradeConstructionFor = (
-  context: CurrentOpportunityContext,
-  patch: {
-    side?: CurrentOpportunitySide;
-    entry?: number;
-    invalidation?: number;
-    target?: number;
-    rrEstimate?: number;
-    strategyId: CurrentOpportunityStrategyId;
-    status: CurrentOpportunityStatus;
-    classification?: CurrentOpportunityClassification;
-  }
-) => {
-  const classification = patch.classification ?? classificationFor(patch.status, patch.strategyId);
-  if (classification === "diagnostic" || classification === "no_trade" || patch.status === "no_trade") return undefined;
-  const side = patch.side ?? context.side ?? "flat";
-  return buildIctTradeConstruction({
-    side,
-    entry: patch.entry ?? context.entry,
-    stop: patch.invalidation ?? context.invalidation,
-    target: patch.target ?? context.target,
-    entryModelType: "generic",
-    symbol: context.requestedSymbol,
-    brokerSymbol: context.brokerSymbol,
-    timeframe: context.primaryTimeframe,
-    sourceFingerprint: context.sourceFingerprint,
-    strategyId: patch.strategyId,
-    authority
-  });
-};
-
 const validationFor = (status: CurrentOpportunityStatus) =>
   status === "valid_candidate"
     ? ["replay_required", "walk_forward_required", "evidence_required", "paper_demo_gate_required"] as const
@@ -158,43 +127,62 @@ const opportunity = (
     classification?: CurrentOpportunityClassification;
     setupName: string;
     thesis: string;
+    geometryMode?: CurrentOpportunity["geometryMode"];
     blockers?: Array<string | undefined>;
     missingConditions?: Array<string | undefined>;
   }
 ): CurrentOpportunity => {
   const initialClassification = patch.classification ?? classificationFor(patch.status, patch.strategyId);
-  const construction = tradeConstructionFor(context, { ...patch, classification: initialClassification });
-  const constructionMissing = construction?.blockers.filter((blocker) => tradeConstructionMissingBlockers.has(blocker)) ?? [];
-  const constructionBlockers = construction?.blockers.filter((blocker) => !tradeConstructionMissingBlockers.has(blocker)) ?? [];
-  const finalStatus = patch.status === "valid_candidate" && construction && !construction.valid ? "near_miss" : patch.status;
+  const geometry = initialClassification === "diagnostic" ? undefined : patch.geometry;
+  const geometryProjection = geometry ? projectCanonicalTradeGeometry(geometry) : undefined;
+  const geometryMode = patch.geometryMode ?? (geometry ? "canonical" : "unavailable");
+  const finalStatus = patch.status === "valid_candidate" && !geometry
+    ? "near_miss"
+    : patch.status === "valid_candidate" && geometry?.geometryValid !== true
+      ? "near_miss"
+      : patch.status;
   const finalClassification = patch.classification ?? classificationFor(finalStatus, patch.strategyId);
-  const missingConditions = filterDiagnosticTradeLabels([...(patch.missingConditions ?? []), ...constructionMissing], finalClassification);
-  const blockers = filterDiagnosticTradeLabels([...(patch.blockers ?? []), ...constructionBlockers], finalClassification);
+  const missingConditions = filterDiagnosticTradeLabels([
+    ...(patch.missingConditions ?? []),
+    finalClassification !== "diagnostic" && !geometry ? "canonical_geometry_unavailable" : undefined
+  ], finalClassification);
+  const blockers = filterDiagnosticTradeLabels([
+    ...(patch.blockers ?? []),
+    ...(geometry?.blockers ?? []),
+    geometryMode === "source_blocked" ? "source_native_geometry_unresolved" : undefined
+  ], finalClassification);
+  const publishGeometry = Boolean(geometryProjection && finalClassification !== "diagnostic");
   return {
     id: createId("current_opp", `${patch.strategyId}:${patch.setupName}:${context.generatedAt}:${finalStatus}`),
     strategyId: patch.strategyId,
     model: patch.model,
     symbol: context.requestedSymbol,
     brokerSymbol: context.brokerSymbol,
-    side: patch.side ?? context.side ?? "flat",
+    side: geometry ? (geometry.direction === "LONG" ? "long" : "short") : patch.side ?? "flat",
     timeframe: patch.timeframe ?? context.primaryTimeframe,
     contextTimeframes: context.contextTimeframes,
     status: finalStatus,
     classification: finalClassification,
     setupName: patch.setupName,
     thesis: patch.thesis,
-    entry: finalClassification === "diagnostic" ? undefined : patch.entry ?? context.entry,
-    invalidation: finalClassification === "diagnostic" ? undefined : patch.invalidation ?? context.invalidation,
-    target: finalClassification === "diagnostic" ? undefined : patch.target ?? context.target,
-    rrEstimate: finalClassification === "diagnostic" ? undefined : construction?.rr ?? patch.rrEstimate ?? context.rrEstimate,
+    entry: publishGeometry ? geometryProjection?.intendedEntry : undefined,
+    invalidation: publishGeometry ? geometryProjection?.intendedStop : undefined,
+    target: publishGeometry ? geometryProjection?.intendedTarget : undefined,
+    rrEstimate: publishGeometry ? geometryProjection?.theoreticalRR : undefined,
+    geometry,
+    geometryMode,
+    geometryStatus: geometry?.status,
+    actionable: Boolean(geometry?.actionable),
     confidence: patch.confidence ?? context.confidence ?? 0,
     requiredValidation: patch.requiredValidation ?? [...validationFor(finalStatus)],
     blockers: unique(blockers),
     missingConditions: unique(missingConditions),
     nextAction: finalClassification === "diagnostic"
       ? patch.nextAction ?? "Context only - not a trade candidate. Wait for a registered trade setup before validation."
-      : construction && !construction.valid
-      ? construction.nextAction
+      : patch.status === "valid_candidate" && !geometry
+      ? "No trade - canonical source-native geometry is unavailable."
+      : patch.status === "valid_candidate" && geometry && !geometry.geometryValid
+      ? `No trade - ${geometry.status.toLowerCase().replace(/_/g, " ")}. Native geometry remains research-visible.`
       : patch.nextAction ?? context.opportunityNextAction ?? "Keep monitoring; no approved research candidate is available.",
     sourceDepth: context.sourceDepth,
     researchOnly: true,
@@ -319,7 +307,8 @@ const ifvgFilteredV2Opportunity = (context: CurrentOpportunityContext): CurrentO
   return opportunity(context, {
     strategyId: "ifvg_filtered_v2_research",
     model: "IFVG filtered v2",
-    status,
+    status: "diagnostic_context",
+    classification: "diagnostic",
     setupName: "IFVG filtered v2 - clean retest displacement",
     thesis:
       "Filtered IFVG v2 is the current best IFVG research profile: clean retest plus displacement confirmation, then replay and walk-forward before any Paper-Demo consideration.",
@@ -344,14 +333,7 @@ const ifvgFreshRetestV3Opportunity = (context: CurrentOpportunityContext): Curre
   const shallowDepth =
     context.sourceDepth.depthPolicyStatus === "insufficient" ||
     context.sourceDepth.depthPolicyStatus === "tactical_only";
-  const completeTrade = Boolean(
-    assessment &&
-    finite(assessment.entry) &&
-    finite(assessment.invalidation) &&
-    finite(assessment.target) &&
-    finite(assessment.rr) &&
-    assessment.rr >= 2
-  );
+  const completeTrade = Boolean(assessment?.geometry?.geometryValid && assessment.geometry.actionable);
   const status: CurrentOpportunityStatus = context.isMockOrSample
     ? "rejected"
     : !assessment
@@ -408,6 +390,7 @@ const ifvgFreshRetestV3Opportunity = (context: CurrentOpportunityContext): Curre
     invalidation: assessment?.invalidation,
     target: assessment?.target,
     rrEstimate: assessment?.rr,
+    geometry: assessment?.geometry,
     confidence: assessment?.eligible ? Math.max(context.confidence ?? 0, 0.6) : context.confidence,
     blockers,
     missingConditions,
@@ -454,6 +437,7 @@ const sessionRaidReversalOpportunity = (context: CurrentOpportunityContext): Cur
     invalidation: narrative.invalidation,
     target: narrative.target,
     rrEstimate: narrative.rr,
+    geometry: narrative.geometry,
     confidence: narrative.confidence,
     blockers: [...sharedBlockers, ...narrative.blockers],
     missingConditions: missing,
@@ -478,6 +462,7 @@ const primaryOpportunity = (context: CurrentOpportunityContext) => {
     thesis: isDiagnostic
       ? "Context only - not a trade candidate. Use this as bias/context only until a registered trade setup appears."
       : context.thesis ?? "Current market read is waiting for a structured ICT setup.",
+    geometryMode: isCmd ? "source_blocked" : "unavailable",
     blockers: [
       ...baseBlockersFor(context),
       cmdBlocked ? context.cmdIndependentDateGateReason ?? "CMD needs independent-date validation." : undefined,
@@ -577,6 +562,7 @@ const strategyDiagnostics = (context: CurrentOpportunityContext): CurrentOpportu
       ],
       nextAction: "Use the causal IFVG fresh-retest v3 profile instead of promoting raw IFVG v1."
     }),
+    ifvgFilteredV2Opportunity(context),
     ifvgFreshRetestV3Opportunity(context),
     opportunity(context, {
       strategyId: "market_map_only_diagnostic_v1",

@@ -15,6 +15,7 @@ const sourceFiles = [
   { root: sourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: sourceRoot, file: "ictTradeConstruction.ts" },
   { root: sourceRoot, file: "ictIfvgTypes.ts" },
+  { root: sourceRoot, file: "ictIfvgProducerPolicy.ts" },
   { root: sourceRoot, file: "ictIfvg.ts" },
   { root: sourceRoot, file: "ictIfvgFilteredV2.ts" },
   { root: sourceRoot, file: "ictIfvgFreshRetestV3.ts" },
@@ -108,8 +109,16 @@ function compileSuiteForNode() {
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const withGeometryStub = rewritten
+      .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withGeometryStub, "utf8");
   }
+  fs.writeFileSync(
+    path.join(outRoot, "ictDetectorCanonicalGeometry.mjs"),
+    "export function adaptIfvgNativeGeometry() { return undefined; }\n",
+    "utf8"
+  );
   fs.writeFileSync(
     path.join(outRoot, "index.mjs"),
     sourceFiles
@@ -141,6 +150,23 @@ export function detectCurrentOpportunities() {
   fs.writeFileSync(
     path.join(outRoot, "forwardScenarioStub.mjs"),
     "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "tradeGeometryStub.mjs"),
+    `export function projectCanonicalTradeGeometry(geometry) {
+  return {
+    geometryId: geometry.geometryId,
+    status: geometry.status,
+    intendedEntry: geometry.entry?.intendedPrice,
+    intendedStop: geometry.stop?.price,
+    intendedTarget: geometry.target?.price,
+    theoreticalRR: geometry.theoreticalRR,
+    geometryValid: geometry.geometryValid,
+    actionable: geometry.actionable,
+    displayKind: geometry.actionable ? "ACTIONABLE_GEOMETRY" : "RESEARCH_GEOMETRY"
+  };
+}\n`,
     "utf8"
   );
 }
@@ -246,6 +272,14 @@ async function main() {
   assert.equal(sell.strategyId, "ict-bread-and-butter-sell");
   assert.equal(osok.strategyId, "ict-one-shot-one-kill");
   assert.ok(["research_only", "no_trade"].includes(osok.decision), "OSOK must only emit research_only or no_trade");
+  for (const signal of [buy, sell, osok]) {
+    assert.equal(signal.decision, "no_trade", `${signal.strategyId} must fail closed until source-native geometry identities exist`);
+    assert.equal(signal.entryZone, undefined, `${signal.strategyId} must not publish a generic midpoint entry`);
+    assert.equal(signal.invalidation, undefined, `${signal.strategyId} must not publish recent-bar invalidation as structural geometry`);
+    assert.equal(signal.target, undefined, `${signal.strategyId} must not publish nearest liquidity as its native objective`);
+    assert.equal(signal.rrEstimate, undefined, `${signal.strategyId} must not publish R:R for source-blocked geometry`);
+    assert.equal(signal.strategyGeometryIntent?.status, "SOURCE_BLOCKED");
+  }
 
   const advisorSignals = suite.buildIctAdvisorSignals({
     brokerSymbol: "USTECH",

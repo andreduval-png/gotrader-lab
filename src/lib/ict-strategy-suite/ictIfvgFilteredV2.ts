@@ -1,5 +1,6 @@
 import { evaluateIctIfvg } from "./ictIfvg";
 import type { IctIfvgCandidate, IctIfvgInput } from "./ictIfvgTypes";
+import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -66,6 +67,7 @@ export interface IctIfvgFilteredV2Assessment {
   signalFresh: boolean;
   eligible: boolean;
   blockers: string[];
+  geometry?: CanonicalTradeGeometry;
   researchOnly: true;
   authority: typeof authority;
 }

@@ -135,13 +135,18 @@ export interface OperatorResearchPlanSummary {
   side: "long" | "short" | "flat";
   setupDirection: "bullish" | "bearish" | "neutral";
   signal: "BUY" | "SELL" | "NO_TRADE";
-  planSource: "signal_contract" | "legacy_recovery" | "unavailable";
+  planSource: "canonical_geometry" | "unavailable";
   planCoherence: "coherent" | "incomplete" | "incoherent";
   planCoherenceReason: string;
   candidateStatus?: string;
   entryZone?: { lower: number; upper: number };
   entryPrice?: number;
-  entryPriceMethod?: "canonical_candidate" | "zone_midpoint" | "rr_implied_recovery";
+  entryPriceMethod?: "canonical_geometry";
+  geometryId?: string;
+  geometryStatus?: string;
+  geometryValid?: boolean;
+  actionable?: boolean;
+  displayKind?: "ACTIONABLE_GEOMETRY" | "RESEARCH_GEOMETRY";
   stopLoss?: number;
   takeProfit?: number;
   targetProvenance?: {

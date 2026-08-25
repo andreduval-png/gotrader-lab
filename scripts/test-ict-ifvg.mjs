@@ -7,23 +7,32 @@ import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const projectRoot = process.cwd();
-const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
+const suiteRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
+const canonicalRoot = path.join(projectRoot, "src", "lib", "ictCanonical");
+const geometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-ifvg-test");
 const sourceFiles = [
-  "ictTradeConstructionTypes.ts",
-  "ictTradeConstruction.ts",
-  "ictIfvgTypes.ts",
-  "ictIfvg.ts",
-  "ictIfvgFilteredV2.ts",
-  "ictIfvgFreshRetestV3.ts",
-  "ictIfvgShallowRetestV4.ts"
+  { root: canonicalRoot, file: "canonicalIctTypes.ts" },
+  { root: canonicalRoot, file: "canonicalIctIdentity.ts" },
+  { root: geometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: geometryRoot, file: "targetSelection.ts" },
+  { root: geometryRoot, file: "canonicalTradeGeometry.ts" },
+  { root: suiteRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: suiteRoot, file: "ictTradeConstruction.ts" },
+  { root: suiteRoot, file: "ictIfvgProducerPolicy.ts" },
+  { root: suiteRoot, file: "ictIfvgTypes.ts" },
+  { root: suiteRoot, file: "ictIfvg.ts" },
+  { root: suiteRoot, file: "ictIfvgFilteredV2.ts" },
+  { root: suiteRoot, file: "ictDetectorCanonicalGeometry.ts" },
+  { root: suiteRoot, file: "ictIfvgFreshRetestV3.ts" },
+  { root: suiteRoot, file: "ictIfvgShallowRetestV4.ts" }
 ];
 
 function compileForNode() {
   fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
-  for (const file of sourceFiles) {
-    const sourcePath = path.join(sourceRoot, file);
+  for (const { root, file } of sourceFiles) {
+    const sourcePath = path.join(root, file);
     const source = fs.readFileSync(sourcePath, "utf8");
     const transpiled = ts.transpileModule(source, {
       compilerOptions: {
@@ -35,6 +44,11 @@ function compileForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(/from\s+"@\/lib\/ictCanonical\/canonicalIctTypes"/g, 'from "./canonicalIctTypes"')
+      .replace(/from\s+"@\/lib\/ictCanonical\/canonicalIctIdentity"/g, 'from "./canonicalIctIdentity"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/tradeGeometryTypes"/g, 'from "./tradeGeometryTypes"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/targetSelection"/g, 'from "./targetSelection"')
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
@@ -216,13 +230,21 @@ async function main() {
   const filteredV2 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFilteredV2.mjs")).href);
   const freshRetestV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")).href);
   const shallowRetestV4 = await import(pathToFileURL(path.join(outRoot, "ictIfvgShallowRetestV4.mjs")).href);
+  const producerPolicy = await import(pathToFileURL(path.join(outRoot, "ictIfvgProducerPolicy.mjs")).href);
 
   const base = {
     sourceProvider: "mt5_read_only",
+    sourceFingerprint: "mt5|ES|ES|5m|ifvg_fixture",
+    requestedSymbol: "ES",
+    brokerSymbol: "ES",
+    timeframe: "5m"
+  };
+
+  const mnqBase = {
+    ...base,
     sourceFingerprint: "mt5|MNQ|USTECH|5m|ifvg_fixture",
     requestedSymbol: "MNQ",
-    brokerSymbol: "USTECH",
-    timeframe: "5m"
+    brokerSymbol: "USTECH"
   };
 
   const long = ifvg.evaluateIctIfvg({ ...base, candles: validLongIfvg(), contextCandles: contextBullish });
@@ -236,10 +258,41 @@ async function main() {
   assert.ok(long.rr >= 2);
   assert.equal(long.tradeConstruction.valid, true);
   assert.equal(long.tradeConstruction.entryModelType, "ifvg");
+  assert.equal(long.geometryPolicyId, "ifvg_distal_edge_buffer_and_retracement_limit_v1");
+  assert.equal(long.stopSource, "ifvg_distal_edge_plus_buffer");
+  assert.equal(long.setupDetected, true);
+  assert.equal(long.geometryEligible, true);
+  assert.equal(long.entryLifecycleStatus, "waiting_for_entry");
   assert.ok(long.stop < long.ifvgBounds.low, "long IFVG stop must be below IFVG bottom");
   assert.equal(long.canCreateValidationChainEntry, true);
   assert.equal(ifvg.ictIfvgCanQueueValidation(long), true);
   assertSafe(long);
+
+  const tightMnq = ifvg.evaluateIctIfvg({ ...mnqBase, candles: validLongIfvg(), contextCandles: contextBullish });
+  assert.equal(tightMnq.setupDetected, true);
+  assert.equal(tightMnq.geometryEligible, false);
+  assert.equal(tightMnq.actionable, false);
+  assert.equal(tightMnq.blockers.includes("STOP_DISTANCE_TOO_SMALL"), true);
+  assert.equal(tightMnq.stopDistance < 4, true);
+  assert.equal(tightMnq.stopSource, "ifvg_distal_edge_plus_buffer");
+  assert.equal(tightMnq.stop, long.stop, "MNQ viability must not widen the source-native stop");
+  assert.equal(tightMnq.target, long.target, "MNQ viability must not stretch the source-native target");
+  assertSafe(tightMnq);
+
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "short", entry: 100, currentPrice: 101.29 }), "entry_missed");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "short", entry: 100, currentPrice: 99 }), "waiting_for_entry");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "long", entry: 100, currentPrice: 98.71 }), "entry_missed");
+  assert.equal(producerPolicy.resolveIctIfvgEntryLifecycle({ side: "long", entry: 100, currentPrice: 101 }), "waiting_for_entry");
+  assert.equal(producerPolicy.findIctIfvgRetracementFillOffset({
+    side: "short",
+    entry: 100,
+    candles: [{ high: 99.5, low: 98 }, { high: 100.25, low: 99 }]
+  }), 1);
+  assert.equal(producerPolicy.findIctIfvgRetracementFillOffset({
+    side: "long",
+    entry: 100,
+    candles: [{ high: 102, low: 100.5 }, { high: 101, low: 99.75 }]
+  }), 1);
 
   const filteredLongCandles = validFilteredLongIfvg();
   const filteredLongBase = ifvg.evaluateIctIfvg({ ...base, candles: filteredLongCandles, contextCandles: contextBullish });
@@ -264,13 +317,95 @@ async function main() {
   assert.equal(freshLong.cleanRetest, true);
   assert.equal(freshLong.signalFresh, true);
   assert.equal(freshLong.eligible, true);
+  assert.ok(freshLong.geometry, "live v3 assessment must attach canonical geometry");
+  assert.equal(freshLong.geometry.strategyId, "ifvg_fresh_retest_v3_research");
+  assert.equal(freshLong.geometry.profileId, "ifvg_fresh_retest_v3_research");
+  assert.equal(freshLong.geometry.profileVersion, "v3");
+  assert.equal(freshLong.geometry.candidateId, filteredLongBase.candidateId);
+  assert.equal(freshLong.geometry.entry.intendedPrice, filteredLongBase.entry);
+  assert.equal(freshLong.geometry.stop.price, filteredLongBase.stop);
+  assert.equal(freshLong.geometry.target.price, filteredLongBase.target);
+  assert.ok(Math.abs(freshLong.geometry.theoreticalRR - filteredLongBase.rr) < 0.0001);
+  assert.equal(freshLong.geometry.status, "VALID_ACTIONABLE");
+  assert.equal(freshLong.geometry.actionable, true);
   assertSafe(freshLong);
   const compactFreshLong = freshRetestV3.compactIctIfvgFreshRetestV3Assessment(freshLong);
   assert.equal(compactFreshLong.strategyId, "ifvg_fresh_retest_v3_research");
+  assert.equal(compactFreshLong.candidateId, filteredLongBase.candidateId);
+  assert.equal(compactFreshLong.geometryPolicyId, "ifvg_distal_edge_buffer_and_retracement_limit_v1");
   assert.equal(compactFreshLong.canCreateValidationChainEntry, true);
   assert.equal(compactFreshLong.sourceFingerprint, base.sourceFingerprint);
+  assert.equal(compactFreshLong.geometry?.geometryId, freshLong.geometry.geometryId);
+  assert.equal(compactFreshLong.actionable, true);
   assert.doesNotMatch(JSON.stringify(compactFreshLong), /"candles"\s*:|"rawCandles"\s*:|"retestCandle"\s*:/i);
   assertSafe(compactFreshLong);
+
+  const mnqBoundaryCandidate = (riskDistance) => ({
+    ...filteredLongBase,
+    candidateId: `${filteredLongBase.candidateId}|mnq|${riskDistance}`,
+    requestedSymbol: "MNQ",
+    brokerSymbol: "USTECH",
+    sourceFingerprint: `${mnqBase.sourceFingerprint}|${riskDistance}`,
+    entry: 100,
+    stop: 100 - riskDistance,
+    target: 110,
+    rr: Number((10 / riskDistance).toFixed(4)),
+    stopDistance: riskDistance,
+    blockers: riskDistance < 4 ? ["STOP_DISTANCE_TOO_SMALL"] : [],
+    missingConditions: riskDistance < 4 ? ["source-native stop below minimum"] : [],
+    geometryEligible: riskDistance >= 4,
+    canCreateValidationChainEntry: riskDistance >= 4,
+    tradeConstruction: {
+      ...filteredLongBase.tradeConstruction,
+      entry: 100,
+      stop: 100 - riskDistance,
+      target: 110,
+      riskDistance,
+      rewardDistance: 10,
+      theoreticalRR: Number((10 / riskDistance).toFixed(4)),
+      valid: riskDistance >= 4,
+      blockers: riskDistance < 4 ? ["stop_too_tight"] : []
+    }
+  });
+  const boundaryInput = { ...mnqBase, candles: filteredLongCandles, contextCandles: contextBullish };
+  const belowBoundary = freshRetestV3.assessIctIfvgFreshRetestV3(boundaryInput, mnqBoundaryCandidate(3.999));
+  const exactBoundary = freshRetestV3.assessIctIfvgFreshRetestV3(boundaryInput, mnqBoundaryCandidate(4));
+  const aboveBoundary = freshRetestV3.assessIctIfvgFreshRetestV3(boundaryInput, mnqBoundaryCandidate(4.001));
+  assert.equal(belowBoundary.geometry, undefined, "3.999-point MNQ stop must remain blocked");
+  assert.equal(exactBoundary.geometry?.riskDistance, 4, "4.000-point MNQ stop must pass unchanged");
+  assert.equal(exactBoundary.geometry?.actionable, true);
+  assert.ok(Math.abs(aboveBoundary.geometry?.riskDistance - 4.001) < 1e-9, "4.001-point MNQ stop must pass unchanged");
+
+  const lowRrCandidate = {
+    ...mnqBoundaryCandidate(5),
+    candidateId: `${filteredLongBase.candidateId}|mnq|low-rr`,
+    target: 105,
+    rr: 1,
+    blockers: ["RR_BELOW_MINIMUM"],
+    missingConditions: ["minimum reward-to-risk not met"],
+    canCreateValidationChainEntry: false
+  };
+  const lowRrAssessment = freshRetestV3.assessIctIfvgFreshRetestV3(boundaryInput, lowRrCandidate);
+  assert.equal(lowRrAssessment.geometry?.status, "VALID_BELOW_RR_THRESHOLD");
+  assert.equal(lowRrAssessment.geometry?.actionable, false);
+  assert.equal(lowRrAssessment.geometry?.entry.intendedPrice, 100);
+  assert.equal(lowRrAssessment.geometry?.stop.price, 95);
+  assert.equal(lowRrAssessment.geometry?.target.price, 105);
+
+  const missedCandidate = {
+    ...mnqBoundaryCandidate(5),
+    candidateId: `${filteredLongBase.candidateId}|mnq|entry-missed`,
+    entryLifecycleStatus: "entry_missed",
+    entryMissedAt: filteredLongBase.currentMarketTimestamp,
+    blockers: ["ENTRY_MISSED"],
+    missingConditions: ["retracement entry was missed"],
+    canCreateValidationChainEntry: false
+  };
+  const missedAssessment = freshRetestV3.assessIctIfvgFreshRetestV3(boundaryInput, missedCandidate);
+  assert.equal(missedAssessment.geometry?.entry.lifecycleStatus, "ENTRY_MISSED");
+  assert.equal(missedAssessment.geometry?.status, "ENTRY_MISSED");
+  assert.equal(missedAssessment.geometry?.actionable, false);
+  assert.equal(missedAssessment.geometry?.target, undefined, "missed entries must not project a plan target");
 
   const bounds = filteredLongBase.ifvgBounds;
   assert.ok(bounds, "fixture must include IFVG bounds");
@@ -325,6 +460,7 @@ async function main() {
     { ...base, candles: staleFilteredCandles, contextCandles: contextBullish },
     staleFilteredBase
   );
+  assert.equal(staleFreshV3.geometry?.actionable, false, "stale v3 context must not carry plan-actionable geometry");
   assert.equal(staleFreshV3.eligible, false);
   assert.ok(staleFreshV3.blockers.includes("stale_retest_signal"));
   assertSafe(staleFreshV3);
@@ -441,6 +577,16 @@ async function main() {
       deepBlocked: !deepV4.eligible,
       paperDemoEligible: shallowV4.paperDemoEligible,
       researchOnly: shallowV4.researchOnly
+    },
+    mnqTightStopRegression: {
+      candidateId: tightMnq.candidateId,
+      entry: tightMnq.entry,
+      stop: tightMnq.stop,
+      target: tightMnq.target,
+      stopDistance: tightMnq.stopDistance,
+      rr: tightMnq.rr,
+      stopSource: tightMnq.stopSource,
+      blockers: tightMnq.blockers
     },
     authority: authorityNone,
     safety: {
