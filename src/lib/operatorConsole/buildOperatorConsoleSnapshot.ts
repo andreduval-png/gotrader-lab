@@ -78,9 +78,13 @@ const researchPlanFor = (
   sourceFingerprint: string | undefined,
   cycle: OperatorCycleState
 ): OperatorConsoleSnapshot["researchPlan"] => {
-  const currentCandidate = activation?.currentOpportunitySummary?.topOpportunity
-    ?? activation?.currentOpportunitySummary?.topNearMiss
-    ?? activation?.currentOpportunitySummary?.topRejected;
+  const currentCandidate = activation?.currentOpportunitySummary?.selectedCanonicalCandidateId
+    ? activation.currentOpportunitySummary.topOpportunity
+    : activation?.currentOpportunitySummary?.canonicalCandidateSetDisposition
+      ? undefined
+      : activation?.currentOpportunitySummary?.topOpportunity
+        ?? activation?.currentOpportunitySummary?.topNearMiss
+        ?? activation?.currentOpportunitySummary?.topRejected;
   const identityComplete = Boolean(
     activation?.cycleId &&
     activation.sourceFingerprint &&
@@ -130,6 +134,29 @@ const researchPlanFor = (
     };
   }
   const currentActivation = activation!;
+  if (activation?.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS") {
+    const reason = "Actionable canonical strategies disagree. No singular plan or geometry is selected.";
+    return {
+      status: "no_trade",
+      planIdentityStatus,
+      cycleId: currentActivation.cycleId,
+      currentReadEvaluatedAt: currentActivation.currentReadEvaluatedAt,
+      setup: "Conflicting canonical setups",
+      side: "flat",
+      setupDirection: "neutral",
+      signal: "NO_TRADE",
+      planSource: "unavailable",
+      planCoherence: "incomplete",
+      planCoherenceReason: reason,
+      riskScreeningStatus: "conflict",
+      riskScreeningReason: reason,
+      accountRiskEvaluation: "external_simulation_required",
+      sourceFingerprint: currentActivation.sourceFingerprint,
+      generatedAt: currentActivation.activationTimestamp,
+      informationalOnly: true,
+      executionAllowed: false
+    };
+  }
   const canonicalGeometry = activation?.proposedGeometry;
   const canonicalProjection = canonicalGeometry ? projectCanonicalTradeGeometry(canonicalGeometry) : undefined;
   const stopLoss = canonicalProjection?.intendedStop;
@@ -241,7 +268,7 @@ const candidatePlansFor = (
   if (sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint) return [];
   return (activation.candidatePlans ?? []).map((plan) => {
     const complete = finite(plan.entry) && finite(plan.stop) && finite(plan.target) && finite(plan.riskReward);
-    const signal = complete && plan.actionable
+    const signal = complete && plan.actionable && activation.canonicalSetupConflict !== "CONFLICTING_CANONICAL_SETUPS"
       ? plan.side === "long" ? "BUY" as const : plan.side === "short" ? "SELL" as const : "NO_TRADE" as const
       : "NO_TRADE" as const;
     return {

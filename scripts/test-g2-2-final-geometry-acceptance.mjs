@@ -70,8 +70,9 @@ assert.doesNotMatch(downstream.signalContract, /buildCanonicalTradeGeometry|Math
 assert.doesNotMatch(downstream.operatorConsole, /buildCanonicalTradeGeometry|proposedEntryPrice\s*\?\?|proposedStopLoss\s*\?\?|proposedTakeProfit\s*\?\?/);
 assert.match(downstream.currentOpportunity, /projectCanonicalTradeGeometry\(geometry\)/);
 assert.match(downstream.currentOpportunity, /entry:\s*publishGeometry\s*\?\s*geometryProjection\?\.intendedEntry\s*:\s*undefined/);
-assert.match(downstream.signalContract, /entryReference:\s*currentRead\.canonicalGeometry\?\.entry\.intendedPrice/);
-assert.match(downstream.signalContract, /rrEstimate:\s*currentRead\.canonicalGeometry\?\.theoreticalRR/);
+assert.match(downstream.signalContract, /entryReference:\s*canonicalConflict\s*\?\s*undefined\s*:\s*currentRead\.canonicalGeometry\?\.entry\.intendedPrice/);
+assert.match(downstream.signalContract, /rrEstimate:\s*canonicalConflict\s*\?\s*undefined\s*:\s*currentRead\.canonicalGeometry\?\.theoreticalRR/);
+assert.match(downstream.signalContract, /canonicalConflict\s*\?\s*"flat"\s*:\s*currentRead\.side/);
 assert.match(downstream.activateMarket, /proposedGeometry:\s*matchingCandidate\?\.geometry/);
 assert.match(downstream.operatorConsole, /projectCanonicalTradeGeometry\(canonicalGeometry\)/);
 

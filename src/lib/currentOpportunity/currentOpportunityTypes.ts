@@ -2,6 +2,7 @@ import type { IctSessionRaidReversalNarrative } from "../ict-strategy-suite/ictS
 import type { IctIfvgFreshRetestV3CompactAssessment } from "../ict-strategy-suite/ictIfvgFreshRetestV3";
 import type { CanonicalTradeGeometry } from "../tradeGeometry";
 import type { IctCoreCandidateCollection } from "@/lib/ictI2";
+import type { CanonicalCandidateSetDisposition, CanonicalRuntimeCandidate } from "./canonicalRuntimeCandidateSet";
 
 export type CurrentOpportunityStatus =
   | "valid_candidate"
@@ -163,6 +164,7 @@ export interface CurrentOpportunity {
   geometry?: CanonicalTradeGeometry;
   geometryMode: "canonical" | "source_blocked" | "unavailable";
   geometryStatus?: CanonicalTradeGeometry["status"];
+  canonicalCandidate: boolean;
   actionable: boolean;
   confidence: number;
   requiredValidation: CurrentOpportunityRequiredValidation[];
@@ -196,6 +198,10 @@ export interface CurrentOpportunitySummary {
   regimeContextCount: number;
   noTradeContextCount: number;
   canonicalSetupConflict: "NONE" | "CONFLICTING_CANONICAL_SETUPS";
+  canonicalCandidateSetDisposition: CanonicalCandidateSetDisposition;
+  canonicalCandidateCount: number;
+  actionableCanonicalCandidateCount: number;
+  selectedCanonicalCandidateId?: string;
   topOpportunity?: CurrentOpportunity;
   topNearMiss?: CurrentOpportunity;
   topRejected?: CurrentOpportunity;
@@ -223,6 +229,7 @@ export interface CurrentOpportunityScan {
     opportunityMissingEvidenceCount: number;
   };
   opportunities: CurrentOpportunity[];
+  canonicalCandidates: CanonicalRuntimeCandidate[];
   summary: CurrentOpportunitySummary;
   researchOnly: true;
   authority: CurrentOpportunityAuthority;

@@ -715,7 +715,15 @@ export function ICTLab() {
           {currentOpportunityScan ? (
             <>
               <div className="grid gap-3 md:grid-cols-4">
-                <StatusTile label="Top setup" value={currentOpportunityScan.summary.topOpportunity?.model ?? currentOpportunityScan.summary.topNearMiss?.model ?? "none"} detail={currentOpportunityScan.summary.topOpportunity?.status ?? currentOpportunityScan.summary.topNearMiss?.status ?? "no trade"} />
+                <StatusTile
+                  label="Top setup"
+                  value={currentOpportunityScan.summary.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+                    ? "conflicting canonical setups"
+                    : currentOpportunityScan.summary.topOpportunity?.model ?? currentOpportunityScan.summary.topNearMiss?.model ?? "none"}
+                  detail={currentOpportunityScan.summary.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+                    ? "no singular selection"
+                    : currentOpportunityScan.summary.topOpportunity?.status ?? currentOpportunityScan.summary.topNearMiss?.status ?? "no trade"}
+                />
                 <StatusTile label="Depth" value={currentOpportunityScan.summary.depthStatus.replace(/_/g, " ")} detail={currentOpportunityScan.summary.rangeHistoryAvailable ? `${currentOpportunityScan.summary.validationLookbackDays.toFixed(1)} days` : "range history not ready"} />
                 <StatusTile label="Rejected" value={String(currentOpportunityScan.summary.rejectedCount)} detail={currentOpportunityScan.summary.topRejected?.blockers[0] ?? "none"} />
                 <StatusTile label="Next action" value={currentOpportunityScan.summary.nextAction} detail={currentOpportunityScan.summary.topBlocker ?? "no blocker"} />

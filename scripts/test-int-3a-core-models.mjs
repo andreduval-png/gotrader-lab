@@ -26,6 +26,7 @@ const files = [
   ["src/lib/ictI2/ictJudasSwingModel.ts", "ictJudasSwingModel.mjs"],
   ["src/lib/ictI2/ictI2Collection.ts", "ictI2Collection.mjs"],
   ["src/lib/currentOpportunity/currentOpportunityTypes.ts", "currentOpportunityTypes.mjs"],
+  ["src/lib/currentOpportunity/canonicalRuntimeCandidateSet.ts", "canonicalRuntimeCandidateSet.mjs"],
   ["src/lib/currentOpportunity/detectCurrentOpportunities.ts", "detectCurrentOpportunities.mjs"]
 ];
 
@@ -44,7 +45,8 @@ for (const [sourceName, outputName] of files) {
     .replace(/from\s+["']@\/lib\/ictI2\/([^"']+)["']/g, (_match, name) => `from "./${name}.mjs"`)
     .replace(/from\s+["']\.\.\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
     .replace(/from\s+["']\.\/currentOpportunityTypes["']/g, 'from "./currentOpportunityTypes.mjs"');
-  fs.writeFileSync(path.join(out, outputName), js, "utf8");
+  const runtimeRewritten = js.replace(/from\s+["']\.\/canonicalRuntimeCandidateSet["']/g, 'from "./canonicalRuntimeCandidateSet.mjs"');
+  fs.writeFileSync(path.join(out, outputName), runtimeRewritten, "utf8");
 }
 
 const model2022 = await import(`${pathToFileURL(path.join(out, "ict2022Model.mjs")).href}?v=${Date.now()}`);

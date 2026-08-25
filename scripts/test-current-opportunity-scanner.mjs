@@ -16,7 +16,14 @@ const sourceFiles = [
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "tradeGeometryTypes.ts" },
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "targetSelection.ts" },
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "canonicalTradeGeometry.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "entryLifecycle.ts" },
+  { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "strategyGeometryIntent.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ictI2Types.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ictI2Shared.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ict2022Model.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ictI2Collection.ts" },
   { root: sourceRoot, file: "currentOpportunityTypes.ts" },
+  { root: sourceRoot, file: "canonicalRuntimeCandidateSet.ts" },
   { root: sourceRoot, file: "buildCurrentOpportunityContext.ts" },
   { root: ictSourceRoot, file: "ictTradeConstructionTypes.ts" },
   { root: ictSourceRoot, file: "ictTradeConstruction.ts" },
@@ -55,6 +62,8 @@ function compileForNode() {
       .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+"@\/lib\/ictI2\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/ictCanonical"/g, 'from "./canonicalIctTypes.mjs"')
       .replace(/from\s+"..\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), dependenciesRewritten, "utf8");
   }
@@ -212,11 +221,41 @@ const liveIfvgContext = {
   "1h": [ifvgCandle(-240, 88, 94, 87, 93), ifvgCandle(-180, 93, 103, 92, 101)]
 };
 
+const ictAuthority = {
+  executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none",
+  productionAdoptionAllowed: false, canCreateEvidence: false, canApproveReadiness: false,
+  canApplyCalibration: false, canCreateTradeIntent: false
+};
+const ictFactBase = (factId, factType, minute, timeframe = "5m") => ({
+  factId, factType, symbol: "ES", timeframe, occurredAt: ifvgIso(minute), confirmedAt: ifvgIso(minute), validFrom: ifvgIso(minute), state: "ACTIVE",
+  lineage: { sourceCandleIds: [`ict-${minute}`], sourceFactIds: [], sourceFingerprint: "mt5|ES|ES|5m|int-3a-1", policyId: "int-3a-1-fixture", policyVersion: "1" },
+  authority: ictAuthority
+});
+const ict2022Fixture = (direction) => {
+  const long = direction === "bullish";
+  return {
+    facts: [
+      { ...ictFactBase("ict-target", "LIQUIDITY", 0, "1h"), liquidityId: "ict-target-liquidity", side: long ? "BUY_SIDE_LIQUIDITY" : "SELL_SIDE_LIQUIDITY", liquidityClass: "EXTERNAL", sourceStructureIds: ["target-swing"], ownerTimeframe: "1h", price: long ? 112 : 89, status: "AVAILABLE" },
+      { ...ictFactBase("ict-draw", "DRAW_ON_LIQUIDITY", 0, "1h"), drawId: "ict-primary-draw", direction, targetLiquidityId: "ict-target-liquidity", targetClass: "EXTERNAL", ownerTimeframe: "1h", distance: 10, structuralRelevance: 75, available: true, consumed: false, selectionPolicyVersion: "1", nearestLiquidityId: "ict-target-liquidity" },
+      { ...ictFactBase("ict-raid", "LIQUIDITY", 5, "15m"), liquidityId: "ict-raid-liquidity", side: long ? "SELL_SIDE_LIQUIDITY" : "BUY_SIDE_LIQUIDITY", liquidityClass: "EXTERNAL", sourceStructureIds: ["raid-swing"], ownerTimeframe: "15m", price: long ? 95 : 105, status: "CONSUMED", consumedAt: ifvgIso(5), consumingCandleId: "ict-5" },
+      { ...ictFactBase("ict-displacement", "DISPLACEMENT", 10), displacementId: "ict-displacement", direction, startCandleId: "ict-5", endCandleId: "ict-10", bodySize: 4, baselineBodySize: 2, bodyMultiple: 2, measurementPolicyId: "int-3a-1-fixture" },
+      { ...ictFactBase("ict-mss", "MSS", 15), mssId: "ict-mss", direction, brokenStructureId: "ict-swing", breakCandleId: "ict-15", displacementId: "ict-displacement", breakPrice: 100 },
+      { ...ictFactBase("ict-fvg", "FVG", 20), fvgId: "ict-fvg", direction, proximalPrice: long ? 100 : 101, distalPrice: long ? 101 : 100, midpoint: 100.5, originCandleIds: ["ict-10", "ict-15", "ict-20"], fvgState: "OPEN", filledPercentage: 0 }
+    ],
+    candlesByTimeframe: { "5m": [{ id: "ict-retrace", symbol: "ES", timeframe: "5m", timestamp: ifvgIso(25), open: 101, high: 101.2, low: 100.4, close: 100.8, volume: 100 }] },
+    asOf: ifvgIso(25), sourceFingerprint: "mt5|ES|ES|5m|int-3a-1",
+    narrative: { structural: direction, intermediate: long ? "bearish" : "bullish", execution: long ? "bearish" : "bullish", liquidityPath: long ? "buyside" : "sellside", structuralTimeframe: "1h", intermediateTimeframe: "15m", executionTimeframe: "5m", policyId: "gotrader.ict.c1-1.hierarchical-roles.v1", policyVersion: "1.0.0" },
+    symbol: "ES", timeframe: "5m"
+  };
+};
+
 async function main() {
   compileForNode();
   const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")));
   const ifvgV3 = await import(pathToFileURL(path.join(outRoot, "ictIfvgFreshRetestV3.mjs")));
   const signalContract = await import(pathToFileURL(path.join(outRoot, "ictSignalContract.mjs")));
+  const ict2022 = await import(pathToFileURL(path.join(outRoot, "ict2022Model.mjs")));
+  const ictCollection = await import(pathToFileURL(path.join(outRoot, "ictI2Collection.mjs")));
 
   const tacticalContext = suite.buildCurrentOpportunityContext({ packet: basePacket, currentRead: baseRead });
   const tacticalScan = suite.detectCurrentOpportunities(tacticalContext);
@@ -335,6 +374,77 @@ async function main() {
   assert.equal(liveIfvgOpportunity?.invalidation, liveIfvgCompact.geometry.stop.price);
   assert.equal(liveIfvgOpportunity?.target, liveIfvgCompact.geometry.target.price);
   assert.equal(liveIfvgOpportunity?.rrEstimate, liveIfvgCompact.geometry.theoreticalRR);
+
+  const ict2022Short = ict2022.evaluateIct2022Model(ict2022Fixture("bearish"));
+  const crossFamilyConflictPacket = {
+    ...liveIfvgPacket,
+    compactSummary: {
+      ...liveIfvgPacket.compactSummary,
+      coreIctCandidates: ictCollection.buildIctCoreCandidateCollection({
+        generatedAt: ifvgIso(25),
+        sourceFingerprint: liveIfvgInput.sourceFingerprint,
+        candidates: [ict2022Short]
+      })
+    }
+  };
+  const crossFamilyConflictScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: crossFamilyConflictPacket, currentRead: liveIfvgReadContext })
+  );
+  const conflictActionable = crossFamilyConflictScan.canonicalCandidates.filter((candidate) => candidate.actionability);
+  assert.equal(conflictActionable.length, 2, "real IFVG and ICT 2022 producers must both survive aggregation");
+  assert.equal(crossFamilyConflictScan.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(crossFamilyConflictScan.summary.canonicalCandidateSetDisposition, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(crossFamilyConflictScan.summary.selectedCanonicalCandidateId, undefined);
+  assert.equal(crossFamilyConflictScan.summary.topOpportunity, undefined);
+  assert.deepEqual(conflictActionable.map((candidate) => candidate.direction), ["long", "short"]);
+  assert.notEqual(conflictActionable[0].geometryId, conflictActionable[1].geometryId);
+
+  const ict2022Long = ict2022.evaluateIct2022Model(ict2022Fixture("bullish"));
+  const sameDirectionPacket = {
+    ...liveIfvgPacket,
+    compactSummary: {
+      ...liveIfvgPacket.compactSummary,
+      coreIctCandidates: ictCollection.buildIctCoreCandidateCollection({
+        generatedAt: ifvgIso(25),
+        sourceFingerprint: liveIfvgInput.sourceFingerprint,
+        candidates: [ict2022Long]
+      })
+    }
+  };
+  const sameDirectionScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: sameDirectionPacket, currentRead: liveIfvgReadContext })
+  );
+  const alignedActionable = sameDirectionScan.canonicalCandidates.filter((candidate) => candidate.actionability);
+  assert.equal(sameDirectionScan.summary.canonicalSetupConflict, "NONE");
+  assert.equal(sameDirectionScan.summary.canonicalCandidateSetDisposition, "MULTIPLE_ALIGNED_CANONICAL_SETUPS");
+  assert.equal(sameDirectionScan.summary.selectedCanonicalCandidateId, undefined);
+  assert.equal(alignedActionable.length, 2);
+  assert.deepEqual(alignedActionable.map((candidate) => candidate.direction), ["long", "long"]);
+  assert.notEqual(alignedActionable[0].geometryId, alignedActionable[1].geometryId);
+
+  const blockedDirectionalContexts = ["ict_power_of_three_v1", "ict_judas_swing_v1"].map((strategyId) => ({
+    ...liveIfvgOpportunity,
+    id: `${strategyId}-blocked`,
+    strategyId,
+    candidateId: `${strategyId}-blocked`,
+    side: "short",
+    status: "needs_more_data",
+    classification: "diagnostic",
+    candidateState: "SOURCE_BLOCKED",
+    actionable: false,
+    geometry: undefined,
+    geometryId: undefined,
+    blockers: [`${strategyId.toUpperCase()}_SOURCE_BLOCKED`]
+  }));
+  const blockedContextSet = suite.buildCanonicalRuntimeCandidateSet({
+    opportunities: [liveIfvgOpportunity, ...blockedDirectionalContexts],
+    generatedAt: ifvgIso(25),
+    sourceFingerprint: liveIfvgInput.sourceFingerprint,
+    authority: tacticalScan.authority
+  });
+  assert.equal(blockedContextSet.conflict, "NONE", "source-blocked PO3/Judas must not create directional conflict");
+  assert.equal(blockedContextSet.disposition, "SINGLE_ACTIONABLE_CANDIDATE");
+  assert.equal(blockedContextSet.selectedCandidateId, liveIfvgOpportunity.candidateId);
   const liveIfvgCurrentRead = {
     ...liveIfvgReadContext,
     approvedStatus: "approved_research_candidate",
@@ -588,6 +698,23 @@ async function main() {
         target: liveIfvgSignal.target,
         theoreticalRR: liveIfvgSignal.rrEstimate
       }
+    },
+    crossFamily: {
+      ifvg: {
+        strategyId: conflictActionable[0].strategyId,
+        candidateId: conflictActionable[0].candidateId,
+        geometryId: conflictActionable[0].geometryId,
+        direction: conflictActionable[0].direction
+      },
+      ict2022: {
+        strategyId: conflictActionable[1].strategyId,
+        candidateId: conflictActionable[1].candidateId,
+        geometryId: conflictActionable[1].geometryId,
+        direction: conflictActionable[1].direction
+      },
+      conflict: crossFamilyConflictScan.summary.canonicalSetupConflict,
+      selectedCandidateId: crossFamilyConflictScan.summary.selectedCanonicalCandidateId ?? null,
+      sameDirectionDisposition: sameDirectionScan.summary.canonicalCandidateSetDisposition
     },
     authority: tacticalScan.authority
   }, null, 2));

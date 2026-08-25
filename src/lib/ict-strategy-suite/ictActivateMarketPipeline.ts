@@ -519,11 +519,14 @@ const buildLatestSummary = (
   cycleId: identity.cycleId,
   sourceFingerprint: identity.sourceFingerprint ?? result.currentRead?.debug.sourceFingerprint,
   currentReadEvaluatedAt: result.currentRead?.debug.lastEvaluationAt,
-  currentCandidateId: (
-    result.currentRead?.currentOpportunitySummary?.topOpportunity
-    ?? result.currentRead?.currentOpportunitySummary?.topNearMiss
-    ?? result.currentRead?.currentOpportunitySummary?.topRejected
-  )?.id,
+  currentCandidateId: result.currentRead?.currentOpportunitySummary?.selectedCanonicalCandidateId
+    ?? (result.currentRead?.currentOpportunitySummary?.canonicalCandidateSetDisposition
+      ? undefined
+      : (
+          result.currentRead?.currentOpportunitySummary?.topOpportunity
+          ?? result.currentRead?.currentOpportunitySummary?.topNearMiss
+          ?? result.currentRead?.currentOpportunitySummary?.topRejected
+        )?.candidateId),
   candidatePlans: result.summary.candidatePlans,
   canonicalSetupConflict: result.summary.canonicalSetupConflict,
   requestedSymbol: result.requestedSymbol,
@@ -961,9 +964,24 @@ export async function runIctActivateMarketPipeline(
     const failed = resultErrors.length > 0;
     const partial = resultWarnings.length > 0 || steps.some((step) => step.status === "skipped");
     const status: IctActivateMarketStatus = failed ? "failed" : partial ? "partial" : "completed";
-    const currentCandidate = currentRead?.currentOpportunitySummary?.topOpportunity
-      ?? currentRead?.currentOpportunitySummary?.topNearMiss
-      ?? currentRead?.currentOpportunitySummary?.topRejected;
+    const selectedCanonicalCandidateId = currentRead?.currentOpportunitySummary?.selectedCanonicalCandidateId
+      ?? (currentRead?.currentOpportunitySummary?.canonicalCandidateSetDisposition
+        ? undefined
+        : (
+            currentRead?.currentOpportunitySummary?.topOpportunity
+            ?? currentRead?.currentOpportunitySummary?.topNearMiss
+            ?? currentRead?.currentOpportunitySummary?.topRejected
+          )?.candidateId);
+    const legacyCurrentCandidate = currentRead?.currentOpportunitySummary?.canonicalCandidateSetDisposition
+      ? undefined
+      : currentRead?.currentOpportunitySummary?.topOpportunity
+        ?? currentRead?.currentOpportunitySummary?.topNearMiss
+        ?? currentRead?.currentOpportunitySummary?.topRejected;
+    const currentCandidate = selectedCanonicalCandidateId
+      ? currentRead?.canonicalCandidates?.find((candidate) => candidate.candidateId === selectedCanonicalCandidateId)?.opportunity
+        ?? currentRead?.currentOpportunities?.find((candidate) => candidate.candidateId === selectedCanonicalCandidateId)
+        ?? legacyCurrentCandidate
+      : legacyCurrentCandidate;
     const currentCandidateProjection = currentCandidate?.geometry
       ? projectCanonicalTradeGeometry(currentCandidate.geometry)
       : undefined;
@@ -997,8 +1015,10 @@ export async function runIctActivateMarketPipeline(
       "ict_power_of_three_v1",
       "ict_judas_swing_v1"
     ]);
-    const candidatePlans: IctActivateMarketCandidatePlan[] = (currentRead?.currentOpportunities ?? [])
-      .filter((candidate) => integratedStrategyIds.has(candidate.strategyId))
+    const candidatePlanOpportunities = currentRead?.canonicalCandidates?.length
+      ? currentRead.canonicalCandidates.map((candidate) => candidate.opportunity)
+      : (currentRead?.currentOpportunities ?? []).filter((candidate) => integratedStrategyIds.has(candidate.strategyId));
+    const candidatePlans: IctActivateMarketCandidatePlan[] = candidatePlanOpportunities
       .map((candidate) => {
         const projection = candidate.geometry ? projectCanonicalTradeGeometry(candidate.geometry) : undefined;
         return {

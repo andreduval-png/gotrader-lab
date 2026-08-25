@@ -552,9 +552,16 @@ async function main() {
     side: "flat",
     canonicalGeometry: undefined,
     currentOpportunitySummary: {
-      canonicalSetupConflict: "CONFLICTING_CANONICAL_SETUPS"
+      canonicalSetupConflict: "CONFLICTING_CANONICAL_SETUPS",
+      canonicalCandidateSetDisposition: "CONFLICTING_CANONICAL_SETUPS",
+      canonicalCandidateCount: 2,
+      actionableCanonicalCandidateCount: 2
     },
-    currentOpportunities: [canonicalIfvgOpportunity, ict2022Opportunity]
+    currentOpportunities: [canonicalIfvgOpportunity, ict2022Opportunity],
+    canonicalCandidates: [
+      { opportunityId: canonicalIfvgOpportunity.id, candidateId: canonicalIfvgOpportunity.candidateId, strategyId: canonicalIfvgOpportunity.strategyId, direction: canonicalIfvgOpportunity.side, actionability: true, canonicalGeometry: canonicalIfvgOpportunity.geometry, geometryId: canonicalIfvgOpportunity.geometry.geometryId, opportunity: canonicalIfvgOpportunity },
+      { opportunityId: ict2022Opportunity.id, candidateId: ict2022Opportunity.candidateId, strategyId: ict2022Opportunity.strategyId, direction: ict2022Opportunity.side, actionability: true, canonicalGeometry: ict2022Opportunity.geometry, geometryId: ict2022Opportunity.geometry.geometryId, opportunity: ict2022Opportunity }
+    ]
   });
   globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({ status: "no_signal", side: "flat", canonicalGeometry: undefined });
   const conflictResult = await suite.runIctActivateMarketPipeline(
@@ -563,6 +570,7 @@ async function main() {
     { saveLatestSummary: () => undefined }
   );
   assert.equal(conflictResult.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(conflictResult.summary.researchSide, "flat");
   assert.equal(conflictResult.summary.proposedGeometry, undefined, "conflicts must not create a synthetic primary plan");
   assert.deepEqual(
     conflictResult.summary.candidatePlans.map((plan) => [plan.strategyId, plan.candidateId, plan.geometryId, plan.entry, plan.stop, plan.target, plan.riskReward]),

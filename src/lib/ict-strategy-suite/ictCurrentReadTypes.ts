@@ -35,6 +35,7 @@ import type {
 } from "./ictSessionNarrativeTypes";
 import type { IctSessionRaidReversalNarrative } from "./ictSessionRaidReversalTypes";
 import type { CurrentOpportunity, CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
+import type { CanonicalRuntimeCandidate } from "../currentOpportunity/canonicalRuntimeCandidateSet";
 
 export type IctCurrentReadPacketSource =
   | "live_mt5"
@@ -178,6 +179,8 @@ export interface IctCurrentRead {
   opportunitySummary: string;
   currentOpportunitySummary?: CurrentOpportunitySummary;
   currentOpportunities?: CurrentOpportunity[];
+  canonicalCandidates?: CanonicalRuntimeCandidate[];
+  canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
   opportunityDetected: boolean;
   opportunityType: IctOpportunityType;
   opportunityStage: IctOpportunityStage;

@@ -361,6 +361,22 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
           ) : null}
 
+          {snapshot.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS" ? (
+            <div
+              className="border-b border-amber-400/20 bg-amber-400/[0.07] px-5 py-3 text-sm text-amber-100 sm:px-6"
+              data-testid="operator-canonical-conflict"
+              role="alert"
+            >
+              <p className="font-semibold">Conflicting canonical setups</p>
+              <p className="mt-1 text-xs text-amber-200/80">
+                {snapshot.candidatePlans
+                  .filter((candidate) => candidate.side !== "flat" && candidate.actionable)
+                  .map((candidate) => `${candidate.strategyId.replace(/_/g, " ")}: ${candidate.side.toUpperCase()}`)
+                  .join(" / ")}
+              </p>
+            </div>
+          ) : null}
+
           {snapshot.candidatePlans.length ? (
             <div className="grid gap-px border-b border-white/10 bg-white/10 sm:grid-cols-2" data-testid="operator-canonical-candidates">
               {snapshot.candidatePlans.map((candidate) => (

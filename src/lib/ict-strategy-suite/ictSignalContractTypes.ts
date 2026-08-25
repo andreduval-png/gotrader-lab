@@ -28,6 +28,7 @@ import type {
   IctSessionNarrativeProfile
 } from "./ictSessionNarrativeTypes";
 import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import type { CurrentOpportunitySummary } from "@/lib/currentOpportunity";
 
 export type IctResearchSignalStatus =
   | "approved_research_signal"
@@ -86,6 +87,7 @@ export interface IctResearchSignal {
   strategyVersion?: string;
   profileId?: string;
   candidateId?: string;
+  canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
   setup?: string;
   phase?: "phase_1" | "phase_2" | "combined";
   side: IctSide;

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "test:int-3a-core-models": "node scripts/test-int-3a-core-models.mjs",
+    "test:int-3a-1-cross-family-conflict": "node scripts/test-current-opportunity-scanner.mjs",
+    "test:int-3a-1-multi-candidate-projection": "node scripts/test-ict-activate-market-pipeline.mjs",
+    "test:int-3a-1-operator-conflict": "node scripts/test-int-3a-1-operator-conflict.mjs",
     "test:trade-geometry-no-chase": "node scripts/test-trade-geometry-no-chase.mjs",
     "test:trade-geometry-targets": "node scripts/test-trade-geometry-targets.mjs",
     "test:trade-geometry": "node scripts/test-trade-geometry.mjs",

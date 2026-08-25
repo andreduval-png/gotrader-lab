@@ -97,6 +97,8 @@ function compileSuiteForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(/from\s+"\.\.\/ictI2"/g, 'from "./ictI2Stub.mjs"')
+      .replace(/from\s+'\.\.\/ictI2'/g, "from './ictI2Stub.mjs'")
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/integrations\/mt5\/([^"]+)"/g, 'from "./$1.mjs"')
@@ -110,8 +112,11 @@ function compileSuiteForNode() {
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'");
     const withGeometryStub = rewritten
+      .replace(/ictI2Stub\.mjs\.mjs/g, "ictI2Stub.mjs")
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
-      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'")
+      .replace(/from\s+"@\/lib\/ictI2"/g, 'from "./ictI2Stub.mjs"')
+      .replace(/from\s+'@\/lib\/ictI2'/g, "from './ictI2Stub.mjs'");
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withGeometryStub, "utf8");
   }
   fs.writeFileSync(
@@ -150,6 +155,11 @@ export function detectCurrentOpportunities() {
   fs.writeFileSync(
     path.join(outRoot, "forwardScenarioStub.mjs"),
     "export function buildForwardScenarioMapFromCurrentRead() { return undefined; }\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(outRoot, "ictI2Stub.mjs"),
+    "export function buildIctCoreRuntimeCandidates() { return undefined; }\n",
     "utf8"
   );
   fs.writeFileSync(

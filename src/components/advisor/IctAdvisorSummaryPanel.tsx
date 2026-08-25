@@ -332,10 +332,11 @@ export function IctAdvisorSummaryPanel({
       return statusWeight(right.approvedProfileDecision?.status) - statusWeight(left.approvedProfileDecision?.status) || right.confidence - left.confidence;
     })[0];
   const currentOpportunitySummary = currentRead.currentOpportunitySummary ?? packet?.compactSummary.currentOpportunitySummary;
-  const topCurrentOpportunity =
-    currentOpportunitySummary?.topOpportunity ??
-    currentOpportunitySummary?.topNearMiss ??
-    currentOpportunitySummary?.topRejected;
+  const topCurrentOpportunity = currentOpportunitySummary?.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+    ? undefined
+    : currentOpportunitySummary?.topOpportunity ??
+      currentOpportunitySummary?.topNearMiss ??
+      currentOpportunitySummary?.topRejected;
   const ifvgFreshRetestOpportunity = (currentRead.currentOpportunities ?? []).find(
     (item) => item.strategyId === "ifvg_fresh_retest_v3_research"
   );

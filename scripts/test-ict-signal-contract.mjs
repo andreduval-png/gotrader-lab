@@ -259,6 +259,21 @@ async function main() {
   assert.equal(noSignal.status, "no_signal");
   assertSafeSignal(noSignal, suite);
 
+  const conflictSignal = suite.buildIctResearchSignalFromCurrentRead(
+    currentReadFixture({ canonicalSetupConflict: "CONFLICTING_CANONICAL_SETUPS" }),
+    latestStateFixture("strong")
+  );
+  assert.equal(conflictSignal.status, "no_signal");
+  assert.equal(conflictSignal.side, "flat");
+  assert.equal(conflictSignal.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(conflictSignal.canonicalGeometry, undefined);
+  assert.equal(conflictSignal.canonicalGeometryId, undefined);
+  assert.equal(conflictSignal.actionable, false);
+  assert.equal(conflictSignal.entryReference, undefined);
+  assert.equal(conflictSignal.invalidation, undefined);
+  assert.equal(conflictSignal.target, undefined);
+  assertSafeSignal(conflictSignal, suite);
+
   const missingTarget = suite.buildIctResearchSignalFromCurrentRead(
     currentReadFixture({ target: undefined }),
     latestStateFixture("strong")

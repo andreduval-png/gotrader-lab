@@ -87,6 +87,9 @@ const canonicalEntryZone = (currentRead: IctCurrentRead): IctResearchSignalEntry
 
 const buildBlockingReasons = (currentRead: IctCurrentRead) =>
   unique([
+    currentRead.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+      ? "Conflicting canonical setups prohibit singular signal selection."
+      : undefined,
     !isDirectionalSide(currentRead.side) ? "Signal is flat or non-directional." : undefined,
     !canonicalEntryZone(currentRead) ? "Missing canonical entry." : undefined,
     !currentRead.canonicalGeometry ? "Canonical source-native geometry is unavailable." : undefined,
@@ -117,6 +120,7 @@ export const classifyResearchSignalStatus = (
   currentRead: IctCurrentRead,
   latestState?: IctLatestResearchState
 ): IctResearchSignalStatus => {
+  if (currentRead.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS") return "no_signal";
   if (currentRead.approvedStatus === "no_trade" || currentRead.side === "flat") return "no_signal";
   const blockers = buildBlockingReasons(currentRead);
   const hasCriticalBlocker = blockers.some((reason) =>
@@ -211,6 +215,7 @@ export const buildIctResearchSignalFromCurrentRead = (
   currentRead: IctCurrentRead,
   latestState?: IctLatestResearchState
 ): IctResearchSignal => {
+  const canonicalConflict = currentRead.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS";
   const status = classifyResearchSignalStatus(currentRead, latestState);
   const blockers = buildBlockingReasons(currentRead);
   const warnings = unique([
@@ -258,24 +263,25 @@ export const buildIctResearchSignalFromCurrentRead = (
     weeklyBiasDirection: currentRead.weeklyBiasDirection,
     weeklyBiasReason: currentRead.weeklyBiasReason,
     htfTimeframes: currentRead.htfTimeframes,
-    strategyId: currentRead.activeStrategyId,
-    strategyVersion: currentRead.activeStrategyVersion,
-    profileId: currentRead.activeProfileId,
-    candidateId: currentRead.activeCandidateId,
+    strategyId: canonicalConflict ? undefined : currentRead.activeStrategyId,
+    strategyVersion: canonicalConflict ? undefined : currentRead.activeStrategyVersion,
+    profileId: canonicalConflict ? undefined : currentRead.activeProfileId,
+    candidateId: canonicalConflict ? undefined : currentRead.activeCandidateId,
+    canonicalSetupConflict: currentRead.canonicalSetupConflict,
     setup: currentRead.bestSetup,
     phase: phaseFor(currentRead),
-    side: currentRead.side,
-    geometryMode: currentRead.geometryMode,
-    canonicalGeometry: currentRead.canonicalGeometry,
-    canonicalGeometryId: currentRead.canonicalGeometry?.geometryId,
-    geometryStatus: currentRead.canonicalGeometry?.status,
-    actionable: currentRead.canonicalGeometry?.actionable === true,
-    entryReference: currentRead.canonicalGeometry?.entry.intendedPrice,
-    entryZone: canonicalEntryZone(currentRead),
-    invalidation: currentRead.canonicalGeometry?.stop.price,
-    target: currentRead.canonicalGeometry?.target?.price,
-    targetProvenance: currentRead.targetProvenance,
-    rrEstimate: currentRead.canonicalGeometry?.theoreticalRR,
+    side: canonicalConflict ? "flat" : currentRead.side,
+    geometryMode: canonicalConflict ? "unavailable" : currentRead.geometryMode,
+    canonicalGeometry: canonicalConflict ? undefined : currentRead.canonicalGeometry,
+    canonicalGeometryId: canonicalConflict ? undefined : currentRead.canonicalGeometry?.geometryId,
+    geometryStatus: canonicalConflict ? undefined : currentRead.canonicalGeometry?.status,
+    actionable: canonicalConflict ? false : currentRead.canonicalGeometry?.actionable === true,
+    entryReference: canonicalConflict ? undefined : currentRead.canonicalGeometry?.entry.intendedPrice,
+    entryZone: canonicalConflict ? undefined : canonicalEntryZone(currentRead),
+    invalidation: canonicalConflict ? undefined : currentRead.canonicalGeometry?.stop.price,
+    target: canonicalConflict ? undefined : currentRead.canonicalGeometry?.target?.price,
+    targetProvenance: canonicalConflict ? undefined : currentRead.targetProvenance,
+    rrEstimate: canonicalConflict ? undefined : currentRead.canonicalGeometry?.theoreticalRR,
     confidence: currentRead.confidence,
     approvedProfileStatus: currentRead.approvedStatus,
     modelQualityLane: currentRead.modelQualityLane,

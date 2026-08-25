@@ -9,6 +9,7 @@ import type {
   CurrentOpportunitySummary
 } from "./currentOpportunityTypes";
 import { projectCanonicalTradeGeometry } from "../tradeGeometry/canonicalTradeGeometry";
+import { buildCanonicalRuntimeCandidateSet, type CanonicalRuntimeCandidateSet } from "./canonicalRuntimeCandidateSet";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -178,7 +179,13 @@ const opportunity = (
     geometry,
     geometryMode,
     geometryStatus: geometry?.status,
-    actionable: Boolean(geometry?.actionable),
+    canonicalCandidate: patch.canonicalCandidate ?? Boolean(geometry),
+    actionable: Boolean(
+      geometry?.actionable &&
+      geometry.geometryValid &&
+      finalStatus === "valid_candidate" &&
+      finalClassification !== "diagnostic"
+    ),
     confidence: patch.confidence ?? context.confidence ?? 0,
     requiredValidation: patch.requiredValidation ?? [...validationFor(finalStatus)],
     blockers: unique(blockers),
@@ -220,6 +227,7 @@ const coreIctOpportunities = (context: CurrentOpportunityContext): CurrentOpport
       profileId: candidate.profileId,
       candidateState: candidate.state,
       contextIdentity: candidate.contextIdentity,
+      canonicalCandidate: true,
       model: label,
       status,
       classification: executable ? undefined : "diagnostic",
@@ -428,7 +436,15 @@ const ifvgFreshRetestV3Opportunity = (context: CurrentOpportunityContext): Curre
           : assessment.nextAction;
 
   return opportunity(context, {
+    id: assessment?.candidateId,
+    candidateId: assessment?.candidateId,
     strategyId: "ifvg_fresh_retest_v3_research",
+    strategyVersion: "v3",
+    profileId: "ifvg_fresh_retest_v3_research",
+    candidateState: assessment?.baseStatus,
+    contextIdentity: assessment?.sourceFingerprint
+      ? `${assessment.sourceFingerprint}|${assessment.candidateDetectedAt}`
+      : undefined,
     model: "IFVG fresh retest v3",
     status,
     setupName: "IFVG fresh-retest v3",
@@ -630,13 +646,22 @@ const strategyDiagnostics = (context: CurrentOpportunityContext): CurrentOpportu
   ];
 };
 
-const summarize = (context: CurrentOpportunityContext, opportunities: CurrentOpportunity[]): CurrentOpportunitySummary => {
+const summarize = (
+  context: CurrentOpportunityContext,
+  opportunities: CurrentOpportunity[],
+  canonicalCandidateSet: CanonicalRuntimeCandidateSet
+): CurrentOpportunitySummary => {
   const sorted = opportunities.slice().sort((left, right) => statusRank[right.status] - statusRank[left.status] || right.confidence - left.confidence);
   const count = (status: CurrentOpportunityStatus) => opportunities.filter((item) => item.status === status).length;
-  const canonicalSetupConflict = context.coreIctCandidates?.conflict ?? "NONE";
-  const topOpportunity = canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
-    ? undefined
-    : sorted.find((item) => item.classification !== "diagnostic" && (item.status === "valid_candidate" || item.status === "forming"));
+  const canonicalSetupConflict = canonicalCandidateSet.conflict;
+  const selectedCanonicalOpportunity = canonicalCandidateSet.selectedCandidateId
+    ? opportunities.find((item) => item.candidateId === canonicalCandidateSet.selectedCandidateId)
+    : undefined;
+  const topOpportunity = canonicalCandidateSet.disposition === "SINGLE_ACTIONABLE_CANDIDATE"
+    ? selectedCanonicalOpportunity
+    : canonicalCandidateSet.disposition === "NO_ACTIONABLE_CANDIDATE"
+      ? sorted.find((item) => item.classification !== "diagnostic" && item.status === "forming")
+      : undefined;
   const topNearMiss = sorted.find((item) => item.status === "near_miss");
   const topRejected = sorted.find((item) => item.status === "rejected");
   const topDiagnostic = sorted.find((item) => item.classification === "diagnostic");
@@ -669,12 +694,18 @@ const summarize = (context: CurrentOpportunityContext, opportunities: CurrentOpp
     regimeContextCount: count("regime_context"),
     noTradeContextCount: count("no_trade_context"),
     canonicalSetupConflict,
+    canonicalCandidateSetDisposition: canonicalCandidateSet.disposition,
+    canonicalCandidateCount: canonicalCandidateSet.candidates.length,
+    actionableCanonicalCandidateCount: canonicalCandidateSet.actionableCandidates.length,
+    selectedCanonicalCandidateId: canonicalCandidateSet.selectedCandidateId,
     topOpportunity,
     topNearMiss,
     topRejected,
     topBlocker,
     nextAction: canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
       ? "Conflicting canonical setups are preserved; no automatic trade selector is authorized."
+      : canonicalCandidateSet.disposition === "MULTIPLE_ALIGNED_CANONICAL_SETUPS"
+        ? "Aligned canonical setups are preserved separately; no automatic trade selector is authorized."
       : topOpportunity?.nextAction ?? topNearMiss?.nextAction ?? topDiagnostic?.nextAction ?? "Run Activate Market with explicit MT5 90-day context.",
     rangeHistoryAvailable: context.sourceDepth.rangeHistoryAvailable,
     validationLookbackDays: context.sourceDepth.validationLookbackDays,
@@ -693,7 +724,13 @@ export const detectCurrentOpportunities = (context: CurrentOpportunityContext): 
   ].sort(
     (left, right) => statusRank[right.status] - statusRank[left.status] || right.confidence - left.confidence
   );
-  const summary = summarize(context, opportunities);
+  const canonicalCandidateSet = buildCanonicalRuntimeCandidateSet({
+    opportunities,
+    generatedAt: context.generatedAt,
+    sourceFingerprint: context.sourceFingerprint,
+    authority
+  });
+  const summary = summarize(context, opportunities, canonicalCandidateSet);
   return {
     scanId: createId("current_scan", `${context.generatedAt}:${context.sourceFingerprint ?? "no_fp"}:${opportunities.length}`),
     generatedAt: context.generatedAt,
@@ -704,6 +741,7 @@ export const detectCurrentOpportunities = (context: CurrentOpportunityContext): 
       opportunityMissingEvidenceCount: context.opportunityMissingEvidence.length
     },
     opportunities,
+    canonicalCandidates: canonicalCandidateSet.candidates,
     summary,
     researchOnly: true,
     authority,
@@ -729,6 +767,12 @@ export const assertCurrentOpportunityScanIsCompact = (scan: CurrentOpportunitySc
 
 export const summarizeCurrentOpportunityScan = (scan?: CurrentOpportunityScan) => {
   if (!scan) return "Current opportunity scanner has not run.";
+  if (scan.summary.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS") {
+    return `Conflicting canonical setups / no trade. Next: ${scan.summary.nextAction}`;
+  }
+  if (scan.summary.canonicalCandidateSetDisposition === "MULTIPLE_ALIGNED_CANONICAL_SETUPS") {
+    return `Multiple aligned canonical setups / no singular selection. Next: ${scan.summary.nextAction}`;
+  }
   const top =
     scan.summary.topOpportunity ??
     scan.summary.topNearMiss ??

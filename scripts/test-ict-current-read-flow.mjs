@@ -131,9 +131,10 @@ export async function listCanonicalCandleSourceSummaries() {
   fs.writeFileSync(
     path.join(outRoot, "currentOpportunityStub.mjs"),
     `export const buildCurrentOpportunityContext = (input) => input;
-export const detectCurrentOpportunities = () => ({
+export const detectCurrentOpportunities = () => globalThis.__ICT_CURRENT_READ_OPPORTUNITY_SCAN ?? ({
   generatedAt: new Date().toISOString(),
   opportunities: [],
+  canonicalCandidates: [],
   summary: { total: 0, tradeCandidates: 0, formingCandidates: 0, diagnosticContexts: 0, rejectedCandidates: 0, noTrade: 0 }
 });
 `,
@@ -290,6 +291,37 @@ async function main() {
   assert.equal(read.authority.readinessOverrideAuthority, "none");
   assert.equal(suite.assertIctCurrentReadIsCompact(read).ok, true, "current read must remain compact and safe");
   assert.doesNotMatch(JSON.stringify(read), /"candles"\s*:|"snapshot"\s*:|"accountNumber"\s*:|"orderId"\s*:|"positionId"\s*:|"secret"\s*:/i);
+
+  const conflictOpportunity = (strategyId, candidateId, side) => ({
+    id: candidateId, candidateId, strategyId, setupName: strategyId, side, status: "valid_candidate",
+    classification: "trade_candidate", canonicalCandidate: true, actionable: true, blockers: [], missingConditions: []
+  });
+  const ifvgConflictOpportunity = conflictOpportunity("ifvg_fresh_retest_v3_research", "ifvg-conflict-candidate", "long");
+  const ictConflictOpportunity = conflictOpportunity("ict_2022_model_v1", "ict-2022-conflict-candidate", "short");
+  globalThis.__ICT_CURRENT_READ_OPPORTUNITY_SCAN = {
+    generatedAt: packet.generatedAt,
+    opportunities: [ifvgConflictOpportunity, ictConflictOpportunity],
+    canonicalCandidates: [
+      { opportunityId: ifvgConflictOpportunity.id, candidateId: ifvgConflictOpportunity.candidateId, strategyId: ifvgConflictOpportunity.strategyId, direction: "long", actionability: true, opportunity: ifvgConflictOpportunity },
+      { opportunityId: ictConflictOpportunity.id, candidateId: ictConflictOpportunity.candidateId, strategyId: ictConflictOpportunity.strategyId, direction: "short", actionability: true, opportunity: ictConflictOpportunity }
+    ],
+    summary: {
+      canonicalSetupConflict: "CONFLICTING_CANONICAL_SETUPS",
+      canonicalCandidateSetDisposition: "CONFLICTING_CANONICAL_SETUPS",
+      canonicalCandidateCount: 2,
+      actionableCanonicalCandidateCount: 2,
+      nextAction: "Conflicting canonical setups are preserved; no automatic trade selector is authorized."
+    }
+  };
+  const conflictRead = suite.buildIctCurrentReadFromPacket(packet);
+  assert.equal(conflictRead.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(conflictRead.activeCandidateId, undefined);
+  assert.equal(conflictRead.activeStrategyId, undefined);
+  assert.equal(conflictRead.canonicalGeometry, undefined);
+  assert.equal(conflictRead.side, "flat");
+  assert.equal(conflictRead.canonicalCandidates.length, 2);
+  assert.match(conflictRead.topReasons.join(" "), /strategies disagree/i);
+  globalThis.__ICT_CURRENT_READ_OPPORTUNITY_SCAN = undefined;
 
   const deepContext = {
     ...packet.marketAnalysisContext,

@@ -948,22 +948,35 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
       }
     })
   );
-  const canonicalCandidate = currentOpportunityScan.summary.topOpportunity
-    ?? currentOpportunityScan.summary.topNearMiss
-    ?? currentOpportunityScan.summary.topRejected;
+  const canonicalCandidates = currentOpportunityScan.canonicalCandidates ?? [];
+  const selectedCanonicalCandidateId = currentOpportunityScan.summary.selectedCanonicalCandidateId
+    ?? (currentOpportunityScan.summary.canonicalCandidateSetDisposition
+      ? undefined
+      : currentOpportunityScan.summary.topOpportunity?.candidateId);
+  const canonicalCandidate = selectedCanonicalCandidateId
+    ? canonicalCandidates.find((candidate) => candidate.candidateId === selectedCanonicalCandidateId)?.opportunity
+      ?? currentOpportunityScan.opportunities.find((candidate) => candidate.candidateId === selectedCanonicalCandidateId)
+    : undefined;
   const canonicalGeometry = canonicalCandidate?.geometry;
   const canonicalProjection = canonicalGeometry ? projectCanonicalTradeGeometry(canonicalGeometry) : undefined;
-  const integratedCandidateIds = new Set([
-    "ifvg_fresh_retest_v3_research",
-    "ict_2022_model_v1",
-    "ict_power_of_three_v1",
-    "ict_judas_swing_v1"
-  ]);
-  const integratedCandidates = currentOpportunityScan.opportunities.filter((candidate) => integratedCandidateIds.has(candidate.strategyId));
+  const canonicalOpportunityIds = new Set(canonicalCandidates.map((candidate) => candidate.opportunityId));
+  const integratedCandidates = canonicalCandidates.map((candidate) => candidate.opportunity);
   const compactCurrentOpportunities = [
     ...integratedCandidates,
-    ...currentOpportunityScan.opportunities.filter((candidate) => !integratedCandidateIds.has(candidate.strategyId))
+    ...currentOpportunityScan.opportunities.filter((candidate) => !canonicalOpportunityIds.has(candidate.id))
   ].slice(0, 12);
+  const canonicalSetBlocksSelection =
+    currentOpportunityScan.summary.canonicalCandidateSetDisposition === "CONFLICTING_CANONICAL_SETUPS" ||
+    currentOpportunityScan.summary.canonicalCandidateSetDisposition === "MULTIPLE_ALIGNED_CANONICAL_SETUPS";
+  const canonicalSetReason = currentOpportunityScan.summary.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+    ? "Multiple actionable canonical strategies disagree; no singular research plan is selected."
+    : currentOpportunityScan.summary.canonicalCandidateSetDisposition === "MULTIPLE_ALIGNED_CANONICAL_SETUPS"
+      ? "Multiple aligned canonical strategies remain separate; no singular research plan is selected."
+      : undefined;
+  const finalTopReasons = uniqueReasons([canonicalSetReason, ...currentReadTopReasons]);
+  const finalNextAction = canonicalSetBlocksSelection
+    ? currentOpportunityScan.summary.nextAction
+    : currentReadNextAction;
 
   const currentRead: IctCurrentRead = {
     researchOnly: true,
@@ -993,12 +1006,15 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     htfStatus: htfStatusFor(packet),
     bestPhase1Setup: bestPhase1?.setup,
     bestPhase2Setup: bestPhase2?.setup,
-    bestSetup: canonicalCandidate?.setupName ?? recommended.setup,
+    bestSetup: canonicalCandidate?.setupName
+      ?? (canonicalSetBlocksSelection ? currentOpportunityScan.summary.canonicalCandidateSetDisposition.toLowerCase() : recommended.setup),
     activeStrategyId: canonicalCandidate?.strategyId,
     activeStrategyVersion: canonicalCandidate?.strategyVersion,
     activeProfileId: canonicalCandidate?.profileId,
     activeCandidateId: canonicalCandidate?.candidateId,
-    side: canonicalGeometry ? (canonicalGeometry.direction === "LONG" ? "long" : "short") : recommended.side,
+    side: canonicalGeometry
+      ? (canonicalGeometry.direction === "LONG" ? "long" : "short")
+      : canonicalSetBlocksSelection ? "flat" : recommended.side,
     approvedStatus: packet.approvedProfileDecision.status,
     modelQualityLane,
     universalRecognition,
@@ -1015,6 +1031,8 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     opportunitySummary: universalRecognition.opportunitySummary,
     currentOpportunitySummary: currentOpportunityScan.summary,
     currentOpportunities: compactCurrentOpportunities,
+    canonicalCandidates,
+    canonicalSetupConflict: currentOpportunityScan.summary.canonicalSetupConflict,
     opportunityDetected,
     opportunity: recognizedOpportunity,
     opportunityType: recognizedOpportunity.type,
@@ -1107,8 +1125,8 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     rrConstructionReason,
     smtReason,
     riskReason,
-    topReasons: currentReadTopReasons,
-    nextAction: currentReadNextAction,
+    topReasons: finalTopReasons,
+    nextAction: finalNextAction,
     debug: {
       candleCount: packet.activeSource.candleCount,
       primaryTimeframeAvailable: packet.activeSource.candleCount > 0,
