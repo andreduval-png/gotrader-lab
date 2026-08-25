@@ -1013,7 +1013,9 @@ export async function runIctActivateMarketPipeline(
       "ifvg_fresh_retest_v3_research",
       "ict_2022_model_v1",
       "ict_power_of_three_v1",
-      "ict_judas_swing_v1"
+      "ict_judas_swing_v1",
+      "ict_market_maker_buy_model_v1",
+      "ict_market_maker_sell_model_v1"
     ]);
     const candidatePlanOpportunities = currentRead?.canonicalCandidates?.length
       ? currentRead.canonicalCandidates.map((candidate) => candidate.opportunity)

@@ -10,7 +10,7 @@ import type {
   CanonicalPdArrayFact,
   CanonicalPdLocationFact
 } from "@/lib/ictCanonical/canonicalIctTypes";
-import { parameterHash, transitionAppender } from "@/lib/ictI2/ictI2Shared";
+import { canonicalGeometryFromIntent, transitionsFor } from "@/lib/ictI2/ictI2Shared";
 import { buildMmxmDeliveryContext, visibleIctI3Facts } from "@/lib/ictI3/marketMakerFramework";
 import type {
   IctI3DetectionInput,
@@ -19,7 +19,8 @@ import type {
   MarketMakerModelParameters,
   MmxmPhase
 } from "@/lib/ictI3/ictI3Types";
-import { buildCanonicalTradeGeometry, evaluateEntryLifecycle } from "@/lib/tradeGeometry";
+import { evaluateEntryLifecycle } from "@/lib/tradeGeometry";
+import type { CompleteStrategyGeometryIntent } from "@/lib/tradeGeometry";
 
 const modelIdentity = (direction: MarketMakerDirection) => direction === "BULLISH"
   ? {
@@ -54,10 +55,9 @@ const narrativeSupports = (input: IctI3DetectionInput, direction: MarketMakerDir
   const expected = direction === "BULLISH" ? "bullish" : "bearish";
   const opposite = direction === "BULLISH" ? "bearish" : "bullish";
   const expectedPath = direction === "BULLISH" ? "buyside" : "sellside";
-  const maturation = input.narrative.setupMaturationDirection === expected;
-  const structuralContinuation =
-    input.narrative.structuralBias === expected && input.narrative.currentFlowDirection !== opposite;
-  return (maturation || structuralContinuation) && input.narrative.liquidityPath === expectedPath;
+  return input.narrative.structural === expected &&
+    input.narrative.execution !== opposite &&
+    input.narrative.liquidityPath === expectedPath;
 };
 
 const parameterMaterial = (parameters: MarketMakerModelParameters, direction: MarketMakerDirection) => ({
@@ -66,6 +66,9 @@ const parameterMaterial = (parameters: MarketMakerModelParameters, direction: Ma
   eligiblePdArrayTypes: [...parameters.eligiblePdArrayTypes]
 });
 
+const parameterHash = (schemaId: string, material: ReturnType<typeof parameterMaterial>) =>
+  canonicalFingerprint({ schemaId, material });
+
 export const evaluateMarketMakerModelCore = (
   input: IctI3DetectionInput,
   direction: MarketMakerDirection,
@@ -73,7 +76,7 @@ export const evaluateMarketMakerModelCore = (
 ): MarketMakerModelCandidate => {
   const identity = modelIdentity(direction);
   const facts = visibleIctI3Facts(input.facts, input.asOf);
-  const lifecycle = transitionAppender<MmxmPhase>("SEARCHING", input.asOf);
+  const lifecycle = transitionsFor<MmxmPhase>("SEARCHING", input.asOf);
   const blockers: string[] = [];
   const warnings: string[] = [];
   let range: CanonicalDealingRangeFact | undefined;
@@ -258,20 +261,17 @@ export const evaluateMarketMakerModelCore = (
         allowCausalRetrace: false,
         observedStatus: touch ? "ENTRY_TOUCHED_NOT_FILLED" : undefined
       });
-  const geometry = buildCanonicalTradeGeometry({
+  const geometryIntent: CompleteStrategyGeometryIntent = {
+    status: "COMPLETE",
     strategyId: identity.strategyId,
     strategyVersion: "1.0.0",
     profileId: identity.profileId,
     profileVersion: "1.0.0",
-    parameterHash: parameterHash("gotrader.ict.i3.market-maker.parameters.v1", parameterMaterial(parameters, direction)),
-    candidateId: canonicalFingerprint({
-      strategyId: identity.strategyId,
-      profileId: identity.profileId,
-      sourceFingerprint: input.sourceFingerprint,
-      dealingRangeId: range.dealingRangeId,
-      liquidityEventId: engineering.liquidityId,
-      direction
-    }),
+    geometryPolicyId: "gotrader.ict.i3.market-maker.geometry.v1",
+    geometryPolicyVersion: "1.0.0",
+    entryPolicyId: `${identity.strategyId}.${parameters.entryMode.toLowerCase()}`,
+    stopPolicyId: `${identity.strategyId}.liquidity-engineering-extreme`,
+    targetPolicyId: `${identity.strategyId}.opposite-external-objective`,
     direction: identity.tradeDirection,
     entry: {
       model: parameters.entryMode,
@@ -289,7 +289,7 @@ export const evaluateMarketMakerModelCore = (
       ownerTimeframe: engineering.ownerTimeframe,
       structuralInvalidation: true
     },
-    targetCandidates: [{
+    primaryTarget: {
       targetId: objective.liquidityId,
       type: "EXTERNAL_LIQUIDITY",
       direction: identity.tradeDirection,
@@ -300,19 +300,23 @@ export const evaluateMarketMakerModelCore = (
       consumed: objective.status === "CONSUMED",
       internalExternalClass: "EXTERNAL",
       liquidityClass: objective.liquidityClass
-    }],
-    targetPolicy: {
-      policyId: `${identity.strategyId}.opposite-external-objective`,
-      policyVersion: "1.0.0",
-      primaryTargetType: "EXTERNAL_LIQUIDITY",
-      primaryTargetId: objective.liquidityId,
-      allowedFallbackTargetTypes: []
     },
-    primaryDrawOnLiquidityId: objective.liquidityId,
-    minimumRequiredRR: parameters.minimumRR,
+    intermediateTargets: [],
+    supportingFactIds: compactIds([range, engineering, transition, displacement, mss, pdArray, objective]),
     sourceFingerprint: input.sourceFingerprint,
+  };
+  const geometry = canonicalGeometryFromIntent({
+    intent: geometryIntent,
+    candidateId: canonicalFingerprint({
+      strategyId: identity.strategyId,
+      profileId: identity.profileId,
+      sourceFingerprint: input.sourceFingerprint,
+      dealingRangeId: range.dealingRangeId,
+      liquidityEventId: engineering.liquidityId,
+      direction
+    }),
     asOf: input.asOf,
-    researchOnly: true
+    minimumRequiredRR: parameters.minimumRR
   });
 
   if (geometry.status === "TARGET_CONSUMED") {
@@ -333,5 +337,5 @@ export const evaluateMarketMakerModelCore = (
   }
 
   const result = candidate();
-  return { ...result, geometry };
+  return { ...result, geometryIntent, geometry };
 };

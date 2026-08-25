@@ -9,7 +9,8 @@ import { mt5ReadOnlyCandlesToGoTraderCandles } from "../integrations/mt5/mt5Read
 import type { ResearchRuntimeSnapshot } from "../runtime";
 import type { Candle } from "../types";
 import type { Timeframe } from "../types";
-import { buildIctCoreRuntimeCandidates } from "../ictI2";
+import { buildIctCanonicalRuntimeInput, evaluateIctCoreRuntimeCandidates } from "../ictI2";
+import { evaluateIctMarketMakerRuntimeCandidates } from "../ictI3";
 import {
   buildCurrentOpportunityContext,
   detectCurrentOpportunities
@@ -1146,7 +1147,7 @@ export async function buildIctAdvisorPacketFromRuntime(
     : undefined;
   const coreIctSourceFingerprint = activeSource?.fingerprint ?? sourceSummary.fingerprint;
   const coreIctAsOf = ifvgDetectorCandles.at(-1)?.timestamp ?? new Date().toISOString();
-  const coreIctCandidates = buildIctCoreRuntimeCandidates({
+  const canonicalRuntimeInput = buildIctCanonicalRuntimeInput({
     candlesByTimeframe: {
       "5m": ifvgDetectorCandles,
       "15m": (ifvgContextSources.M15 ?? ifvgContextSources["15m"] ?? []),
@@ -1158,6 +1159,8 @@ export async function buildIctAdvisorPacketFromRuntime(
     asOf: coreIctAsOf,
     sourceFingerprint: coreIctSourceFingerprint
   });
+  const coreIctCandidates = evaluateIctCoreRuntimeCandidates(canonicalRuntimeInput);
+  const marketMakerCandidates = evaluateIctMarketMakerRuntimeCandidates(canonicalRuntimeInput);
   const packet: IctAdvisorPacket = {
     packetId: createId("ict_advisor_packet"),
     source: "gotrader_ict_strategy_suite",
@@ -1250,6 +1253,7 @@ export async function buildIctAdvisorPacketFromRuntime(
       recognitionOpportunitySummary: universalRecognition.opportunitySummary,
       ifvgFreshRetestV3,
       coreIctCandidates,
+      marketMakerCandidates,
       hydrationSource: analysis.hydrationSource,
       hydrationWarning: analysis.hydrationWarning,
       noTradeReasonCount: recommendedSignal.noTradeReasons.length + (analysis.hydrationWarning ? 1 : 0)

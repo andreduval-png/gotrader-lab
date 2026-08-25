@@ -42,7 +42,9 @@ const strategyOrder = new Map([
   ["ifvg_fresh_retest_v3_research", 0],
   ["ict_2022_model_v1", 1],
   ["ict_power_of_three_v1", 2],
-  ["ict_judas_swing_v1", 3]
+  ["ict_judas_swing_v1", 3],
+  ["ict_market_maker_buy_model_v1", 4],
+  ["ict_market_maker_sell_model_v1", 5]
 ]);
 
 const stableCandidateOrder = (left: CanonicalRuntimeCandidate, right: CanonicalRuntimeCandidate) =>

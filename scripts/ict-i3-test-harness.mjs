@@ -186,13 +186,14 @@ export function marketMakerFixture(direction = "BULLISH") {
     asOf: at(25),
     sourceFingerprint: "i3-fixture-source",
     narrative: {
-      structuralBias: factDirection,
-      currentFlowDirection: bullish ? "bearish" : "bullish",
-      setupMaturationDirection: factDirection,
-      retracementState: "confirmed",
-      continuationState: "forming",
+      structural: factDirection,
+      intermediate: bullish ? "bearish" : "bullish",
+      execution: factDirection,
       liquidityPath: bullish ? "buyside" : "sellside",
-      policyId: "c1-i3-fixture",
+      structuralTimeframe: "1h",
+      intermediateTimeframe: "15m",
+      executionTimeframe: "5m",
+      policyId: "gotrader.ict.c1-1.hierarchical-roles.v1",
       policyVersion: "1.0.0"
     },
     smt: {

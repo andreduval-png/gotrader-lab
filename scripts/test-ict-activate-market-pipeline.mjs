@@ -515,6 +515,96 @@ async function main() {
   assert.equal(canonicalIfvgResult.summary.executionAllowed, false);
   assertSafe(canonicalIfvgResult);
 
+  const marketMakerBuyGeometry = {
+    ...canonicalIfvgGeometry,
+    geometryId: "mmbm-live-canonical-geometry",
+    logicalGeometryKey: "mmbm-live-logical-geometry",
+    strategyId: "ict_market_maker_buy_model_v1",
+    strategyVersion: "1.0.0",
+    profileId: "ict_market_maker_buy_model_v1_research",
+    profileVersion: "1.0.0",
+    candidateId: "mmbm-live-candidate",
+    direction: "LONG",
+    entry: { model: "PD_ARRAY_REPRICE", intendedPrice: 23090, lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED" },
+    stop: { model: "ENGINEERING_EXTREME", price: 23080, structuralInvalidation: true },
+    target: {
+      ...canonicalIfvgGeometry.target,
+      model: "OPPOSITE_EXTERNAL_LIQUIDITY",
+      price: 23120,
+      targetId: "mmbm-opposite-external-liquidity",
+      policyId: "ict_market_maker_buy_model_v1.opposite-external-liquidity"
+    },
+    riskDistance: 10,
+    rewardDistance: 30,
+    theoreticalRR: 3,
+    minimumRequiredRR: 2
+  };
+  const marketMakerBuyOpportunity = {
+    ...canonicalIfvgOpportunity,
+    id: "mmbm-live-opportunity",
+    candidateId: "mmbm-live-candidate",
+    strategyId: "ict_market_maker_buy_model_v1",
+    strategyVersion: "1.0.0",
+    profileId: "ict_market_maker_buy_model_v1_research",
+    candidateState: "ACTIVE_DELIVERY",
+    setupName: "Market Maker Buy Model",
+    side: "long",
+    geometry: marketMakerBuyGeometry,
+    entry: 23090,
+    invalidation: 23080,
+    target: 23120,
+    rrEstimate: 3
+  };
+  globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
+    side: "long",
+    activeStrategyId: marketMakerBuyOpportunity.strategyId,
+    activeCandidateId: marketMakerBuyOpportunity.candidateId,
+    canonicalGeometry: marketMakerBuyGeometry,
+    currentOpportunitySummary: {
+      canonicalSetupConflict: "NONE",
+      canonicalCandidateSetDisposition: "SINGLE_ACTIONABLE_CANDIDATE",
+      canonicalCandidateCount: 1,
+      actionableCanonicalCandidateCount: 1,
+      selectedCanonicalCandidateId: marketMakerBuyOpportunity.candidateId,
+      topOpportunity: marketMakerBuyOpportunity
+    },
+    currentOpportunities: [marketMakerBuyOpportunity],
+    canonicalCandidates: [{
+      opportunityId: marketMakerBuyOpportunity.id,
+      candidateId: marketMakerBuyOpportunity.candidateId,
+      strategyId: marketMakerBuyOpportunity.strategyId,
+      direction: marketMakerBuyOpportunity.side,
+      actionability: true,
+      canonicalGeometry: marketMakerBuyGeometry,
+      geometryId: marketMakerBuyGeometry.geometryId,
+      opportunity: marketMakerBuyOpportunity
+    }]
+  });
+  globalThis.__ACTIVATE_MARKET_TEST_SIGNAL = signalContract({
+    status: "approved_research_signal",
+    side: "long",
+    strategyId: marketMakerBuyOpportunity.strategyId,
+    canonicalGeometry: marketMakerBuyGeometry,
+    canonicalGeometryId: marketMakerBuyGeometry.geometryId,
+    entryReference: 23090,
+    invalidation: 23080,
+    target: 23120,
+    rrEstimate: 3
+  });
+  const marketMakerBuyResult = await suite.runIctActivateMarketPipeline(
+    { snapshot: snapshot(), saveLatestSummary: false },
+    undefined,
+    { saveLatestSummary: () => undefined }
+  );
+  assert.notEqual(marketMakerBuyResult.status, "failed");
+  assert.equal(marketMakerBuyResult.summary.proposedGeometry, marketMakerBuyGeometry, "Activate Market must preserve producer geometry by reference");
+  assert.deepEqual(
+    marketMakerBuyResult.summary.candidatePlans.map((plan) => [plan.strategyId, plan.candidateId, plan.geometryId, plan.entry, plan.stop, plan.target, plan.riskReward]),
+    [["ict_market_maker_buy_model_v1", "mmbm-live-candidate", "mmbm-live-canonical-geometry", 23090, 23080, 23120, 3]]
+  );
+  assert.equal(marketMakerBuyResult.summary.executionAllowed, false);
+  assertSafe(marketMakerBuyResult);
+
   const ict2022Geometry = {
     ...canonicalIfvgGeometry,
     geometryId: "ict-2022-long-canonical-geometry",

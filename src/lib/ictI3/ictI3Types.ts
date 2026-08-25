@@ -1,11 +1,11 @@
 import type { IctSmtSignal } from "@/lib/ict-strategy-suite/ictIndexSmtTypes";
-import type { IctI2DatasetIdentity, IctI2NarrativeContext, IctI2StateTransition } from "@/lib/ictI2/ictI2Types";
+import type { IctCoreStateTransition, IctHierarchicalNarrative } from "@/lib/ictI2/ictI2Types";
 import type {
   CanonicalIctAuthority,
   CanonicalIctFact,
   CanonicalPdArrayType
 } from "@/lib/ictCanonical/canonicalIctTypes";
-import type { CanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import type { CanonicalTradeGeometry, StrategyGeometryIntent } from "@/lib/tradeGeometry";
 import type { Candle, FuturesSymbol, Timeframe } from "@/lib/types";
 
 export type IctI3RuleClassification =
@@ -94,9 +94,13 @@ export interface IctI3DetectionInput {
   candlesByTimeframe: Readonly<Partial<Record<Timeframe, readonly Candle[]>>>;
   asOf: string;
   sourceFingerprint: string;
-  narrative: IctI2NarrativeContext;
+  narrative: IctHierarchicalNarrative;
   smt?: Pick<IctSmtSignal, "divergenceType" | "confirmsCandidate" | "rejectsCandidate" | "reason">;
-  dataset?: IctI2DatasetIdentity;
+  dataset?: {
+    datasetCertificateId: string;
+    datasetId: string;
+    datasetChecksum: string;
+  };
 }
 
 export interface MarketMakerModelCandidate {
@@ -114,13 +118,24 @@ export interface MarketMakerModelCandidate {
   state: MmxmPhase;
   context: MmxmDeliveryContext;
   supportingFactIds: readonly string[];
-  transitions: readonly IctI2StateTransition<MmxmPhase>[];
+  transitions: readonly IctCoreStateTransition<MmxmPhase>[];
   geometry?: CanonicalTradeGeometry;
+  geometryIntent?: StrategyGeometryIntent;
   blockers: readonly string[];
   warnings: readonly string[];
   authority: CanonicalIctAuthority;
   researchValidated: false;
   productionAdoptionAllowed: false;
+}
+
+export interface MarketMakerCandidateCollection {
+  version: "gotrader.ict-market-maker-candidates.v1";
+  generatedAt: string;
+  sourceFingerprint: string;
+  frameworks: readonly MmxmDeliveryContext[];
+  candidates: readonly MarketMakerModelCandidate[];
+  researchValidated: false;
+  authority: CanonicalIctAuthority;
 }
 
 export interface IctI3CurrentReadProjection {

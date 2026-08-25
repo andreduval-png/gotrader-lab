@@ -18,7 +18,17 @@ const js = ts.transpileModule(source, {
   .replace(/from\s+["']@\/lib\/tradeGeometry["']/g, 'from "./tradeGeometry.mjs"')
   .replace(/from\s+["']\.\/operatorConsoleTypes["']/g, 'from "./operatorConsoleTypes.mjs"');
 fs.writeFileSync(path.join(out, "buildOperatorConsoleSnapshot.mjs"), js, "utf8");
-fs.writeFileSync(path.join(out, "tradeGeometry.mjs"), "export const projectCanonicalTradeGeometry = () => undefined;\n", "utf8");
+fs.writeFileSync(path.join(out, "tradeGeometry.mjs"), `export const projectCanonicalTradeGeometry = (geometry) => geometry ? {
+  geometryId: geometry.geometryId,
+  intendedEntry: geometry.entry?.intendedPrice,
+  intendedStop: geometry.stop?.price,
+  intendedTarget: geometry.target?.price,
+  theoreticalRR: geometry.theoreticalRR,
+  geometryValid: geometry.geometryValid,
+  actionable: geometry.actionable,
+  status: geometry.status,
+  displayKind: geometry.actionable ? "ACTIONABLE_GEOMETRY" : "RESEARCH_GEOMETRY"
+} : undefined;\n`, "utf8");
 fs.writeFileSync(path.join(out, "operatorConsoleTypes.mjs"), `export const OPERATOR_AUTHORITY = {
   executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none"
 };\n`, "utf8");
@@ -68,6 +78,57 @@ assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.candidateA
 assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.globalActionable), [false, false]);
 assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.geometryId), ["ifvg-geometry", "ict-geometry"]);
 assert.equal(snapshot.authority.executionAuthority, "none");
+
+const marketMakerActivation = {
+  ...activation,
+  cycleId: "int-3b-mmbm-cycle",
+  canonicalSetupConflict: "NONE",
+  currentOpportunitySummary: {
+    canonicalSetupConflict: "NONE",
+    canonicalCandidateSetDisposition: "SINGLE_ACTIONABLE_CANDIDATE",
+    canonicalCandidateCount: 1,
+    actionableCanonicalCandidateCount: 1,
+    selectedCanonicalCandidateId: "mmbm-candidate"
+  },
+  candidatePlans: [
+    candidatePlan("ict_market_maker_buy_model_v1", "mmbm-candidate", "mmbm-geometry", "long", 23090, 23080, 23120)
+  ],
+  currentCandidateId: "mmbm-candidate",
+  researchSide: "long",
+  proposedCandidateStatus: "valid_candidate",
+  proposedGeometry: {
+    geometryId: "mmbm-geometry",
+    entry: { intendedPrice: 23090 },
+    stop: { price: 23080 },
+    target: { price: 23120 },
+    theoreticalRR: 3,
+    geometryValid: true,
+    actionable: true,
+    status: "VALID_ACTIONABLE"
+  },
+  proposedEntryPrice: 23090,
+  proposedStopLoss: 23080,
+  proposedTakeProfit: 23120,
+  proposedRiskReward: 3
+};
+const marketMakerCycle = { ...cycle, cycleId: marketMakerActivation.cycleId };
+const marketMakerSnapshot = buildOperatorConsoleSnapshot({
+  activation: marketMakerActivation,
+  cycle: marketMakerCycle,
+  now: "2026-08-25T12:01:01.000Z"
+});
+assert.equal(marketMakerSnapshot.researchPlan.currentCandidateId, "mmbm-candidate");
+assert.equal(marketMakerSnapshot.researchPlan.geometryId, "mmbm-geometry");
+assert.equal(marketMakerSnapshot.researchPlan.entryPrice, 23090);
+assert.equal(marketMakerSnapshot.researchPlan.stopLoss, 23080);
+assert.equal(marketMakerSnapshot.researchPlan.takeProfit, 23120);
+assert.equal(marketMakerSnapshot.candidatePlans.length, 1);
+assert.equal(marketMakerSnapshot.candidatePlans[0].strategyId, "ict_market_maker_buy_model_v1");
+assert.equal(marketMakerSnapshot.candidatePlans[0].candidateId, "mmbm-candidate");
+assert.equal(marketMakerSnapshot.candidatePlans[0].geometryId, "mmbm-geometry");
+assert.equal(marketMakerSnapshot.candidatePlans[0].candidateActionable, true);
+assert.equal(marketMakerSnapshot.candidatePlans[0].globalActionable, true);
+assert.equal(marketMakerSnapshot.authority.executionAuthority, "none");
 
 const view = fs.readFileSync(path.join(root, "src/components/operator/OperatorConsoleView.tsx"), "utf8");
 assert.match(view, /operator-canonical-conflict/);

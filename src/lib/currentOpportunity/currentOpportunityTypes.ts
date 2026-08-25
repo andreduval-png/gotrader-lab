@@ -2,6 +2,7 @@ import type { IctSessionRaidReversalNarrative } from "../ict-strategy-suite/ictS
 import type { IctIfvgFreshRetestV3CompactAssessment } from "../ict-strategy-suite/ictIfvgFreshRetestV3";
 import type { CanonicalTradeGeometry } from "../tradeGeometry";
 import type { IctCoreCandidateCollection } from "@/lib/ictI2";
+import type { MarketMakerCandidateCollection } from "@/lib/ictI3";
 import type { CanonicalCandidateSetDisposition, CanonicalRuntimeCandidate } from "./canonicalRuntimeCandidateSet";
 
 export type CurrentOpportunityStatus =
@@ -44,6 +45,9 @@ export type CurrentOpportunityStrategyId =
   | "ict_2022_model_v1"
   | "ict_power_of_three_v1"
   | "ict_judas_swing_v1"
+  | "mmxm_delivery_framework_v1"
+  | "ict_market_maker_buy_model_v1"
+  | "ict_market_maker_sell_model_v1"
   | "nasdaq_london_raid_ny_reversal_v1"
   | "market_map_only_diagnostic_v1";
 
@@ -126,6 +130,7 @@ export interface CurrentOpportunityContext {
   sessionRaidReversal?: IctSessionRaidReversalNarrative;
   ifvgFreshRetestV3?: IctIfvgFreshRetestV3CompactAssessment;
   coreIctCandidates?: IctCoreCandidateCollection;
+  marketMakerCandidates?: MarketMakerCandidateCollection;
   fvgStatus?: string;
   displacementStatus?: string;
   drawOnLiquidity?: string;

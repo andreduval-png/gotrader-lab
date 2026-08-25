@@ -249,6 +249,74 @@ const coreIctOpportunities = (context: CurrentOpportunityContext): CurrentOpport
     });
   });
 
+const marketMakerTerminalStates = new Set([
+  "INVALIDATED",
+  "ENTRY_MISSED",
+  "SETUP_EXPIRED",
+  "SOURCE_BLOCKED",
+  "NO_VALID_TARGET",
+  "TARGET_CONSUMED",
+  "GEOMETRY_NON_ACTIONABLE"
+]);
+
+const marketMakerOpportunities = (context: CurrentOpportunityContext): CurrentOpportunity[] => {
+  const collection = context.marketMakerCandidates;
+  if (!collection) return [];
+  const framework = collection.frameworks
+    .slice()
+    .sort((left, right) => right.supportingFactIds.length - left.supportingFactIds.length)[0];
+  const frameworkOpportunity = framework
+    ? opportunity(context, {
+        id: `mmxm:${collection.sourceFingerprint}:${framework.deliveryDirection}`,
+        candidateId: `mmxm:${collection.sourceFingerprint}:${framework.deliveryDirection}`,
+        strategyId: "mmxm_delivery_framework_v1",
+        candidateState: framework.phase,
+        canonicalCandidate: false,
+        model: "MMXM Delivery Framework",
+        status: "diagnostic_context",
+        classification: "diagnostic",
+        setupName: "MMXM delivery context",
+        thesis: "Range-owned liquidity engineering, delivery transition, and repricing context only; MMXM cannot create geometry or a signal.",
+        side: "flat",
+        geometryMode: "unavailable",
+        blockers: [...framework.blockers],
+        missingConditions: [],
+        nextAction: "Context only. MMBM or MMSM must independently complete canonical geometry."
+      })
+    : undefined;
+  const candidates = collection.candidates.map((candidate) => {
+    const qualified = candidate.state === "ACTIVE_DELIVERY" && candidate.geometry?.geometryValid === true && candidate.geometry.actionable;
+    const rejected = marketMakerTerminalStates.has(candidate.state);
+    const label = candidate.direction === "long" ? "Market Maker Buy Model" : "Market Maker Sell Model";
+    return opportunity(context, {
+      id: candidate.candidateId,
+      candidateId: candidate.candidateId,
+      strategyId: candidate.strategyId,
+      strategyVersion: candidate.strategyVersion,
+      profileId: candidate.profileId,
+      candidateState: candidate.state,
+      contextIdentity: candidate.context.dealingRangeId,
+      canonicalCandidate: true,
+      model: label,
+      status: qualified ? "valid_candidate" : rejected ? "rejected" : "forming",
+      setupName: label,
+      thesis: qualified
+        ? `Canonical ${label} causal state and G1.1 geometry are complete for research validation.`
+        : `${label} remains non-actionable until its range-owned causal state and native geometry are complete.`,
+      side: candidate.direction,
+      timeframe: candidate.timeframe,
+      geometry: candidate.geometry,
+      geometryMode: candidate.geometry ? "canonical" : "unavailable",
+      blockers: [...candidate.blockers],
+      missingConditions: qualified ? [] : [...candidate.blockers],
+      nextAction: qualified
+        ? "Preserve the unchanged canonical geometry for replay and evidence validation."
+        : "Wait for the missing causal fact or lifecycle condition; do not repair geometry downstream."
+    });
+  });
+  return frameworkOpportunity ? [frameworkOpportunity, ...candidates] : candidates;
+};
+
 const baseBlockersFor = (context: CurrentOpportunityContext) =>
   unique([
     context.isMockOrSample ? "Mock/sample source cannot produce a valid live opportunity." : undefined,
@@ -718,6 +786,7 @@ export const detectCurrentOpportunities = (context: CurrentOpportunityContext): 
   const sessionRaid = sessionRaidReversalOpportunity(context);
   const opportunities = [
     ...coreIctOpportunities(context),
+    ...marketMakerOpportunities(context),
     primaryOpportunity(context),
     ...(sessionRaid ? [sessionRaid] : []),
     ...strategyDiagnostics(context)

@@ -13,6 +13,7 @@ const outRoot = path.join(projectRoot, ".gotrader", "current-opportunity-scanner
 const sourceFiles = [
   { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctTypes.ts" },
   { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctIdentity.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictCanonical"), file: "canonicalIctModelContract.ts" },
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "tradeGeometryTypes.ts" },
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "targetSelection.ts" },
   { root: path.join(projectRoot, "src", "lib", "tradeGeometry"), file: "canonicalTradeGeometry.ts" },
@@ -22,6 +23,12 @@ const sourceFiles = [
   { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ictI2Shared.ts" },
   { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ict2022Model.ts" },
   { root: path.join(projectRoot, "src", "lib", "ictI2"), file: "ictI2Collection.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "ictI3Types.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "marketMakerFramework.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "marketMakerParameters.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "marketMakerModelCore.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "marketMakerBuyModel.ts" },
+  { root: path.join(projectRoot, "src", "lib", "ictI3"), file: "marketMakerSellModel.ts" },
   { root: sourceRoot, file: "currentOpportunityTypes.ts" },
   { root: sourceRoot, file: "canonicalRuntimeCandidateSet.ts" },
   { root: sourceRoot, file: "buildCurrentOpportunityContext.ts" },
@@ -63,10 +70,16 @@ function compileForNode() {
       .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
       .replace(/from\s+"@\/lib\/ictI2\/([^"]+)"/g, 'from "./$1.mjs"')
+      .replace(/from\s+"@\/lib\/ictI3\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+"@\/lib\/ictCanonical"/g, 'from "./canonicalIctTypes.mjs"')
       .replace(/from\s+"..\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), dependenciesRewritten, "utf8");
   }
+  fs.appendFileSync(
+    path.join(outRoot, "canonicalTradeGeometry.mjs"),
+    '\nexport { evaluateEntryLifecycle } from "./entryLifecycle.mjs";\n',
+    "utf8"
+  );
 }
 
 const basePacket = {
@@ -124,6 +137,59 @@ const canonicalGeometry = ({ strategyId, direction, entry, stop, target, rr = 2.
   geometryValid: true, actionable, status: actionable ? "VALID_ACTIONABLE" : "VALID_BELOW_RR_THRESHOLD", blockers: [], warnings: [],
   sourceFingerprint: "mt5_fp_current", authority: { execution: "none", broker: "none", production: "none" }
 });
+
+const marketMakerCollection = ({ buy = false, sell = false } = {}) => {
+  const candidate = (direction) => {
+    const bullish = direction === "long";
+    const strategyId = bullish ? "ict_market_maker_buy_model_v1" : "ict_market_maker_sell_model_v1";
+    const geometry = canonicalGeometry({
+      strategyId,
+      direction: bullish ? "LONG" : "SHORT",
+      entry: bullish ? 99 : 101,
+      stop: bullish ? 90 : 110,
+      target: bullish ? 120 : 80,
+      rr: 21 / 9
+    });
+    geometry.geometryId = `${strategyId}-g1-1-geometry`;
+    geometry.candidateId = `${strategyId}-candidate`;
+    return {
+      candidateId: geometry.candidateId,
+      strategyId,
+      strategyVersion: "1.0.0",
+      profileId: bullish ? "ict_mmbm_base_research_v1" : "ict_mmsm_base_research_v1",
+      parameterHash: `${strategyId}-parameters`,
+      sourceFingerprint: "mt5|ES|ES|5m|int-1-1-live",
+      symbol: "ES",
+      timeframe: "5m",
+      marketTimestamp: ifvgIso(25),
+      direction,
+      state: "ACTIVE_DELIVERY",
+      context: {
+        frameworkId: "gotrader.ict.i3.mmxm-delivery-framework.v1",
+        classification: "framework_context",
+        phase: "ACTIVE_DELIVERY",
+        deliveryDirection: bullish ? "BULLISH_DELIVERY" : "BEARISH_DELIVERY",
+        dealingRangeId: "range-1",
+        liquidityEventId: bullish ? "sellside-engineering" : "buyside-engineering",
+        transitionId: bullish ? "bullish-transition" : "bearish-transition",
+        pdArrayId: bullish ? "bullish-pd-array" : "bearish-pd-array",
+        objectiveLiquidityId: bullish ? "buyside-objective" : "sellside-objective",
+        supportingFactIds: ["range-1", "engineering", "transition", "pd-array", "objective"],
+        blockers: [], authority: ictAuthority
+      },
+      supportingFactIds: ["range-1", "engineering", "transition", "pd-array", "objective"],
+      transitions: [], geometry, blockers: [], warnings: [], authority: ictAuthority,
+      researchValidated: false, productionAdoptionAllowed: false
+    };
+  };
+  const candidates = [buy ? candidate("long") : undefined, sell ? candidate("short") : undefined].filter(Boolean);
+  return {
+    version: "gotrader.ict-market-maker-candidates.v1",
+    generatedAt: ifvgIso(25), sourceFingerprint: "mt5|ES|ES|5m|int-1-1-live",
+    frameworks: candidates.map((item) => item.context), candidates,
+    researchValidated: false, authority: ictAuthority
+  };
+};
 
 const baseRead = {
   requestedSymbol: "MNQ",
@@ -249,6 +315,33 @@ const ict2022Fixture = (direction) => {
   };
 };
 
+const marketMakerProducerFixture = (direction) => {
+  const bullish = direction === "BULLISH";
+  const factDirection = bullish ? "bullish" : "bearish";
+  const objectiveSide = bullish ? "BUY_SIDE_LIQUIDITY" : "SELL_SIDE_LIQUIDITY";
+  const facts = [
+    { ...ictFactBase("mm-range", "DEALING_RANGE", 0, "1h"), dealingRangeId: "mm-range-1", highSwingId: "mm-range-high", lowSwingId: "mm-range-low", highPrice: 110, lowPrice: 90, equilibrium: 100, context: "balanced_range" },
+    { ...ictFactBase("mm-pd-location", "PD_LOCATION", 1), pdLocationId: "mm-pd-location", dealingRangeId: "mm-range-1", price: bullish ? 96 : 104, location: bullish ? "DISCOUNT" : "PREMIUM", equilibriumBandFraction: 0.04 },
+    { ...ictFactBase("mm-engineering", "LIQUIDITY", 5, "1h"), liquidityId: "mm-engineering", side: bullish ? "SELL_SIDE_LIQUIDITY" : "BUY_SIDE_LIQUIDITY", liquidityClass: "EXTERNAL", sourceStructureIds: [bullish ? "mm-range-low" : "mm-range-high"], ownerTimeframe: "1h", dealingRangeId: "mm-range-1", price: bullish ? 90 : 110, status: "CONSUMED", consumedAt: ifvgIso(5), consumingCandleId: "mm-c5" },
+    { ...ictFactBase("mm-internal", "LIQUIDITY", 6), liquidityId: "mm-internal", side: objectiveSide, liquidityClass: "INTERNAL", sourceStructureIds: ["mm-internal-swing"], ownerTimeframe: "5m", dealingRangeId: "mm-range-1", price: 100, status: "AVAILABLE" },
+    { ...ictFactBase("mm-transition", "IRL_ERL_TRANSITION", 10), transitionId: "mm-transition", transitionType: "ERL_TO_IRL_DELIVERY", direction: factDirection, fromLiquidityId: "mm-engineering", toLiquidityId: "mm-internal", dealingRangeId: "mm-range-1", startedAt: ifvgIso(5), currentState: "ACTIVE" },
+    { ...ictFactBase("mm-displacement", "DISPLACEMENT", 15), displacementId: "mm-displacement", direction: factDirection, startCandleId: "mm-c10", endCandleId: "mm-c15", bodySize: 5, baselineBodySize: 2, bodyMultiple: 2.5, measurementPolicyId: "int-3b-fixture" },
+    { ...ictFactBase("mm-mss", "MSS", 16), mssId: "mm-mss", direction: factDirection, brokenStructureId: "mm-internal-swing", breakCandleId: "mm-c16", displacementId: "mm-displacement", breakPrice: bullish ? 101 : 99 },
+    { ...ictFactBase("mm-pd-array", "PD_ARRAY", 20), pdArrayId: "mm-pd-array", pdArrayType: "FVG", direction: factDirection, priceRange: bullish ? [98, 100] : [100, 102], sourceFactId: "mm-source-fvg" },
+    { ...ictFactBase("mm-objective", "LIQUIDITY", 0, "1h"), liquidityId: "mm-objective", side: objectiveSide, liquidityClass: "EXTERNAL", sourceStructureIds: [bullish ? "mm-range-high" : "mm-range-low"], ownerTimeframe: "1h", dealingRangeId: "mm-range-1", price: bullish ? 120 : 80, status: "AVAILABLE" }
+  ];
+  const entry = bullish ? 99 : 101;
+  return {
+    facts,
+    candlesByTimeframe: { "5m": [{ id: "mm-entry-touch", symbol: "ES", timeframe: "5m", timestamp: ifvgIso(25), open: entry, high: entry + 1, low: entry - 1, close: entry, volume: 100 }] },
+    asOf: ifvgIso(25),
+    sourceFingerprint: "mt5|ES|ES|5m|int-3a-1",
+    narrative: { structural: factDirection, intermediate: bullish ? "bearish" : "bullish", execution: factDirection, liquidityPath: bullish ? "buyside" : "sellside", structuralTimeframe: "1h", intermediateTimeframe: "15m", executionTimeframe: "5m", policyId: "gotrader.ict.c1-1.hierarchical-roles.v1", policyVersion: "1.0.0" },
+    symbol: "ES",
+    timeframe: "5m"
+  };
+};
+
 async function main() {
   compileForNode();
   const suite = await import(pathToFileURL(path.join(outRoot, "index.mjs")));
@@ -256,6 +349,23 @@ async function main() {
   const signalContract = await import(pathToFileURL(path.join(outRoot, "ictSignalContract.mjs")));
   const ict2022 = await import(pathToFileURL(path.join(outRoot, "ict2022Model.mjs")));
   const ictCollection = await import(pathToFileURL(path.join(outRoot, "ictI2Collection.mjs")));
+  const marketMakerBuy = await import(pathToFileURL(path.join(outRoot, "marketMakerBuyModel.mjs")));
+  const marketMakerSell = await import(pathToFileURL(path.join(outRoot, "marketMakerSellModel.mjs")));
+  const realMarketMakerCollection = ({ buy = false, sell = false } = {}) => {
+    const candidates = [
+      ...(buy ? [marketMakerBuy.evaluateMarketMakerBuyModel(marketMakerProducerFixture("BULLISH"))] : []),
+      ...(sell ? [marketMakerSell.evaluateMarketMakerSellModel(marketMakerProducerFixture("BEARISH"))] : [])
+    ];
+    return {
+      version: "gotrader.ict-market-maker-candidates.v1",
+      generatedAt: ifvgIso(25),
+      sourceFingerprint: "mt5|ES|ES|5m|int-3a-1",
+      frameworks: candidates.map((candidate) => candidate.context),
+      candidates,
+      researchValidated: false,
+      authority: ictAuthority
+    };
+  };
 
   const tacticalContext = suite.buildCurrentOpportunityContext({ packet: basePacket, currentRead: baseRead });
   const tacticalScan = suite.detectCurrentOpportunities(tacticalContext);
@@ -421,6 +531,75 @@ async function main() {
   assert.equal(alignedActionable.length, 2);
   assert.deepEqual(alignedActionable.map((candidate) => candidate.direction), ["long", "long"]);
   assert.notEqual(alignedActionable[0].geometryId, alignedActionable[1].geometryId);
+
+  const threeFamilyAlignedPacket = {
+    ...sameDirectionPacket,
+    compactSummary: {
+      ...sameDirectionPacket.compactSummary,
+      marketMakerCandidates: realMarketMakerCollection({ buy: true })
+    }
+  };
+  const threeFamilyAlignedScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: threeFamilyAlignedPacket, currentRead: liveIfvgReadContext })
+  );
+  const threeAligned = threeFamilyAlignedScan.canonicalCandidates.filter((candidate) => candidate.actionability);
+  assert.equal(threeAligned.length, 3, "IFVG, ICT 2022, and MMBM must all survive aligned aggregation");
+  assert.equal(threeFamilyAlignedScan.summary.canonicalCandidateSetDisposition, "MULTIPLE_ALIGNED_CANONICAL_SETUPS");
+  assert.equal(threeFamilyAlignedScan.summary.selectedCanonicalCandidateId, undefined);
+  assert.equal(new Set(threeAligned.map((candidate) => candidate.candidateId)).size, 3);
+  assert.equal(new Set(threeAligned.map((candidate) => candidate.geometryId)).size, 3);
+
+  const threeFamilyConflictPacket = {
+    ...sameDirectionPacket,
+    compactSummary: {
+      ...sameDirectionPacket.compactSummary,
+      marketMakerCandidates: realMarketMakerCollection({ sell: true })
+    }
+  };
+  const threeFamilyConflictScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: threeFamilyConflictPacket, currentRead: liveIfvgReadContext })
+  );
+  const threeConflict = threeFamilyConflictScan.canonicalCandidates.filter((candidate) => candidate.actionability);
+  assert.equal(threeConflict.length, 3);
+  assert.equal(threeFamilyConflictScan.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(threeFamilyConflictScan.summary.selectedCanonicalCandidateId, undefined);
+
+  const simultaneousMarketMakerPacket = {
+    ...liveIfvgPacket,
+    compactSummary: {
+      ...liveIfvgPacket.compactSummary,
+      ifvgFreshRetestV3: undefined,
+      marketMakerCandidates: realMarketMakerCollection({ buy: true, sell: true })
+    }
+  };
+  const simultaneousMarketMakerScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: simultaneousMarketMakerPacket, currentRead: liveIfvgReadContext })
+  );
+  assert.equal(simultaneousMarketMakerScan.summary.canonicalSetupConflict, "CONFLICTING_CANONICAL_SETUPS");
+  assert.equal(simultaneousMarketMakerScan.summary.selectedCanonicalCandidateId, undefined);
+
+  const frameworkOnlyPacket = {
+    ...liveIfvgPacket,
+    compactSummary: {
+      ...liveIfvgPacket.compactSummary,
+      marketMakerCandidates: {
+        ...marketMakerCollection(),
+        frameworks: [{
+          frameworkId: "gotrader.ict.i3.mmxm-delivery-framework.v1",
+          classification: "framework_context",
+          phase: "DELIVERY_TRANSITION_FORMING",
+          deliveryDirection: "BEARISH_DELIVERY",
+          dealingRangeId: "range-1",
+          supportingFactIds: ["range-1"], blockers: [], authority: ictAuthority
+        }]
+      }
+    }
+  };
+  const frameworkOnlyScan = suite.detectCurrentOpportunities(
+    suite.buildCurrentOpportunityContext({ packet: frameworkOnlyPacket, currentRead: liveIfvgReadContext })
+  );
+  assert.equal(frameworkOnlyScan.summary.canonicalSetupConflict, "NONE", "MMXM context must not create a false conflict");
+  assert.equal(frameworkOnlyScan.opportunities.find((item) => item.strategyId === "mmxm_delivery_framework_v1")?.classification, "diagnostic");
 
   const blockedDirectionalContexts = ["ict_power_of_three_v1", "ict_judas_swing_v1"].map((strategyId) => ({
     ...liveIfvgOpportunity,

@@ -10,7 +10,7 @@ import { evaluateIct2022Model } from "@/lib/ictI2/ict2022Model";
 import { buildIctCoreCandidateCollection } from "@/lib/ictI2/ictI2Collection";
 import { evaluateIctJudasSwing } from "@/lib/ictI2/ictJudasSwingModel";
 import { evaluateIctPowerOfThree } from "@/lib/ictI2/ictPowerOfThreeModel";
-import type { IctCoreCandidateCollection, IctHierarchicalNarrative, IctRoleDirection } from "@/lib/ictI2/ictI2Types";
+import type { IctCoreCandidateCollection, IctCoreDetectionInput, IctHierarchicalNarrative, IctRoleDirection } from "@/lib/ictI2/ictI2Types";
 import type { Candle, FuturesSymbol, Timeframe } from "@/lib/types";
 
 const ROLE_TIMEFRAMES = { structural: "1h", intermediate: "15m", execution: "5m" } as const;
@@ -37,7 +37,7 @@ export const buildIctHierarchicalNarrative = (facts: readonly CanonicalIctFact[]
   };
 };
 
-export const buildIctCoreRuntimeCandidates = ({
+export const buildIctCanonicalRuntimeInput = ({
   candlesByTimeframe,
   symbol,
   asOf,
@@ -47,7 +47,7 @@ export const buildIctCoreRuntimeCandidates = ({
   symbol: FuturesSymbol;
   asOf: string;
   sourceFingerprint: string;
-}): IctCoreCandidateCollection => {
+}): IctCoreDetectionInput => {
   const facts = Object.entries(candlesByTimeframe).flatMap(([timeframe, candles]) =>
     candles?.length
       ? buildCanonicalIctFactSnapshot({ candles, asOf, symbol, timeframe: timeframe as Timeframe, sourceFingerprint }).facts
@@ -62,7 +62,7 @@ export const buildIctCoreRuntimeCandidates = ({
     : undefined;
   const sessionFacts = buildCanonicalSessionWindows({ symbol, timeframe: ROLE_TIMEFRAMES.execution, validFrom: asOf, sourceFingerprint });
   const allFacts = [...facts, ...(draw ? [draw] : []), ...sessionFacts];
-  const input = {
+  return {
     facts: allFacts,
     candlesByTimeframe,
     asOf,
@@ -71,10 +71,15 @@ export const buildIctCoreRuntimeCandidates = ({
     symbol,
     timeframe: ROLE_TIMEFRAMES.execution
   } as const;
-  return buildIctCoreCandidateCollection({
-    generatedAt: asOf,
-    sourceFingerprint,
+};
+
+export const evaluateIctCoreRuntimeCandidates = (input: IctCoreDetectionInput): IctCoreCandidateCollection =>
+  buildIctCoreCandidateCollection({
+    generatedAt: input.asOf,
+    sourceFingerprint: input.sourceFingerprint,
     candidates: [evaluateIct2022Model(input), evaluateIctPowerOfThree(input), evaluateIctJudasSwing(input)]
   });
-};
+
+export const buildIctCoreRuntimeCandidates = (request: Parameters<typeof buildIctCanonicalRuntimeInput>[0]) =>
+  evaluateIctCoreRuntimeCandidates(buildIctCanonicalRuntimeInput(request));
 
