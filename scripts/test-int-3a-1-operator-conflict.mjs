@@ -64,6 +64,8 @@ assert.equal(snapshot.researchPlan.stopLoss, undefined);
 assert.equal(snapshot.researchPlan.takeProfit, undefined);
 assert.equal(snapshot.candidatePlans.length, 2);
 assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.signal), ["NO_TRADE", "NO_TRADE"]);
+assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.candidateActionable), [true, true]);
+assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.globalActionable), [false, false]);
 assert.deepEqual(snapshot.candidatePlans.map((candidate) => candidate.geometryId), ["ifvg-geometry", "ict-geometry"]);
 assert.equal(snapshot.authority.executionAuthority, "none");
 
@@ -71,6 +73,11 @@ const view = fs.readFileSync(path.join(root, "src/components/operator/OperatorCo
 assert.match(view, /operator-canonical-conflict/);
 assert.match(view, /Conflicting canonical setups/);
 assert.match(view, /candidate\.side\.toUpperCase\(\)/);
+assert.match(view, /candidate\.candidateActionable/);
+assert.match(view, /Conflict \/ context only/);
+
+const hook = fs.readFileSync(path.join(root, "src/components/operator/useOperatorConsole.ts"), "utf8");
+assert.doesNotMatch(hook, /buildInt3a1ConflictAcceptanceFixture|int3a1Fixture/, "final snapshot paint must not remain an acceptance authority");
 
 console.log(JSON.stringify({
   status: "passed",
@@ -81,4 +88,3 @@ console.log(JSON.stringify({
   geometryIds: snapshot.candidatePlans.map((candidate) => candidate.geometryId),
   executionAuthority: snapshot.authority.executionAuthority
 }, null, 2));
-

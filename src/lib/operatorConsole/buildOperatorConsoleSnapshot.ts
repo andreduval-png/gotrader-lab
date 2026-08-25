@@ -268,7 +268,9 @@ const candidatePlansFor = (
   if (sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint) return [];
   return (activation.candidatePlans ?? []).map((plan) => {
     const complete = finite(plan.entry) && finite(plan.stop) && finite(plan.target) && finite(plan.riskReward);
-    const signal = complete && plan.actionable && activation.canonicalSetupConflict !== "CONFLICTING_CANONICAL_SETUPS"
+    const candidateActionable = complete && plan.actionable;
+    const globalActionable = candidateActionable && activation.canonicalSetupConflict !== "CONFLICTING_CANONICAL_SETUPS";
+    const signal = globalActionable
       ? plan.side === "long" ? "BUY" as const : plan.side === "short" ? "SELL" as const : "NO_TRADE" as const
       : "NO_TRADE" as const;
     return {
@@ -286,7 +288,8 @@ const candidatePlansFor = (
       stopLoss: plan.stop,
       takeProfit: plan.target,
       riskReward: plan.riskReward,
-      actionable: signal !== "NO_TRADE",
+      candidateActionable,
+      globalActionable,
       blocker: plan.blockers[0],
       contextIdentity: plan.contextIdentity
     };

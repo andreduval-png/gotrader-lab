@@ -44,6 +44,17 @@ let refreshPromise: Promise<OperatorConsoleSnapshot> | undefined;
 let attached = false;
 let snapshot = buildOperatorConsoleSnapshot({ cycle: readOperatorCycleState() });
 
+const resolveOperatorRuntimeSnapshot = async () => {
+  const acceptanceScenario = import.meta.env.DEV && typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("acceptanceScenario")
+    : undefined;
+  if (acceptanceScenario === "int3a2-live-conflict") {
+    const acceptance = await import("./int3a2ProductionAcceptance");
+    return acceptance.runInt3a2ProductionConflictAcceptance();
+  }
+  return resolveResearchRuntimeSnapshot();
+};
+
 const readPredictionSummary = (): OperatorPredictionSummary => {
   const state = loadPredictionLedger();
   const latest = state.entries.at(-1);
@@ -105,7 +116,10 @@ export const getOperatorConsoleSnapshot = () => snapshot;
 export const refreshOperatorConsoleSnapshot = (): Promise<OperatorConsoleSnapshot> => {
   if (refreshPromise) return refreshPromise;
   refreshPromise = Promise.all([
-    resolveResearchRuntimeSnapshot().catch(() => undefined),
+    resolveOperatorRuntimeSnapshot().catch((error) => {
+      if (import.meta.env.DEV) console.error("Operator runtime refresh failed", error);
+      return undefined;
+    }),
     hydrateResearchEvidenceAggregateIndex().catch(() => loadResearchEvidenceAggregateIndex())
   ])
     .then(([runtime, evidence]) => {

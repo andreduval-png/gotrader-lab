@@ -377,7 +377,11 @@ export function IctAdvisorSummaryPanel({
               />
               <AdvisorMini
                 label="Current opportunities"
-                value={topCurrentOpportunity ? `${formatToken(topCurrentOpportunity.model)} / ${formatToken(topCurrentOpportunity.status)}` : "scanner pending"}
+                value={currentOpportunitySummary?.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+                  ? "conflicting canonical setups"
+                  : topCurrentOpportunity
+                    ? `${formatToken(topCurrentOpportunity.model)} / ${formatToken(topCurrentOpportunity.status)}`
+                    : "scanner pending"}
                 detail={currentOpportunitySummary ? `${currentOpportunitySummary.formingCount} forming / ${currentOpportunitySummary.nearMissCount} near-miss / ${formatToken(currentOpportunitySummary.depthStatus)}` : "run Activate Market"}
               />
               <AdvisorMini

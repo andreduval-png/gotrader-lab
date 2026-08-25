@@ -185,7 +185,8 @@ export interface OperatorCandidatePlanSummary {
   stopLoss?: number;
   takeProfit?: number;
   riskReward?: number;
-  actionable: boolean;
+  candidateActionable: boolean;
+  globalActionable: boolean;
   blocker?: string;
   contextIdentity?: string;
 }

@@ -370,7 +370,7 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               <p className="font-semibold">Conflicting canonical setups</p>
               <p className="mt-1 text-xs text-amber-200/80">
                 {snapshot.candidatePlans
-                  .filter((candidate) => candidate.side !== "flat" && candidate.actionable)
+                  .filter((candidate) => candidate.side !== "flat" && candidate.candidateActionable)
                   .map((candidate) => `${candidate.strategyId.replace(/_/g, " ")}: ${candidate.side.toUpperCase()}`)
                   .join(" / ")}
               </p>
@@ -408,7 +408,9 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
               { label: "Stop loss", value: price(snapshot.researchPlan.stopLoss), tone: typeof snapshot.researchPlan.stopLoss === "number" ? "negative" as const : "neutral" as const },
               { label: "Take profit", value: price(snapshot.researchPlan.takeProfit), tone: typeof snapshot.researchPlan.takeProfit === "number" ? "positive" as const : "neutral" as const },
               { label: "Risk / reward", value: number(snapshot.researchPlan.riskReward, "R"), tone: typeof snapshot.researchPlan.riskReward !== "number" ? "neutral" as const : snapshot.researchPlan.riskReward > 0 ? "positive" as const : "negative" as const },
-              { label: "Probability", value: `${probability.label} · ${probability.percentage}`, tone: probability.tone }
+              snapshot.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
+                ? { label: "Decision", value: "Conflict / context only", tone: "neutral" as const }
+                : { label: "Probability", value: `${probability.label} · ${probability.percentage}`, tone: probability.tone }
             ].map(({ label, value, tone }) => (
               <div
                 key={label}
