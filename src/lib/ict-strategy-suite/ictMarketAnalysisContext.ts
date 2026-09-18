@@ -12,6 +12,17 @@ import {
 } from "../integrations/mt5/mt5ReadOnlyDepth";
 import type { ResearchRuntimeSnapshot } from "../runtime";
 import type { Candle, FuturesSymbol, Timeframe } from "../types";
+import {
+  buildCanonicalDataSnapshot,
+  buildCanonicalStrategyDataView,
+  buildSharedCanonicalFactSnapshots,
+  canonicalLiveRequirements,
+  createCanonicalTimeframeSnapshot,
+  resolveCanonicalFetchPlan,
+  runBoundedCanonicalTasks,
+  type CanonicalDataRequirement,
+  type CanonicalTimeframeDataSnapshot
+} from "../canonicalData";
 import type {
   IctAnalysisDepthStatus,
   IctAnalysisTimeframe,
@@ -554,6 +565,7 @@ export const buildIctMarketAnalysisContextFromSnapshot = ({
 };
 
 export interface BuildIctMarketAnalysisContextConfig {
+  signal?: AbortSignal;
   brokerSymbol?: string;
   chartDisplayLimit?: number;
   displayTimeframe?: string;
@@ -563,12 +575,37 @@ export interface BuildIctMarketAnalysisContextConfig {
   snapshot?: ResearchRuntimeSnapshot;
   timeframes?: IctAnalysisTimeframe[];
   to?: string;
+  asOf?: string;
+  dataRequirements?: readonly CanonicalDataRequirement[];
 }
 
 export interface BuildIctMarketAnalysisContextDependencies {
   fetchDisplayCandles?: typeof fetchMt5ReadOnlyCandles;
   fetchChunkedHistory?: typeof fetchMt5CandlesInChunks;
 }
+
+const compatibilityRequirementsFor = (
+  timeframes: readonly IctAnalysisTimeframe[],
+  lookbackDays: number
+): CanonicalDataRequirement[] => [{
+  contractVersion: "1.0.0",
+  ownerId: "ict_market_analysis_context",
+  consumerId: "live.market_analysis_compatibility",
+  tier: "LIVE_CONTEXT",
+  purpose: "Explicit caller compatibility requirement for bounded market analysis.",
+  requiredTimeframes: timeframes.map((timeframe) => ({
+    timeframe,
+    minimumWarmupBars: 0,
+    evaluationBars: 0,
+    minimumCalendarDays: lookbackDays,
+    basis: "COMPATIBILITY_BASELINE",
+    reason: "Preserve the caller's explicit timeframe/lookback request."
+  })),
+  sessionHistoryRequirements: [],
+  weekHistoryRequirements: timeframes.includes("W1") ? 2 : 0,
+  requiresCompletedBars: true,
+  continuityPolicy: "SESSION_AWARE_REQUIRED"
+}];
 
 export async function buildIctMarketAnalysisContextBundle(
   config: BuildIctMarketAnalysisContextConfig,
@@ -584,14 +621,31 @@ export async function buildIctMarketAnalysisContextBundle(
     ...ICT_REQUIRED_MARKET_ANALYSIS_TIMEFRAMES,
     ...(config.includeOptionalTimeframes ?? [])
   ];
+  config.signal?.throwIfAborted();
+  const asOf = config.asOf ?? config.to ?? new Date().toISOString();
+  const requirements = config.dataRequirements ??
+    (config.timeframes || config.lookbackDays
+      ? compatibilityRequirementsFor(timeframes, lookbackDays)
+      : canonicalLiveRequirements());
+  const stageStartedAt = Date.now();
+  const canonicalFetchPlan = resolveCanonicalFetchPlan({
+    requirements,
+    requestedSymbol,
+    brokerSymbol,
+    provider: snapshot?.marketData.activeResearchSource.provider ?? "mt5_readonly",
+    sourceId: snapshot?.marketData.activeResearchSource.sourceId ?? `${requestedSymbol}:${brokerSymbol}`,
+    asOf
+  });
+  const dataStageTimingsMs: Partial<Record<"DATA_PLAN" | "MT5_FETCH" | "NORMALIZATION" | "CONTINUITY" | "CANONICAL_FACTS", number>> = {
+    DATA_PLAN: Date.now() - stageStartedAt
+  };
   const useDefaultFetchers = !dependencies.fetchDisplayCandles && !dependencies.fetchChunkedHistory;
   const cacheKey = [
     requestedSymbol,
     brokerSymbol,
     displayTimeframe,
     lookbackDays,
-    config.to ?? "latest",
-    timeframes.join(",")
+    canonicalFetchPlan.planId
   ].join("|");
   const cached = useDefaultFetchers ? marketAnalysisBundleCache.get(cacheKey) : undefined;
   if (cached && cached.expiresAt > Date.now()) {
@@ -601,57 +655,97 @@ export async function buildIctMarketAnalysisContextBundle(
   const fetchHistory = dependencies.fetchChunkedHistory ?? fetchMt5CandlesInChunks;
   const warnings: string[] = [];
   let displayCandles: Candle[] = [];
-  try {
-    const displayResponse = await fetchDisplay({
-      brokerSymbol,
-      limit: chartDisplayLimit,
-      symbol: requestedSymbol,
-      timeframe: displayTimeframe
-    });
-    displayCandles = mt5DisplayCandlesToGoTraderCandles({
-      candles: displayResponse.candles.slice(-chartDisplayLimit),
-      requestedSymbol,
-      timeframe: displayTimeframe
-    });
-    warnings.push(...displayResponse.warnings.filter((warning) => /read-only|cfd|proxy|unavailable/i.test(warning)).slice(0, 3));
-  } catch (error) {
-    warnings.push(`Display candle fetch failed: ${error instanceof Error ? error.message : String(error)}.`);
-  }
-
   const analysisCandlesByTimeframe: IctMarketAnalysisContextBundle["analysisCandlesByTimeframe"] = {};
   const depthSummariesByTimeframe: IctMarketAnalysisContextBundle["depthSummariesByTimeframe"] = {};
   const analysisContexts: IctAnalysisTimeframeContext[] = [];
-  for (const timeframe of timeframes) {
-    try {
-      const result = await fetchHistory({
-        brokerSymbol,
-        chunkDays: chunkDaysFor[timeframe],
-        limitPerChunk: 5000,
-        lookbackDays,
-        symbol: requestedSymbol,
-        timeframe: requestTimeframe[timeframe],
-        to: config.to
-      });
-      analysisCandlesByTimeframe[timeframe] = mt5CandlesToGoTraderCandles({
-        candles: result.candles,
+  const fetchStartedAt = Date.now();
+  const fetched = await runBoundedCanonicalTasks(
+    canonicalFetchPlan.requests,
+    canonicalFetchPlan.concurrencyLimit,
+    async (request) => {
+      try {
+        const result = await fetchHistory({
+          brokerSymbol,
+          chunkDays: chunkDaysFor[request.timeframe],
+          limitPerChunk: request.maximumHistoryBars ?? 5000,
+          lookbackDays: Math.max(1, request.minimumCalendarDays || lookbackDays),
+          symbol: requestedSymbol,
+          timeframe: request.requestTimeframe,
+          to: asOf
+        }, undefined, config.signal);
+        config.signal?.throwIfAborted();
+        return { request, result } as const;
+      } catch (error) {
+        config.signal?.throwIfAborted();
+        return { request, error } as const;
+      }
+    },
+    config.signal
+  );
+  config.signal?.throwIfAborted();
+  dataStageTimingsMs.MT5_FETCH = Date.now() - fetchStartedAt;
+  const normalizeStartedAt = Date.now();
+  const rawCandlesByTimeframe: Partial<Record<IctAnalysisTimeframe, Candle[]>> = {};
+  for (const item of fetched) {
+    const timeframe = item.request.timeframe;
+    if ("result" in item && item.result) {
+      rawCandlesByTimeframe[timeframe] = mt5CandlesToGoTraderCandles({
+        candles: item.result.candles,
         requestedSymbol,
         timeframe
       });
-      depthSummariesByTimeframe[timeframe] = result.summary;
-      analysisContexts.push(contextFromDepthSummary(timeframe, result.summary, sourceMethodFor(result, timeframe)));
-    } catch (error) {
+      depthSummariesByTimeframe[timeframe] = item.result.summary;
+      analysisContexts.push(contextFromDepthSummary(timeframe, item.result.summary, sourceMethodFor(item.result, timeframe)));
+    } else {
       const summary = summarizeHistoryDepth({
         brokerSymbol,
         candles: [],
         chunkCount: 0,
         chunkingStatus: "unavailable",
-        limitationReason: error instanceof Error ? error.message : String(error),
-        requestedLookbackDays: lookbackDays,
+        limitationReason: item.error instanceof Error ? item.error.message : String(item.error),
+        requestedLookbackDays: Math.max(1, item.request.minimumCalendarDays || lookbackDays),
         requestedSymbol,
         timeframe: requestTimeframe[timeframe]
       });
       depthSummariesByTimeframe[timeframe] = summary;
       analysisContexts.push(contextFromDepthSummary(timeframe, summary, "mt5_chunked_range_unavailable"));
+    }
+  }
+  dataStageTimingsMs.NORMALIZATION = Date.now() - normalizeStartedAt;
+  const continuityStartedAt = Date.now();
+  const timeframeSnapshots: Partial<Record<IctAnalysisTimeframe, CanonicalTimeframeDataSnapshot>> = {};
+  for (const request of canonicalFetchPlan.requests) {
+    const sourceMethod = analysisContexts.find((context) => context.timeframe === request.timeframe)?.sourceMethod ?? "mt5_chunked_range_unavailable";
+    const timeframeSnapshot = createCanonicalTimeframeSnapshot({
+      candles: rawCandlesByTimeframe[request.timeframe] ?? [],
+      request,
+      asOf,
+      sourceMethod
+    });
+    timeframeSnapshots[request.timeframe] = timeframeSnapshot;
+    analysisCandlesByTimeframe[request.timeframe] = [...timeframeSnapshot.closedCandles];
+    if (timeframeSnapshot.liveDisplayCandle) {
+      warnings.push(`${request.timeframe} forming candle was quarantined from canonical facts.`);
+    }
+    if (!timeframeSnapshot.continuity.safeForCanonicalFacts) {
+      warnings.push(`${request.timeframe} continuity ${timeframeSnapshot.continuity.status}; unsafe canonical facts must fail closed.`);
+    }
+  }
+  dataStageTimingsMs.CONTINUITY = Date.now() - continuityStartedAt;
+  let canonicalDataSnapshot = buildCanonicalDataSnapshot({ plan: canonicalFetchPlan, timeframes: timeframeSnapshots });
+  const displayAnalysisTimeframe = ictAnalysisTimeframeFromTimeframe(displayTimeframe);
+  const displaySnapshot = displayAnalysisTimeframe ? canonicalDataSnapshot.timeframes[displayAnalysisTimeframe] : undefined;
+  if (displaySnapshot) {
+    displayCandles = [...displaySnapshot.closedCandles.slice(-chartDisplayLimit), ...(displaySnapshot.liveDisplayCandle ? [displaySnapshot.liveDisplayCandle] : [])].slice(-chartDisplayLimit);
+  } else {
+    try {
+      const displayResponse = await fetchDisplay({ brokerSymbol, limit: chartDisplayLimit, symbol: requestedSymbol, timeframe: displayTimeframe }, undefined, config.signal);
+      config.signal?.throwIfAborted();
+      displayCandles = mt5DisplayCandlesToGoTraderCandles({ candles: displayResponse.candles.slice(-chartDisplayLimit), requestedSymbol, timeframe: displayTimeframe });
+      warnings.push(...displayResponse.warnings.filter((warning) => /read-only|cfd|proxy|unavailable/i.test(warning)).slice(0, 3));
+    } catch (error) {
+      config.signal?.throwIfAborted();
+      warnings.push(`Display candle fetch failed: ${error instanceof Error ? error.message : String(error)}.`);
     }
   }
   const nativeWeeklyCount = analysisCandlesByTimeframe.W1?.length ?? 0;
@@ -693,8 +787,31 @@ export async function buildIctMarketAnalysisContextBundle(
     const existingIndex = analysisContexts.findIndex((context) => context.timeframe === "W1");
     if (existingIndex >= 0) analysisContexts[existingIndex] = derivedContext;
     else analysisContexts.push(derivedContext);
+    const weeklyRequest = canonicalFetchPlan.requests.find((request) => request.timeframe === "W1");
+    if (weeklyRequest) {
+      timeframeSnapshots.W1 = createCanonicalTimeframeSnapshot({
+        candles: derivedWeeklyCandles,
+        request: weeklyRequest,
+        asOf,
+        sourceMethod: "derived_from_d1_chunked_history"
+      });
+      canonicalDataSnapshot = buildCanonicalDataSnapshot({ plan: canonicalFetchPlan, timeframes: timeframeSnapshots });
+      if (displayAnalysisTimeframe === "W1") {
+        displayCandles = [...(timeframeSnapshots.W1.closedCandles.slice(-chartDisplayLimit)), ...(timeframeSnapshots.W1.liveDisplayCandle ? [timeframeSnapshots.W1.liveDisplayCandle] : [])].slice(-chartDisplayLimit);
+      }
+    }
   }
   const resolvedWeeklyBias = weeklyBiasFromCandles(analysisCandlesByTimeframe.W1 ?? []);
+
+  const factsStartedAt = Date.now();
+  const sharedCanonicalFactSnapshots = buildSharedCanonicalFactSnapshots({
+    snapshot: canonicalDataSnapshot,
+    symbol: toFuturesSymbol(requestedSymbol),
+    sourceFingerprint: snapshot?.marketData.activeResearchSource.fingerprint ?? canonicalDataSnapshot.snapshotId,
+    candleLimitsByTimeframe: { M5: 300 }
+  });
+  dataStageTimingsMs.CANONICAL_FACTS = Date.now() - factsStartedAt;
+  const canonicalStrategyViews = requirements.map((requirement) => buildCanonicalStrategyDataView({ snapshot: canonicalDataSnapshot, requirement }));
 
   const bundle: IctMarketAnalysisContextBundle = {
     context: buildContext({
@@ -708,7 +825,12 @@ export async function buildIctMarketAnalysisContextBundle(
     }),
     displayCandles,
     analysisCandlesByTimeframe,
-    depthSummariesByTimeframe
+    depthSummariesByTimeframe,
+    canonicalFetchPlan,
+    canonicalDataSnapshot,
+    canonicalStrategyViews,
+    sharedCanonicalFactSnapshots,
+    dataStageTimingsMs
   };
   const cacheable =
     bundle.context.multiTimeframeContextStatus === "built" &&

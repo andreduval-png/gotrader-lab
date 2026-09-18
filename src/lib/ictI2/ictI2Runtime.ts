@@ -6,6 +6,7 @@ import {
   type CanonicalIctFact,
   type CanonicalLiquidityFact
 } from "@/lib/ictCanonical";
+import type { CanonicalIctFactSnapshot } from "@/lib/ictCanonical";
 import { evaluateIct2022Model } from "@/lib/ictI2/ict2022Model";
 import { buildIctCoreCandidateCollection } from "@/lib/ictI2/ictI2Collection";
 import { evaluateIctJudasSwing } from "@/lib/ictI2/ictJudasSwingModel";
@@ -42,15 +43,18 @@ export const buildIctCanonicalRuntimeInput = ({
   symbol,
   asOf,
   sourceFingerprint
+  ,factSnapshotsByTimeframe
 }: {
   candlesByTimeframe: Readonly<Partial<Record<Timeframe, readonly Candle[]>>>;
   symbol: FuturesSymbol;
   asOf: string;
   sourceFingerprint: string;
+  factSnapshotsByTimeframe?: Readonly<Partial<Record<Timeframe, CanonicalIctFactSnapshot>>>;
 }): IctCoreDetectionInput => {
   const facts = Object.entries(candlesByTimeframe).flatMap(([timeframe, candles]) =>
     candles?.length
-      ? buildCanonicalIctFactSnapshot({ candles, asOf, symbol, timeframe: timeframe as Timeframe, sourceFingerprint }).facts
+      ? factSnapshotsByTimeframe?.[timeframe as Timeframe]?.facts ??
+        buildCanonicalIctFactSnapshot({ candles, asOf, symbol, timeframe: timeframe as Timeframe, sourceFingerprint }).facts
       : []
   );
   const narrative = buildIctHierarchicalNarrative(facts);

@@ -52,6 +52,18 @@ const resolveOperatorRuntimeSnapshot = async () => {
     const acceptance = await import("./int3a2ProductionAcceptance");
     return acceptance.runInt3a2ProductionConflictAcceptance();
   }
+  if (acceptanceScenario === "rc1c-plan-first") {
+    const acceptance = await import("./rc1cProductionAcceptance");
+    return acceptance.runRc1cProductionAcceptance();
+  }
+  if (acceptanceScenario === "multi-strategy-validation") {
+    const acceptance = await import("./multiStrategyValidationAcceptance");
+    return acceptance.runMultiStrategyValidationAcceptance();
+  }
+  if (acceptanceScenario === "owner-validation-policy") {
+    const acceptance = await import("./ownerValidationPolicyAcceptance");
+    return acceptance.runOwnerValidationPolicyAcceptance();
+  }
   return resolveResearchRuntimeSnapshot();
 };
 
@@ -159,7 +171,7 @@ const refresh = () => {
 
 const refreshAtCheckpoint = () => {
   const cycle = readOperatorCycleState();
-  if (cycle.status === "running" || cycle.status === "stopping") return;
+  if ((cycle.status === "running" || cycle.status === "stopping") && !cycle.ownerResearch?.livePlanPublished) return;
   refresh();
 };
 
@@ -171,7 +183,7 @@ const refreshCycleOnly = () => {
     generatedAt: new Date().toISOString(),
     cycle,
     insight: cycle.latestInsight ?? snapshot.insight,
-    researchPlan: cycleActive
+    researchPlan: cycleActive && !cycle.ownerResearch?.livePlanPublished
       ? pendingResearchPlan(cycle.cycleId, snapshot.source.fingerprint)
       : snapshot.researchPlan,
     authority: cycle.authority,
@@ -179,6 +191,9 @@ const refreshCycleOnly = () => {
     researchOnly: true
   };
   notify();
+  if (cycleActive && cycle.ownerResearch?.livePlanPublished) {
+    refresh();
+  }
   if (cycle.status !== "running" && cycle.status !== "stopping") {
     refresh();
   }

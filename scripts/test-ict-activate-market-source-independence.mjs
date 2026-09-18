@@ -257,6 +257,36 @@ async function runHelperBlockedTest(module) {
   assert.doesNotMatch(JSON.stringify(result), /"candles"\s*:|"rawSnapshot"\s*:|"account"\s*:|"order"\s*:|"position"\s*:|"password"\s*:|"secret"\s*:/i);
 }
 
+async function runDeferredHtfPlannerTest(module) {
+  let htfFetches = 0;
+  const result = await module.ensureMt5CanonicalResearchSource(
+    {
+      requestedSymbol: "MNQ",
+      brokerSymbol: "USTECH",
+      timeframe: "5m",
+      candleLimit: 1000,
+      higherTimeframes: ["15m", "1h"],
+      deferHigherTimeframesToSharedPlanner: true
+    },
+    {
+      loadSettings: () => settings,
+      saveSettings: (nextSettings) => ({ ...settings, ...nextSettings }),
+      checkStatus: async () => ({ provider: "mt5_read_only", connectionStatus: "connected", message: "connected", warnings: [], ...authority }),
+      fetchSymbols: async () => ({ provider: "mt5_read_only", connectionStatus: "connected", symbols: ["USTECH"], warnings: [], missingEvidence: [], ...authority }),
+      fetchQuote: async () => ({ provider: "mt5_read_only", symbol: "USTECH", requestedSymbol: "MNQ", brokerSymbol: "USTECH", mid: 28769.03, connectionStatus: "connected", warnings: [], missingEvidence: [], ...authority }),
+      fetchCandleFeed: async () => safeFeed(),
+      fetchHigherTimeframes: async () => {
+        htfFetches += 1;
+        return [];
+      },
+      resolveSnapshot: async () => runtimeSnapshot()
+    }
+  );
+  assert.equal(result.ok, true);
+  assert.equal(htfFetches, 0, "cycle-local planner must own M15/H1 instead of prefetching duplicates");
+  assert.match(result.higherTimeframes.warning, /deferred to the cycle-local canonical fetch planner/i);
+}
+
 function assertUiUsesSharedHelper() {
   const advisorSource = fs.readFileSync(path.join(projectRoot, "src", "components", "advisor", "ResearchAdvisorView.tsx"), "utf8");
   const dashboardSource = fs.readFileSync(path.join(projectRoot, "src", "components", "dashboard", "MissionControlShell.tsx"), "utf8");
@@ -271,6 +301,7 @@ async function main() {
   const module = await import(pathToFileURL(path.join(outRoot, "ictActivateMarketSourceActivation.mjs")));
   await runHelperSuccessTest(module);
   await runHelperBlockedTest(module);
+  await runDeferredHtfPlannerTest(module);
   assertUiUsesSharedHelper();
   console.log(JSON.stringify({
     status: "passed",

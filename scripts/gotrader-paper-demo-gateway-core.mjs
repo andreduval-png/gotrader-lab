@@ -3,10 +3,12 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 
 import {
-  loadPaperSizingPreviewPolicy,
-  readRecentTradeProposalAudits,
-  TRADE_PROPOSAL_MCP_AUTHORITY
-} from "./gotrader-trade-proposal-core.mjs";
+  evaluateCanonicalTradeProposal,
+  readRecentCanonicalProposals,
+  GOTRADER_RESEARCH_MCP_POLICY_VERSION,
+  GOTRADER_RESEARCH_MCP_AUTHORITY,
+  sha256Id
+} from "./gotrader-research-mcp-core.mjs";
 import {
   appendSimulationRiskLedger,
   buildRiskEvaluationRequest,
@@ -22,7 +24,7 @@ import {
 } from "./gotrader-account-risk-core.mjs";
 
 export const PAPER_DEMO_GATEWAY_POLICY_VERSION = "gotrader_paper_demo_gateway_v1";
-export const PAPER_DEMO_GATEWAY_AUTHORITY = TRADE_PROPOSAL_MCP_AUTHORITY;
+export const PAPER_DEMO_GATEWAY_AUTHORITY = GOTRADER_RESEARCH_MCP_AUTHORITY;
 export const PAPER_DEMO_GATEWAY_PROFILE = "ifvg_fresh_retest_v3_research";
 export const PAPER_DEMO_EXECUTION_REQUEST_CONTRACT = "gotrader.paper_demo_execution_request";
 export const PAPER_DEMO_EXECUTION_REQUEST_VERSION = "1.0";
@@ -95,6 +97,8 @@ export const loadPaperDemoGatewayPolicy = (env = process.env) => {
   const mt5DemoMaxRiskUsd = Number(env.GOTRADER_MT5_DEMO_HANDOFF_MAX_RISK_USD || 0);
   return {
     enabled: env.GOTRADER_PAPER_DEMO_GATEWAY_ENABLED === "true",
+    simulationRiskUsd: finitePositive(Number(env.GOTRADER_PAPER_SIMULATION_RISK_USD))
+      ? Number(env.GOTRADER_PAPER_SIMULATION_RISK_USD) : 0,
     killSwitchActive: env.GOTRADER_PAPER_DEMO_KILL_SWITCH !== "false",
     maxDailyLossR: finitePositive(maxDailyLossR) ? maxDailyLossR : 0,
     maxPreparationsPerDay: Number.isFinite(maxPreparationsPerDay) && maxPreparationsPerDay > 0
@@ -160,16 +164,6 @@ const sourceIdentityMatches = (proposal, validation) =>
   proposal?.brokerSymbol === validation.brokerSymbol &&
   proposal?.timeframe === validation.timeframe;
 
-const sizingIsPrepared = (proposalEvaluation) =>
-  proposalEvaluation?.sizingPreview?.status === "paper_preview_only" &&
-  proposalEvaluation?.sizingPreview?.executable === false &&
-  finitePositive(proposalEvaluation?.sizingPreview?.paperUnitsPreview);
-
-const sourceFingerprintIsCanonical = (proposal) =>
-  compactToken(proposal?.sourceFingerprint).startsWith(
-    `${proposal?.sourceProvider}|${proposal?.requestedSymbol}|${proposal?.brokerSymbol}|${proposal?.timeframe}|`
-  );
-
 export const evaluatePaperDemoPreparation = ({
   accountRiskEvaluation,
   forwardEvidence,
@@ -196,13 +190,30 @@ export const evaluatePaperDemoPreparation = ({
   if (policy.killSwitchActive) blockers.push("paper_demo_kill_switch_active");
   if (!finitePositive(policy.maxDailyLossR)) blockers.push("paper_demo_daily_loss_limit_not_configured");
   if (!finitePositive(policy.maxPreparationsPerDay)) blockers.push("paper_demo_daily_request_limit_not_configured");
-  if (!proposalEvaluation || proposalEvaluation.status !== "queued_for_deterministic_validation") {
+  if (!proposalEvaluation || proposalEvaluation.status !== "validated_research_proposal" ||
+      proposalEvaluation.policyVersion !== GOTRADER_RESEARCH_MCP_POLICY_VERSION) {
     blockers.push("safe_trade_proposal_required");
   }
-  if (!proposalEvaluation?.deterministicChecks?.payloadSafe) blockers.push("proposal_payload_not_safe");
-  if (!proposalEvaluation?.deterministicChecks?.geometryValid) blockers.push("proposal_geometry_not_valid");
-  if ((proposalEvaluation?.deterministicChecks?.rr ?? 0) < 2) blockers.push("proposal_minimum_rr_not_met");
-  if (!sizingIsPrepared(proposalEvaluation)) blockers.push("operator_paper_sizing_not_prepared");
+  const checks = proposalEvaluation?.checks;
+  if (!Array.isArray(proposalEvaluation?.blockers) || proposalEvaluation.blockers.length ||
+      !Array.isArray(proposalEvaluation?.blockedFields) || proposalEvaluation.blockedFields.length) blockers.push("proposal_payload_not_safe");
+  if (!checks?.geometryValid) blockers.push("proposal_geometry_not_valid");
+  if (!Number.isFinite(checks?.rr) || checks.rr < 2) blockers.push("proposal_minimum_rr_not_met");
+  if (!checks?.profileIdentityMatched || !checks?.validationIdentityMatched || !checks?.readinessPassed || checks?.runtimeFreshness !== "fresh") {
+    blockers.push("canonical_proposal_checks_not_passed");
+  }
+  if (proposal?.strategyProfileId !== PAPER_DEMO_GATEWAY_PROFILE) blockers.push("paper_demo_profile_not_supported");
+  if (!authorityIsNone(proposalEvaluation?.authority) || proposalEvaluation?.executable !== false || proposalEvaluation?.autoApplyAllowed !== false) {
+    blockers.push("proposal_research_boundary_invalid");
+  }
+  if (!proposalEvaluation || proposalEvaluation.proposalId !== sha256Id({
+    createdAt: proposalEvaluation.createdAt, compactProposal: proposal,
+    runtimeEvidenceId: checks?.runtimeEvidenceId ?? null
+  })) blockers.push("proposal_identity_hash_mismatch");
+  if (!finitePositive(policy.simulationRiskUsd)) blockers.push("operator_paper_sizing_not_prepared");
+  if (accountRiskEvaluation?.requestId !== buildRiskEvaluationRequest({ proposalEvaluation, now, requestedRiskUsd: policy.simulationRiskUsd }).requestId) {
+    blockers.push("account_risk_proposal_mismatch");
+  }
   if (accountRiskEvaluation?.status !== "approved_for_simulation") {
     blockers.push("account_risk_governor_not_approved");
     blockers.push(...(accountRiskEvaluation?.blockers ?? []).map((item) => `account_risk:${item}`));
@@ -218,13 +229,19 @@ export const evaluatePaperDemoPreparation = ({
   if (!finitePositive(accountRiskEvaluation?.sizing?.estimatedRiskUsd)) {
     blockers.push("account_risk_sizing_not_approved");
   }
+  if (accountRiskEvaluation?.sizing?.estimatedRiskUsd > policy.simulationRiskUsd) {
+    blockers.push("account_risk_exceeds_operator_budget");
+  }
   if (!Number.isFinite(proposalMs) || !Number.isFinite(nowMs) || nowMs - proposalMs > policy.signalMaxAgeMs || nowMs < proposalMs) {
     blockers.push("paper_demo_signal_stale");
   }
   if (!validationEvidence?.available) blockers.push("authoritative_validation_report_missing");
   if (validationEvidence?.reportStatus !== "completed") blockers.push("authoritative_validation_incomplete");
   if (!sourceIdentityMatches(proposal, validationEvidence)) blockers.push("validation_source_identity_mismatch");
-  if (!sourceFingerprintIsCanonical(proposal)) blockers.push("proposal_source_fingerprint_not_canonical");
+  // Fingerprints are opaque identities, validated against the canonical runtime, not a legacy string encoding.
+  if (!compactToken(proposal?.sourceFingerprint) || !checks?.runtimeEvidenceId || !proposalEvaluation?.ledgerReference) {
+    blockers.push("proposal_canonical_identity_missing");
+  }
   if (proposal?.strategyProfileId !== validationEvidence?.strategyProfileId) blockers.push("validation_profile_mismatch");
   if (validationEvidence?.walkForwardVerdict !== "passed") blockers.push("walk_forward_not_passed");
   if ((validationEvidence?.completedTrades ?? 0) < 30) blockers.push("validation_trade_sample_insufficient");
@@ -627,8 +644,15 @@ const preparePaperDemoSimulationUnlocked = async (
 ) => {
   const policy = loadPaperDemoGatewayPolicy(env);
   const accountRiskPolicy = loadSimulationAccountRiskPolicy(env);
-  const proposals = await readRecentTradeProposalAudits({ limit: 20, repoRoot });
-  const proposalEvaluation = proposals.find((item) => item.proposalId === proposalId);
+  const proposals = await readRecentCanonicalProposals({ limit: 20, repoRoot });
+  let proposalEvaluation = proposals.find((item) => item.proposalId === proposalId);
+  if (proposalEvaluation) {
+    // Revalidate the source/evidence currently active, without refreshing the original proposal's age or identity.
+    const current = await evaluateCanonicalTradeProposal(proposalEvaluation.compactProposal, { repoRoot, nowMs: Date.parse(now), record: false });
+    if (current.status !== "validated_research_proposal") {
+      proposalEvaluation = { ...proposalEvaluation, status: "blocked", blockers: current.blockers };
+    }
+  }
   const validationReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.validationReportPath));
   const forwardReport = await readJsonFile(resolveInsideRepo(repoRoot, policy.forwardEvidenceReportPath));
   const state = await loadPaperDemoGatewayState({ repoRoot, now });
@@ -657,7 +681,7 @@ const preparePaperDemoSimulationUnlocked = async (
   const accountRiskRequest = buildRiskEvaluationRequest({
     now,
     proposalEvaluation,
-    requestedRiskUsd: Number(proposalEvaluation?.sizingPreview?.riskBudgetUsd)
+    requestedRiskUsd: policy.simulationRiskUsd
   });
   const accountRiskEvaluation = evaluateSimulationAccountRisk({
     now,

@@ -40,11 +40,11 @@ export const ICT_I3_SOURCE_PACKET = Object.freeze({
       resolution: "The source examples identify engineered highs/lows and liquidity capture before directional completion."
     },
     {
-      ruleId: "i3.canonical-transition",
+      ruleId: "i3.market-maker-delivery-sequence",
       classification: "CANONICAL_GOTRADER_RULE",
-      behavior: "A canonical directional ERL-to-IRL transition confirms delivery away from the engineered extreme.",
+      behavior: "The strategy joins same-range external-liquidity consumption to causally later directional displacement and a later eligible PD array.",
       material: true,
-      resolution: "Composes I1 transition facts without implementing the future I4 transition strategies."
+      resolution: "DH3 retired the unsourced standalone transition dependency; this is an MMBM/MMSM prerequisite, not a canonical fact."
     },
     {
       ruleId: "i3.displacement-required",
@@ -56,9 +56,9 @@ export const ICT_I3_SOURCE_PACKET = Object.freeze({
     {
       ruleId: "i3.pd-array-entry",
       classification: "CANONICAL_GOTRADER_RULE",
-      behavior: "Entry intent is owned by one causally visible canonical PD array after delivery confirmation.",
+      behavior: "Entry intent is owned by one causally visible canonical FVG PD array after displacement.",
       material: true,
-      resolution: "I3 does not redetect FVG, IFVG, BPR, or blocks."
+      resolution: "DH3 directly sourced FVG for this sequence; broader array types remain outside executable Market Maker qualification."
     },
     {
       ruleId: "i3.external-objective",
@@ -77,7 +77,7 @@ export const ICT_I3_SOURCE_PACKET = Object.freeze({
     {
       ruleId: "i3.base-thresholds",
       classification: "RESEARCH_PARAMETER",
-      behavior: "Setup age, minimum R:R, role timeframes, and eligible PD-array types are frozen profile parameters.",
+      behavior: "Setup age, minimum R:R, role timeframes, and the FVG-only executable eligibility policy are frozen profile parameters.",
       material: true,
       resolution: "No exact universal numeric threshold is source-supported; I3 performs no optimization."
     },

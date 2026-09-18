@@ -738,7 +738,8 @@ export function ResearchAdvisorView() {
         displayLabel,
         higherTimeframes,
         requestedSymbol: advisorRequestedSymbol,
-        timeframe: advisorPrimaryTimeframe
+        timeframe: advisorPrimaryTimeframe,
+        deferHigherTimeframesToSharedPlanner: true
       });
       if (!sourceActivation.ok) {
         throw new Error(sourceActivation.message);
@@ -1439,6 +1440,7 @@ export function ResearchAdvisorView() {
       />
       <RecognitionSummaryCard currentRead={currentRead} packet={activeAdvisorPacket} />
       <MarketOpportunityCard currentRead={currentRead} />
+      <CharterProfilesCard currentRead={currentRead} />
       <SessionRaidReversalCard currentRead={currentRead} />
       <AdvisorStrategyLibraryCard currentRead={currentRead} />
       <ResearchSignalCard signal={researchSignal} />
@@ -1917,6 +1919,40 @@ function MarketOpportunityCard({ currentRead }: { currentRead: IctCurrentRead })
       <p className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-sm leading-5 text-slate-300">
         {approvedExplanation} {currentRead.selfImprovementHypothesisQueued ? "Research hypothesis queued - needs replay validation." : `Research hypothesis not queued: ${currentRead.selfImprovementHypothesisReason ?? "not eligible"}.`}
       </p>
+    </section>
+  );
+}
+
+function CharterProfilesCard({ currentRead }: { currentRead: IctCurrentRead }) {
+  const profiles = currentRead.charterProfiles ?? [];
+  if (!profiles.length) return null;
+  return (
+    <section data-testid="advisor-charter-profiles" className={`${WORKSPACE_PRIMARY_PANEL} border-sky-300/15 bg-sky-300/[0.025]`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className={WORKSPACE_SECTION_LABEL}>Charter Profiles</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-50">Owner attribution and context</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">No profile geometry</Badge>
+          <Badge variant="secondary">Research only</Badge>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {profiles.map((profile) => (
+          <span
+            key={profile.charterProfileId}
+            className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300"
+            data-charter-model={profile.charterModelNumber}
+            title={profile.blocker ?? profile.detail}
+          >
+            <span>{profile.label}</span>
+            <Badge variant={profile.runtimeStatus === "owner_candidate_active" ? "success" : profile.runtimeStatus === "source_blocked" ? "warning" : "secondary"}>
+              {formatToken(profile.runtimeStatus)}
+            </Badge>
+          </span>
+        ))}
+      </div>
     </section>
   );
 }

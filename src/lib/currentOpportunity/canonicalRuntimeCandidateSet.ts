@@ -13,6 +13,7 @@ export interface CanonicalRuntimeCandidate {
   strategyId: CurrentOpportunity["strategyId"];
   strategyVersion?: string;
   profileId?: string;
+  charterProfile?: CurrentOpportunity["charterProfile"];
   candidateId: string;
   direction: CurrentOpportunitySide;
   setupState: string;
@@ -23,6 +24,7 @@ export interface CanonicalRuntimeCandidate {
   sourceIdentity: string;
   evaluationAsOf: string;
   contextIdentity?: string;
+  prerequisiteIdentity?: CurrentOpportunity["prerequisiteIdentity"];
   opportunity: CurrentOpportunity;
 }
 
@@ -78,6 +80,7 @@ export const buildCanonicalRuntimeCandidateSet = ({ opportunities, generatedAt, 
       strategyId: opportunity.strategyId,
       strategyVersion: opportunity.strategyVersion,
       profileId: opportunity.profileId,
+      charterProfile: opportunity.charterProfile,
       candidateId: opportunity.candidateId,
       direction: opportunity.side,
       setupState: opportunity.candidateState ?? opportunity.status,
@@ -88,6 +91,7 @@ export const buildCanonicalRuntimeCandidateSet = ({ opportunities, generatedAt, 
       sourceIdentity: opportunity.contextIdentity ?? sourceFingerprint ?? "source-unavailable",
       evaluationAsOf: generatedAt,
       contextIdentity: opportunity.contextIdentity,
+      prerequisiteIdentity: opportunity.prerequisiteIdentity,
       opportunity
     }))
     .sort(stableCandidateOrder);

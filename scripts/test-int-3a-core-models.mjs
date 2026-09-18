@@ -25,6 +25,8 @@ const files = [
   ["src/lib/ictI2/ictPowerOfThreeModel.ts", "ictPowerOfThreeModel.mjs"],
   ["src/lib/ictI2/ictJudasSwingModel.ts", "ictJudasSwingModel.mjs"],
   ["src/lib/ictI2/ictI2Collection.ts", "ictI2Collection.mjs"],
+  ["src/lib/ictCharterProfiles/ictCharterProfileTypes.ts", "ictCharterProfileTypes.mjs"],
+  ["src/lib/ictCharterProfiles/ictCharterProfileRuntime.ts", "ictCharterProfileRuntime.mjs"],
   ["src/lib/currentOpportunity/currentOpportunityTypes.ts", "currentOpportunityTypes.mjs"],
   ["src/lib/currentOpportunity/canonicalRuntimeCandidateSet.ts", "canonicalRuntimeCandidateSet.mjs"],
   ["src/lib/currentOpportunity/detectCurrentOpportunities.ts", "detectCurrentOpportunities.mjs"]
@@ -43,6 +45,8 @@ for (const [sourceName, outputName] of files) {
     .replace(/from\s+["']@\/lib\/tradeGeometry\/entryLifecycle["']/g, 'from "./entryLifecycle.mjs"')
     .replace(/from\s+["']@\/lib\/tradeGeometry\/strategyGeometryIntent["']/g, 'from "./strategyGeometryIntent.mjs"')
     .replace(/from\s+["']@\/lib\/ictI2\/([^"']+)["']/g, (_match, name) => `from "./${name}.mjs"`)
+    .replace(/from\s+["']\.\/ictCharterProfileTypes["']/g, 'from "./ictCharterProfileTypes.mjs"')
+    .replace(/from\s+["']\.\.\/ictCharterProfiles["']/g, 'from "./ictCharterProfileRuntime.mjs"')
     .replace(/from\s+["']\.\.\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
     .replace(/from\s+["']\.\/currentOpportunityTypes["']/g, 'from "./currentOpportunityTypes.mjs"');
   const runtimeRewritten = js.replace(/from\s+["']\.\/canonicalRuntimeCandidateSet["']/g, 'from "./canonicalRuntimeCandidateSet.mjs"');
@@ -97,6 +101,12 @@ for (const direction of ["bullish", "bearish"]) {
   assert.equal(result.canonicalGeometry.target.price, direction === "bullish" ? 112 : 89);
   assert.equal(result.canonicalGeometry.geometryId, result.canonicalGeometry.geometryId);
 }
+
+const ict2022Freeze = model2022.evaluateIct2022Model(ictFixture("bearish"));
+assert.equal(ict2022Freeze.canonicalGeometry.entry.intendedPrice, 100.5);
+assert.equal(ict2022Freeze.canonicalGeometry.stop.price, 105);
+assert.equal(ict2022Freeze.canonicalGeometry.target.price, 89);
+assert(Math.abs(ict2022Freeze.canonicalGeometry.theoreticalRR - (11.5 / 4.5)) < 1e-12);
 
 const lowRr = model2022.evaluateIct2022Model(ictFixture("bullish", 102));
 assert.equal(lowRr.canonicalGeometry.status, "VALID_BELOW_RR_THRESHOLD");
@@ -168,4 +178,16 @@ const sameDirectionScan = currentOpportunity.detectCurrentOpportunities(opportun
 assert.equal(sameDirectionScan.summary.canonicalSetupConflict, "NONE");
 assert.equal(sameDirectionScan.opportunities.filter((candidate) => candidate.strategyId === "ict_2022_model_v1").length, 2);
 
-console.log(JSON.stringify({ status: "passed", ict2022Directions: 2, po3: po3Result.state, judas: judasResult.state, conflict: conflict.conflict }, null, 2));
+console.log(JSON.stringify({
+  status: "passed",
+  ict2022Directions: 2,
+  ict2022Freeze: {
+    entry: ict2022Freeze.canonicalGeometry.entry.intendedPrice,
+    stop: ict2022Freeze.canonicalGeometry.stop.price,
+    target: ict2022Freeze.canonicalGeometry.target.price,
+    theoreticalRR: ict2022Freeze.canonicalGeometry.theoreticalRR
+  },
+  po3: po3Result.state,
+  judas: judasResult.state,
+  conflict: conflict.conflict
+}, null, 2));

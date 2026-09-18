@@ -7,12 +7,18 @@ import ts from "typescript";
 
 const projectRoot = process.cwd();
 const ictRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
+const canonicalRoot = path.join(projectRoot, "src", "lib", "ictCanonical");
+const geometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "live-session-raid-reversal-test");
 const sourceFiles = [
-  "ictTradeConstructionTypes.ts",
-  "ictTradeConstruction.ts",
-  "ictSessionRaidReversalTypes.ts",
-  "ictSessionRaidReversal.ts"
+  { root: ictRoot, file: "ictTradeConstructionTypes.ts" },
+  { root: ictRoot, file: "ictTradeConstruction.ts" },
+  { root: ictRoot, file: "ictSessionRaidReversalTypes.ts" },
+  { root: ictRoot, file: "ictSessionRaidReversal.ts" },
+  { root: canonicalRoot, file: "canonicalIctIdentity.ts" },
+  { root: geometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: geometryRoot, file: "targetSelection.ts" },
+  { root: geometryRoot, file: "canonicalTradeGeometry.ts" }
 ];
 
 const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || "http://127.0.0.1:7341").replace(/\/$/, "");
@@ -45,8 +51,8 @@ const round = (value, decimals = 2) => Number(value.toFixed(decimals));
 function compileForNode() {
   fs.rmSync(outRoot, { recursive: true, force: true });
   fs.mkdirSync(outRoot, { recursive: true });
-  for (const file of sourceFiles) {
-    const sourcePath = path.join(ictRoot, file);
+  for (const { root, file } of sourceFiles) {
+    const sourcePath = path.join(root, file);
     const source = fs.readFileSync(sourcePath, "utf8");
     const transpiled = ts.transpileModule(source, {
       compilerOptions: {
@@ -58,8 +64,16 @@ function compileForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(
+        /import \{ CANONICAL_ICT_NONE_AUTHORITY \} from "@\/lib\/ictCanonical\/canonicalIctTypes";/g,
+        'const CANONICAL_ICT_NONE_AUTHORITY = { execution: "none", broker: "none", production: "none" };'
+      )
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
+      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/targetSelection["']/g, 'from "./targetSelection.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/tradeGeometryTypes["']/g, 'from "./tradeGeometryTypes.mjs"')
+      .replace(/from\s+["']@\/lib\/ictCanonical\/canonicalIctIdentity["']/g, 'from "./canonicalIctIdentity.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
 }

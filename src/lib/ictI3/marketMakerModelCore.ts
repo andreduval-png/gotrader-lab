@@ -4,14 +4,13 @@ import type {
   CanonicalDealingRangeFact,
   CanonicalDisplacementFact,
   CanonicalIctFact,
-  CanonicalIrlErlTransitionFact,
   CanonicalLiquidityFact,
   CanonicalMssFact,
-  CanonicalPdArrayFact,
-  CanonicalPdLocationFact
+  CanonicalPdArrayFact
 } from "@/lib/ictCanonical/canonicalIctTypes";
 import { canonicalGeometryFromIntent, transitionsFor } from "@/lib/ictI2/ictI2Shared";
 import { buildMmxmDeliveryContext, visibleIctI3Facts } from "@/lib/ictI3/marketMakerFramework";
+import { qualifyMarketMakerDeliverySequence } from "@/lib/ictI3/marketMakerDeliverySequence";
 import type {
   IctI3DetectionInput,
   MarketMakerDirection,
@@ -29,8 +28,6 @@ const modelIdentity = (direction: MarketMakerDirection) => direction === "BULLIS
       side: "long" as const,
       tradeDirection: "LONG" as const,
       factDirection: "bullish" as const,
-      engineeringSide: "SELL_SIDE_LIQUIDITY" as const,
-      objectiveSide: "BUY_SIDE_LIQUIDITY" as const,
       requiredPdLocation: "DISCOUNT" as const
     }
   : {
@@ -39,15 +36,11 @@ const modelIdentity = (direction: MarketMakerDirection) => direction === "BULLIS
       side: "short" as const,
       tradeDirection: "SHORT" as const,
       factDirection: "bearish" as const,
-      engineeringSide: "BUY_SIDE_LIQUIDITY" as const,
-      objectiveSide: "SELL_SIDE_LIQUIDITY" as const,
       requiredPdLocation: "PREMIUM" as const
     };
 
 const compactIds = (facts: Array<CanonicalIctFact | undefined>) =>
   [...new Set(facts.filter((fact): fact is CanonicalIctFact => Boolean(fact)).map((fact) => fact.factId))];
-
-const latest = <T extends CanonicalIctFact>(facts: readonly T[]) => facts.at(-1);
 
 const after = (fact: CanonicalIctFact, timestamp: string) => Date.parse(fact.validFrom) >= Date.parse(timestamp);
 
@@ -76,23 +69,41 @@ export const evaluateMarketMakerModelCore = (
 ): MarketMakerModelCandidate => {
   const identity = modelIdentity(direction);
   const facts = visibleIctI3Facts(input.facts, input.asOf);
+  const qualification = qualifyMarketMakerDeliverySequence({
+    facts,
+    asOf: input.asOf,
+    sourceFingerprint: input.sourceFingerprint,
+    direction,
+    eligiblePdArrayTypes: parameters.eligiblePdArrayTypes
+  });
+  const deliverySequence = qualification.sequence;
   const lifecycle = transitionsFor<MmxmPhase>("SEARCHING", input.asOf);
   const blockers: string[] = [];
   const warnings: string[] = [];
-  let range: CanonicalDealingRangeFact | undefined;
-  let engineering: CanonicalLiquidityFact | undefined;
-  let transition: CanonicalIrlErlTransitionFact | undefined;
-  let pdArray: CanonicalPdArrayFact | undefined;
-  let objective: CanonicalLiquidityFact | undefined;
+  let range: CanonicalDealingRangeFact | undefined = qualification.selection.range;
+  let engineering: CanonicalLiquidityFact | undefined = qualification.selection.engineering;
+  let displacement: CanonicalDisplacementFact | undefined = qualification.selection.displacement;
+  let pdArray: CanonicalPdArrayFact | undefined = qualification.selection.pdArray;
+  let objective: CanonicalLiquidityFact | undefined = qualification.selection.objective;
+  let mss: CanonicalMssFact | undefined;
 
   const candidate = (): MarketMakerModelCandidate => {
-    const supportingFactIds = compactIds([range, engineering, transition, pdArray, objective]);
+    const supportingFactIds = compactIds([
+      range,
+      qualification.selection.pdLocation,
+      engineering,
+      displacement,
+      mss,
+      pdArray,
+      objective
+    ]);
     const candidateId = canonicalFingerprint({
       strategyId: identity.strategyId,
       profileId: identity.profileId,
       sourceFingerprint: input.sourceFingerprint,
       dealingRangeId: range?.dealingRangeId,
       liquidityEventId: engineering?.liquidityId,
+      deliverySequenceId: deliverySequence.sequenceId,
       direction
     });
     return {
@@ -108,12 +119,14 @@ export const evaluateMarketMakerModelCore = (
       marketTimestamp: input.asOf,
       direction: identity.side,
       state: lifecycle.state(),
+      deliverySequence,
       context: buildMmxmDeliveryContext({
         direction,
         phase: lifecycle.state(),
         range,
         liquidityEvent: engineering,
-        transition,
+        deliverySequence,
+        displacement,
         pdArray,
         objective,
         supportingFactIds,
@@ -129,11 +142,8 @@ export const evaluateMarketMakerModelCore = (
     };
   };
 
-  range = latest(facts.filter((fact): fact is CanonicalDealingRangeFact =>
-    fact.factType === "DEALING_RANGE" && fact.state === "ACTIVE"
-  ));
   if (!range) {
-    blockers.push("An active canonical dealing range is required.");
+    blockers.push(...deliverySequence.blockers);
     return candidate();
   }
   lifecycle.add("RANGE_CONTEXT_ESTABLISHED", range.validFrom, [range.factId], "A named canonical dealing range owns the model context.");
@@ -144,9 +154,7 @@ export const evaluateMarketMakerModelCore = (
   }
 
   if (parameters.premiumDiscountPolicy !== "DISABLED") {
-    const pdLocation = latest(facts.filter((fact): fact is CanonicalPdLocationFact =>
-      fact.factType === "PD_LOCATION" && fact.dealingRangeId === range?.dealingRangeId
-    ));
+    const pdLocation = qualification.selection.pdLocation;
     if (!pdLocation || pdLocation.location !== identity.requiredPdLocation) {
       const message = `${identity.requiredPdLocation} context is not confirmed for dealing range ${range.dealingRangeId}.`;
       if (parameters.premiumDiscountPolicy === "REQUIRED") {
@@ -168,44 +176,21 @@ export const evaluateMarketMakerModelCore = (
   }
   lifecycle.add("LIQUIDITY_ENGINEERING_FORMING", range.validFrom, [range.factId], "The model waits for opposite external liquidity engineering.");
 
-  engineering = facts.find((fact): fact is CanonicalLiquidityFact =>
-    fact.factType === "LIQUIDITY" &&
-    fact.dealingRangeId === range?.dealingRangeId &&
-    fact.liquidityClass === "EXTERNAL" &&
-    fact.side === identity.engineeringSide &&
-    fact.status === "CONSUMED" &&
-    Date.parse(fact.consumedAt ?? fact.validFrom) >= Date.parse(range?.validFrom ?? input.asOf)
-  );
   if (!engineering) {
-    blockers.push(`No consumed ${identity.engineeringSide} external-liquidity event exists in the active range.`);
+    blockers.push(...deliverySequence.blockers);
     return candidate();
   }
   const eventAt = engineering.consumedAt ?? engineering.validFrom;
   lifecycle.add("LIQUIDITY_EVENT_CONFIRMED", eventAt, [engineering.factId], "Opposite external liquidity was consumed with canonical lineage.");
-  lifecycle.add("DELIVERY_TRANSITION_FORMING", eventAt, [engineering.factId], "The framework waits for the canonical directional delivery transition.");
+  lifecycle.add("DELIVERY_SEQUENCE_FORMING", eventAt, [engineering.factId], "The Market Maker strategy waits for causally later directional displacement.");
 
-  transition = facts.find((fact): fact is CanonicalIrlErlTransitionFact =>
-    fact.factType === "IRL_ERL_TRANSITION" &&
-    fact.dealingRangeId === range?.dealingRangeId &&
-    fact.transitionType === parameters.transitionPolicy &&
-    fact.direction === identity.factDirection &&
-    Date.parse(fact.startedAt) >= Date.parse(eventAt) &&
-    fact.currentState !== "INVALIDATED"
-  );
-  if (!transition || transition.currentState === "FORMING") {
-    blockers.push("Canonical ERL-to-IRL delivery transition is not confirmed.");
-    return candidate();
-  }
-  lifecycle.add("DELIVERY_TRANSITION_CONFIRMED", transition.validFrom, [transition.factId], "I1 confirmed directional ERL-to-IRL delivery.");
-
-  const displacement = facts.find((fact): fact is CanonicalDisplacementFact =>
-    fact.factType === "DISPLACEMENT" && fact.direction === identity.factDirection && after(fact, transition?.validFrom ?? eventAt)
-  );
   if (!displacement) {
-    blockers.push("Directional canonical displacement after delivery confirmation is missing.");
+    blockers.push(...deliverySequence.blockers);
     return candidate();
   }
-  const mss = facts.find((fact): fact is CanonicalMssFact =>
+  lifecycle.add("DELIVERY_SEQUENCE_CONFIRMED", displacement.validFrom, [engineering.factId, displacement.factId], "The strategy-owned liquidity-to-displacement sequence is confirmed.");
+
+  mss = facts.find((fact): fact is CanonicalMssFact =>
     fact.factType === "MSS" && fact.direction === identity.factDirection && after(fact, displacement.validFrom)
   );
   if (parameters.mssPolicy === "REQUIRED" && !mss) {
@@ -214,28 +199,19 @@ export const evaluateMarketMakerModelCore = (
   }
 
   lifecycle.add("PD_ARRAY_REPRICE_FORMING", displacement.validFrom, compactIds([displacement, mss]), "Delivery is confirmed; the model waits for an eligible canonical PD array.");
-  pdArray = facts.find((fact): fact is CanonicalPdArrayFact =>
-    fact.factType === "PD_ARRAY" &&
-    parameters.eligiblePdArrayTypes.includes(fact.pdArrayType) &&
-    (fact.direction === identity.factDirection || fact.direction === "neutral") &&
-    ["FORMING", "ACTIVE"].includes(fact.state) &&
-    after(fact, displacement.validFrom)
-  );
   if (!pdArray) {
-    blockers.push("No eligible canonical PD array is causally visible after displacement.");
+    blockers.push(...deliverySequence.blockers);
     return candidate();
   }
 
-  objective = facts.find((fact): fact is CanonicalLiquidityFact =>
-    fact.factType === "LIQUIDITY" &&
-    fact.dealingRangeId === range?.dealingRangeId &&
-    fact.liquidityClass === "EXTERNAL" &&
-    fact.side === identity.objectiveSide &&
-    fact.liquidityId !== engineering?.liquidityId
-  );
   if (!objective) {
     lifecycle.add("NO_VALID_TARGET", input.asOf, [range.factId], "The opposite external objective is missing.");
-    blockers.push("No opposite external-liquidity objective exists for the active dealing range.");
+    blockers.push(...deliverySequence.blockers);
+    return candidate();
+  }
+
+  if (deliverySequence.status !== "QUALIFIED") {
+    blockers.push(...deliverySequence.blockers);
     return candidate();
   }
 
@@ -302,7 +278,7 @@ export const evaluateMarketMakerModelCore = (
       liquidityClass: objective.liquidityClass
     },
     intermediateTargets: [],
-    supportingFactIds: compactIds([range, engineering, transition, displacement, mss, pdArray, objective]),
+    supportingFactIds: compactIds([range, qualification.selection.pdLocation, engineering, displacement, mss, pdArray, objective]),
     sourceFingerprint: input.sourceFingerprint,
   };
   const geometry = canonicalGeometryFromIntent({
@@ -313,6 +289,7 @@ export const evaluateMarketMakerModelCore = (
       sourceFingerprint: input.sourceFingerprint,
       dealingRangeId: range.dealingRangeId,
       liquidityEventId: engineering.liquidityId,
+      deliverySequenceId: deliverySequence.sequenceId,
       direction
     }),
     asOf: input.asOf,
@@ -332,8 +309,8 @@ export const evaluateMarketMakerModelCore = (
     lifecycle.add("GEOMETRY_NON_ACTIONABLE", input.asOf, compactIds([engineering, pdArray, objective]), "G1.1 rejected actionability without changing native geometry.");
     blockers.push(...geometry.blockers);
   } else if (touch) {
-    lifecycle.add("ENTRY_ELIGIBLE", touch.timestamp, compactIds([engineering, transition, pdArray, objective]), "Price touched the immutable PD-array entry intent.");
-    lifecycle.add("ACTIVE_DELIVERY", touch.timestamp, compactIds([engineering, transition, pdArray, objective]), "The research model is active; BT2 exclusively owns fill and outcome.");
+    lifecycle.add("ENTRY_ELIGIBLE", touch.timestamp, compactIds([engineering, displacement, pdArray, objective]), "Price touched the immutable PD-array entry intent.");
+    lifecycle.add("ACTIVE_DELIVERY", touch.timestamp, compactIds([engineering, displacement, pdArray, objective]), "The research model is active; BT2 exclusively owns fill and outcome.");
   }
 
   const result = candidate();

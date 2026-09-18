@@ -5,6 +5,7 @@ import { buildIctMarketAnalysisContextBundle } from "./ictMarketAnalysisContext"
 
 interface AdvisorPacketWorkerRequest {
   snapshot: ResearchRuntimeSnapshot;
+  asOf?: string;
 }
 
 type AdvisorPacketWorkerResponse =
@@ -19,7 +20,8 @@ const scope = self as unknown as {
 scope.onmessage = async (event) => {
   try {
     const marketAnalysisContextBundle = await buildIctMarketAnalysisContextBundle({
-      snapshot: event.data.snapshot
+      snapshot: event.data.snapshot,
+      asOf: event.data.asOf
     });
     const packet = await buildIctAdvisorPacketFromRuntime(event.data.snapshot, {
       marketAnalysisContextBundle

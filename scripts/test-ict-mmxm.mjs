@@ -7,12 +7,15 @@ const registry = ict.assertIctI3Registry();
 assert.equal(registry.length, 3);
 assert.equal(ict.executableIctI3Registry().length, 2);
 assert.equal(registry.find((entry) => entry.modelId === "mmxm_delivery_framework_v1").executable, false);
+assert.equal(registry.filter((entry) => entry.runtimeClassification === "LIVE_FACT_COMPLETENESS_UNVERIFIED").length, 2);
+assert.equal(registry.filter((entry) => entry.runtimeClassification === "LIVE_FACT_COMPLETE_EXECUTABLE_OWNER").length, 0);
 assert.equal(ict.ICT_I3_SOURCE_PACKET.status, "RESOLVED_FOR_BOUNDED_RESEARCH");
 
 const candidate = ict.evaluateMarketMakerBuyModel(marketMakerFixture("BULLISH"));
 assert.equal(candidate.context.classification, "framework_context");
 assert.equal(candidate.context.frameworkId, "gotrader.ict.i3.mmxm-delivery-framework.v1");
 assert.equal(candidate.context.liquidityEventId, "engineering");
+assert.equal(candidate.context.sequenceId, candidate.deliverySequence.sequenceId);
 assert.equal(candidate.context.objectiveLiquidityId, "objective");
 assert(!("candles" in candidate.context));
 

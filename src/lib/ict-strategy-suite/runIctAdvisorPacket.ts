@@ -1,5 +1,6 @@
 import type { ResearchRuntimeSnapshot } from "../runtime";
 import { buildIctAdvisorPacketFromRuntime } from "./ictAdvisorEngine";
+import { buildIctMarketAnalysisContextBundle } from "./ictMarketAnalysisContext";
 import { appendIctAdvisorJournalEvents } from "./ictAdvisorJournal";
 import type { IctAdvisorPacket } from "./ictAdvisorTypes";
 import { appendIctIndexSmtJournalEvents } from "./ictIndexSmt";
@@ -28,9 +29,15 @@ export async function runIctAdvisorPacket(input: {
   snapshot: ResearchRuntimeSnapshot;
   signal?: AbortSignal;
   timeoutMs?: number;
+  asOf?: string;
 }): Promise<IctAdvisorPacket> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
-    return buildIctAdvisorPacketFromRuntime(input.snapshot);
+    input.signal?.throwIfAborted();
+    const marketAnalysisContextBundle = await buildIctMarketAnalysisContextBundle({ snapshot: input.snapshot, asOf: input.asOf, signal: input.signal });
+    input.signal?.throwIfAborted();
+    const packet = await buildIctAdvisorPacketFromRuntime(input.snapshot, { marketAnalysisContextBundle });
+    input.signal?.throwIfAborted();
+    return packet;
   }
 
   return new Promise<IctAdvisorPacket>((resolve, reject) => {
@@ -70,6 +77,6 @@ export async function runIctAdvisorPacket(input: {
       return;
     }
     input.signal?.addEventListener("abort", abort, { once: true });
-    worker.postMessage({ snapshot: input.snapshot });
+    worker.postMessage({ snapshot: input.snapshot, asOf: input.asOf });
   });
 }

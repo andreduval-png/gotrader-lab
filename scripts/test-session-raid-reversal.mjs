@@ -8,16 +8,18 @@ import ts from "typescript";
 
 const projectRoot = process.cwd();
 const ictRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
-const opportunityRoot = path.join(projectRoot, "src", "lib", "currentOpportunity");
+const canonicalRoot = path.join(projectRoot, "src", "lib", "ictCanonical");
+const geometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "session-raid-reversal-test");
 const sourceFiles = [
   { root: ictRoot, file: "ictTradeConstructionTypes.ts" },
   { root: ictRoot, file: "ictTradeConstruction.ts" },
   { root: ictRoot, file: "ictSessionRaidReversalTypes.ts" },
   { root: ictRoot, file: "ictSessionRaidReversal.ts" },
-  { root: opportunityRoot, file: "currentOpportunityTypes.ts" },
-  { root: opportunityRoot, file: "buildCurrentOpportunityContext.ts" },
-  { root: opportunityRoot, file: "detectCurrentOpportunities.ts" }
+  { root: canonicalRoot, file: "canonicalIctIdentity.ts" },
+  { root: geometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: geometryRoot, file: "targetSelection.ts" },
+  { root: geometryRoot, file: "canonicalTradeGeometry.ts" }
 ];
 
 function compileForNode() {
@@ -36,10 +38,18 @@ function compileForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(
+        /import \{ CANONICAL_ICT_NONE_AUTHORITY \} from "@\/lib\/ictCanonical\/canonicalIctTypes";/g,
+        'const CANONICAL_ICT_NONE_AUTHORITY = { execution: "none", broker: "none", production: "none" };'
+      )
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
       .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
       .replace(/from\s+"..\/ict-strategy-suite\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+'..\/ict-strategy-suite\/([^']+)'/g, "from './$1.mjs'");
+      .replace(/from\s+'..\/ict-strategy-suite\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+"@\/lib\/tradeGeometry\/canonicalTradeGeometry"/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/tradeGeometryTypes"/g, 'from "./tradeGeometryTypes.mjs"')
+      .replace(/from\s+"@\/lib\/tradeGeometry\/targetSelection"/g, 'from "./targetSelection.mjs"')
+      .replace(/from\s+"@\/lib\/ictCanonical\/canonicalIctIdentity"/g, 'from "./canonicalIctIdentity.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
 }
@@ -58,7 +68,7 @@ const candle = (dateKey, hour, minute, open, high, low, close) => ({
   volume: 100
 });
 
-function validScenario5m() {
+export function validScenario5m() {
   const candles = [];
   // MT5-derived Sunday evening reference for the June 10 trading week.
   candles.push(candle("2026-06-07", 20, 0, 90, 91, 89, 90.5));
@@ -101,7 +111,7 @@ function validScenario5m() {
   return candles;
 }
 
-function validScenario15m() {
+export function validScenario15m() {
   return [
     candle("2026-06-10", 9, 30, 103.8, 106.5, 102, 105.4),
     candle("2026-06-10", 9, 45, 105.4, 105.8, 98, 99),
@@ -148,8 +158,6 @@ async function main() {
   compileForNode();
   assertMt5OnlyReferenceWording();
   const detector = await import(pathToFileURL(path.join(outRoot, "ictSessionRaidReversal.mjs")).href);
-  const contextBuilder = await import(pathToFileURL(path.join(outRoot, "buildCurrentOpportunityContext.mjs")).href);
-  const scanner = await import(pathToFileURL(path.join(outRoot, "detectCurrentOpportunities.mjs")).href);
 
   const base = {
     candles5m: validScenario5m(),
@@ -167,8 +175,8 @@ async function main() {
 
   const narrative = detector.evaluateIctSessionRaidReversal(base);
   assert.equal(narrative.narrativeId, "nasdaq_london_raid_ny_reversal_v1");
-  assert.equal(narrative.status, "complete_bearish_reversal_candidate");
-  assert.equal(narrative.side, "short");
+  assert.equal(narrative.status, "context_only");
+  assert.equal(narrative.side, "scenario");
   assert.ok(narrative.steps.every((step) => step.detected), "all synthetic steps should be detected");
   assert.equal(narrative.referenceLevels.currentPremiumDiscount, "discount");
   assert.equal(narrative.referenceLevels.sundayOpen.price, 90);
@@ -177,54 +185,15 @@ async function main() {
   assert.ok(narrative.entry);
   assert.ok(narrative.invalidation);
   assert.ok(narrative.target);
-  assert.ok(narrative.rr >= 2);
-  assert.equal(narrative.canCreateValidationChainEntry, true);
+  assert.equal(narrative.target, narrative.referenceLevels.sellSideLiquidityTargets.find((target) => target.objectiveId === narrative.selectedTargetObjective?.objectiveId)?.price);
+  assert.equal(narrative.selectedTargetObjective?.policyVersion, "2.0.0-nearest-native-objective");
+  assert.ok(narrative.rr < 2, "nearest native session target must remain selected even when below minimum RR");
+  assert.ok(narrative.tradeConstructionBlockers.includes("rr_below_minimum"));
+  assert.equal(narrative.geometry?.status, "VALID_BELOW_RR_THRESHOLD");
+  assert.equal(narrative.geometry?.actionable, false);
+  assert.equal(narrative.canCreateValidationChainEntry, false);
   assert.match(narrative.bearishScenario, /Sunday Open 90/);
   assertSafe(narrative);
-
-  const packet = {
-    generatedAt: "2026-06-10T16:00:00.000Z",
-    requestedSymbol: "MNQ",
-    brokerSymbol: "USTECH",
-    primaryTimeframe: "5m",
-    htfTimeframes: ["15m", "1h", "4h", "1d"],
-    activeSource: {
-      provider: "mt5_read_only",
-      candleCount: 1000,
-      sourceFingerprint: base.sourceFingerprint,
-      sourceLabel: "MT5 read-only USTECH",
-      sourceStatus: {
-        isMockOrSample: false,
-        isResearchActive: true,
-        isProxyInstrument: true,
-        statusLabel: "MT5 read-only research active"
-      }
-    },
-    marketAnalysisContext: {
-      analysisDepthStatus: "sufficient",
-      analysisTimeframesUsed: ["M5", "M15", "H1", "H4", "D1"],
-      missingTimeframes: [],
-      analysisTimeframes: [{ timeframe: "M5", candleCount: 17799, availableLookbackDays: 88.95 }]
-    },
-    compactSummary: {},
-    sessionRaidReversal: narrative,
-    recommendedSignal: {
-      setup: "no_trade",
-      side: "flat",
-      confidence: 0,
-      summary: "No generic signal.",
-      noTradeReasons: []
-    },
-    approvedProfileDecision: { status: "no_trade" }
-  };
-  const context = contextBuilder.buildCurrentOpportunityContext({ packet });
-  const scan = scanner.detectCurrentOpportunities(context);
-  const sessionOpportunity = scan.opportunities.find((item) => item.strategyId === "nasdaq_london_raid_ny_reversal_v1");
-  assert.ok(sessionOpportunity, "scanner should surface session raid narrative");
-  assert.equal(sessionOpportunity.status, "valid_candidate");
-  assert.equal(sessionOpportunity.classification, "trade_candidate");
-  assert.ok(sessionOpportunity.requiredValidation.includes("replay_required"));
-  assertSafe(scan);
 
   const noAsia = detector.evaluateIctSessionRaidReversal({
     ...base,
@@ -289,12 +258,13 @@ async function main() {
     stepCount: narrative.steps.length,
     rr: narrative.rr,
     sundayOpen: narrative.referenceLevels.sundayOpen?.price,
-    scannerStatus: sessionOpportunity.status,
     authority: narrative.authority
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

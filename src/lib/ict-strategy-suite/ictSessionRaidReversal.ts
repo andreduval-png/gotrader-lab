@@ -1,4 +1,6 @@
 import { buildIctTradeConstruction } from "./ictTradeConstruction";
+import { canonicalFingerprint } from "@/lib/ictCanonical/canonicalIctIdentity";
+import { buildCanonicalTradeGeometry } from "@/lib/tradeGeometry/canonicalTradeGeometry";
 import type {
   IctSessionRaidReversalInput,
   IctSessionRaidReversalLevel,
@@ -7,6 +9,7 @@ import type {
   IctSessionRaidReversalRange,
   IctSessionRaidReversalStep,
   IctSessionRaidReversalStepName,
+  IctSessionRaidReversalTargetObjective,
   IctSessionRaidReversalZone
 } from "./ictSessionRaidReversalTypes";
 
@@ -28,6 +31,16 @@ const safety = {
 };
 
 const defaultZone = "America/New_York";
+export const LONDON_RAID_V1_STRATEGY_VERSION = "1.0.0" as const;
+export const LONDON_RAID_V1_TARGET_POLICY_ID = "nasdaq_london_raid_ny_reversal_v1.native-sellside-liquidity" as const;
+export const LONDON_RAID_V1_TARGET_POLICY_VERSION = "2.0.0-nearest-native-objective" as const;
+const LONDON_RAID_V1_TARGET_CLASSES = new Set([
+  "asia_low",
+  "prior_day_low",
+  "mt5_sunday_open_equilibrium",
+  "london_low",
+  "intraday_swing_low"
+]);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const round = (value: number, decimals = 2) => Number(value.toFixed(decimals));
 const unique = (values: Array<string | undefined>) =>
@@ -228,6 +241,30 @@ const premiumDiscountFor = (lastClose?: number, sundayOpen?: number): IctSession
   return lastClose > sundayOpen ? "premium" : "discount";
 };
 
+export const selectLondonRaidPrimaryTarget = ({
+  objectives,
+  entry,
+  asOf
+}: {
+  objectives: readonly IctSessionRaidReversalTargetObjective[];
+  entry?: number;
+  asOf: string;
+}) => {
+  const asOfMs = Date.parse(asOf);
+  if (!finite(entry) || !Number.isFinite(asOfMs)) return undefined;
+  const nearest = objectives
+    .filter((objective) => objective.policyId === LONDON_RAID_V1_TARGET_POLICY_ID)
+    .filter((objective) => objective.policyVersion === LONDON_RAID_V1_TARGET_POLICY_VERSION)
+    .filter((objective) => LONDON_RAID_V1_TARGET_CLASSES.has(objective.targetClass))
+    .filter((objective) => finite(objective.price) && objective.price! < entry)
+    .filter((objective) => !objective.validFrom || Date.parse(objective.validFrom) <= asOfMs)
+    .slice()
+    .sort((left, right) =>
+      (entry - left.price!) - (entry - right.price!) || left.objectiveId.localeCompare(right.objectiveId)
+    )[0];
+  return nearest?.consumed ? undefined : nearest;
+};
+
 const targetCandidatesForShort = (
   reference: {
     sundayOpen?: IctSessionRaidReversalLevel;
@@ -236,26 +273,55 @@ const targetCandidatesForShort = (
     priorDayLow?: IctSessionRaidReversalLevel;
   },
   candles: CompactCandle[],
-  entry?: number
+  entry: number | undefined,
+  identity: {
+    tradingDate: string;
+    sourceFingerprint?: string;
+    asOf: string;
+  }
 ) => {
   const swingLow = lowestCandle(candles);
-  const targets: Array<IctSessionRaidReversalLevel | undefined> = [
-    reference.asiaRange.low ? { label: "Asia Low", price: reference.asiaRange.low, source: "asia_low" } : undefined,
-    reference.priorDayLow?.price ? { label: "Prior Day Low", price: reference.priorDayLow.price, source: "prior_day_low" } : undefined,
-    reference.sundayOpen?.price ? { label: "MT5-derived Sunday Open", price: reference.sundayOpen.price, source: "mt5_sunday_open_equilibrium" } : undefined,
-    reference.londonRange.low ? { label: "London Low", price: reference.londonRange.low, source: "london_low" } : undefined,
-    swingLow ? { label: "Intraday Swing Low", price: swingLow.low, timestamp: swingLow.timestamp, source: "intraday_swing_low" } : undefined
+  const targets: Array<{ level: IctSessionRaidReversalLevel; validFrom?: string } | undefined> = [
+    reference.asiaRange.low ? { level: { label: "Asia Low", price: reference.asiaRange.low, source: "asia_low" }, validFrom: reference.asiaRange.endTimestamp } : undefined,
+    reference.priorDayLow?.price ? { level: { ...reference.priorDayLow, label: "Prior Day Low", source: "prior_day_low" }, validFrom: reference.priorDayLow.timestamp } : undefined,
+    reference.sundayOpen?.price ? { level: { ...reference.sundayOpen, label: "MT5-derived Sunday Open", source: "mt5_sunday_open_equilibrium" }, validFrom: reference.sundayOpen.timestamp } : undefined,
+    reference.londonRange.low ? { level: { label: "London Low", price: reference.londonRange.low, source: "london_low" }, validFrom: reference.londonRange.endTimestamp } : undefined,
+    swingLow ? { level: { label: "Intraday Swing Low", price: swingLow.low, timestamp: swingLow.timestamp, source: "intraday_swing_low" }, validFrom: swingLow.timestamp } : undefined
   ];
   return targets
-    .filter((item): item is IctSessionRaidReversalLevel => Boolean(item && finite(item.price)))
-    .filter((item) => !finite(entry) || (item.price ?? Number.POSITIVE_INFINITY) < entry!)
-    .sort((left, right) => (right.price ?? Number.NEGATIVE_INFINITY) - (left.price ?? Number.NEGATIVE_INFINITY));
+    .filter((item): item is { level: IctSessionRaidReversalLevel; validFrom?: string } => Boolean(item && finite(item.level.price)))
+    .map(({ level: item, validFrom }): IctSessionRaidReversalTargetObjective => {
+      const sourceFingerprint = identity.sourceFingerprint ?? "source-fingerprint-unavailable";
+      const objectiveId = canonicalFingerprint({
+        strategyId: "nasdaq_london_raid_ny_reversal_v1",
+        targetClass: item.source,
+        price: item.price,
+        validFrom,
+        sessionIdentity: identity.tradingDate,
+        sourceFingerprint
+      });
+      return {
+        ...item,
+        objectiveId,
+        targetClass: item.source,
+        sessionIdentity: identity.tradingDate,
+        validFrom,
+        asOf: identity.asOf,
+        sourceFingerprint,
+        policyId: LONDON_RAID_V1_TARGET_POLICY_ID,
+        policyVersion: LONDON_RAID_V1_TARGET_POLICY_VERSION,
+        consumed: false
+      };
+    });
 };
 
 export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInput): IctSessionRaidReversalNarrative => {
   const timingZone = input.timingZone ?? defaultZone;
-  const candles = sortCandles(input.candles5m);
-  const candles15m = sortCandles(input.candles15m ?? []);
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
+  const evaluationAsOfMs = Date.parse(generatedAt);
+  const causalAt = (candle: CompactCandle) => Number.isFinite(evaluationAsOfMs) && Date.parse(candle.timestamp) <= evaluationAsOfMs;
+  const candles = sortCandles(input.candles5m).filter(causalAt);
+  const candles15m = sortCandles(input.candles15m ?? []).filter(causalAt);
   const requestedSymbol = input.requestedSymbol ?? "MNQ";
   const brokerSymbol = input.brokerSymbol ?? requestedSymbol;
   const sourceProvider = input.sourceProvider ?? "unavailable";
@@ -263,7 +329,6 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
   const primaryTimeframe = input.primaryTimeframe ?? "5m";
   const entryTimeframe = input.entryTimeframe ?? "15m";
   const htfTimeframes = Object.keys(input.htfContext ?? {});
-  const generatedAt = input.generatedAt ?? new Date().toISOString();
   const insufficient = candles.length < 48;
   const last = candles.at(-1);
   const tradingDate = input.tradingDate ?? (last ? tradingDateFor(last.timestamp, timingZone) : undefined);
@@ -294,7 +359,7 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
       },
       steps: [],
       tradeConstructionBlockers: [],
-      blockers: ["insufficient_candles"],
+      blockers: [Number.isFinite(evaluationAsOfMs) ? "insufficient_candles" : "invalid_evaluation_timestamp"],
       missingConditions: ["needs_at_least_48_tactical_candles"],
       bullishScenario: "Insufficient session data; no bullish weekly scenario is inferred.",
       bearishScenario: "Insufficient session data; no bearish delivery scenario is inferred.",
@@ -385,6 +450,7 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
     ...[nyRaid?.high, londonHighCandle?.high, breaker?.high, fairValueGap?.high].filter(finite)
   );
   const invalidation = finite(entry) && finite(rawStop) ? round(rawStop + Math.max(0.25, avgDayRange * 0.1)) : undefined;
+  const targetSelectionAsOf = retrace?.timestamp ?? last?.timestamp ?? generatedAt;
   const sellSideLiquidityTargets = targetCandidatesForShort(
     {
       sundayOpen,
@@ -393,11 +459,10 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
       priorDayLow: level("Prior Day Low", priorLowCandle, priorLowCandle?.low, "prior_trading_day_low", timingZone)
     },
     afterNyOpen.length ? afterNyOpen : dayCandles,
-    entry
+    entry,
+    { tradingDate, sourceFingerprint, asOf: targetSelectionAsOf }
   );
-  const preferredTarget = finite(entry) && finite(invalidation)
-    ? sellSideLiquidityTargets.find((item) => finite(item.price) && (entry - item.price!) / (invalidation - entry) >= 2) ?? sellSideLiquidityTargets.at(-1)
-    : sellSideLiquidityTargets[0];
+  const preferredTarget = selectLondonRaidPrimaryTarget({ objectives: sellSideLiquidityTargets, entry, asOf: targetSelectionAsOf });
   const target = preferredTarget?.price;
   const construction = buildIctTradeConstruction({
     side: "short",
@@ -424,6 +489,63 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
     maxStopDistance: brokerSymbol.toUpperCase().includes("USTECH") ? 120 : undefined,
     authority
   });
+  const geometry = finite(entry) && finite(invalidation) && finite(target) && preferredTarget && sourceFingerprint && retrace
+    ? buildCanonicalTradeGeometry({
+        strategyId: "nasdaq_london_raid_ny_reversal_v1",
+        strategyVersion: LONDON_RAID_V1_STRATEGY_VERSION,
+        parameterHash: "london-raid-v1-session-policy",
+        candidateId: canonicalFingerprint({
+          strategyId: "nasdaq_london_raid_ny_reversal_v1",
+          sourceFingerprint,
+          tradingDate,
+          raid: nyRaid?.timestamp,
+          retrace: retrace.timestamp
+        }),
+        direction: "SHORT",
+        entry: {
+          model: "SESSION_RAID_NATIVE_FVG_RETRACE",
+          intendedPrice: entry,
+          sourceFactId: fairValueGap?.createdAt,
+          ownerTimeframe: entryTimeframe,
+          validFrom: retrace.timestamp,
+          lifecycleStatus: "ENTRY_TOUCHED_NOT_FILLED"
+        },
+        stop: {
+          model: "SESSION_RAID_NATIVE_RAID_EXTREME_BUFFER",
+          price: invalidation,
+          sourceFactId: nyRaid?.timestamp,
+          ownerTimeframe: primaryTimeframe,
+          structuralInvalidation: !construction.blockers.some((blocker) =>
+            ["stop_too_tight", "stop_too_wide", "stop_not_beyond_structure", "invalid_price_order"].includes(blocker)
+          )
+        },
+        targetCandidates: [{
+          targetId: preferredTarget.objectiveId,
+          type: "EXTERNAL_LIQUIDITY",
+          direction: "SHORT",
+          price: target,
+          sourceFactId: preferredTarget.objectiveId,
+          ownerTimeframe: primaryTimeframe,
+          validFrom: preferredTarget.validFrom,
+          consumed: false,
+          internalExternalClass: "EXTERNAL",
+          liquidityClass: preferredTarget.targetClass
+        }],
+        targetPolicy: {
+          policyId: LONDON_RAID_V1_TARGET_POLICY_ID,
+          policyVersion: LONDON_RAID_V1_TARGET_POLICY_VERSION,
+          primaryTargetType: "EXTERNAL_LIQUIDITY",
+          primaryTargetId: preferredTarget.objectiveId,
+          allowedFallbackTargetTypes: []
+        },
+        nearestLiquidityId: preferredTarget.objectiveId,
+        primaryDrawOnLiquidityId: preferredTarget.objectiveId,
+        minimumRequiredRR: 2,
+        sourceFingerprint,
+        asOf: targetSelectionAsOf,
+        researchOnly: false
+      })
+    : undefined;
   const sellSideDelivery = finite(target) && retrace
     ? afterNyOpen.find((candle) => new Date(candle.timestamp) > new Date(retrace.timestamp) && candle.low <= target)
     : undefined;
@@ -538,6 +660,8 @@ export const evaluateIctSessionRaidReversal = (input: IctSessionRaidReversalInpu
     invalidation: construction.stop,
     target: construction.target,
     rr: construction.rr,
+    geometry,
+    selectedTargetObjective: preferredTarget,
     tradeConstructionBlockers: construction.blockers,
     blockers,
     missingConditions: unique([

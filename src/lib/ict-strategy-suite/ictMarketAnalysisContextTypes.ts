@@ -1,5 +1,7 @@
 import type { Candle } from "../types";
 import type { Mt5ReadOnlyDepthSummary } from "../integrations/mt5/mt5ReadOnlyDepth";
+import type { CanonicalDataSnapshot, CanonicalFetchPlan, CanonicalStrategyDataView } from "../canonicalData";
+import type { CanonicalIctFactSnapshot } from "../ictCanonical";
 
 export type IctAnalysisTimeframe = "W1" | "D1" | "H4" | "H1" | "M15" | "M5" | "M1";
 
@@ -74,4 +76,9 @@ export interface IctMarketAnalysisContextBundle {
   displayCandles: Candle[];
   analysisCandlesByTimeframe: Partial<Record<IctAnalysisTimeframe, Candle[]>>;
   depthSummariesByTimeframe: Partial<Record<IctAnalysisTimeframe, Mt5ReadOnlyDepthSummary>>;
+  canonicalFetchPlan?: CanonicalFetchPlan;
+  canonicalDataSnapshot?: CanonicalDataSnapshot;
+  canonicalStrategyViews?: readonly CanonicalStrategyDataView[];
+  sharedCanonicalFactSnapshots?: Readonly<Partial<Record<IctAnalysisTimeframe, CanonicalIctFactSnapshot>>>;
+  dataStageTimingsMs?: Readonly<Partial<Record<"DATA_PLAN" | "MT5_FETCH" | "NORMALIZATION" | "CONTINUITY" | "CANONICAL_FACTS", number>>>;
 }

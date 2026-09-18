@@ -1327,7 +1327,8 @@ export function MissionControlShell({ state }: { state: LabState }) {
           displayLabel,
           higherTimeframes,
           requestedSymbol,
-          timeframe
+          timeframe,
+          deferHigherTimeframesToSharedPlanner: true
         },
         { resolveSnapshot: resolveAndStoreRuntime }
       );

@@ -220,8 +220,11 @@ export interface CanonicalPdLocationFact extends CanonicalIctFactBase {
   pdLocationId: string;
   dealingRangeId: string;
   price: number;
+  referenceTime: string;
   location: "PREMIUM" | "EQUILIBRIUM" | "DISCOUNT";
   equilibriumBandFraction: number;
+  classificationPolicyId: string;
+  classificationPolicyVersion: string;
 }
 
 export interface CanonicalOteZoneFact extends CanonicalIctFactBase {
@@ -251,6 +254,7 @@ export interface CanonicalPdArrayFact extends CanonicalIctFactBase {
   direction: CanonicalDirection;
   priceRange: readonly [number, number];
   sourceFactId: string;
+  dealingRangeId?: string;
 }
 
 export interface CanonicalSessionWindowFact extends CanonicalIctFactBase {

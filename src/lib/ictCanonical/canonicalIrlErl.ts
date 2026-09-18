@@ -65,13 +65,31 @@ export const createCanonicalIrlErlTransition = ({
 }): CanonicalIrlErlTransitionFact => {
   const expectedFrom = transitionType === "IRL_TO_ERL_DELIVERY" ? "INTERNAL" : "EXTERNAL";
   const expectedTo = transitionType === "IRL_TO_ERL_DELIVERY" ? "EXTERNAL" : "INTERNAL";
+  const startedAtMs = Date.parse(startedAt);
+  const confirmedAtMs = Date.parse(confirmedAt);
+  const earliestStartMs = Math.max(Date.parse(dealingRange.validFrom), Date.parse(fromLiquidity.validFrom));
+  const earliestConfirmationMs = Math.max(startedAtMs, Date.parse(toLiquidity.validFrom));
   if (
     fromLiquidity.liquidityClass !== expectedFrom ||
     toLiquidity.liquidityClass !== expectedTo ||
     fromLiquidity.dealingRangeId !== dealingRange.dealingRangeId ||
-    toLiquidity.dealingRangeId !== dealingRange.dealingRangeId
+    toLiquidity.dealingRangeId !== dealingRange.dealingRangeId ||
+    fromLiquidity.symbol !== dealingRange.symbol ||
+    toLiquidity.symbol !== dealingRange.symbol ||
+    fromLiquidity.timeframe !== dealingRange.timeframe ||
+    toLiquidity.timeframe !== dealingRange.timeframe
   ) {
     throw new Error("IRL/ERL transition endpoints must match the transition type and canonical dealing range.");
+  }
+  if (
+    !Number.isFinite(startedAtMs) ||
+    !Number.isFinite(confirmedAtMs) ||
+    !Number.isFinite(earliestStartMs) ||
+    !Number.isFinite(earliestConfirmationMs) ||
+    startedAtMs < earliestStartMs ||
+    confirmedAtMs < earliestConfirmationMs
+  ) {
+    throw new Error("IRL/ERL transition timestamps must be causal relative to the range and endpoint facts.");
   }
   const factId = canonicalFactId("IRL_ERL_TRANSITION", {
     transitionType,

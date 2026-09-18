@@ -14,6 +14,8 @@ assert.equal(valid.geometry.entry.intendedPrice, 101);
 assert.equal(valid.geometry.stop.price, 110);
 assert.equal(valid.geometry.target.price, 80);
 assert.equal(valid.context.deliveryDirection, "BEARISH_DELIVERY");
+assert.equal(valid.deliverySequence.status, "QUALIFIED");
+assert.equal(valid.supportingFactIds.some((id) => /transition/i.test(id)), false);
 assert.equal(valid.authority.executionAuthority, "none");
 
 const consumed = marketMakerFixture("BEARISH");

@@ -79,6 +79,8 @@ const stepDefinitions: Array<{ id: IctActivateMarketStepId; label: string }> = [
 ];
 
 export interface IctActivateMarketPipelineConfig {
+  signal?: AbortSignal;
+  dataAsOf?: string;
   snapshot: ResearchRuntimeSnapshot;
   latestResearchState?: IctLatestResearchState;
   saveLatestSummary?: boolean;
@@ -158,18 +160,22 @@ export const markActivationStepFailed = (steps: IctActivateMarketStep[], id: Ict
     completedAt: now()
   });
 
+let summaryPersistenceFailed = false;
 const defaultSaveLatestSummary = (summary: IctActivateMarketLatestSummary) => {
   latestSummaryMemory = summary;
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
   try {
     window.localStorage.setItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY, JSON.stringify(summary));
+    summaryPersistenceFailed = false;
   } catch {
+    summaryPersistenceFailed = true;
     // Activation summary persistence must never block the operator workflow.
   }
   window.dispatchEvent(new CustomEvent(ICT_ACTIVATE_MARKET_UPDATED_EVENT, { detail: { summary } }));
 };
 
 export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummary | undefined => {
+  if (summaryPersistenceFailed) return latestSummaryMemory;
   if (typeof window === "undefined" || typeof window.localStorage === "undefined") return latestSummaryMemory;
   try {
     const raw = window.localStorage.getItem(ICT_ACTIVATE_MARKET_LATEST_SUMMARY_STORAGE_KEY)
@@ -190,6 +196,9 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
               strategyId: plan.strategyId as IctActivateMarketCandidatePlan["strategyId"],
               strategyVersion: typeof plan.strategyVersion === "string" ? plan.strategyVersion : undefined,
               profileId: typeof plan.profileId === "string" ? plan.profileId : undefined,
+              charterProfile: plan.charterProfile && typeof plan.charterProfile === "object"
+                ? plan.charterProfile as IctActivateMarketCandidatePlan["charterProfile"]
+                : undefined,
               candidateId: String(plan.candidateId),
               candidateState: typeof plan.candidateState === "string" ? plan.candidateState : undefined,
               setupName: typeof plan.setupName === "string" ? plan.setupName : String(plan.strategyId),
@@ -207,8 +216,22 @@ export const readLatestActivateMarketSummary = (): IctActivateMarketLatestSummar
               riskReward: asFiniteNumber(plan.riskReward),
               actionable: plan.actionable === true,
               blockers: asList(plan.blockers),
-              contextIdentity: typeof plan.contextIdentity === "string" ? plan.contextIdentity : undefined
+              contextIdentity: typeof plan.contextIdentity === "string" ? plan.contextIdentity : undefined,
+              prerequisiteIdentity: plan.prerequisiteIdentity && typeof plan.prerequisiteIdentity === "object"
+                ? plan.prerequisiteIdentity as IctActivateMarketCandidatePlan["prerequisiteIdentity"]
+                : undefined
             }))
+        : undefined,
+      contextItems: Array.isArray(parsed.contextItems)
+        ? parsed.contextItems.filter((item: unknown) => Boolean(item && typeof item === "object" && (item as { executable?: unknown }).executable === false))
+        : undefined,
+      charterProfiles: Array.isArray(parsed.charterProfiles)
+        ? parsed.charterProfiles.filter((item: unknown) => Boolean(
+            item &&
+            typeof item === "object" &&
+            (item as { emitsGeometry?: unknown }).emitsGeometry === false &&
+            (item as { executableStrategyAdded?: unknown }).executableStrategyAdded === false
+          ))
         : undefined,
       canonicalSetupConflict: parsed.canonicalSetupConflict === "CONFLICTING_CANONICAL_SETUPS"
         ? "CONFLICTING_CANONICAL_SETUPS"
@@ -528,6 +551,8 @@ const buildLatestSummary = (
           ?? result.currentRead?.currentOpportunitySummary?.topRejected
         )?.candidateId),
   candidatePlans: result.summary.candidatePlans,
+  contextItems: result.summary.contextItems,
+  charterProfiles: result.summary.charterProfiles,
   canonicalSetupConflict: result.summary.canonicalSetupConflict,
   requestedSymbol: result.requestedSymbol,
   brokerSymbol: result.brokerSymbol,
@@ -621,6 +646,7 @@ export async function runIctActivateMarketPipeline(
   callbacks?: IctActivateMarketCallbacks,
   dependencies: IctActivateMarketPipelineDependencies = {}
 ): Promise<IctActivateMarketResult> {
+  config.signal?.throwIfAborted();
   const snapshot = config.snapshot;
   const requestedSymbol = sourceRequestedSymbol(snapshot);
   const brokerSymbol = sourceBrokerSymbol(snapshot);
@@ -647,7 +673,7 @@ export async function runIctActivateMarketPipeline(
     } else {
       // The worker builds the raw multi-timeframe context internally and sends
       // back only the compact packet, avoiding a large structured clone on the UI thread.
-      advisorPacket = await runIctAdvisorPacket({ snapshot });
+      advisorPacket = await runIctAdvisorPacket({ snapshot, signal: config.signal, asOf: config.dataAsOf });
     }
     return advisorPacket;
   };
@@ -656,7 +682,7 @@ export async function runIctActivateMarketPipeline(
     if (!marketAnalysisContextBundle) {
       const buildMarketContext =
         dependencies.buildMarketAnalysisContext ??
-        ((nextSnapshot: ResearchRuntimeSnapshot) => buildIctMarketAnalysisContextBundle({ snapshot: nextSnapshot }));
+        ((nextSnapshot: ResearchRuntimeSnapshot) => buildIctMarketAnalysisContextBundle({ snapshot: nextSnapshot, asOf: config.dataAsOf, signal: config.signal }));
       marketAnalysisContextBundle = await buildMarketContext(snapshot);
     }
     return marketAnalysisContextBundle;
@@ -672,11 +698,14 @@ export async function runIctActivateMarketPipeline(
     runningMessage: string,
     task: () => Promise<string | { message?: string; warning?: string; skipped?: boolean; error?: string }>
   ) => {
+    config.signal?.throwIfAborted();
     steps = markActivationStepRunning(steps, id, runningMessage);
     notify(callbacks, id, steps);
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
     try {
+      config.signal?.throwIfAborted();
       const output = await task();
+      config.signal?.throwIfAborted();
       if (typeof output === "string") {
         steps = markActivationStepCompleted(steps, id, output);
       } else if (output.skipped) {
@@ -690,6 +719,9 @@ export async function runIctActivateMarketPipeline(
         steps = markActivationStepCompleted(steps, id, output.message ?? output.warning, output.warning);
       }
     } catch (error) {
+      config.signal?.throwIfAborted();
+      // The operator must not retry a failed full-context worker on later steps.
+      if (config.signal && id === "load_analysis_m5") throw error;
       const message = errorMessage(error);
       errors.push(message);
       steps = markActivationStepFailed(steps, id, message);
@@ -825,7 +857,9 @@ export async function runIctActivateMarketPipeline(
     currentRead = {
       ...currentRead,
       currentOpportunitySummary: currentOpportunityScan.summary,
-      currentOpportunities: currentOpportunityScan.opportunities.slice(0, 8)
+      currentOpportunities: currentOpportunityScan.opportunities.slice(0, 8),
+      canonicalCandidates: currentOpportunityScan.canonicalCandidates,
+      charterProfiles: currentOpportunityScan.charterProfiles
     };
     advisorPacket.compactSummary.currentOpportunitySummary = currentOpportunityScan.summary;
     saveCurrentOpportunityScan(currentOpportunityScan);
@@ -1027,6 +1061,7 @@ export async function runIctActivateMarketPipeline(
           strategyId: candidate.strategyId,
           strategyVersion: candidate.strategyVersion,
           profileId: candidate.profileId,
+          charterProfile: candidate.charterProfile,
           candidateId: candidate.candidateId,
           candidateState: candidate.candidateState,
           setupName: candidate.setupName,
@@ -1040,7 +1075,8 @@ export async function runIctActivateMarketPipeline(
           riskReward: projection?.theoreticalRR,
           actionable: Boolean(candidate.actionable && projection?.actionable),
           blockers: [...new Set([...(candidate.blockers ?? []), ...(candidate.missingConditions ?? [])])].slice(0, 8),
-          contextIdentity: candidate.contextIdentity
+          contextIdentity: candidate.contextIdentity,
+          prerequisiteIdentity: candidate.prerequisiteIdentity
         };
       });
     return {
@@ -1076,6 +1112,8 @@ export async function runIctActivateMarketPipeline(
         opportunityNextAction: currentRead?.opportunityNextAction,
         currentOpportunitySummary: currentRead?.currentOpportunitySummary,
         candidatePlans,
+        contextItems: currentRead?.ictContextItems,
+        charterProfiles: currentRead?.charterProfiles,
         canonicalSetupConflict: currentRead?.currentOpportunitySummary?.canonicalSetupConflict,
         recognitionTier: currentRead?.recognitionTier,
         scalpStatus: currentRead?.scalpStatus,

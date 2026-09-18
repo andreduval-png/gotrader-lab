@@ -37,8 +37,8 @@ export type MmxmPhase =
   | "RANGE_CONTEXT_ESTABLISHED"
   | "LIQUIDITY_ENGINEERING_FORMING"
   | "LIQUIDITY_EVENT_CONFIRMED"
-  | "DELIVERY_TRANSITION_FORMING"
-  | "DELIVERY_TRANSITION_CONFIRMED"
+  | "DELIVERY_SEQUENCE_FORMING"
+  | "DELIVERY_SEQUENCE_CONFIRMED"
   | "PD_ARRAY_REPRICE_FORMING"
   | "ENTRY_ELIGIBLE"
   | "ACTIVE_DELIVERY"
@@ -61,6 +61,8 @@ export interface MmxmDeliveryContext {
   liquidityClass?: string;
   liquidityOwnerTimeframe?: Timeframe;
   liquidityConsumedAt?: string;
+  sequenceId?: string;
+  displacementId?: string;
   transitionId?: string;
   transitionType?: "IRL_TO_ERL_DELIVERY" | "ERL_TO_IRL_DELIVERY";
   pdArrayId?: string;
@@ -75,7 +77,6 @@ export interface MarketMakerModelParameters {
   setupTimeframe: "5m" | "15m";
   executionTimeframe: "1m" | "5m";
   dealingRangePolicy: "ACTIVE_CANONICAL_RANGE";
-  transitionPolicy: "ERL_TO_IRL_DELIVERY";
   premiumDiscountPolicy: "REQUIRED" | "PREFERRED" | "DISABLED";
   displacementPolicy: "REQUIRED";
   mssPolicy: "OPTIONAL" | "REQUIRED";
@@ -116,6 +117,7 @@ export interface MarketMakerModelCandidate {
   marketTimestamp: string;
   direction: "long" | "short";
   state: MmxmPhase;
+  deliverySequence: MarketMakerDeliverySequence;
   context: MmxmDeliveryContext;
   supportingFactIds: readonly string[];
   transitions: readonly IctCoreStateTransition<MmxmPhase>[];
@@ -160,5 +162,47 @@ export interface IctI3RegistryEntry {
   displayName: string;
   classification: "FRAMEWORK_CONTEXT" | "ACTIVE_RESEARCH";
   executable: boolean;
+  runtimeClassification: "FRAMEWORK_CONTEXT_ONLY" | "LIVE_FACT_COMPLETENESS_UNVERIFIED" | "LIVE_FACT_COMPLETE_EXECUTABLE_OWNER";
   researchValidated: false;
+}
+
+export type MarketMakerDeliverySequenceStatus =
+  | "QUALIFIED"
+  | "WAITING_FOR_RANGE"
+  | "PD_LOCATION_INVALID"
+  | "WAITING_FOR_LIQUIDITY_EVENT"
+  | "WAITING_FOR_DISPLACEMENT"
+  | "WAITING_FOR_PD_ARRAY"
+  | "PD_ARRAY_RANGE_INVALID"
+  | "OBJECTIVE_UNAVAILABLE"
+  | "SEQUENCE_ORDER_INVALID"
+  | "SOURCE_BLOCKED";
+
+export interface MarketMakerDeliverySequence {
+  schemaId: "gotrader.ict.i3.market-maker-delivery-sequence";
+  schemaVersion: "1.0.0";
+  sequenceId: string;
+  strategyFamily: "MARKET_MAKER";
+  direction: MarketMakerDirection;
+  sourceFingerprint: string;
+  dealingRangeId?: string;
+  pdLocationFactId?: string;
+  engineeringLiquidityId?: string;
+  displacementId?: string;
+  pdArrayId?: string;
+  objectiveLiquidityId?: string;
+  orderedTimestamps: {
+    rangeValidFrom?: string;
+    pdLocationValidFrom?: string;
+    liquidityConsumedAt?: string;
+    displacementValidFrom?: string;
+    pdArrayValidFrom?: string;
+    objectiveValidFrom?: string;
+  };
+  status: MarketMakerDeliverySequenceStatus;
+  blockers: readonly string[];
+  supportingFactIds: readonly string[];
+  asOf: string;
+  policyId: "gotrader.ict.i3.market-maker-delivery-sequence";
+  policyVersion: "1.0.0";
 }

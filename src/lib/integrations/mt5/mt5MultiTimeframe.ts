@@ -52,12 +52,14 @@ export async function fetchAndStoreMt5HigherTimeframeSources({
   brokerSymbol,
   limit,
   requestedSymbol,
-  timeframes
+  timeframes,
+  signal
 }: {
   brokerSymbol?: string;
   limit?: number;
   requestedSymbol?: string;
   timeframes?: string[];
+  signal?: AbortSignal;
 }) {
   const settings = loadMt5ReadOnlySettings();
   const resolvedRequestedSymbol = (requestedSymbol || settings.requestedSymbol || "MNQ").trim();
@@ -70,6 +72,7 @@ export async function fetchAndStoreMt5HigherTimeframeSources({
   const fetched: Mt5HigherTimeframeSourceSummary[] = [];
 
   for (const timeframeInput of selectedTimeframes) {
+    signal?.throwIfAborted();
     const timeframe = sanitizeMt5ReadOnlyTimeframe(timeframeInput) as Timeframe;
     const candlesResponse = await fetchMt5ReadOnlyCandles(
       {
@@ -78,8 +81,10 @@ export async function fetchAndStoreMt5HigherTimeframeSources({
         symbol: resolvedRequestedSymbol,
         timeframe
       },
-      settings
+      settings,
+      signal
     );
+    signal?.throwIfAborted();
     const feed = createActiveMt5ReadOnlyCandleFeed({
       candlesResponse,
       gotraderSymbol: resolvedRequestedSymbol,
@@ -124,5 +129,6 @@ export async function fetchAndStoreMt5HigherTimeframeSources({
     });
   }
 
+  signal?.throwIfAborted();
   return saveMt5HigherTimeframeSourceSummaries([...existing, ...fetched]);
 }

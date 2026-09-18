@@ -103,6 +103,8 @@ export interface Mt5ActivateMarketSourceResult {
 }
 
 export interface EnsureMt5CanonicalResearchSourceOptions {
+  signal?: AbortSignal;
+  deferHigherTimeframesToSharedPlanner?: boolean;
   brokerSymbol?: string;
   candleLimit?: number;
   displayLabel?: string;
@@ -247,6 +249,7 @@ export async function ensureMt5CanonicalResearchSource(
   options: EnsureMt5CanonicalResearchSourceOptions = {},
   dependencies: EnsureMt5CanonicalResearchSourceDependencies = {}
 ): Promise<Mt5ActivateMarketSourceResult> {
+  options.signal?.throwIfAborted();
   const deps = {
     checkStatus: dependencies.checkStatus ?? checkMt5ReadOnlyStatus,
     fetchCandleFeed: dependencies.fetchCandleFeed ?? fetchAndStoreMt5ReadOnlyCandleFeed,
@@ -283,7 +286,8 @@ export async function ensureMt5CanonicalResearchSource(
     candleLimit
   });
 
-  const status = await deps.checkStatus(settings);
+  const status = await deps.checkStatus(settings, options.signal);
+  options.signal?.throwIfAborted();
   if (status.connectionStatus !== "connected" && status.connectionStatus !== "degraded") {
     return result({
       failedStep: "wrapper_status",
@@ -305,7 +309,8 @@ export async function ensureMt5CanonicalResearchSource(
     });
   }
 
-  const symbols = await deps.fetchSymbols(settings);
+  const symbols = await deps.fetchSymbols(settings, options.signal);
+  options.signal?.throwIfAborted();
   if (!brokerSymbolExists(symbols.symbols, brokerSymbol)) {
     return result({
       failedStep: "symbol_check",
@@ -317,7 +322,8 @@ export async function ensureMt5CanonicalResearchSource(
     });
   }
 
-  const quote = await deps.fetchQuote({ symbol: requestedSymbol, brokerSymbol }, settings);
+  const quote = await deps.fetchQuote({ symbol: requestedSymbol, brokerSymbol }, settings, options.signal);
+  options.signal?.throwIfAborted();
   if (!(quote.mid || quote.bid || quote.ask)) {
     return result({
       failedStep: "quote",
@@ -338,8 +344,10 @@ export async function ensureMt5CanonicalResearchSource(
     gotraderTimeframe: timeframe,
     limit: candleLimit,
     settings,
-    usageMode: "research_source"
+    usageMode: "research_source",
+    signal: options.signal
   });
+  options.signal?.throwIfAborted();
   if (!feed.candleCount) {
     return result({
       failedStep: "candles",
@@ -355,19 +363,25 @@ export async function ensureMt5CanonicalResearchSource(
 
   let htfSources: Mt5HigherTimeframeSourceSummary[] = [];
   let htfWarning: string | undefined;
-  if (higherTimeframes.length) {
+  if (higherTimeframes.length && !options.deferHigherTimeframesToSharedPlanner) {
     try {
       htfSources = await deps.fetchHigherTimeframes({
         brokerSymbol,
         limit: candleLimit,
         requestedSymbol,
-        timeframes: higherTimeframes
+        timeframes: higherTimeframes,
+        signal: options.signal
       });
     } catch (error) {
+      options.signal?.throwIfAborted();
       htfWarning = error instanceof Error ? error.message : "Higher timeframe MT5 context fetch failed.";
     }
   }
-  const higherTimeframeSummary = htfSummary({ requestedTimeframes: higherTimeframes, sources: htfSources, warning: htfWarning });
+  const higherTimeframeSummary = htfSummary({ requestedTimeframes: higherTimeframes, sources: htfSources,
+    warning: options.deferHigherTimeframesToSharedPlanner
+      ? "Higher-timeframe history is deferred to the cycle-local canonical fetch planner."
+      : htfWarning });
+  options.signal?.throwIfAborted();
 
   if (!feed.activeForChart) {
     return result({
@@ -412,6 +426,7 @@ export async function ensureMt5CanonicalResearchSource(
   }
 
   const snapshot = await deps.resolveSnapshot();
+  options.signal?.throwIfAborted();
   return result({
     feed,
     higherTimeframes: higherTimeframeSummary,

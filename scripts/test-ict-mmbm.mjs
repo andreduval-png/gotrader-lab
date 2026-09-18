@@ -16,7 +16,12 @@ assert.equal(valid.geometry.entry.intendedPrice, 99);
 assert.equal(valid.geometry.stop.price, 90);
 assert.equal(valid.geometry.target.price, 120);
 assert.equal(valid.context.dealingRangeId, "range-1");
-assert.equal(valid.context.transitionId, "transition");
+assert.equal(valid.deliverySequence.status, "QUALIFIED");
+assert.equal(valid.context.sequenceId, valid.deliverySequence.sequenceId);
+assert.equal(valid.deliverySequence.engineeringLiquidityId, "engineering");
+assert.equal(valid.deliverySequence.displacementId, "displacement");
+assert.equal(valid.deliverySequence.pdArrayId, "pd-array");
+assert.equal(marketMakerFixture("BULLISH").facts.some((fact) => fact.factType === "IRL_ERL_TRANSITION"), false);
 assert.equal(valid.authority.executionAuthority, "none");
 assert.equal(valid.researchValidated, false);
 
@@ -24,9 +29,11 @@ const noEvent = marketMakerFixture("BULLISH");
 noEvent.facts = noEvent.facts.filter((fact) => fact.factId !== "engineering");
 assert.equal(ict.evaluateMarketMakerBuyModel(noEvent).state, "LIQUIDITY_ENGINEERING_FORMING");
 
-const noTransition = marketMakerFixture("BULLISH");
-noTransition.facts = noTransition.facts.filter((fact) => fact.factId !== "transition");
-assert.equal(ict.evaluateMarketMakerBuyModel(noTransition).state, "DELIVERY_TRANSITION_FORMING");
+const noDisplacement = marketMakerFixture("BULLISH");
+noDisplacement.facts = noDisplacement.facts.filter((fact) => fact.factId !== "displacement");
+const noDisplacementResult = ict.evaluateMarketMakerBuyModel(noDisplacement);
+assert.equal(noDisplacementResult.state, "DELIVERY_SEQUENCE_FORMING");
+assert(noDisplacementResult.blockers.some((blocker) => /displacement/i.test(blocker)));
 
 const noPdArray = marketMakerFixture("BULLISH");
 noPdArray.facts = noPdArray.facts.filter((fact) => fact.factId !== "pd-array");
@@ -54,6 +61,8 @@ const missedResult = ict.evaluateMarketMakerBuyModel(missed);
 assert.equal(missedResult.state, "ENTRY_MISSED");
 assert.equal(missedResult.geometry.entry.intendedPrice, 99);
 assert.equal(missedResult.geometry.status, "ENTRY_MISSED");
+
+assert.equal(valid.supportingFactIds.some((id) => /transition/i.test(id)), false);
 
 console.log(JSON.stringify({
   status: "passed",

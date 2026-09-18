@@ -323,6 +323,7 @@ export const adaptSessionRaidNativeGeometry = ({
   profileId?: string;
   researchOnly: boolean;
 }): CanonicalTradeGeometry | undefined => {
+  if (narrative.geometry) return narrative.geometry;
   const candidate = {
     side: narrative.side === "short" ? "short" : "flat",
     entry: narrative.entry,
@@ -340,7 +341,8 @@ export const adaptSessionRaidNativeGeometry = ({
     raid: narrative.steps.find((step) => step.step === "ny_london_high_raid")?.timestamp,
     retrace: narrative.steps.find((step) => step.step === "fvg_retrace")?.timestamp
   });
-  const targetId = canonicalFingerprint({ candidateId, target: narrative.target, role: "session-raid-sellside" });
+  const selectedObjective = narrative.selectedTargetObjective;
+  const targetId = selectedObjective?.objectiveId ?? canonicalFingerprint({ candidateId, target: narrative.target, role: "session-raid-sellside" });
   return buildCanonicalTradeGeometry({
     strategyId,
     strategyVersion,
@@ -370,15 +372,15 @@ export const adaptSessionRaidNativeGeometry = ({
       type: "EXTERNAL_LIQUIDITY",
       direction: "SHORT",
       price: narrative.target!,
-      sourceFactId: narrative.referenceLevels.sellSideLiquidityTargets[0]?.source,
+      sourceFactId: selectedObjective?.objectiveId ?? narrative.referenceLevels.sellSideLiquidityTargets[0]?.source,
       ownerTimeframe: narrative.primaryTimeframe,
       validFrom: narrative.steps.find((step) => step.step === "fvg_retrace")?.timestamp,
       consumed: false,
       internalExternalClass: "EXTERNAL"
     }],
     targetPolicy: {
-      policyId: `${strategyId}.native-sellside-liquidity`,
-      policyVersion: strategyVersion,
+      policyId: selectedObjective?.policyId ?? `${strategyId}.native-sellside-liquidity`,
+      policyVersion: selectedObjective?.policyVersion ?? strategyVersion,
       primaryTargetType: "EXTERNAL_LIQUIDITY",
       primaryTargetId: targetId,
       allowedFallbackTargetTypes: []

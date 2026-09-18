@@ -3,6 +3,7 @@ export type OperatorCycleStatus =
   | "running"
   | "stopping"
   | "completed"
+  | "completed_with_blockers"
   | "blocked"
   | "failed"
   | "canceled";
@@ -11,6 +12,8 @@ export type OperatorCycleStage =
   | "idle"
   | "activating_source"
   | "building_market_read"
+  | "owner_research"
+  | "research_only"
   | "running_research"
   | "finalizing"
   | "complete";
@@ -44,6 +47,7 @@ export interface OperatorCycleState {
   lastError?: string;
   sourceFingerprint?: string;
   latestInsight?: OperatorInsightSummary;
+  ownerResearch?: import("@/lib/operatorResearch").OperatorResearchCycleSummary;
   authority: OperatorAuthority;
   autoApplyAllowed: false;
   researchOnly: true;
@@ -174,6 +178,8 @@ export interface OperatorCandidatePlanSummary {
   strategyId: string;
   strategyVersion?: string;
   profileId?: string;
+  charterModelNumber?: number;
+  charterProfileId?: string;
   candidateId: string;
   candidateState?: string;
   setup: string;
@@ -191,6 +197,56 @@ export interface OperatorCandidatePlanSummary {
   contextIdentity?: string;
 }
 
+export interface OperatorMarketContextSummary {
+  contextId: string;
+  artifactId: string;
+  label: string;
+  classification: string;
+  state: string;
+  sourceBlocked: boolean;
+  detail: string;
+  blocker?: string;
+  executable: false;
+}
+
+export interface OperatorCharterProfileSummary {
+  charterModelNumber: number;
+  charterProfileId: string;
+  label: string;
+  classification: string;
+  status: string;
+  owner: string;
+  ownerCandidateId?: string;
+  detail: string;
+  blocker?: string;
+  emitsGeometry: false;
+  executableStrategyAdded: false;
+}
+
+export interface OperatorResearchCoverageRow {
+  strategyId: string;
+  label: string;
+  lane: "live_owner" | "research_only";
+  tier: string;
+  status: import("@/lib/operatorResearch").CanonicalOwnerResearchTaskStatus | "NOT_STARTED";
+  blocker?: string;
+  evidenceStatus: "CURRENT" | "NO_EVIDENCE" | "BLOCKED";
+  lastRunAt?: string;
+  durationMs?: number;
+  evaluationsCompleted: number;
+  candidateCount: number;
+  fillCount: number;
+  outcomeCount: number;
+  currentPartition?: string;
+  validationStatus: import("@/lib/ownerValidation").OwnerValidationStatus;
+  readinessStatus: import("@/lib/ownerValidation").OwnerReadinessStatus;
+  technicalStatus: import("@/lib/ownerValidationPolicy").OwnerTechnicalValidationStatus;
+  performanceStatus: import("@/lib/ownerValidationPolicy").OwnerPerformanceValidationStatus;
+  policyEvidenceStatus: import("@/lib/ownerValidationPolicy").OwnerAccumulationEvidenceStatus;
+  validationBlocker?: string;
+  evidenceAgeMs?: number;
+}
+
 export interface OperatorConsoleSnapshot {
   generatedAt: string;
   source: OperatorSourceSummary;
@@ -202,6 +258,22 @@ export interface OperatorConsoleSnapshot {
   memory: OperatorMemorySummary;
   researchPlan: OperatorResearchPlanSummary;
   candidatePlans: OperatorCandidatePlanSummary[];
+  marketContexts: OperatorMarketContextSummary[];
+  charterProfiles: OperatorCharterProfileSummary[];
+  researchCoverage: {
+    globalStatus: import("@/lib/operatorResearch").OperatorResearchGlobalStatus;
+    validationGlobalStatus: import("@/lib/ownerValidation").OwnerValidationGlobalStatus;
+    technicallyValidatedCount: number;
+    performanceValidatedCount: number;
+    performancePolicyDefinedCount: number;
+    policyRequiredCount: number;
+    researchReadyCount: number;
+    liveOwnerCount: 5;
+    rows: OperatorResearchCoverageRow[];
+    researchOnlyRows: OperatorResearchCoverageRow[];
+    livePlanPublished: boolean;
+    timeToLivePlanMs?: number;
+  };
   canonicalSetupConflict: "NONE" | "CONFLICTING_CANONICAL_SETUPS";
   decisions: OperatorDecision[];
   authority: OperatorAuthority;

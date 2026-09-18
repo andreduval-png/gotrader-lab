@@ -11,6 +11,7 @@ import type { Candle } from "../types";
 import type { Timeframe } from "../types";
 import { buildIctCanonicalRuntimeInput, evaluateIctCoreRuntimeCandidates } from "../ictI2";
 import { evaluateIctMarketMakerRuntimeCandidates } from "../ictI3";
+import { buildIctRuntimeContextSnapshot } from "../ictContextRuntime";
 import {
   buildCurrentOpportunityContext,
   detectCurrentOpportunities
@@ -1157,10 +1158,25 @@ export async function buildIctAdvisorPacketFromRuntime(
     } as Partial<Record<Timeframe, Candle[]>>,
     symbol: requestedSymbol,
     asOf: coreIctAsOf,
-    sourceFingerprint: coreIctSourceFingerprint
+    sourceFingerprint: coreIctSourceFingerprint,
+    factSnapshotsByTimeframe: {
+      "5m": options.marketAnalysisContextBundle?.sharedCanonicalFactSnapshots?.M5,
+      "15m": options.marketAnalysisContextBundle?.sharedCanonicalFactSnapshots?.M15,
+      "1h": options.marketAnalysisContextBundle?.sharedCanonicalFactSnapshots?.H1,
+      "4h": options.marketAnalysisContextBundle?.sharedCanonicalFactSnapshots?.H4,
+      "1d": options.marketAnalysisContextBundle?.sharedCanonicalFactSnapshots?.D1
+    }
   });
   const coreIctCandidates = evaluateIctCoreRuntimeCandidates(canonicalRuntimeInput);
   const marketMakerCandidates = evaluateIctMarketMakerRuntimeCandidates(canonicalRuntimeInput);
+  const ictContextRuntime = buildIctRuntimeContextSnapshot({
+    facts: canonicalRuntimeInput.facts,
+    asOf: canonicalRuntimeInput.asOf,
+    sourceFingerprint: canonicalRuntimeInput.sourceFingerprint,
+    narrative: canonicalRuntimeInput.narrative,
+    observedPrice: ifvgDetectorCandles.at(-1)?.close,
+    observedAt: ifvgDetectorCandles.at(-1)?.timestamp
+  });
   const packet: IctAdvisorPacket = {
     packetId: createId("ict_advisor_packet"),
     source: "gotrader_ict_strategy_suite",
@@ -1254,6 +1270,7 @@ export async function buildIctAdvisorPacketFromRuntime(
       ifvgFreshRetestV3,
       coreIctCandidates,
       marketMakerCandidates,
+      ictContextRuntime,
       hydrationSource: analysis.hydrationSource,
       hydrationWarning: analysis.hydrationWarning,
       noTradeReasonCount: recommendedSignal.noTradeReasons.length + (analysis.hydrationWarning ? 1 : 0)

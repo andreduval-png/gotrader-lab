@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { createServer } from "vite";
+import fs from "node:fs/promises";
 import net from "node:net";
 import { chromium } from "@playwright/test";
 
@@ -30,14 +31,15 @@ const waitForServer = async (url) => {
 
 const port = await freePort();
 const baseUrl = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-  cwd: process.cwd(),
-  stdio: "ignore",
-  windowsHide: true
+const server = await createServer({
+  cacheDir: ".gotrader/p2-vite-cache",
+  server: { host: "127.0.0.1", port, strictPort: true },
+  plugins: [{ name: "isolate-acceptance-network", configResolved(config) { config.server.proxy = {}; } }]
 });
 
 let browser;
 try {
+  await server.listen();
   await waitForServer(`${baseUrl}/dashboard`);
   browser = await chromium.launch({ headless: true });
 
@@ -63,6 +65,11 @@ try {
 
   for (const viewport of [{ name: "desktop", width: 1440, height: 1100 }, { name: "mobile", width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport });
+    await context.route("**/*", (route) => {
+      const url = new URL(route.request().url());
+      return url.origin === baseUrl && !url.pathname.startsWith("/gotrader-research-mcp")
+        ? route.continue() : route.abort();
+    });
     const page = await context.newPage();
     const errors = [];
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
@@ -73,21 +80,32 @@ try {
 
     const conflict = await page.getByTestId("operator-canonical-conflict").innerText();
     const candidates = await page.getByTestId("operator-canonical-candidates").innerText();
+    const contexts = await page.getByTestId("operator-market-contexts").innerText();
     assert.match(conflict, /IFVG.*LONG/i);
     assert.match(conflict, /ICT 2022.*SHORT/i);
     assert.match(candidates, /E 95\.0000[\s\S]*S 93\.9095[\s\S]*T 98\.6000/);
     assert.match(candidates, /E 100\.50[\s\S]*S 105\.00[\s\S]*T 89\.0000[\s\S]*2\.56R/);
+    assert.match(contexts, /Unicorn[\s\S]*OTE[\s\S]*Opening Gap/i);
+    assert.match(contexts, /Context only/i);
+    const charter = page.getByTestId("operator-charter-profiles");
+    assert.equal(await charter.getAttribute("open"), null, "profile inventory should be collapsed by default");
+    await charter.locator("summary").click();
+    assert.equal(await charter.locator("[data-charter-model]").count(), 12);
+    assert.match(await charter.innerText(), /Owner attribution only/);
+    assert.match(await charter.locator('[data-charter-model="5"]').innerText(), /source blocked/i);
     assert.equal(await page.getByTestId("operator-plan-probability").count(), 0);
     assert.equal(await page.getByText("Conflict / context only", { exact: true }).count(), 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     const trace = await page.evaluate(() => window.__GOTRADER_INT3A2_TRACE__);
     requiredTrace.forEach((step) => assert.ok(trace.includes(step), `missing runtime trace step ${step}`));
     assert.deepEqual(errors, []);
+    await fs.mkdir(".gotrader/p2-browser", { recursive: true });
+    await page.screenshot({ path: `.gotrader/p2-browser/${viewport.name}.png`, fullPage: true });
     await context.close();
   }
 
   console.log(JSON.stringify({ status: "passed", scenario: "int3a2-live-conflict", viewports: ["desktop", "mobile"], authority: "none/none/none" }, null, 2));
 } finally {
   await browser?.close();
-  server.kill();
+  await server.close();
 }

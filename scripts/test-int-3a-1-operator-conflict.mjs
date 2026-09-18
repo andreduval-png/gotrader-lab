@@ -16,6 +16,7 @@ const js = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove }
 }).outputText
   .replace(/from\s+["']@\/lib\/tradeGeometry["']/g, 'from "./tradeGeometry.mjs"')
+  .replace(/from\s+["']@\/lib\/researchCoverage["']/g, 'from "./researchCoverage.mjs"')
   .replace(/from\s+["']\.\/operatorConsoleTypes["']/g, 'from "./operatorConsoleTypes.mjs"');
 fs.writeFileSync(path.join(out, "buildOperatorConsoleSnapshot.mjs"), js, "utf8");
 fs.writeFileSync(path.join(out, "tradeGeometry.mjs"), `export const projectCanonicalTradeGeometry = (geometry) => geometry ? {
@@ -32,6 +33,13 @@ fs.writeFileSync(path.join(out, "tradeGeometry.mjs"), `export const projectCanon
 fs.writeFileSync(path.join(out, "operatorConsoleTypes.mjs"), `export const OPERATOR_AUTHORITY = {
   executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none"
 };\n`, "utf8");
+fs.writeFileSync(path.join(out, "researchCoverage.mjs"), `export const CANONICAL_LIVE_RESEARCH_OWNER_ORDER = [
+  "ifvg_fresh_retest_v3_research",
+  "ict_2022_model_v1",
+  "ict_market_maker_buy_model_v1",
+  "ict_market_maker_sell_model_v1",
+  "nasdaq_london_raid_ny_reversal_v1"
+];\n`, "utf8");
 
 const { buildOperatorConsoleSnapshot } = await import(`${pathToFileURL(path.join(out, "buildOperatorConsoleSnapshot.mjs")).href}?v=${Date.now()}`);
 const authority = { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none" };

@@ -9,8 +9,16 @@ import ts from "typescript";
 const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
 const mt5Root = path.join(projectRoot, "src", "lib", "integrations", "mt5");
+const canonicalDataRoot = path.join(projectRoot, "src", "lib", "canonicalData");
+const geometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "ict-current-read-flow-test");
 const sourceFiles = [
+  { root: canonicalDataRoot, file: "canonicalDataTypes.ts" },
+  { root: canonicalDataRoot, file: "canonicalDataRequirements.ts" },
+  { root: canonicalDataRoot, file: "canonicalDataPlanner.ts" },
+  { root: geometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: geometryRoot, file: "targetSelection.ts" },
+  { root: geometryRoot, file: "canonicalTradeGeometry.ts" },
   { root: sourceRoot, file: "ictStrategySuiteTypes.ts" },
   { root: sourceRoot, file: "ictAdvisorTypes.ts" },
   { root: sourceRoot, file: "ictSessionNarrativeTypes.ts" },
@@ -111,12 +119,35 @@ function compileSuiteForNode() {
       .replace(/from\s+'..\/currentOpportunity'/g, "from './currentOpportunityStub.mjs'")
       .replace(/from\s+"..\/ictI2"/g, 'from "./ictI2Stub.mjs"')
       .replace(/from\s+'..\/ictI2'/g, "from './ictI2Stub.mjs'")
+      .replace(/from\s+"..\/ictI3"/g, 'from "./ictI3Stub.mjs"')
+      .replace(/from\s+'..\/ictI3'/g, "from './ictI3Stub.mjs'")
+      .replace(/from\s+"..\/ictContextRuntime"/g, 'from "./ictContextRuntimeStub.mjs"')
+      .replace(/from\s+'..\/ictContextRuntime'/g, "from './ictContextRuntimeStub.mjs'")
+      .replace(/from\s+"@\/lib\/ictContextRuntime"/g, 'from "./ictContextRuntimeStub.mjs"')
+      .replace(/from\s+'@\/lib\/ictContextRuntime'/g, "from './ictContextRuntimeStub.mjs'")
       .replace(/from\s+"..\/forwardScenario"/g, 'from "./forwardScenarioStub.mjs"')
       .replace(/from\s+'..\/forwardScenario'/g, "from './forwardScenarioStub.mjs'")
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/targetSelection["']/g, 'from "./targetSelection.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/tradeGeometryTypes["']/g, 'from "./tradeGeometryTypes.mjs"')
       .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "./tradeGeometryStub.mjs"')
-      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'");
+      .replace(/from\s+'@\/lib\/tradeGeometry'/g, "from './tradeGeometryStub.mjs'")
+      .replace(/from\s+["']\.\.\/canonicalData["']/g, 'from "./canonicalDataFacade.mjs"')
+      .replace(/from\s+["']@\/lib\/ictCanonical\/canonicalIctIdentity["']/g, 'from "./canonicalIdentityStub.mjs"')
+      .replace(/from\s+["']@\/lib\/ictCanonical\/canonicalFactBuilder["']/g, 'from "./canonicalFactBuilderStub.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
+  fs.writeFileSync(path.join(outRoot, "canonicalDataFacade.mjs"), `
+export * from "./canonicalDataRequirements.mjs";
+export * from "./canonicalDataPlanner.mjs";
+`, "utf8");
+  fs.writeFileSync(path.join(outRoot, "canonicalIdentityStub.mjs"), `
+export const canonicalFingerprint = (value) => "fixture:" + Buffer.from(JSON.stringify(value)).toString("base64url");
+export const fingerprintCanonicalSource = (candles) => canonicalFingerprint(candles.map((item) => [item.id, item.timestamp, item.close]));
+`, "utf8");
+  fs.writeFileSync(path.join(outRoot, "canonicalFactBuilderStub.mjs"), `
+export const buildCanonicalIctFactSnapshot = (input) => ({ asOf: input.asOf, sourceFingerprint: input.sourceFingerprint, facts: [] });
+`, "utf8");
   fs.writeFileSync(
     path.join(outRoot, "candleSourcesStub.mjs"),
     `export async function loadCanonicalCandleSource(sourceId) {
@@ -141,7 +172,30 @@ export const detectCurrentOpportunities = () => globalThis.__ICT_CURRENT_READ_OP
     "utf8"
   );
   fs.writeFileSync(path.join(outRoot, "forwardScenarioStub.mjs"), "export const buildForwardScenarioMapFromCurrentRead = () => undefined;\n", "utf8");
-  fs.writeFileSync(path.join(outRoot, "ictI2Stub.mjs"), "export const buildIctCoreRuntimeCandidates = () => undefined;\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictI2Stub.mjs"), `export const buildIctCanonicalRuntimeInput = (input) => ({
+  facts: [],
+  asOf: input.asOf,
+  sourceFingerprint: input.sourceFingerprint,
+  symbol: input.symbol,
+  timeframe: "5m",
+  candlesByTimeframe: input.candlesByTimeframe,
+  narrative: { structural: "neutral", intermediate: "neutral", execution: "neutral", liquidityPath: "unresolved", structuralTimeframe: "1h", intermediateTimeframe: "15m", executionTimeframe: "5m", policyId: "test-only", policyVersion: "1" }
+});
+export const evaluateIctCoreRuntimeCandidates = () => undefined;
+`, "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictI3Stub.mjs"), "export const evaluateIctMarketMakerRuntimeCandidates = () => undefined;\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "ictContextRuntimeStub.mjs"), `export const buildIctRuntimeContextSnapshot = (input) => ({
+  version: "gotrader.ict-context-runtime.v1",
+  generatedAt: input.asOf,
+  sourceFingerprint: input.sourceFingerprint,
+  items: [],
+  counts: { executableStrategiesAdded: 0, frameworks: 0, contexts: 0, policies: 0, sourceBlocked: 0 },
+  candidateCount: 0,
+  executionAllowed: false,
+  researchValidated: false,
+  authority: { executionAuthority: "none", brokerAuthority: "none", readinessOverrideAuthority: "none", productionAdoptionAllowed: false, canCreateEvidence: false, canApproveReadiness: false, canApplyCalibration: false, canCreateTradeIntent: false }
+});
+`, "utf8");
   fs.writeFileSync(path.join(outRoot, "ictDetectorCanonicalGeometry.mjs"), "export const adaptIfvgNativeGeometry = () => undefined;\n", "utf8");
   fs.writeFileSync(path.join(outRoot, "tradeGeometryStub.mjs"), "export const projectCanonicalTradeGeometry = () => undefined;\n", "utf8");
   fs.writeFileSync(

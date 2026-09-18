@@ -7,6 +7,8 @@ import ts from "typescript";
 
 const projectRoot = process.cwd();
 const ictRoot = path.join(projectRoot, "src", "lib", "ict-strategy-suite");
+const canonicalRoot = path.join(projectRoot, "src", "lib", "ictCanonical");
+const geometryRoot = path.join(projectRoot, "src", "lib", "tradeGeometry");
 const outRoot = path.join(projectRoot, ".gotrader", "session-raid-reversal-v2-filtered");
 
 const bridgeUrl = (process.env.MT5_READONLY_BRIDGE_URL || "http://127.0.0.1:7341").replace(/\/$/, "");
@@ -38,7 +40,11 @@ const sourceFiles = [
   { root: ictRoot, file: "ictSessionRaidReversalTypes.ts" },
   { root: ictRoot, file: "ictSessionRaidReversal.ts" },
   { root: ictRoot, file: "ictSessionRaidReversalV2Types.ts" },
-  { root: ictRoot, file: "ictSessionRaidReversalV2.ts" }
+  { root: ictRoot, file: "ictSessionRaidReversalV2.ts" },
+  { root: canonicalRoot, file: "canonicalIctIdentity.ts" },
+  { root: geometryRoot, file: "tradeGeometryTypes.ts" },
+  { root: geometryRoot, file: "targetSelection.ts" },
+  { root: geometryRoot, file: "canonicalTradeGeometry.ts" }
 ];
 
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -60,8 +66,16 @@ function compileForNode() {
       fileName: sourcePath
     }).outputText;
     const rewritten = transpiled
+      .replace(
+        /import \{ CANONICAL_ICT_NONE_AUTHORITY \} from "@\/lib\/ictCanonical\/canonicalIctTypes";/g,
+        'const CANONICAL_ICT_NONE_AUTHORITY = { execution: "none", broker: "none", production: "none" };'
+      )
       .replace(/from\s+"\.\/([^"]+)"/g, 'from "./$1.mjs"')
-      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'");
+      .replace(/from\s+'\.\/([^']+)'/g, "from './$1.mjs'")
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/canonicalTradeGeometry["']/g, 'from "./canonicalTradeGeometry.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/targetSelection["']/g, 'from "./targetSelection.mjs"')
+      .replace(/from\s+["']@\/lib\/tradeGeometry\/tradeGeometryTypes["']/g, 'from "./tradeGeometryTypes.mjs"')
+      .replace(/from\s+["']@\/lib\/ictCanonical\/canonicalIctIdentity["']/g, 'from "./canonicalIctIdentity.mjs"');
     fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
   }
 }

@@ -3,6 +3,7 @@ import type { IctActivateMarketLatestSummary } from "@/lib/ict-strategy-suite/ic
 import type { ResearchRuntimeSnapshot } from "@/lib/runtime";
 import type { ValidationChainEntry } from "@/lib/validationChain";
 import { projectCanonicalTradeGeometry } from "@/lib/tradeGeometry";
+import { CANONICAL_LIVE_RESEARCH_OWNER_ORDER, type CanonicalLiveResearchOwnerId } from "@/lib/researchCoverage";
 
 import {
   OPERATOR_AUTHORITY,
@@ -73,11 +74,125 @@ const emptyMemory = (): OperatorMemorySummary => ({
   gbrainDeliveryEnabled: false
 });
 
+const OWNER_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  ifvg_fresh_retest_v3_research: "IFVG v3",
+  ict_2022_model_v1: "ICT 2022",
+  ict_market_maker_buy_model_v1: "MMBM",
+  ict_market_maker_sell_model_v1: "MMSM",
+  nasdaq_london_raid_ny_reversal_v1: "London Raid v1",
+  ifvg_fresh_retest_v4_candidate: "IFVG v4"
+});
+
+const researchCoverageFor = (cycle: OperatorCycleState): OperatorConsoleSnapshot["researchCoverage"] => {
+  const summary = cycle.ownerResearch;
+  const validation = summary?.ownerValidation;
+  const policySummary = validation?.policySummary;
+  const validationByOwner = new Map(validation?.owners.map((owner) => [owner.ownerStrategyId, owner]) ?? []);
+  const readinessByOwner = new Map(validation?.readiness.map((owner) => [owner.ownerStrategyId, owner]) ?? []);
+  const policyByOwner = new Map(policySummary?.owners.map((owner) => [owner.ownerStrategyId, owner]) ?? []);
+  const rowFor = (
+    task: NonNullable<OperatorCycleState["ownerResearch"]>["tasks"][number],
+    lane: "live_owner" | "research_only"
+  ) => {
+    const ownerValidation = validationByOwner.get(task.ownerStrategyId);
+    const ownerReadiness = readinessByOwner.get(task.ownerStrategyId);
+    const ownerPolicy = lane === "live_owner"
+      ? policyByOwner.get(task.ownerStrategyId as CanonicalLiveResearchOwnerId)
+      : undefined;
+    return ({
+    strategyId: task.ownerStrategyId,
+    label: task.ownerLabel,
+    lane,
+    tier: task.tier,
+    status: task.status,
+    blocker: task.blocker,
+    evidenceStatus: task.evidenceIds.length ? "CURRENT" as const : task.blocker ? "BLOCKED" as const : "NO_EVIDENCE" as const,
+    lastRunAt: task.completedAt ?? task.lastProgressAt ?? task.startedAt,
+    durationMs: task.runDurationMs,
+    evaluationsCompleted: task.progress.evaluationsCompleted,
+    candidateCount: task.progress.candidateCount,
+    fillCount: task.progress.fillCount,
+    outcomeCount: task.progress.outcomeCount,
+    currentPartition: task.progress.currentPartition,
+    validationStatus: lane === "research_only" ? "RESEARCH_ONLY" as const : ownerValidation?.status ?? "NOT_EVALUATED" as const,
+    readinessStatus: lane === "research_only" ? "NOT_APPLICABLE" as const : ownerReadiness?.status ?? "VALIDATION_REQUIRED" as const,
+    technicalStatus: lane === "research_only" ? "TECHNICAL_SOURCE_BLOCKED" as const : ownerPolicy?.technicalStatus ?? "TECHNICAL_EVIDENCE_REQUIRED" as const,
+    performanceStatus: lane === "research_only" ? "NOT_APPLICABLE" as const : ownerPolicy?.performanceStatus ?? "INSUFFICIENT_PERFORMANCE_EVIDENCE" as const,
+    policyEvidenceStatus: lane === "research_only" ? "NO_EVIDENCE" as const : ownerPolicy?.evidenceStatus ?? "NO_EVIDENCE" as const,
+    validationBlocker: ownerPolicy?.blocker ?? ownerValidation?.blocker,
+    evidenceAgeMs: ownerValidation?.evidenceAgeMs
+  });
+  };
+  if (!summary) {
+    return {
+      globalStatus: "NOT_STARTED",
+      validationGlobalStatus: "NONE_VALIDATED",
+      technicallyValidatedCount: 5,
+      performanceValidatedCount: 0,
+      performancePolicyDefinedCount: 5,
+      policyRequiredCount: 0,
+      researchReadyCount: 0,
+      liveOwnerCount: 5,
+      rows: CANONICAL_LIVE_RESEARCH_OWNER_ORDER.map((strategyId) => ({
+        strategyId,
+        label: OWNER_LABELS[strategyId],
+        lane: "live_owner" as const,
+        tier: "HISTORICAL_VALIDATION",
+        status: "NOT_STARTED" as const,
+        evidenceStatus: "NO_EVIDENCE" as const,
+        evaluationsCompleted: 0,
+        candidateCount: 0,
+        fillCount: 0,
+        outcomeCount: 0,
+        validationStatus: "NOT_EVALUATED" as const,
+        readinessStatus: "VALIDATION_REQUIRED" as const,
+        technicalStatus: "TECHNICALLY_VALIDATED" as const,
+        performanceStatus: "INSUFFICIENT_PERFORMANCE_EVIDENCE" as const,
+        policyEvidenceStatus: "NO_EVIDENCE" as const
+      })),
+      researchOnlyRows: [{
+        strategyId: "ifvg_fresh_retest_v4_candidate",
+        label: "IFVG v4",
+        lane: "research_only" as const,
+        tier: "TACTICAL_RESEARCH",
+        status: "NOT_STARTED" as const,
+        evidenceStatus: "NO_EVIDENCE" as const,
+        evaluationsCompleted: 0,
+        candidateCount: 0,
+        fillCount: 0,
+        outcomeCount: 0,
+        validationStatus: "RESEARCH_ONLY" as const,
+        readinessStatus: "NOT_APPLICABLE" as const,
+        technicalStatus: "TECHNICAL_SOURCE_BLOCKED" as const,
+        performanceStatus: "NOT_APPLICABLE" as const,
+        policyEvidenceStatus: "NO_EVIDENCE" as const
+      }],
+      livePlanPublished: false
+    };
+  }
+  return {
+    globalStatus: summary.globalStatus,
+    validationGlobalStatus: validation?.globalStatus ?? "NONE_VALIDATED",
+    technicallyValidatedCount: policySummary?.technicallyValidatedCount ?? 5,
+    performanceValidatedCount: policySummary?.performanceValidatedCount ?? 0,
+    performancePolicyDefinedCount: policySummary?.performancePolicyDefinedCount ?? 5,
+    policyRequiredCount: policySummary?.policyRequiredCount ?? 0,
+    researchReadyCount: policySummary?.researchReadyCount ?? 0,
+    liveOwnerCount: 5,
+    rows: summary.tasks.map((task) => rowFor(task, "live_owner")),
+    researchOnlyRows: summary.researchOnlyTasks.map((task) => rowFor(task, "research_only")),
+    livePlanPublished: summary.livePlanPublished,
+    timeToLivePlanMs: summary.performance.timeToLivePlanMs
+  };
+};
+
 const researchPlanFor = (
   activation: IctActivateMarketLatestSummary | undefined,
   sourceFingerprint: string | undefined,
   cycle: OperatorCycleState
 ): OperatorConsoleSnapshot["researchPlan"] => {
+  // Display the immutable cycle result; tape freshness is not plan identity.
+  const expectedSourceFingerprint = cycle.sourceFingerprint || sourceFingerprint;
   const currentCandidate = activation?.currentOpportunitySummary?.selectedCanonicalCandidateId
     ? activation.currentOpportunitySummary.topOpportunity
     : activation?.currentOpportunitySummary?.canonicalCandidateSetDisposition
@@ -96,7 +211,7 @@ const researchPlanFor = (
       ? "legacy_unbound" as const
       : cycle.cycleId && activation.cycleId !== cycle.cycleId
         ? "stale_cycle" as const
-        : sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint
+        : expectedSourceFingerprint && activation.sourceFingerprint !== expectedSourceFingerprint
           ? "source_mismatch" as const
           : activation.currentCandidateId && currentCandidate?.id && activation.currentCandidateId !== currentCandidate.id
             ? "candidate_mismatch" as const
@@ -263,9 +378,10 @@ const candidatePlansFor = (
   sourceFingerprint: string | undefined,
   cycle: OperatorCycleState
 ): OperatorConsoleSnapshot["candidatePlans"] => {
+  const expectedSourceFingerprint = cycle.sourceFingerprint || sourceFingerprint;
   if (!activation?.cycleId || !activation.sourceFingerprint || !activation.currentReadEvaluatedAt) return [];
   if (cycle.cycleId && activation.cycleId !== cycle.cycleId) return [];
-  if (sourceFingerprint && activation.sourceFingerprint !== sourceFingerprint) return [];
+  if (expectedSourceFingerprint && activation.sourceFingerprint !== expectedSourceFingerprint) return [];
   return (activation.candidatePlans ?? []).map((plan) => {
     const complete = finite(plan.entry) && finite(plan.stop) && finite(plan.target) && finite(plan.riskReward);
     const candidateActionable = complete && plan.actionable;
@@ -277,6 +393,8 @@ const candidatePlansFor = (
       strategyId: plan.strategyId,
       strategyVersion: plan.strategyVersion,
       profileId: plan.profileId,
+      charterModelNumber: plan.charterProfile?.charterModelNumber,
+      charterProfileId: plan.charterProfile?.charterProfileId,
       candidateId: plan.candidateId,
       candidateState: plan.candidateState,
       setup: plan.setupName.replace(/_/g, " "),
@@ -294,6 +412,52 @@ const candidatePlansFor = (
       contextIdentity: plan.contextIdentity
     };
   });
+};
+
+const marketContextsFor = (
+  activation: IctActivateMarketLatestSummary | undefined,
+  sourceFingerprint: string | undefined,
+  cycle: OperatorCycleState
+): OperatorConsoleSnapshot["marketContexts"] => {
+  const expectedSourceFingerprint = cycle.sourceFingerprint || sourceFingerprint;
+  if (!activation?.cycleId || !activation.sourceFingerprint || !activation.currentReadEvaluatedAt) return [];
+  if (cycle.cycleId && activation.cycleId !== cycle.cycleId) return [];
+  if (expectedSourceFingerprint && activation.sourceFingerprint !== expectedSourceFingerprint) return [];
+  return (activation.contextItems ?? []).map((item) => ({
+    contextId: item.contextId,
+    artifactId: item.artifactId,
+    label: item.displayName,
+    classification: item.classification,
+    state: item.state,
+    sourceBlocked: item.sourceStatus === "blocked_source_semantics",
+    detail: item.detail,
+    blocker: item.sourceBlockReason ?? item.missingSemanticFields?.join(", "),
+    executable: false
+  }));
+};
+
+const charterProfilesFor = (
+  activation: IctActivateMarketLatestSummary | undefined,
+  sourceFingerprint: string | undefined,
+  cycle: OperatorCycleState
+): OperatorConsoleSnapshot["charterProfiles"] => {
+  const expectedSourceFingerprint = cycle.sourceFingerprint || sourceFingerprint;
+  if (!activation?.cycleId || !activation.sourceFingerprint || !activation.currentReadEvaluatedAt) return [];
+  if (cycle.cycleId && activation.cycleId !== cycle.cycleId) return [];
+  if (expectedSourceFingerprint && activation.sourceFingerprint !== expectedSourceFingerprint) return [];
+  return (activation.charterProfiles ?? []).map((profile) => ({
+    charterModelNumber: profile.charterModelNumber,
+    charterProfileId: profile.charterProfileId,
+    label: profile.label,
+    classification: profile.classification,
+    status: profile.runtimeStatus,
+    owner: profile.ownerStrategyId ?? profile.ownerFrameworkId ?? "none",
+    ownerCandidateId: profile.ownerCandidateId,
+    detail: profile.detail,
+    blocker: profile.blocker,
+    emitsGeometry: false,
+    executableStrategyAdded: false
+  }));
 };
 
 const insightFor = (
@@ -475,6 +639,9 @@ export const buildOperatorConsoleSnapshot = ({
     memory,
     researchPlan: researchPlanFor(activation, canonicalSource?.fingerprint, cycle),
     candidatePlans: candidatePlansFor(activation, canonicalSource?.fingerprint, cycle),
+    marketContexts: marketContextsFor(activation, canonicalSource?.fingerprint, cycle),
+    charterProfiles: charterProfilesFor(activation, canonicalSource?.fingerprint, cycle),
+    researchCoverage: researchCoverageFor(cycle),
     canonicalSetupConflict: activation?.canonicalSetupConflict ?? "NONE",
     decisions: decisionsFor({ runtime, autonomousRun, cycle, sourceEligible }),
     authority: OPERATOR_AUTHORITY,

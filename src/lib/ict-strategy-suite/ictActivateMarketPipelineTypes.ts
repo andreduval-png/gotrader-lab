@@ -20,6 +20,8 @@ import type {
 import type { IctResearchHypothesis, IctResearchHypothesisStatus } from "./ictSelfImprovementTypes";
 import type { IctResearchSignal } from "./ictSignalContractTypes";
 import type { CurrentOpportunity, CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
+import type { IctRuntimeContextItem } from "../ictContextRuntime";
+import type { CharterCandidateAttribution, CharterProfileRuntimeItem } from "../ictCharterProfiles";
 
 export type IctActivateMarketStepId =
   | "resolve_symbol"
@@ -89,6 +91,7 @@ export interface IctActivateMarketCandidatePlan {
   strategyId: CurrentOpportunity["strategyId"];
   strategyVersion?: string;
   profileId?: string;
+  charterProfile?: CharterCandidateAttribution;
   candidateId: string;
   candidateState?: string;
   setupName: string;
@@ -103,6 +106,7 @@ export interface IctActivateMarketCandidatePlan {
   actionable: boolean;
   blockers: string[];
   contextIdentity?: string;
+  prerequisiteIdentity?: CurrentOpportunity["prerequisiteIdentity"];
 }
 
 export interface IctActivateMarketLatestSummary {
@@ -113,6 +117,8 @@ export interface IctActivateMarketLatestSummary {
   currentCandidateId?: string;
   candidatePlans?: IctActivateMarketCandidatePlan[];
   canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
+  contextItems?: readonly IctRuntimeContextItem[];
+  charterProfiles?: readonly CharterProfileRuntimeItem[];
   requestedSymbol: string;
   brokerSymbol: string;
   primaryTimeframe: string;
@@ -221,6 +227,8 @@ export interface IctActivateMarketResult {
     opportunityNextAction?: string;
     currentOpportunitySummary?: CurrentOpportunitySummary;
     candidatePlans?: IctActivateMarketCandidatePlan[];
+    contextItems?: readonly IctRuntimeContextItem[];
+    charterProfiles?: readonly CharterProfileRuntimeItem[];
     canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
     recognitionTier?: IctCurrentRead["recognitionTier"];
     scalpStatus?: IctCurrentRead["scalpStatus"];

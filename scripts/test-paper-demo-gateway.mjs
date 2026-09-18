@@ -20,7 +20,7 @@ import {
   writeMt5DemoExecutionRequest,
   writePaperDemoExecutionRequest
 } from "./gotrader-paper-demo-gateway-core.mjs";
-import { appendTradeProposalAudit, evaluateTradeProposal } from "./gotrader-trade-proposal-core.mjs";
+import { evaluateCanonicalTradeProposal, persistRuntimeMirror } from "./gotrader-research-mcp-core.mjs";
 import {
   buildRiskEvaluationRequest,
   buildSimulationAccountSnapshot,
@@ -36,33 +36,46 @@ const authorityNone = {
   readinessOverrideAuthority: "none"
 };
 const now = "2026-07-18T14:00:00.000Z";
-const proposal = evaluateTradeProposal(
+const tempRoot = await mkdtemp(path.join(os.tmpdir(), "gotrader-paper-demo-gateway-"));
+const activeProfile = {
+  profileId: "ifvg_fresh_retest_v3_research", profileVersion: "v3",
+  parameterFingerprint: "test-frozen-v3", sourceFingerprint: "mt5_read_only|mt5_read_only:MNQ:USTECH:5m|MNQ|5m|1000|start|1|end|2",
+  validationIdentity: "validation_ifvg_v3_current", sourceProvider: "mt5_read_only",
+  requestedSymbol: "MNQ", brokerSymbol: "USTECH", timeframe: "5m"
+};
+const mirror = {
+  schemaVersion: 1, capturedAt: now, activeProfile,
+  validation: { status: "available", identityStatus: "matched", evidenceId: activeProfile.validationIdentity },
+  readiness: { state: "ready" },
+  certifiedEvidence: { entries: [{
+    evidenceId: activeProfile.validationIdentity, ledgerEntryId: "test-ledger",
+    category: "validation results", certificationStatus: "identity_matched",
+    profileId: activeProfile.profileId, profileVersion: activeProfile.profileVersion,
+    parameterFingerprint: activeProfile.parameterFingerprint, sourceFingerprint: activeProfile.sourceFingerprint,
+    validationIdentity: activeProfile.validationIdentity
+  }] }, authority: authorityNone
+};
+await persistRuntimeMirror(mirror, { repoRoot: tempRoot, nowMs: Date.parse(now) });
+const proposal = await evaluateCanonicalTradeProposal(
   {
     requestedSymbol: "MNQ",
     brokerSymbol: "USTECH",
     timeframe: "5m",
     strategyProfileId: "ifvg_fresh_retest_v3_research",
+    strategyProfileVersion: "v3",
+    parameterFingerprint: activeProfile.parameterFingerprint,
     direction: "short",
     entry: 28570,
     stop: 28600,
     targets: [28510],
     sourceProvider: "mt5_read_only",
-    sourceFingerprint: "mt5_read_only|MNQ|USTECH|5m|1000|start|1|end|2",
+    sourceFingerprint: activeProfile.sourceFingerprint,
     validationChainId: "validation_ifvg_v3_current",
     autoApplyAllowed: false,
     authority: authorityNone
   },
   {
-    now,
-    sizingPolicy: {
-      mode: "paper_preview",
-      configured: true,
-      riskBudgetUsd: 300,
-      pointValueUsd: 2,
-      maxUnits: 5,
-      operatorConfigured: true,
-      llmMayOverride: false
-    }
+    nowMs: Date.parse(now), repoRoot: tempRoot
   }
 );
 const validationReport = {
@@ -100,6 +113,7 @@ const forwardReport = {
   authority: authorityNone
 };
 const enabledPolicy = {
+  simulationRiskUsd: 300,
   enabled: true,
   killSwitchActive: false,
   maxDailyLossR: 4,
@@ -140,7 +154,7 @@ const accountRiskState = refreshSimulationAccountHeartbeat(
 const accountRiskRequest = buildRiskEvaluationRequest({
   now: "2026-07-18T14:03:00.000Z",
   proposalEvaluation: proposal,
-  requestedRiskUsd: proposal.sizingPreview.riskBudgetUsd
+  requestedRiskUsd: enabledPolicy.simulationRiskUsd
 });
 const accountRiskEvaluation = evaluateSimulationAccountRisk({
   now: "2026-07-18T14:03:00.000Z",
@@ -165,6 +179,24 @@ assert.equal(prepared.preparation.executable, false);
 assert.equal(prepared.preparation.paperOnly, true);
 assert.equal(prepared.preparation.riskBudgetUsd, 300);
 assert.deepEqual(prepared.authority, authorityNone);
+
+for (const patch of [
+  { proposalEvaluation: { ...proposal, status: "queued_for_deterministic_validation" } },
+  { proposalEvaluation: { ...proposal, executable: true } },
+  { proposalEvaluation: { ...proposal, compactProposal: { ...proposal.compactProposal, entry: 28571 } } },
+  { policy: { ...enabledPolicy, simulationRiskUsd: 0 } },
+  { policy: { ...enabledPolicy, simulationRiskUsd: 1 } },
+  { accountRiskEvaluation: { ...accountRiskEvaluation, requestId: "another-proposal" } },
+  { accountRiskEvaluation: undefined }
+]) {
+  const denied = evaluatePaperDemoPreparation({
+    accountRiskEvaluation, proposalEvaluation: proposal,
+    validationEvidence: summarizeValidationReport(validationReport), forwardEvidence: summarizeForwardEvidenceReport(forwardReport),
+    policy: enabledPolicy, state: emptyState, now: "2026-07-18T14:03:00.000Z", ...patch
+  });
+  assert.equal(denied.status, "blocked");
+  assert.equal(denied.brokerSubmissionAttempted, false);
+}
 
 const duplicate = evaluatePaperDemoPreparation({
   accountRiskEvaluation,
@@ -257,7 +289,7 @@ const nonCanonicalFingerprint = evaluatePaperDemoPreparation({
   state: emptyState,
   now: "2026-07-18T14:03:00.000Z"
 });
-assert(nonCanonicalFingerprint.blockers.includes("proposal_source_fingerprint_not_canonical"));
+assert(nonCanonicalFingerprint.blockers.includes("proposal_identity_hash_mismatch"));
 
 const noForward = evaluatePaperDemoPreparation({
   accountRiskEvaluation,
@@ -297,12 +329,11 @@ const accountRiskBlocked = evaluatePaperDemoPreparation({
 assert(accountRiskBlocked.blockers.includes("account_risk_governor_not_approved"));
 assert(accountRiskBlocked.blockers.includes("account_risk:projected_open_risk_limit_exceeded"));
 
-const tempRoot = await mkdtemp(path.join(os.tmpdir(), "gotrader-paper-demo-gateway-"));
 await mkdir(path.join(tempRoot, ".gotrader"), { recursive: true });
-await appendTradeProposalAudit(proposal, { repoRoot: tempRoot });
 await writeFile(path.join(tempRoot, ".gotrader", "validation.json"), JSON.stringify(validationReport), "utf8");
 await writeFile(path.join(tempRoot, ".gotrader", "forward.json"), JSON.stringify(forwardReport), "utf8");
 const env = {
+  GOTRADER_PAPER_SIMULATION_RISK_USD: "300",
   ...accountRiskEnv,
   GOTRADER_PAPER_DEMO_GATEWAY_ENABLED: "true",
   GOTRADER_PAPER_DEMO_KILL_SWITCH: "false",
@@ -539,6 +570,7 @@ assert.equal(importedForwardReport.autoPromotionAllowed, false);
 assert.deepEqual(importedForwardReport.authority, authorityNone);
 
 const defaultPolicy = loadPaperDemoGatewayPolicy({});
+assert.equal(defaultPolicy.simulationRiskUsd, 0);
 assert.equal(defaultPolicy.enabled, false);
 assert.equal(defaultPolicy.killSwitchActive, true);
 assert.equal(defaultPolicy.mt5DemoHandoffEnabled, false);
@@ -559,6 +591,16 @@ const serialized = JSON.stringify({ prepared, currentStatus });
 for (const forbidden of ["rawCandles", "accountData", "orders", "positions", "apiKey", "password"]) {
   assert(!serialized.includes(forbidden), `Gateway output must exclude ${forbidden}.`);
 }
+
+const beforeRevalidation = await readFile(path.join(tempRoot, ".gotrader", "simulation-account-risk-state.json"), "utf8");
+await persistRuntimeMirror({ ...mirror, readiness: { state: "blocked" } }, { repoRoot: tempRoot, nowMs: Date.parse(now) });
+const changedReadiness = await preparePaperDemoSimulation(proposal.proposalId, {
+  env, now: "2026-07-18T14:03:04.000Z", repoRoot: tempRoot
+});
+assert.equal(changedReadiness.status, "blocked", "a stored passing proposal must be revalidated");
+assert.equal(await readFile(path.join(tempRoot, ".gotrader", "simulation-account-risk-state.json"), "utf8"), beforeRevalidation);
+const proposalLines = (await readFile(path.join(tempRoot, ".gotrader", "research-mcp", "trade-proposals.jsonl"), "utf8")).trim().split(/\r?\n/);
+assert.equal(proposalLines.length, 1, "revalidation must not create duplicate proposals");
 
 console.log(JSON.stringify({
   status: "passed",

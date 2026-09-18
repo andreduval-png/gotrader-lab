@@ -1011,6 +1011,8 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     activeStrategyId: canonicalCandidate?.strategyId,
     activeStrategyVersion: canonicalCandidate?.strategyVersion,
     activeProfileId: canonicalCandidate?.profileId,
+    activeCharterModelNumber: canonicalCandidate?.charterProfile?.charterModelNumber,
+    activeCharterProfileId: canonicalCandidate?.charterProfile?.charterProfileId,
     activeCandidateId: canonicalCandidate?.candidateId,
     side: canonicalGeometry
       ? (canonicalGeometry.direction === "LONG" ? "long" : "short")
@@ -1032,6 +1034,8 @@ export const buildIctCurrentReadFromPacket = (packetInput?: IctAdvisorPacket, la
     currentOpportunitySummary: currentOpportunityScan.summary,
     currentOpportunities: compactCurrentOpportunities,
     canonicalCandidates,
+    ictContextItems: packet.compactSummary.ictContextRuntime?.items,
+    charterProfiles: currentOpportunityScan.charterProfiles,
     canonicalSetupConflict: currentOpportunityScan.summary.canonicalSetupConflict,
     opportunityDetected,
     opportunity: recognizedOpportunity,

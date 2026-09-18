@@ -36,6 +36,8 @@ import type {
 import type { IctSessionRaidReversalNarrative } from "./ictSessionRaidReversalTypes";
 import type { CurrentOpportunity, CurrentOpportunitySummary } from "../currentOpportunity/currentOpportunityTypes";
 import type { CanonicalRuntimeCandidate } from "../currentOpportunity/canonicalRuntimeCandidateSet";
+import type { IctRuntimeContextItem } from "../ictContextRuntime";
+import type { CharterProfileRuntimeItem } from "../ictCharterProfiles";
 
 export type IctCurrentReadPacketSource =
   | "live_mt5"
@@ -95,6 +97,8 @@ export interface IctCurrentRead {
   activeStrategyId?: string;
   activeStrategyVersion?: string;
   activeProfileId?: string;
+  activeCharterModelNumber?: number;
+  activeCharterProfileId?: string;
   activeCandidateId?: string;
   side: IctSide;
   approvedStatus: IctApprovedCandidateStatus;
@@ -180,6 +184,8 @@ export interface IctCurrentRead {
   currentOpportunitySummary?: CurrentOpportunitySummary;
   currentOpportunities?: CurrentOpportunity[];
   canonicalCandidates?: CanonicalRuntimeCandidate[];
+  ictContextItems?: readonly IctRuntimeContextItem[];
+  charterProfiles?: readonly CharterProfileRuntimeItem[];
   canonicalSetupConflict?: CurrentOpportunitySummary["canonicalSetupConflict"];
   opportunityDetected: boolean;
   opportunityType: IctOpportunityType;

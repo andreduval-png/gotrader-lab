@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import "./test-operator-storage-fallback.mjs";
+import "./test-operator-cycle-guard.mjs";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -14,7 +16,7 @@ const view = read("src/components/operator/OperatorConsoleView.tsx");
 
 assert.match(
   cycle,
-  /canonicalSourceFingerprint\s*=\s*activation\.snapshot\.marketData\.activeResearchSource\.fingerprint/,
+  /canonicalSourceFingerprint\s*=\s*activationSnapshot\.marketData\.activeResearchSource\.fingerprint/,
   "operator cycles must bind the canonical source fingerprint"
 );
 assert.match(cycle, /sourceFingerprint:\s*canonicalSourceFingerprint/);
@@ -47,6 +49,8 @@ assert.match(snapshot, /candidatePlansFor/);
 assert.match(snapshot, /plan\.strategyId/);
 assert.match(snapshot, /plan\.candidateId/);
 assert.match(snapshot, /plan\.geometryId/);
+assert.match(snapshot, /marketContextsFor/);
+assert.match(snapshot, /sourceStatus === "blocked_source_semantics"/);
 
 assert.match(view, /Research trade plan/i);
 assert.match(view, /researchPlan\.entryPrice/);
@@ -56,6 +60,12 @@ assert.match(view, /researchPlan\.riskReward/);
 assert.match(view, /operator-canonical-candidates/);
 assert.match(view, /candidate\.strategyId/);
 assert.match(view, /candidate\.geometryId\s*\?\?\s*candidate\.candidateId/);
+assert.match(view, /operator-market-contexts/);
+assert.match(view, /Context only/);
+assert.match(view, /data-context-artifact/);
+assert.match(view, /operator-research-coverage/);
+assert.match(view, /operator-live-owner-research-rows/);
+assert.match(view, /operator-research-only-lane/);
 
 console.log(JSON.stringify({
   status: "passed",

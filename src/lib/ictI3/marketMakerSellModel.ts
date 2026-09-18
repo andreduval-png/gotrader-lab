@@ -16,12 +16,11 @@ export const ICT_MMSM_CANONICAL_MODEL: CanonicalIctModel = assertCanonicalModelC
   requiredTimeframes: ["1h", "5m"],
   preferredTimeframes: ["4h", "15m"],
   optionalTimeframes: ["1m", "1d"],
-  requiredFactTypes: ["DEALING_RANGE", "PD_LOCATION", "LIQUIDITY", "IRL_ERL_TRANSITION", "DISPLACEMENT", "PD_ARRAY"],
+  requiredFactTypes: ["DEALING_RANGE", "PD_LOCATION", "LIQUIDITY", "DISPLACEMENT", "PD_ARRAY"],
   factDependencyIds: [
     "i1.dealing-range",
     "i1.pd-location",
     "i1.liquidity",
-    "i1.irl-erl-transition",
     "i1.displacement",
     "i1.pd-array"
   ],
@@ -33,7 +32,7 @@ export const ICT_MMSM_CANONICAL_MODEL: CanonicalIctModel = assertCanonicalModelC
     parameters: [
       { name: "roleTimeframes", classification: "RESEARCH_PARAMETER" },
       { name: "dealingRangePolicy", classification: "CANONICAL_GOTRADER_RULE", allowedValues: ["ACTIVE_CANONICAL_RANGE"] },
-      { name: "transitionPolicy", classification: "CANONICAL_GOTRADER_RULE", allowedValues: ["ERL_TO_IRL_DELIVERY"] },
+      { name: "deliverySequencePolicy", classification: "CANONICAL_GOTRADER_RULE", allowedValues: ["MARKET_MAKER_DELIVERY_SEQUENCE_V1"] },
       { name: "premiumDiscountPolicy", classification: "RESEARCH_PARAMETER", allowedValues: ["REQUIRED", "PREFERRED", "DISABLED"] },
       { name: "displacementPolicy", classification: "CANONICAL_GOTRADER_RULE", allowedValues: ["REQUIRED"] },
       { name: "mssPolicy", classification: "RESEARCH_PARAMETER", allowedValues: ["OPTIONAL", "REQUIRED"] },

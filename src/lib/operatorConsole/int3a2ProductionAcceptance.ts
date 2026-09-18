@@ -5,6 +5,8 @@ import { buildIctCurrentReadFromPacket } from "@/lib/ict-strategy-suite/ictCurre
 import type { IctAdvisorPacket } from "@/lib/ict-strategy-suite/ictAdvisorTypes";
 import type { IctAnalysisTimeframe, IctAnalysisTimeframeRole, IctMarketAnalysisContextBundle } from "@/lib/ict-strategy-suite/ictMarketAnalysisContextTypes";
 import { evaluateIct2022Model, buildIctCoreCandidateCollection } from "@/lib/ictI2";
+import { buildIctRuntimeContextSnapshot } from "@/lib/ictContextRuntime";
+import type { IctI5CalendarEvidence } from "@/lib/ictI5";
 import type { IctCoreDetectionInput } from "@/lib/ictI2";
 import type { Candle, Timeframe } from "@/lib/types";
 import { buildOperatorConsoleSnapshot } from "./buildOperatorConsoleSnapshot";
@@ -74,6 +76,52 @@ const ict2022ShortInput = (): IctCoreDetectionInput => ({
   narrative: { structural: "bearish", intermediate: "bullish", execution: "bullish", liquidityPath: "sellside", structuralTimeframe: "1h", intermediateTimeframe: "15m", executionTimeframe: "5m", policyId: "gotrader.ict.c1-1.hierarchical-roles.v1", policyVersion: "1.0.0" },
   symbol: "ES", timeframe: "5m"
 });
+
+const int3cContextSnapshot = () => {
+  const gap = (gapId: string, gapType: "NDOG" | "NWOG", minute: number, identity: string) => ({
+    ...factBase(gapId, "OPENING_GAP", minute),
+    gapId,
+    gapType,
+    priorReferencePrice: 96,
+    newOpenPrice: 98,
+    gapLow: 96,
+    gapHigh: 98,
+    midpoint: 97,
+    marketDateOrWeekIdentity: identity,
+    calendarPolicyId: "int3c-controlled-calendar",
+    timeAuthorityId: "gotrader.sessions.iana-america-new-york"
+  });
+  const openingGaps = [
+    gap("int3c-ndog", "NDOG", 40, "2026-06-12"),
+    gap("int3c-nwog", "NWOG", 40, "2026-W24")
+  ];
+  const facts = [
+    { ...factBase("int3c-breaker", "BLOCK", 30), blockId: "int3c-breaker", blockType: "BREAKER_BLOCK", direction: "bullish", originCandleIds: ["ict-30"], proximalPrice: 101, distalPrice: 99, midpoint: 100 },
+    { ...factBase("int3c-fvg", "FVG", 35), fvgId: "int3c-fvg", direction: "bullish", proximalPrice: 100.5, distalPrice: 99.5, midpoint: 100, originCandleIds: ["ict-30", "ict-35", "ict-40"], fvgState: "OPEN", filledPercentage: 0 },
+    { ...factBase("int3c-range", "DEALING_RANGE", 30, "1h"), dealingRangeId: "int3c-range", highSwingId: "int3c-high", lowSwingId: "int3c-low", highPrice: 110, lowPrice: 90, equilibrium: 100, context: "bullish_range" },
+    { ...factBase("int3c-ote", "OTE_ZONE", 35), oteZoneId: "int3c-ote", dealingRangeId: "int3c-range", proximalPrice: 97.6, distalPrice: 94.2, retracementPolicyId: "gotrader.canonical.ote.legacy-foundation", retracementFractions: [0.62, 0.79] },
+    ...openingGaps
+  ];
+  const openingGapEvidence: Readonly<Record<string, IctI5CalendarEvidence>> = Object.fromEntries(openingGaps.map((fact) => [fact.gapId, {
+      evidenceId: `int3c-evidence-${fact.gapId}`,
+      boundaryKind: fact.gapType === "NDOG" ? "DAY_ROLLOVER" : "WEEK_REOPEN",
+      calendarStatus: "VERIFIED",
+      sourceContinuity: "VERIFIED",
+      openingReferenceAvailable: true,
+      holidayStatus: "REGULAR",
+      calendarPolicyId: fact.calendarPolicyId,
+      timeAuthorityId: fact.timeAuthorityId
+    }]));
+  return buildIctRuntimeContextSnapshot({
+    facts: facts as unknown as IctCoreDetectionInput["facts"],
+    asOf: at(90),
+    sourceFingerprint: SOURCE_FINGERPRINT,
+    narrative: ict2022ShortInput().narrative,
+    observedPrice: 96,
+    observedAt: at(85),
+    openingGapEvidence
+  });
+};
 
 const controlledRuntime = async (): Promise<ResearchRuntimeSnapshot> => {
   const base = await resolveResearchRuntimeSnapshot();
@@ -242,7 +290,8 @@ export const runInt3a2ProductionConflictAcceptance = () => {
           approvalScore: 0,
           noTradeReasonCount: 1,
           ifvgFreshRetestV3: compactIctIfvgFreshRetestV3Assessment(ifvg),
-          coreIctCandidates: buildIctCoreCandidateCollection({ generatedAt: at(25), sourceFingerprint: SOURCE_FINGERPRINT, candidates: [ict2022] })
+          coreIctCandidates: buildIctCoreCandidateCollection({ generatedAt: at(25), sourceFingerprint: SOURCE_FINGERPRINT, candidates: [ict2022] }),
+          ictContextRuntime: int3cContextSnapshot()
         },
         approvedProfileDecision: {
           profileId: "ict_default_v1",
@@ -316,6 +365,9 @@ export const runInt3a2ProductionConflictAcceptance = () => {
         snapshotConflict: snapshot.canonicalSetupConflict,
         snapshotCandidates: snapshot.candidatePlans.length
       })}`);
+    }
+    if (snapshot.marketContexts.length === 0 || snapshot.marketContexts.some((context) => context.executable)) {
+      throw new Error("INT-3C controlled contexts did not remain visible and non-executable.");
     }
     trace.push("buildOperatorConsoleSnapshot");
     if (typeof window !== "undefined") {

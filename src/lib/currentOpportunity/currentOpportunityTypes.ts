@@ -4,6 +4,7 @@ import type { CanonicalTradeGeometry } from "../tradeGeometry";
 import type { IctCoreCandidateCollection } from "@/lib/ictI2";
 import type { MarketMakerCandidateCollection } from "@/lib/ictI3";
 import type { CanonicalCandidateSetDisposition, CanonicalRuntimeCandidate } from "./canonicalRuntimeCandidateSet";
+import type { CharterCandidateAttribution, CharterProfileRuntimeItem } from "../ictCharterProfiles";
 
 export type CurrentOpportunityStatus =
   | "valid_candidate"
@@ -74,6 +75,16 @@ export interface CurrentOpportunityAuthority {
   executionAuthority: "none";
   brokerAuthority: "none";
   readinessOverrideAuthority: "none";
+}
+
+export interface MarketMakerPrerequisiteIdentity {
+  sequenceId: string;
+  dealingRangeId?: string;
+  pdLocationFactId?: string;
+  engineeringLiquidityId?: string;
+  displacementId?: string;
+  pdArrayId?: string;
+  objectiveLiquidityId?: string;
 }
 
 export interface CurrentOpportunitySourceDepth {
@@ -150,8 +161,10 @@ export interface CurrentOpportunity {
   strategyId: CurrentOpportunityStrategyId;
   strategyVersion?: string;
   profileId?: string;
+  charterProfile?: CharterCandidateAttribution;
   candidateState?: string;
   contextIdentity?: string;
+  prerequisiteIdentity?: MarketMakerPrerequisiteIdentity;
   model: string;
   symbol: string;
   brokerSymbol: string;
@@ -235,6 +248,7 @@ export interface CurrentOpportunityScan {
   };
   opportunities: CurrentOpportunity[];
   canonicalCandidates: CanonicalRuntimeCandidate[];
+  charterProfiles: readonly CharterProfileRuntimeItem[];
   summary: CurrentOpportunitySummary;
   researchOnly: true;
   authority: CurrentOpportunityAuthority;

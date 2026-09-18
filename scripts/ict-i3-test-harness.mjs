@@ -3,11 +3,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
-export async function loadIctI3() {
+export async function loadIctI3Runtime() {
   const root = process.cwd();
   const out = path.join(root, ".gotrader", `ict-i3-test-runtime-${process.pid}`);
   fs.rmSync(out, { recursive: true, force: true });
-  for (const directory of ["ictCanonical", "tradeGeometry", "ictI2", "ictI3"]) {
+  for (const directory of ["ictCanonical", "sessions", "tradeGeometry", "ictI2", "ictI3"]) {
     const sourceDirectory = path.join(root, "src", "lib", directory);
     const outputDirectory = path.join(out, directory);
     fs.mkdirSync(outputDirectory, { recursive: true });
@@ -25,13 +25,22 @@ export async function loadIctI3() {
         .replace(/from\s+"@\/lib\/ictCanonical\/([^"]+)"/g, 'from "../ictCanonical/$1.mjs"')
         .replace(/from\s+"@\/lib\/ictI2\/([^"]+)"/g, 'from "../ictI2/$1.mjs"')
         .replace(/from\s+"@\/lib\/ictI3\/([^"]+)"/g, 'from "../ictI3/$1.mjs"')
+        .replace(/from\s+"@\/lib\/sessions\/([^"]+)"/g, 'from "../sessions/$1.mjs"')
+        .replace(/from\s+"@\/lib\/sessions"/g, 'from "../sessions/index.mjs"')
         .replace(/from\s+"@\/lib\/tradeGeometry\/([^"]+)"/g, 'from "../tradeGeometry/$1.mjs"')
         .replace(/from\s+"@\/lib\/tradeGeometry"/g, 'from "../tradeGeometry/index.mjs"');
       fs.writeFileSync(path.join(outputDirectory, name.replace(/\.ts$/, ".mjs")), output, "utf8");
     }
   }
-  return import(`${pathToFileURL(path.join(out, "ictI3", "index.mjs")).href}?v=${Date.now()}`);
+  const nonce = Date.now();
+  const [ict, canonical] = await Promise.all([
+    import(`${pathToFileURL(path.join(out, "ictI3", "index.mjs")).href}?v=${nonce}`),
+    import(`${pathToFileURL(path.join(out, "ictCanonical", "index.mjs")).href}?v=${nonce}`)
+  ]);
+  return { ict, canonical };
 }
+
+export const loadIctI3 = async () => (await loadIctI3Runtime()).ict;
 
 export const authority = {
   executionAuthority: "none",
@@ -106,28 +115,6 @@ export function marketMakerFixture(direction = "BULLISH") {
       consumingCandleId: "c5"
     },
     {
-      ...factBase("internal", "LIQUIDITY", 6),
-      liquidityId: "internal",
-      side: objectiveSide,
-      liquidityClass: "INTERNAL",
-      sourceStructureIds: ["internal-swing"],
-      ownerTimeframe: "5m",
-      dealingRangeId: "range-1",
-      price: 100,
-      status: "AVAILABLE"
-    },
-    {
-      ...factBase("transition", "IRL_ERL_TRANSITION", 10),
-      transitionId: "transition",
-      transitionType: "ERL_TO_IRL_DELIVERY",
-      direction: factDirection,
-      fromLiquidityId: "engineering",
-      toLiquidityId: "internal",
-      dealingRangeId: "range-1",
-      startedAt: at(5),
-      currentState: "ACTIVE"
-    },
-    {
       ...factBase("displacement", "DISPLACEMENT", 15),
       displacementId: "displacement",
       direction: factDirection,
@@ -153,7 +140,8 @@ export function marketMakerFixture(direction = "BULLISH") {
       pdArrayType: "FVG",
       direction: factDirection,
       priceRange: pdRange,
-      sourceFactId: "source-fvg"
+      sourceFactId: "source-fvg",
+      dealingRangeId: "range-1"
     },
     {
       ...factBase("objective", "LIQUIDITY", 0),

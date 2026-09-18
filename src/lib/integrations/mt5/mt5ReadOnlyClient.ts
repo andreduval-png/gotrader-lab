@@ -153,8 +153,11 @@ const selectedBrokerSymbol = (
   settingsBrokerSymbol?: string
 ) => requestBrokerSymbol?.trim() || settingsBrokerSymbol?.trim() || defaultSettings.brokerSymbolOverride;
 
-const fetchJson = async <T>(url: string): Promise<T> => {
+const fetchJson = async <T>(url: string, signal?: AbortSignal): Promise<T> => {
+  signal?.throwIfAborted();
   const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  signal?.addEventListener("abort", abort, { once: true });
   const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, {
@@ -166,6 +169,7 @@ const fetchJson = async <T>(url: string): Promise<T> => {
     }
     return (await response.json()) as T;
   } finally {
+    signal?.removeEventListener("abort", abort);
     globalThis.clearTimeout(timeout);
   }
 };
@@ -197,23 +201,26 @@ const normalizeConnectionStatus = (
     ? status
     : fallback;
 
-export async function checkMt5ReadOnlyStatus(settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()) {
+export async function checkMt5ReadOnlyStatus(settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(), signal?: AbortSignal) {
   try {
-    const payload = await fetchJson<Partial<Mt5ReadOnlyStatus>>(endpoint(settings, "status"));
+    const payload = await fetchJson<Partial<Mt5ReadOnlyStatus>>(endpoint(settings, "status"), signal);
+    signal?.throwIfAborted();
     return storeStatus(normalizeStatus(payload, settings));
   } catch {
+    signal?.throwIfAborted();
     return storeStatus(disconnectedStatus(`MT5 read-only bridge did not respond at ${settings.bridgeUrl}.`));
   }
 }
 
 export async function fetchMt5ReadOnlyQuote(
   request: { symbol: string; brokerSymbol?: string },
-  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()
+  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(),
+  signal?: AbortSignal
 ): Promise<Mt5ReadOnlyQuote> {
   const brokerSymbol = selectedBrokerSymbol(request.brokerSymbol, settings.brokerSymbolOverride);
   try {
     const payload = await fetchJson<Partial<Mt5ReadOnlyQuote>>(
-      endpoint(settings, "quote", { requestedSymbol: request.symbol, symbol: brokerSymbol })
+      endpoint(settings, "quote", { requestedSymbol: request.symbol, symbol: brokerSymbol }), signal
     );
     const bid = typeof payload.bid === "number" ? payload.bid : undefined;
     const ask = typeof payload.ask === "number" ? payload.ask : undefined;
@@ -239,6 +246,7 @@ export async function fetchMt5ReadOnlyQuote(
       ...authority
     };
   } catch {
+    signal?.throwIfAborted();
     return {
       provider: "mt5_read_only",
       symbol: brokerSymbol ?? request.symbol,
@@ -252,14 +260,14 @@ export async function fetchMt5ReadOnlyQuote(
   }
 }
 
-export async function fetchMt5ReadOnlySymbols(settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()) {
+export async function fetchMt5ReadOnlySymbols(settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(), signal?: AbortSignal) {
   try {
     const payload = await fetchJson<{
       connectionStatus?: Mt5ReadOnlyStatus["connectionStatus"];
       symbols?: unknown[];
       warnings?: string[];
       missingEvidence?: string[];
-    }>(endpoint(settings, "symbols"));
+    }>(endpoint(settings, "symbols"), signal);
     const symbols = (payload.symbols ?? [])
       .map((item) => (typeof item === "object" && item !== null ? (item as { symbol?: unknown; name?: unknown }).symbol ?? (item as { name?: unknown }).name : item))
       .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
@@ -277,6 +285,7 @@ export async function fetchMt5ReadOnlySymbols(settings: Mt5ReadOnlySettings = lo
       ...authority
     };
   } catch {
+    signal?.throwIfAborted();
     return {
       provider: "mt5_read_only" as const,
       connectionStatus: "disconnected" as const,
@@ -310,7 +319,8 @@ const disconnectedCandles = (
 
 export async function fetchMt5ReadOnlyCandles(
   request: { symbol: string; timeframe: string; limit?: number; brokerSymbol?: string },
-  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()
+  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(),
+  signal?: AbortSignal
 ): Promise<Mt5ReadOnlyCandlesResponse> {
   const brokerSymbol = selectedBrokerSymbol(request.brokerSymbol, settings.brokerSymbolOverride);
   try {
@@ -320,7 +330,7 @@ export async function fetchMt5ReadOnlyCandles(
         symbol: brokerSymbol,
         timeframe: request.timeframe,
         limit: Math.max(1, Math.min(5000, request.limit ?? 240))
-      })
+      }), signal
     );
     const candles = Array.isArray(payload.candles) ? payload.candles : [];
     return {
@@ -346,6 +356,7 @@ export async function fetchMt5ReadOnlyCandles(
       ...authority
     };
   } catch {
+    signal?.throwIfAborted();
     return disconnectedCandles(request, settings);
   }
 }
@@ -433,7 +444,8 @@ const dateRangeWindows = ({
 
 export async function fetchMt5CandlesByDateRange(
   request: Mt5ReadOnlyDateRangeRequest,
-  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()
+  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(),
+  signal?: AbortSignal
 ): Promise<Mt5ReadOnlyCandlesResponse> {
   const brokerSymbol = selectedBrokerSymbol(request.brokerSymbol, settings.brokerSymbolOverride);
   const safeLimit = Math.max(1, Math.min(5000, request.limit ?? 5000));
@@ -446,7 +458,7 @@ export async function fetchMt5CandlesByDateRange(
         from: request.from,
         to: request.to,
         limit: safeLimit
-      })
+      }), signal
     );
     const candles = normalizeAndDeduplicateCandles(Array.isArray(payload.candles) ? payload.candles : []);
     return {
@@ -472,6 +484,7 @@ export async function fetchMt5CandlesByDateRange(
       ...authority
     };
   } catch {
+    signal?.throwIfAborted();
     return {
       ...disconnectedCandles({ symbol: request.symbol, timeframe: request.timeframe, limit: safeLimit, brokerSymbol }, settings),
       sourceMethod: "GET /candles/range",
@@ -485,7 +498,8 @@ export async function fetchMt5CandlesByDateRange(
 
 export async function fetchMt5CandlesInChunks(
   request: Mt5ReadOnlyChunkedHistoryRequest,
-  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings()
+  settings: Mt5ReadOnlySettings = loadMt5ReadOnlySettings(),
+  signal?: AbortSignal
 ): Promise<Mt5ReadOnlyChunkedHistoryResult> {
   const brokerSymbol = selectedBrokerSymbol(request.brokerSymbol, settings.brokerSymbolOverride) ?? request.symbol;
   const requestedLookbackDays = Math.max(1, request.lookbackDays ?? 90);
@@ -500,6 +514,7 @@ export async function fetchMt5CandlesInChunks(
   const chunks: Mt5ReadOnlyHistoryChunk[] = [];
   const candles: Mt5ReadOnlyCandlesResponse["candles"] = [];
   for (const window of windows) {
+    signal?.throwIfAborted();
     const response = await fetchMt5CandlesByDateRange({
       brokerSymbol,
       from: window.from,
@@ -507,7 +522,8 @@ export async function fetchMt5CandlesInChunks(
       symbol: request.symbol,
       timeframe: request.timeframe,
       to: window.to
-    }, settings);
+    }, settings, signal);
+    signal?.throwIfAborted();
     chunks.push({
       from: window.from,
       to: window.to,
@@ -560,7 +576,8 @@ export async function fetchAndStoreMt5ReadOnlyCandleFeed({
   settings,
   symbol,
   timeframe,
-  usageMode = "chart_only"
+  usageMode = "chart_only",
+  signal
 }: {
   brokerSymbol?: string;
   gotraderSymbol?: string;
@@ -570,10 +587,13 @@ export async function fetchAndStoreMt5ReadOnlyCandleFeed({
   symbol: string;
   timeframe: string;
   usageMode?: "chart_only" | "research_source";
+  signal?: AbortSignal;
 }): Promise<ActiveMt5ReadOnlyCandleFeed> {
   const bridgeSettings = settings ?? loadMt5ReadOnlySettings();
-  const quote = await fetchMt5ReadOnlyQuote({ symbol, brokerSymbol }, bridgeSettings);
-  const candlesResponse = await fetchMt5ReadOnlyCandles({ symbol, timeframe, limit, brokerSymbol }, bridgeSettings);
+  const quote = await fetchMt5ReadOnlyQuote({ symbol, brokerSymbol }, bridgeSettings, signal);
+  signal?.throwIfAborted();
+  const candlesResponse = await fetchMt5ReadOnlyCandles({ symbol, timeframe, limit, brokerSymbol }, bridgeSettings, signal);
+  signal?.throwIfAborted();
   const feed = createActiveMt5ReadOnlyCandleFeed({
     candlesResponse,
     gotraderSymbol: gotraderSymbol ?? symbol,

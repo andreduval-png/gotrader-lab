@@ -58,7 +58,9 @@ export function detectCurrentOpportunities(input) {
   return {
     generatedAt: new Date().toISOString(),
     summary: input.currentRead?.currentOpportunitySummary,
-    opportunities: input.currentRead?.currentOpportunities ?? []
+    opportunities: input.currentRead?.currentOpportunities ?? [],
+    canonicalCandidates: input.currentRead?.canonicalCandidates ?? [],
+    charterProfiles: input.currentRead?.charterProfiles ?? []
   };
 }
 export function saveCurrentOpportunityScan() { return { ok: true, storage: "memory" }; }
@@ -547,6 +549,14 @@ async function main() {
     strategyVersion: "1.0.0",
     profileId: "ict_market_maker_buy_model_v1_research",
     candidateState: "ACTIVE_DELIVERY",
+    prerequisiteIdentity: {
+      sequenceId: "mmbm-sequence",
+      dealingRangeId: "mmbm-range",
+      engineeringLiquidityId: "mmbm-engineering",
+      displacementId: "mmbm-displacement",
+      pdArrayId: "mmbm-pd-array",
+      objectiveLiquidityId: "mmbm-objective"
+    },
     setupName: "Market Maker Buy Model",
     side: "long",
     geometry: marketMakerBuyGeometry,
@@ -554,6 +564,29 @@ async function main() {
     invalidation: 23080,
     target: 23120,
     rrEstimate: 3
+  };
+  const charter6 = {
+    charterModelNumber: 6,
+    charterIdentityId: "gotrader.ict.charter.model-6.v1",
+    charterProfileId: "charter_model_6_mmbm_profile_v1",
+    ownerStrategyId: "ict_market_maker_buy_model_v1",
+    ownerCandidateId: marketMakerBuyOpportunity.candidateId,
+    attributionMode: "owner_candidate_metadata",
+    researchValidated: false,
+    productionAdoptionAllowed: false,
+    authority
+  };
+  marketMakerBuyOpportunity.charterProfile = charter6;
+  const charter6Runtime = {
+    ...charter6,
+    label: "Charter 6 MMBM",
+    classification: "owner_profile",
+    runtimeStatus: "owner_candidate_active",
+    detail: "Attributed to the existing MMBM candidate.",
+    candidateCapability: "owner_attribution_only",
+    geometryCapability: "owner_native_only",
+    executableStrategyAdded: false,
+    emitsGeometry: false
   };
   globalThis.__ACTIVATE_MARKET_TEST_READ = currentRead({
     side: "long",
@@ -569,6 +602,7 @@ async function main() {
       topOpportunity: marketMakerBuyOpportunity
     },
     currentOpportunities: [marketMakerBuyOpportunity],
+    charterProfiles: [charter6Runtime],
     canonicalCandidates: [{
       opportunityId: marketMakerBuyOpportunity.id,
       candidateId: marketMakerBuyOpportunity.candidateId,
@@ -603,6 +637,11 @@ async function main() {
     [["ict_market_maker_buy_model_v1", "mmbm-live-candidate", "mmbm-live-canonical-geometry", 23090, 23080, 23120, 3]]
   );
   assert.equal(marketMakerBuyResult.summary.executionAllowed, false);
+  assert.equal(marketMakerBuyResult.summary.candidatePlans[0].charterProfile?.charterModelNumber, 6);
+  assert.equal(marketMakerBuyResult.summary.candidatePlans[0].prerequisiteIdentity?.sequenceId, "mmbm-sequence");
+  assert.equal(marketMakerBuyResult.summary.candidatePlans[0].prerequisiteIdentity?.displacementId, "mmbm-displacement");
+  assert.equal(marketMakerBuyResult.summary.charterProfiles?.[0].charterProfileId, "charter_model_6_mmbm_profile_v1");
+  assert.equal(marketMakerBuyResult.summary.charterProfiles?.[0].emitsGeometry, false);
   assertSafe(marketMakerBuyResult);
 
   const ict2022Geometry = {
@@ -908,10 +947,24 @@ async function main() {
   assert.equal(mismatchedScannerCandidate.summary.proposedCandidateStatus, "rejected");
   assertSafe(mismatchedScannerCandidate);
 
+  for (const stopAt of ["resolve_symbol", "load_analysis_m5", "save_latest_state"]) {
+    const controller = new AbortController();
+    let saves = 0;
+    await assert.rejects(suite.runIctActivateMarketPipeline(
+      { snapshot: snapshot(), signal: controller.signal },
+      { onStepUpdate: (step) => {
+        if (step.id === stopAt && step.status === "running") controller.abort(new Error("test cancellation"));
+      } },
+      { saveLatestSummary: () => { saves += 1; } }
+    ), /test cancellation/);
+    assert.equal(saves, 0, `cancellation at ${stopAt} must prevent summary persistence`);
+  }
+
   console.log(JSON.stringify({
     status: "passed",
     tested: [
       "initial_step_order",
+      "cancellation_before_work_and_summary_save",
       "successful_pipeline",
       "mt5_unavailable",
       "missing_htf_partial",

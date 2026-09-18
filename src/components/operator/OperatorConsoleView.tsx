@@ -107,6 +107,10 @@ const cycleHeartbeatFor = (stage: OperatorCycleStage) => {
       return { rgb: "34 211 238", label: "Source pulse" };
     case "building_market_read":
       return { rgb: "96 165 250", label: "Market-read pulse" };
+    case "owner_research":
+      return { rgb: "251 191 36", label: "Owner research pulse" };
+    case "research_only":
+      return { rgb: "232 121 249", label: "Research-only pulse" };
     case "running_research":
       return { rgb: "232 121 249", label: "Research pulse" };
     case "finalizing":
@@ -210,10 +214,10 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
                 <div className={cn(
                   "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
                   snapshot.cycle.status === "completed" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" :
-                    snapshot.cycle.status === "failed" || snapshot.cycle.status === "blocked" ? "border-amber-400/30 bg-amber-400/10 text-amber-300" :
+                    snapshot.cycle.status === "failed" || snapshot.cycle.status === "blocked" || snapshot.cycle.status === "completed_with_blockers" ? "border-amber-400/30 bg-amber-400/10 text-amber-300" :
                       "border-white/10 bg-white/[0.04] text-slate-400"
                 )}>
-                  {snapshot.cycle.status === "completed" ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> :
+                  {snapshot.cycle.status === "completed" || snapshot.cycle.status === "completed_with_blockers" ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> :
                     <BrainCircuit className="h-5 w-5" aria-hidden="true" />}
                 </div>
               )}
@@ -402,6 +406,52 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
             </div>
           ) : null}
 
+          {snapshot.marketContexts.length ? (
+            <div className="border-b border-white/10 px-5 py-4 sm:px-6" data-testid="operator-market-contexts">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className={WORKSPACE_SECTION_LABEL}>Market context</p>
+                <Badge variant="muted">Context only</Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {snapshot.marketContexts.map((item) => (
+                  <span
+                    key={item.contextId}
+                    className="inline-flex min-w-0 items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300"
+                    data-context-artifact={item.artifactId}
+                    title={item.blocker ?? item.detail}
+                  >
+                    <span className="max-w-56 truncate">{item.label}</span>
+                    <Badge variant={item.sourceBlocked ? "warning" : "muted"}>{words(item.sourceBlocked ? "source blocked" : item.state)}</Badge>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {snapshot.charterProfiles.length ? (
+            <details className="border-b border-white/10 px-5 py-4 sm:px-6" data-testid="operator-charter-profiles">
+              <summary className="cursor-pointer text-xs text-slate-300">
+                <span className={WORKSPACE_SECTION_LABEL}>Charter profiles</span>{" "}
+                <Badge variant="muted">Owner attribution only</Badge>
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {snapshot.charterProfiles.map((profile) => (
+                  <span
+                    key={profile.charterProfileId}
+                    className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300"
+                    data-charter-model={profile.charterModelNumber}
+                    title={profile.blocker ?? profile.detail}
+                  >
+                    <span className="max-w-48 truncate">{profile.label}</span>
+                    <Badge variant={profile.status === "owner_candidate_active" ? "success" : profile.status === "source_blocked" ? "warning" : "muted"}>
+                      {words(profile.status)}
+                    </Badge>
+                  </span>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
           <div className="grid grid-cols-1 gap-px bg-white/10 sm:grid-cols-2 2xl:grid-cols-3">
             {[
               { label: "Entry price", value: price(snapshot.researchPlan.entryPrice), tone: snapshot.researchPlan.signal === "NO_TRADE" ? "neutral" as const : "positive" as const },
@@ -492,6 +542,71 @@ export function OperatorConsoleView({ state }: OperatorConsoleViewProps) {
           </div>
         </section>
       </div>
+
+      <section className="overflow-hidden border-y border-white/10 bg-[#0d1420]" data-testid="operator-research-coverage">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <div>
+            <p className={WORKSPACE_SECTION_LABEL}>Research coverage</p>
+            <p className="mt-1 text-sm text-slate-400">Owner research, validation, and readiness.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">{snapshot.researchCoverage.liveOwnerCount} live owners</Badge>
+            <Badge variant={snapshot.researchCoverage.globalStatus === "OWNER_RESEARCH_COMPLETE" ? "success" : snapshot.researchCoverage.globalStatus === "COMPLETE_WITH_BLOCKERS" ? "warning" : "muted"}>
+              {words(snapshot.researchCoverage.globalStatus)}
+            </Badge>
+              <Badge variant={snapshot.researchCoverage.validationGlobalStatus === "ALL_VALIDATED" ? "success" : snapshot.researchCoverage.validationGlobalStatus === "PARTIALLY_VALIDATED" ? "secondary" : "muted"}>
+                {words(snapshot.researchCoverage.validationGlobalStatus)}
+              </Badge>
+              <Badge variant="secondary">Tech {snapshot.researchCoverage.technicallyValidatedCount}/5</Badge>
+              <Badge variant="muted">Performance {snapshot.researchCoverage.performanceValidatedCount}/5</Badge>
+              <Badge variant="secondary">Policy defined {snapshot.researchCoverage.performancePolicyDefinedCount}/5</Badge>
+            {typeof snapshot.researchCoverage.timeToLivePlanMs === "number" ? (
+              <Badge variant="muted">Plan {snapshot.researchCoverage.timeToLivePlanMs.toLocaleString()} ms</Badge>
+            ) : null}
+          </div>
+        </div>
+        <div className="divide-y divide-white/10 border-t border-white/10" data-testid="operator-live-owner-research-rows">
+          {snapshot.researchCoverage.rows.map((row) => (
+              <div key={row.strategyId} className="grid min-w-0 gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:px-6" data-owner-strategy={row.strategyId}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-100">{row.label}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500" title={row.validationBlocker ?? row.blocker}>
+                  {words(row.status)} / {row.validationBlocker ?? row.blocker ?? words(row.tier)}
+                </p>
+              </div>
+                <Badge variant={row.technicalStatus === "TECHNICALLY_VALIDATED" ? "success" : "warning"}>
+                  Tech {words(row.technicalStatus)}
+                </Badge>
+                <Badge variant={row.performanceStatus === "PERFORMANCE_VALIDATED" ? "success" : row.performanceStatus === "PERFORMANCE_POLICY_REQUIRED" ? "warning" : "muted"}>
+                  Performance {words(row.performanceStatus)}
+                </Badge>
+                <Badge variant={row.readinessStatus === "READY_FOR_RESEARCH_USE" ? "success" : "muted"}>
+                  Ready {row.readinessStatus === "READY_FOR_RESEARCH_USE" ? "yes" : "no"}
+              </Badge>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-white/10 px-5 py-4 sm:px-6" data-testid="operator-research-only-lane">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-fuchsia-300">Research-only</p>
+              <p className="mt-1 text-xs text-slate-500">Separate from the five live canonical owners.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {snapshot.researchCoverage.researchOnlyRows.map((row) => (
+                <span key={row.strategyId} className="inline-flex items-center gap-2 text-sm text-slate-200" data-owner-strategy={row.strategyId}>
+                  {row.label}
+                  <Badge variant={row.status === "RUNNING" ? "secondary" : row.status === "PASSED" || row.status === "PASSED_WITH_ZERO_CANDIDATES" ? "success" : "muted"}>
+                    {words(row.status)}
+                  </Badge>
+                  <Badge variant="muted">Validation {words(row.validationStatus)}</Badge>
+                  <Badge variant="muted">Readiness {words(row.readinessStatus)}</Badge>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-2xl border border-white/10 bg-[#0d1420] p-5 sm:p-6" data-testid="operator-market-brief">

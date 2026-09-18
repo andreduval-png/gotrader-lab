@@ -7,6 +7,7 @@ export const ICT_I3_REGISTRY: readonly IctI3RegistryEntry[] = Object.freeze([
     displayName: "MMXM Delivery Framework",
     classification: "FRAMEWORK_CONTEXT",
     executable: false,
+    runtimeClassification: "FRAMEWORK_CONTEXT_ONLY",
     researchValidated: false
   },
   {
@@ -15,6 +16,7 @@ export const ICT_I3_REGISTRY: readonly IctI3RegistryEntry[] = Object.freeze([
     displayName: "ICT Market Maker Buy Model",
     classification: "ACTIVE_RESEARCH",
     executable: true,
+    runtimeClassification: "LIVE_FACT_COMPLETENESS_UNVERIFIED",
     researchValidated: false
   },
   {
@@ -23,6 +25,7 @@ export const ICT_I3_REGISTRY: readonly IctI3RegistryEntry[] = Object.freeze([
     displayName: "ICT Market Maker Sell Model",
     classification: "ACTIVE_RESEARCH",
     executable: true,
+    runtimeClassification: "LIVE_FACT_COMPLETENESS_UNVERIFIED",
     researchValidated: false
   }
 ]);

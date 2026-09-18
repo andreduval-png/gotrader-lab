@@ -7,6 +7,7 @@ import type {
   IctPhase2StrategyId
 } from "./ictPhase2Types";
 import type { StrategyGeometryIntent } from "@/lib/tradeGeometry";
+import type { IctRuntimeContextSnapshot } from "@/lib/ictContextRuntime";
 import type { IctSmtSignal } from "./ictIndexSmtTypes";
 import type { IctIndexSmtJournalEvent } from "./ictIndexSmtTypes";
 import type {
@@ -319,6 +320,7 @@ export interface IctAdvisorPacket {
     ifvgFreshRetestV3?: IctIfvgFreshRetestV3CompactAssessment;
     coreIctCandidates?: IctCoreCandidateCollection;
     marketMakerCandidates?: MarketMakerCandidateCollection;
+    ictContextRuntime?: IctRuntimeContextSnapshot;
     hydrationSource?: "canonical_source_store" | "active_mt5_readonly_feed" | "metadata_only" | "unavailable";
     hydrationWarning?: string;
     noTradeReasonCount: number;

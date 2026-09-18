@@ -1,12 +1,12 @@
 import { CANONICAL_ICT_NONE_AUTHORITY } from "@/lib/ictCanonical/canonicalIctTypes";
 import type {
   CanonicalDealingRangeFact,
+  CanonicalDisplacementFact,
   CanonicalIctFact,
-  CanonicalIrlErlTransitionFact,
   CanonicalLiquidityFact,
   CanonicalPdArrayFact
 } from "@/lib/ictCanonical/canonicalIctTypes";
-import type { MarketMakerDirection, MmxmDeliveryContext, MmxmDeliveryDirection } from "@/lib/ictI3/ictI3Types";
+import type { MarketMakerDeliverySequence, MarketMakerDirection, MmxmDeliveryContext, MmxmDeliveryDirection } from "@/lib/ictI3/ictI3Types";
 
 export const visibleIctI3Facts = (facts: readonly CanonicalIctFact[], asOf: string) => {
   const cutoff = Date.parse(asOf);
@@ -18,13 +18,11 @@ export const visibleIctI3Facts = (facts: readonly CanonicalIctFact[], asOf: stri
 
 export const marketMakerDeliveryDirection = (
   direction: MarketMakerDirection,
-  transition?: CanonicalIrlErlTransitionFact
+  sequence?: MarketMakerDeliverySequence
 ): MmxmDeliveryDirection => {
-  if (!transition) return direction === "BULLISH" ? "TRANSITIONING_BULLISH" : "TRANSITIONING_BEARISH";
-  if (transition.currentState === "FORMING") {
+  if (!sequence || sequence.status !== "QUALIFIED") {
     return direction === "BULLISH" ? "TRANSITIONING_BULLISH" : "TRANSITIONING_BEARISH";
   }
-  if (transition.currentState === "INVALIDATED") return "UNRESOLVED";
   return direction === "BULLISH" ? "BULLISH_DELIVERY" : "BEARISH_DELIVERY";
 };
 
@@ -33,7 +31,8 @@ export const buildMmxmDeliveryContext = ({
   phase,
   range,
   liquidityEvent,
-  transition,
+  deliverySequence,
+  displacement,
   pdArray,
   objective,
   supportingFactIds,
@@ -43,7 +42,8 @@ export const buildMmxmDeliveryContext = ({
   phase: MmxmDeliveryContext["phase"];
   range?: CanonicalDealingRangeFact;
   liquidityEvent?: CanonicalLiquidityFact;
-  transition?: CanonicalIrlErlTransitionFact;
+  deliverySequence?: MarketMakerDeliverySequence;
+  displacement?: CanonicalDisplacementFact;
   pdArray?: CanonicalPdArrayFact;
   objective?: CanonicalLiquidityFact;
   supportingFactIds: readonly string[];
@@ -52,14 +52,14 @@ export const buildMmxmDeliveryContext = ({
   frameworkId: "gotrader.ict.i3.mmxm-delivery-framework.v1",
   classification: "framework_context",
   phase,
-  deliveryDirection: phase === "SEARCHING" ? "UNRESOLVED" : marketMakerDeliveryDirection(direction, transition),
+  deliveryDirection: phase === "SEARCHING" ? "UNRESOLVED" : marketMakerDeliveryDirection(direction, deliverySequence),
   dealingRangeId: range?.dealingRangeId,
   liquidityEventId: liquidityEvent?.liquidityId,
   liquidityClass: liquidityEvent?.liquidityClass,
   liquidityOwnerTimeframe: liquidityEvent?.ownerTimeframe,
   liquidityConsumedAt: liquidityEvent?.consumedAt,
-  transitionId: transition?.transitionId,
-  transitionType: transition?.transitionType,
+  sequenceId: deliverySequence?.sequenceId,
+  displacementId: displacement?.displacementId,
   pdArrayId: pdArray?.pdArrayId,
   objectiveLiquidityId: objective?.liquidityId,
   supportingFactIds: [...supportingFactIds],

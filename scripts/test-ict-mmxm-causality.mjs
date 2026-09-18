@@ -38,18 +38,18 @@ for (const direction of ["BULLISH", "BEARISH"]) {
 }
 
 const futureTrap = marketMakerFixture("BULLISH");
-futureTrap.facts = futureTrap.facts.filter((fact) => fact.factId !== "transition");
+futureTrap.facts = futureTrap.facts.filter((fact) => fact.factId !== "displacement" && fact.factId !== "pd-array");
 futureTrap.facts.push({
-  ...factBase("future-transition", "IRL_ERL_TRANSITION", 40),
-  transitionId: "future-transition",
-  transitionType: "ERL_TO_IRL_DELIVERY",
+  ...factBase("future-displacement", "DISPLACEMENT", 40),
+  displacementId: "future-displacement",
   direction: "bullish",
-  fromLiquidityId: "engineering",
-  toLiquidityId: "internal",
-  dealingRangeId: "range-1",
-  startedAt: at(40),
-  currentState: "ACTIVE"
+  startCandleId: "c40",
+  endCandleId: "c40",
+  bodySize: 5,
+  baselineBodySize: 2,
+  bodyMultiple: 2.5,
+  measurementPolicyId: "future"
 });
-assert.equal(ict.evaluateMarketMakerBuyModel(futureTrap).state, "DELIVERY_TRANSITION_FORMING");
+assert.equal(ict.evaluateMarketMakerBuyModel(futureTrap).state, "DELIVERY_SEQUENCE_FORMING");
 
 console.log("MMXM causality and future-extension invariance tests passed");

@@ -17,6 +17,35 @@ const sourceFiles = [
 
 function compileForNode() {
   fs.mkdirSync(outRoot, { recursive: true });
+  for (const [sourcePath, outputName, replacements] of [
+    [path.join(projectRoot, "src", "lib", "canonicalData", "canonicalDataRequirements.ts"), "canonicalDataRequirements.mjs", [
+      [/from\s+["']\.\/canonicalDataTypes["']/g, 'from "./canonicalDataTypes.mjs"']
+    ]],
+    [path.join(projectRoot, "src", "lib", "canonicalData", "canonicalDataPlanner.ts"), "canonicalDataPlanner.mjs", [
+      [/from\s+["']@\/lib\/ictCanonical\/canonicalIctIdentity["']/g, 'from "./canonicalIdentityStub.mjs"'],
+      [/from\s+["']@\/lib\/ictCanonical\/canonicalFactBuilder["']/g, 'from "./canonicalFactBuilderStub.mjs"'],
+      [/from\s+["']\.\/canonicalDataTypes["']/g, 'from "./canonicalDataTypes.mjs"']
+    ]]
+  ]) {
+    let output = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove, verbatimModuleSyntax: false },
+      fileName: sourcePath
+    }).outputText;
+    for (const [pattern, replacement] of replacements) output = output.replace(pattern, replacement);
+    fs.writeFileSync(path.join(outRoot, outputName), output, "utf8");
+  }
+  fs.writeFileSync(path.join(outRoot, "canonicalDataTypes.mjs"), "export {};\n", "utf8");
+  fs.writeFileSync(path.join(outRoot, "canonicalIdentityStub.mjs"), `
+export const canonicalFingerprint = (value) => "fixture:" + Buffer.from(JSON.stringify(value)).toString("base64url");
+export const fingerprintCanonicalSource = (candles) => canonicalFingerprint(candles.map((item) => [item.id, item.timestamp, item.close]));
+`, "utf8");
+  fs.writeFileSync(path.join(outRoot, "canonicalFactBuilderStub.mjs"), `
+export const buildCanonicalIctFactSnapshot = (input) => ({ asOf: input.asOf, sourceFingerprint: input.sourceFingerprint, facts: [] });
+`, "utf8");
+  fs.writeFileSync(path.join(outRoot, "canonicalDataFacade.mjs"), `
+export * from "./canonicalDataRequirements.mjs";
+export * from "./canonicalDataPlanner.mjs";
+`, "utf8");
   for (const file of sourceFiles) {
     const sourcePath = path.join(sourceRoot, file);
     const source = fs.readFileSync(sourcePath, "utf8");
@@ -36,7 +65,9 @@ function compileForNode() {
       .replace(/from\s+'..\/integrations\/mt5\/mt5ReadOnlyClient'/g, "from './mt5ReadOnlyClientStub.mjs'")
       .replace(/from\s+"..\/integrations\/mt5\/mt5ReadOnlyDepth"/g, 'from "./mt5ReadOnlyDepthStub.mjs"')
       .replace(/from\s+'..\/integrations\/mt5\/mt5ReadOnlyDepth'/g, "from './mt5ReadOnlyDepthStub.mjs'");
-    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), rewritten, "utf8");
+    const withPlanner = rewritten
+      .replace(/from\s+["']\.\.\/canonicalData["']/g, 'from "./canonicalDataFacade.mjs"');
+    fs.writeFileSync(path.join(outRoot, file.replace(/\.ts$/, ".mjs")), withPlanner, "utf8");
   }
   fs.writeFileSync(
     path.join(outRoot, "mt5ReadOnlyClientStub.mjs"),
@@ -305,6 +336,24 @@ async function main() {
   assert.equal(defaultHistoryRequestCount, recoveredRequestCount, "complete deep bundle may use the bounded cache");
   delete globalThis.__ICT_TEST_DISPLAY_FETCH;
   delete globalThis.__ICT_TEST_HISTORY_FETCH;
+
+  const fixedAsOf = "2026-06-08T00:00:00.000Z";
+  const canceled = new AbortController();
+  const abortRequests = [];
+  const pending = contextModule.buildIctMarketAnalysisContextBundle({
+    requestedSymbol: "MNQ", brokerSymbol: "USTECH", asOf: fixedAsOf, signal: canceled.signal
+  }, {
+    fetchChunkedHistory: (request, _settings, signal) => {
+      assert.equal(signal, canceled.signal);
+      assert.equal(request.to, fixedAsOf, "history must use cycle asOf, not wall clock");
+      abortRequests.push(request);
+      return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    }
+  });
+  assert.equal(abortRequests.length, 3);
+  canceled.abort("operator_timeout");
+  await assert.rejects(pending, (reason) => reason === "operator_timeout");
+  assert.equal(abortRequests.length, 3, "no queued requests after abort");
 
   console.log(JSON.stringify({
     status: "passed",

@@ -92,14 +92,44 @@ export const buildCanonicalPdLocation = ({
   input,
   range,
   price,
+  referenceTime = input.asOf,
+  referenceCandleId,
   equilibriumBandFraction = 0.04
 }: {
   input: CanonicalFactBuildInput;
   range: CanonicalDealingRangeFact;
   price: number;
+  referenceTime?: string;
+  referenceCandleId?: string;
   equilibriumBandFraction?: number;
-}): CanonicalPdLocationFact => {
+}): CanonicalPdLocationFact | undefined => {
+  const asOfMs = Date.parse(input.asOf);
+  const referenceMs = Date.parse(referenceTime);
+  const rangeValidFromMs = Date.parse(range.validFrom);
   const width = range.highPrice - range.lowPrice;
+  if (
+    range.symbol !== input.symbol ||
+    range.timeframe !== input.timeframe ||
+    !Number.isFinite(asOfMs) ||
+    !Number.isFinite(referenceMs) ||
+    !Number.isFinite(rangeValidFromMs) ||
+    !Number.isFinite(price) ||
+    !Number.isFinite(range.lowPrice) ||
+    !Number.isFinite(range.highPrice) ||
+    !Number.isFinite(range.equilibrium) ||
+    !Number.isFinite(equilibriumBandFraction) ||
+    width <= 0 ||
+    equilibriumBandFraction < 0 ||
+    equilibriumBandFraction > 0.5 ||
+    Math.abs(range.equilibrium - (range.highPrice + range.lowPrice) / 2) > Number.EPSILON * Math.max(1, Math.abs(range.equilibrium)) ||
+    rangeValidFromMs > asOfMs ||
+    referenceMs > asOfMs ||
+    referenceMs < rangeValidFromMs ||
+    price < range.lowPrice ||
+    price > range.highPrice
+  ) return undefined;
+  const policyId = "gotrader.canonical.pd-location.range-relative";
+  const policyVersion = "2.0.0";
   const location =
     Math.abs(price - range.equilibrium) <= width * equilibriumBandFraction
       ? "EQUILIBRIUM"
@@ -109,7 +139,11 @@ export const buildCanonicalPdLocation = ({
   const factId = canonicalFactId("PD_LOCATION", {
     dealingRangeId: range.dealingRangeId,
     price,
-    equilibriumBandFraction
+    referenceTime,
+    location,
+    equilibriumBandFraction,
+    policyId,
+    policyVersion
   });
   return {
     ...canonicalFactBase({
@@ -117,24 +151,27 @@ export const buildCanonicalPdLocation = ({
       factType: "PD_LOCATION",
       symbol: range.symbol,
       timeframe: range.timeframe,
-      occurredAt: input.asOf,
-      confirmedAt: input.asOf,
-      validFrom: input.asOf,
+      occurredAt: referenceTime,
+      confirmedAt: referenceTime,
+      validFrom: referenceTime,
       state: "ACTIVE",
       lineage: canonicalLineage({
-        sourceCandleIds: [],
+        sourceCandleIds: referenceCandleId ? [referenceCandleId] : [],
         sourceFactIds: [range.factId],
         sourceFingerprint: input.sourceFingerprint ?? range.lineage.sourceFingerprint,
-        policyId: "gotrader.canonical.pd-location.range-relative",
-        policyVersion: "1.0.0"
+        policyId,
+        policyVersion
       })
     }),
     factType: "PD_LOCATION",
     pdLocationId: factId,
     dealingRangeId: range.dealingRangeId,
     price,
+    referenceTime,
     location,
-    equilibriumBandFraction
+    equilibriumBandFraction,
+    classificationPolicyId: policyId,
+    classificationPolicyVersion: policyVersion
   };
 };
 
@@ -186,7 +223,31 @@ export const buildCanonicalOteZone = (
 
 type CanonicalArraySource = CanonicalFvgFact | CanonicalFvgTransitionFact | CanonicalBprFact | CanonicalBlockFact | CanonicalOteZoneFact;
 
-export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[]): CanonicalPdArrayFact[] =>
+const sourceRangeId = (source: CanonicalArraySource) =>
+  source.factType === "OTE_ZONE" ? source.dealingRangeId : undefined;
+
+const uniquelyOwnedRange = (
+  source: CanonicalArraySource,
+  priceRange: readonly [number, number],
+  ranges: readonly CanonicalDealingRangeFact[]
+) => {
+  const explicitRangeId = sourceRangeId(source);
+  const matches = ranges.filter((range) =>
+    (!explicitRangeId || range.dealingRangeId === explicitRangeId) &&
+    range.symbol === source.symbol &&
+    range.timeframe === source.timeframe &&
+    range.lineage.sourceFingerprint === source.lineage.sourceFingerprint &&
+    Date.parse(source.validFrom) >= Date.parse(range.validFrom) &&
+    priceRange[0] >= range.lowPrice &&
+    priceRange[1] <= range.highPrice
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
+export const projectCanonicalPdArrays = (
+  facts: readonly CanonicalArraySource[],
+  ranges: readonly CanonicalDealingRangeFact[] = []
+): CanonicalPdArrayFact[] =>
   facts.flatMap((source) => {
     if (source.factType === "FVG_TRANSITION" && source.transitionType !== "INVERTED") return [];
     const pdArrayType = source.factType === "FVG"
@@ -204,7 +265,9 @@ export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[])
     const direction = source.factType === "BPR" || source.factType === "OTE_ZONE"
       ? source.factType === "OTE_ZONE" ? source.direction : "neutral"
       : source.direction;
-    const factId = canonicalFactId("PD_ARRAY", { sourceFactId: source.factId, pdArrayType });
+    const priceRange = [Math.min(...prices), Math.max(...prices)] as const;
+    const dealingRangeId = sourceRangeId(source) ?? uniquelyOwnedRange(source, priceRange, ranges)?.dealingRangeId;
+    const factId = canonicalFactId("PD_ARRAY", { sourceFactId: source.factId, pdArrayType, dealingRangeId });
     return [{
       ...canonicalFactBase({
         factId,
@@ -217,7 +280,7 @@ export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[])
         state: source.state,
         lineage: canonicalLineage({
           sourceCandleIds: source.lineage.sourceCandleIds,
-          sourceFactIds: [source.factId],
+          sourceFactIds: [source.factId, ...(dealingRangeId ? [dealingRangeId] : [])],
           sourceFingerprint: source.lineage.sourceFingerprint,
           policyId: "gotrader.canonical.pd-array.projection",
           policyVersion: "1.0.0"
@@ -227,7 +290,8 @@ export const projectCanonicalPdArrays = (facts: readonly CanonicalArraySource[])
       pdArrayId: factId,
       pdArrayType,
       direction,
-      priceRange: [Math.min(...prices), Math.max(...prices)],
-      sourceFactId: source.factId
+      priceRange,
+      sourceFactId: source.factId,
+      dealingRangeId
     }];
   });

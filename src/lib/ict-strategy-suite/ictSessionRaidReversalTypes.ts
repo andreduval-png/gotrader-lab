@@ -52,6 +52,18 @@ export interface IctSessionRaidReversalLevel {
   source: string;
 }
 
+export interface IctSessionRaidReversalTargetObjective extends IctSessionRaidReversalLevel {
+  objectiveId: string;
+  targetClass: string;
+  sessionIdentity: string;
+  validFrom?: string;
+  asOf: string;
+  sourceFingerprint: string;
+  policyId: string;
+  policyVersion: string;
+  consumed: boolean;
+}
+
 export interface IctSessionRaidReversalRange {
   high?: number;
   low?: number;
@@ -82,7 +94,7 @@ export interface IctSessionRaidReversalReferenceLevels {
   nySessionHigh?: IctSessionRaidReversalLevel;
   nySessionLow?: IctSessionRaidReversalLevel;
   currentPremiumDiscount: IctSessionRaidReversalPremiumDiscount;
-  sellSideLiquidityTargets: IctSessionRaidReversalLevel[];
+  sellSideLiquidityTargets: IctSessionRaidReversalTargetObjective[];
   buySideLiquidityTargets: IctSessionRaidReversalLevel[];
 }
 
@@ -133,6 +145,7 @@ export interface IctSessionRaidReversalNarrative {
   target?: number;
   rr?: number;
   geometry?: CanonicalTradeGeometry;
+  selectedTargetObjective?: IctSessionRaidReversalTargetObjective;
   tradeConstructionBlockers: IctTradeConstructionBlocker[];
   blockers: string[];
   missingConditions: string[];

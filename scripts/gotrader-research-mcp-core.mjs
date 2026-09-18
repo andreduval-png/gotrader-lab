@@ -343,7 +343,7 @@ const identityBlockers = (proposal, active) => {
   return checks.filter(([left, right]) => !proposal?.[left] || proposal[left] !== active?.[right]).map(([, , blocker]) => blocker);
 };
 
-export const evaluateCanonicalTradeProposal = async (proposal, { repoRoot = process.cwd(), nowMs = Date.now() } = {}) => {
+export const evaluateCanonicalTradeProposal = async (proposal, { repoRoot = process.cwd(), nowMs = Date.now(), record = true } = {}) => {
   const runtime = await readRuntimeMirror({ repoRoot, nowMs });
   const blockers = [...runtime.blockers];
   const blockedFields = scanForForbiddenRuntimeContent(proposal, "proposal");
@@ -433,7 +433,7 @@ export const evaluateCanonicalTradeProposal = async (proposal, { repoRoot = proc
     autoApplyAllowed: false,
     authority: GOTRADER_RESEARCH_MCP_AUTHORITY
   };
-  await appendLedger(runtimePaths(repoRoot).proposals, result);
+  if (record) await appendLedger(runtimePaths(repoRoot).proposals, result);
   return result;
 };
 

@@ -10,6 +10,7 @@ import type {
 } from "./currentOpportunityTypes";
 import { projectCanonicalTradeGeometry } from "../tradeGeometry/canonicalTradeGeometry";
 import { buildCanonicalRuntimeCandidateSet, type CanonicalRuntimeCandidateSet } from "./canonicalRuntimeCandidateSet";
+import { attributeCharterOwnerCandidates, buildCharterProfileRuntimeSnapshot } from "../ictCharterProfiles";
 
 const authority = {
   executionAuthority: "none" as const,
@@ -162,6 +163,7 @@ const opportunity = (
     profileId: patch.profileId,
     candidateState: patch.candidateState,
     contextIdentity: patch.contextIdentity,
+    prerequisiteIdentity: patch.prerequisiteIdentity,
     model: patch.model,
     symbol: context.requestedSymbol,
     brokerSymbol: context.brokerSymbol,
@@ -276,7 +278,7 @@ const marketMakerOpportunities = (context: CurrentOpportunityContext): CurrentOp
         status: "diagnostic_context",
         classification: "diagnostic",
         setupName: "MMXM delivery context",
-        thesis: "Range-owned liquidity engineering, delivery transition, and repricing context only; MMXM cannot create geometry or a signal.",
+        thesis: "Range-owned liquidity engineering, directional delivery, and repricing context only; MMXM cannot create geometry or a signal.",
         side: "flat",
         geometryMode: "unavailable",
         blockers: [...framework.blockers],
@@ -296,6 +298,15 @@ const marketMakerOpportunities = (context: CurrentOpportunityContext): CurrentOp
       profileId: candidate.profileId,
       candidateState: candidate.state,
       contextIdentity: candidate.context.dealingRangeId,
+      prerequisiteIdentity: {
+        sequenceId: candidate.deliverySequence.sequenceId,
+        dealingRangeId: candidate.deliverySequence.dealingRangeId,
+        pdLocationFactId: candidate.deliverySequence.pdLocationFactId,
+        engineeringLiquidityId: candidate.deliverySequence.engineeringLiquidityId,
+        displacementId: candidate.deliverySequence.displacementId,
+        pdArrayId: candidate.deliverySequence.pdArrayId,
+        objectiveLiquidityId: candidate.deliverySequence.objectiveLiquidityId
+      },
       canonicalCandidate: true,
       model: label,
       status: qualified ? "valid_candidate" : rejected ? "rejected" : "forming",
@@ -539,6 +550,7 @@ const sessionRaidReversalOpportunity = (context: CurrentOpportunityContext): Cur
   const narrative = context.sessionRaidReversal;
   if (!narrative) return undefined;
   const sharedBlockers = baseBlockersFor(context);
+  const canonicalContextGeometry = narrative.status === "context_only" && narrative.geometry?.geometryValid === true;
   const status: CurrentOpportunityStatus =
     narrative.status === "complete_bearish_reversal_candidate" && narrative.canCreateValidationChainEntry
       ? "valid_candidate"
@@ -548,10 +560,12 @@ const sessionRaidReversalOpportunity = (context: CurrentOpportunityContext): Cur
           ? "needs_more_data"
           : narrative.status === "rejected"
             ? "rejected"
-            : narrative.status === "context_only"
-              ? "diagnostic_context"
+            : canonicalContextGeometry
+              ? "near_miss"
+              : narrative.status === "context_only"
+                ? "diagnostic_context"
               : "near_miss";
-  const diagnostic = narrative.status === "context_only";
+  const diagnostic = narrative.status === "context_only" && !canonicalContextGeometry;
   const detectedSteps = narrative.steps.filter((item) => item.detected).length;
   const stepSummary = `${detectedSteps}/${narrative.steps.length} narrative steps detected`;
   const missing = narrative.missingConditions.length ? narrative.missingConditions : narrative.steps.filter((item) => !item.detected).map((item) => item.step);
@@ -784,7 +798,7 @@ const summarize = (
 
 export const detectCurrentOpportunities = (context: CurrentOpportunityContext): CurrentOpportunityScan => {
   const sessionRaid = sessionRaidReversalOpportunity(context);
-  const opportunities = [
+  const detectedOpportunities = [
     ...coreIctOpportunities(context),
     ...marketMakerOpportunities(context),
     primaryOpportunity(context),
@@ -793,6 +807,12 @@ export const detectCurrentOpportunities = (context: CurrentOpportunityContext): 
   ].sort(
     (left, right) => statusRank[right.status] - statusRank[left.status] || right.confidence - left.confidence
   );
+  const opportunities = attributeCharterOwnerCandidates(detectedOpportunities);
+  const charterProfileRuntime = buildCharterProfileRuntimeSnapshot({
+    opportunities,
+    generatedAt: context.generatedAt,
+    sourceFingerprint: context.sourceFingerprint
+  });
   const canonicalCandidateSet = buildCanonicalRuntimeCandidateSet({
     opportunities,
     generatedAt: context.generatedAt,
@@ -811,6 +831,7 @@ export const detectCurrentOpportunities = (context: CurrentOpportunityContext): 
     },
     opportunities,
     canonicalCandidates: canonicalCandidateSet.candidates,
+    charterProfiles: charterProfileRuntime.profiles,
     summary,
     researchOnly: true,
     authority,
