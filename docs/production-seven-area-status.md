@@ -68,3 +68,16 @@ candidate, fill or completed trade. No performance qualification is claimed,
 no thresholds changed, and no raw candles or generated artifacts are committed.
 The earlier capacity failure remains historical evidence, superseded only for
 this bounded retry, not erased or used to authorize a full-dataset run.
+
+## Full-Session And Two-Date Capacity Update
+
+Full-session and two-date processing capacity are now verified. The accepted
+two-date chain covers 156 observations for each of five owners, including
+explicitly reviewed checkpoint adoption, cross-batch deduplication and independent
+aggregate reconciliation. Peak observed RSS is 517.7 MiB; all resource gates held.
+See [capacity acceptance](production-full-session-multi-date-capacity-acceptance.md).
+
+This supersedes the earlier capacity prerequisite only for the two qualified
+dates. The full 936-observation run is still not admitted. Zero eligible trades
+were produced; owner performance acceptance, broader coverage, durable service
+operations and authorized shadow/demo qualification remain incomplete.

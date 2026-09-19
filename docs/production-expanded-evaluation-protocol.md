@@ -211,3 +211,15 @@ RC1B historical evaluation regression and runner syntax check passed. This is a
 same-day capacity extension, not longer calendar-history or full-schedule
 qualification. FullEvaluationAllowed remains false. Whole-session and multi-date
 resource growth remain PARTIAL; no performance/readiness gate was relaxed.
+
+## Full-Session And Two-Date Closure
+
+The subsequent full-session and two-date capacity tests passed after bounded
+worker, shared-runtime, telemetry-race and reviewed-continuation remediation.
+See [capacity acceptance](production-full-session-multi-date-capacity-acceptance.md)
+for all preserved failures, exact artifact hashes and scope boundaries.
+Accepted two-date coverage is 780 owner-observations, peak observed RSS 517.7 MiB,
+slowest worker 80.758 seconds, and 39.7 MiB output. Three-observation operational
+microbatches preserve the original fold and schedule; the protocol's research
+definition/hash and scoring rules are unchanged. Full 936-observation admission
+and performance/production approval remain closed.
