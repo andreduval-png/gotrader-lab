@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { canonicalHash } from "./lib/bt-g1-3-certified-dataset.mjs";
 import { reconcileHistoricalResults } from "./lib/p4-batch-dispatch.mjs";
@@ -18,6 +19,13 @@ assert.deepEqual(manifest.schedule, plan.schedule);
 assert.equal(continuation.manifestHash, canonicalHash(manifest));
 assert.equal(continuation.fullEvaluationAllowed, false);
 assert.equal(continuation.reports.length, manifest.stages);
+if (manifest.adoption) {
+  assert.ok(manifest.adoption.throughStage > 0 && manifest.adoption.throughStage < manifest.stages);
+  for (const item of manifest.adoption.files) {
+    assert.ok(!path.isAbsolute(item.file) && !item.file.split(/[\\/]/).includes(".."));
+    assert.equal(createHash("sha256").update(fs.readFileSync(path.join(root, item.file))).digest("hex"), item.sha256);
+  }
+}
 const finalPrefix = `stage-${manifest.stages}/`;
 const final = read(`${finalPrefix}pilot-report.json`);
 const { canonicalFingerprint } = await import(pathToFileURL(path.join(root,

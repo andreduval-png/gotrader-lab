@@ -297,6 +297,11 @@ try {
     const partial = dispatchHistoricalFold({ ...dispatch, maxBatches: 1 });
     assert.equal(partial.status, "CHECKPOINTED");
     assert.equal(partial.nextPosition, 1);
+    const seed = JSON.parse(fs.readFileSync(`${directory}/state.json`, "utf8")).checkpoint;
+    const adopted = dispatchHistoricalFold({ ...dispatch, directory: fs.mkdtempSync(".gotrader/reviewed-batch-fixture-"),
+      input: { ...batchInput, resumeFrom: seed } });
+    assert.equal(adopted.result.resultIdentityHash, fresh.resultIdentityHash);
+    assert.throws(() => dispatchHistoricalFold({ ...dispatch, input: { ...batchInput, resumeFrom: seed } }), /REQUIRES_NEW_STATE/);
     assert.throws(() => dispatchHistoricalFold({ ...dispatch, binding: { foldIdentity: "foreign" } }), /IDENTITY_MISMATCH/);
     const batched = dispatchHistoricalFold(dispatch);
     assert.equal(batched.status, "COMPLETED");

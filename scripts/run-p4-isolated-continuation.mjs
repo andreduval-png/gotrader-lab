@@ -8,6 +8,7 @@ import { inspectDiskBudget } from "./lib/p4-disk-budget.mjs";
 import { superviseProbe } from "./lib/p4-probe-supervisor.mjs";
 import { canonicalHash } from "./lib/bt-g1-3-certified-dataset.mjs";
 import { qualificationPlan } from "./lib/p4-qualification-plan.mjs";
+import { adoptReviewedContinuation } from "./lib/p4-reviewed-continuation.mjs";
 
 const root = path.resolve(".gotrader/bt-g1-3r");
 if (process.argv[2] === "--worker") {
@@ -25,6 +26,8 @@ if (process.argv[2] === "--worker") {
   await runBtG13rPilot({ mode: `${mode}/stage-${stage}`, expandedQualification: true,
     batchDirectory: path.join(directory, "batches"), maxBatches: 1, packageBinding: actual,
     qualificationObservations: manifest.observationsPerOwner,
+    reviewedCheckpointDirectory: Number(stage) === manifest.adoption?.throughStage + 1
+      ? path.join(directory, `stage-${manifest.adoption.throughStage}`) : undefined,
     sharedRuntimeDirectory: path.join(directory, "runtime") });
 } else {
   const plan = qualificationPlan(process.argv[2]);
@@ -32,10 +35,17 @@ if (process.argv[2] === "--worker") {
   const packageIdentity = readCleanPackageIdentity(process.cwd());
   const mode = `isolated-${Date.now()}-${process.pid}`, directory = path.join(root, mode);
   fs.mkdirSync(directory, { recursive: true });
-  const manifest = { packageIdentity, ...plan, maxOldSpaceMiB: 256, fullEvaluationAllowed: false, authority: "none/none/none" };
+  let reviewed;
+  if (process.argv[3]) {
+    if (process.argv[3] !== "--adopt-reviewed" || process.argv.length !== 6) throw new Error("EXPLICIT_REVIEWED_SOURCE_AND_STAGE_REQUIRED");
+    reviewed = await adoptReviewedContinuation({ source: process.argv[4], throughStage: Number(process.argv[5]),
+      destination: directory, plan, packageIdentity });
+  }
+  const manifest = { packageIdentity, ...plan, maxOldSpaceMiB: 256,
+    ...(reviewed ? { adoption: reviewed.adoption } : {}), fullEvaluationAllowed: false, authority: "none/none/none" };
   fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(manifest, null, 2), { flag: "wx" });
-  const reports = [];
-  for (let stage = 1; stage <= stages; stage += 1) {
+  const reports = reviewed?.reports ?? [];
+  for (let stage = (reviewed?.adoption.throughStage ?? 0) + 1; stage <= stages; stage += 1) {
     const disk = fs.statfsSync(directory);
     const preflight = evaluateCapacityPreflight({ freeMemoryBytes: os.freemem(), freeDiskBytes: disk.bavail * disk.bsize });
     if (preflight.status !== "BOUNDED_PROBE_ELIGIBLE") {

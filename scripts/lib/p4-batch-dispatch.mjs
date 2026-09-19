@@ -29,9 +29,10 @@ export const dispatchHistoricalFold = ({ directory, binding, input, runFold,
   fs.closeSync(fd);
   const stateFile = path.join(directory, "state.json");
   const identity = canonicalHash({ binding, schedule: input.evaluationTimes, batchSize });
-  let checkpoint;
+  let checkpoint = input.resumeFrom;
   try {
     if (fs.existsSync(stateFile)) {
+      if (checkpoint) throw new Error("BATCH_REVIEWED_CHECKPOINT_REQUIRES_NEW_STATE");
       const { stateHash, ...state } = JSON.parse(fs.readFileSync(stateFile, "utf8"));
       if (canonicalHash(state) !== stateHash || state.identity !== identity) throw new Error("BATCH_STATE_IDENTITY_MISMATCH");
       checkpoint = state.checkpoint;

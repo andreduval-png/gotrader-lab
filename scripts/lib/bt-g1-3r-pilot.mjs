@@ -77,7 +77,7 @@ const peakSampler = () => {
 
 export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false,
   batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null, qualificationObservations = 12,
-  sharedRuntimeDirectory } = {}) => {
+  sharedRuntimeDirectory, reviewedCheckpointDirectory } = {}) => {
   const qualification = qualificationPlan(qualificationObservations);
   if (batchDirectory && !expandedQualification) throw new Error("BATCH_DIRECTORY_REQUIRES_EXPANDED_MODE");
   if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
@@ -134,7 +134,8 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
   const terminalResults = [];
   for (const adapter of adapters) {
     const checkpointFile = path.join(outputDirectory, `${adapter.strategyId}.checkpoint.json`);
-    const resumeFile = resumeDirectory ? path.join(path.resolve(resumeDirectory), `${adapter.strategyId}.checkpoint.json`) : undefined;
+    const checkpointSource = reviewedCheckpointDirectory ?? resumeDirectory;
+    const resumeFile = checkpointSource ? path.join(path.resolve(checkpointSource), `${adapter.strategyId}.checkpoint.json`) : undefined;
     const resumeFrom = resumeFile && fs.existsSync(resumeFile) ? JSON.parse(fs.readFileSync(resumeFile, "utf8")) : undefined;
     let checkpointCount = 0;
     let interrupted = false;
