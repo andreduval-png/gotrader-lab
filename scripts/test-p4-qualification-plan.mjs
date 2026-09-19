@@ -6,7 +6,7 @@ for (const [flag, size] of [["--qualify-two-processes", 12], ["--qualify-four-pr
   ["--qualify-full-session", 78], ["--qualify-multi-date", 156]]) {
   const plan = qualificationPlan(flag);
   assert.deepEqual(plan, qualificationPlan(size));
-  assert.equal(plan.stages, size / 6);
+  assert.equal(plan.stages, size / (size >= 78 ? 3 : 6));
   assert.equal(plan.fullEvaluationAllowed, false);
   assert.deepEqual(plan.schedule, buildExpandedEvaluationProtocol().evaluationTimes.slice(0, size));
   assert.equal(new Set(plan.schedule).size, size);

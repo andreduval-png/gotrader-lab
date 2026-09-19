@@ -18,13 +18,14 @@ if (process.argv[2] === "--worker") {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, "manifest.json"), "utf8"));
   const plan = qualificationPlan(manifest.observationsPerOwner);
   if (manifest.stages !== plan.stages || Number(stage) > manifest.stages ||
-      manifest.observationsPerOwner !== manifest.stages * 6) throw new Error("INVALID_ISOLATED_MANIFEST");
+      manifest.batchSize !== plan.batchSize || manifest.observationsPerOwner !== manifest.stages * manifest.batchSize) throw new Error("INVALID_ISOLATED_MANIFEST");
   const actual = readCleanPackageIdentity(process.cwd());
   if (canonicalHash(actual) !== canonicalHash(manifest.packageIdentity)) throw new Error("ISOLATED_PACKAGE_CHANGED");
   const { runBtG13rPilot } = await import("./lib/bt-g1-3r-pilot.mjs");
   await runBtG13rPilot({ mode: `${mode}/stage-${stage}`, expandedQualification: true,
     batchDirectory: path.join(directory, "batches"), maxBatches: 1, packageBinding: actual,
-    qualificationObservations: manifest.observationsPerOwner });
+    qualificationObservations: manifest.observationsPerOwner,
+    sharedRuntimeDirectory: path.join(directory, "runtime") });
 } else {
   const plan = qualificationPlan(process.argv[2]);
   const { stages } = plan;
@@ -56,11 +57,11 @@ if (process.argv[2] === "--worker") {
     if (result.status !== "COMPLETED" || !packageUnchanged) throw new Error("ISOLATED_STAGE_FAILED_NO_AUTOMATIC_RETRY");
     const pilot = JSON.parse(fs.readFileSync(path.join(stageDirectory, "pilot-report.json"), "utf8"));
     if (pilot.results.length !== 5 || pilot.results.some((owner) => stage < stages
-      ? owner.status !== "checkpointed" || owner.nextPosition !== stage * 6
+      ? owner.status !== "checkpointed" || owner.nextPosition !== stage * plan.batchSize
       : owner.status !== "completed" || owner.counts.evaluated !== manifest.observationsPerOwner)) throw new Error("ISOLATED_CURSOR_MISMATCH");
     if (fs.statSync(path.join(stageDirectory, "stderr.log")).size !== 0 ||
         pilot.resources.peakRssBytes > 768 * 1024 ** 2) throw new Error("ISOLATED_INTERNAL_RESOURCE_FAILURE");
-    console.log(JSON.stringify({ stage, stages, cursor: stage * 6, elapsedMs: result.elapsedMs,
+    console.log(JSON.stringify({ stage, stages, cursor: stage * plan.batchSize, elapsedMs: result.elapsedMs,
       peakRssBytes: Math.max(result.peakRssBytes, pilot.resources.peakRssBytes) }));
   }
   fs.writeFileSync(path.join(directory, "continuation-report.json"), JSON.stringify({ manifestHash: canonicalHash(manifest),

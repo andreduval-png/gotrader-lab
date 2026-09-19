@@ -8,7 +8,7 @@ import {
 } from "./bt-g1-3-certified-dataset.mjs";
 import { loadVerifiedFoldAdmission, runVerifiedHistoricalFold } from "./p3-verified-fold-admission.mjs";
 import { evaluateCapacityPreflight } from "./p4-capacity-preflight.mjs";
-import { compileBtG13rRuntime } from "./bt-g1-3r-runtime.mjs";
+import { compileBtG13rRuntime, loadBoundRuntime } from "./bt-g1-3r-runtime.mjs";
 import { buildExpandedEvaluationProtocol } from "./p4-expanded-evaluation-protocol.mjs";
 import { bindExpandedPolicies, classifyScheduledObservations } from "./p4-expanded-admission.mjs";
 import { dispatchHistoricalFold, reconcileHistoricalResults } from "./p4-batch-dispatch.mjs";
@@ -76,14 +76,15 @@ const peakSampler = () => {
 };
 
 export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false,
-  batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null, qualificationObservations = 12 } = {}) => {
+  batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null, qualificationObservations = 12,
+  sharedRuntimeDirectory } = {}) => {
   const qualification = qualificationPlan(qualificationObservations);
   if (batchDirectory && !expandedQualification) throw new Error("BATCH_DIRECTORY_REQUIRES_EXPANDED_MODE");
   if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
   const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
   const definition = protocol ? { ...BT_G1_3R_PILOT,
     startUtc: qualification.startUtc, endUtc: qualification.endUtc,
-    selectionPolicy: `Capacity qualification: first ${qualificationObservations} observations in six-observation batches; not full evaluation`
+    selectionPolicy: `Capacity qualification: first ${qualificationObservations} observations in ${qualification.batchSize}-observation batches; not full evaluation`
   } : BT_G1_3R_PILOT;
   const startedAt = new Date().toISOString();
   const wallStart = performance.now();
@@ -94,8 +95,8 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
   }
   const stopSampling = peakSampler();
   const outputDirectory = path.resolve(".gotrader", "bt-g1-3r", mode);
-  const runtime = compileBtG13rRuntime({
-    outputRoot: path.join(outputDirectory, "runtime"),
+  const runtime = (sharedRuntimeDirectory ? loadBoundRuntime : compileBtG13rRuntime)({
+    outputRoot: sharedRuntimeDirectory ?? path.join(outputDirectory, "runtime"), packageBinding,
     entries: [
       "src/lib/historicalFold/historicalFoldStrategyAdapters.ts",
       "src/lib/historicalFold/runCanonicalHistoricalFold.ts",
@@ -177,7 +178,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
         directory: ownerBatchDirectory,
         binding: { manifestHash: policyBinding.manifestHash, admissionHash: canonicalHash(admission.receipt),
           owner: adapter.strategyId, fold: foldInput.fold, packageBinding },
-        input: foldInput, runFold, batchSize: protocol.observationsPerBatch, maxBatches
+        input: foldInput, runFold, batchSize: qualification.batchSize, maxBatches
       }) : undefined;
       if (dispatched) {
         checkpointCount = dispatched.batchesExecuted ?? maxBatches;
@@ -221,6 +222,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     admission: admission.receipt,
     admissionHash: canonicalHash(admission.receipt),
     runtimeCompiledFiles: runtime.compiledFiles,
+    runtimeDirectory: path.relative(outputDirectory, runtime.outputRoot).replace(/\\/g, "/"),
     candleCounts: Object.fromEntries(Object.entries(candlesByTimeframe).map(([timeframe, candles]) => [timeframe, candles.length])),
     evaluationCount: evaluationTimes.length,
     results,
@@ -231,7 +233,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
       freeDiskAfterBytes,
       outputBytes,
       workerCount: 1,
-      checkpointBatchSize: protocol?.observationsPerBatch ?? BT_G1_3R_PILOT.checkpointEvery
+      checkpointBatchSize: protocol ? qualification.batchSize : BT_G1_3R_PILOT.checkpointEvery
     },
     researchValidated: false,
     productionAdoptionAllowed: false,

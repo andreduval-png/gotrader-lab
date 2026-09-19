@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { createHash } from "node:crypto";
+import { canonicalHash } from "./bt-g1-3-certified-dataset.mjs";
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx"];
 
@@ -28,6 +30,31 @@ const importSpecifiers = (source) => [...source.matchAll(
 )].map((match) => match[2]);
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Reuse only a complete, package-bound runtime. Never rebuild a damaged cache.
+export const loadBoundRuntime = ({ outputRoot, entries, packageBinding }) => {
+  const manifestFile = path.join(outputRoot, "runtime-manifest.json");
+  const bindingHash = canonicalHash({ packageBinding, entries });
+  const inventory = () => fs.readdirSync(outputRoot, { recursive: true, withFileTypes: true })
+    .filter((item) => item.isFile() && item.name !== "runtime-manifest.json")
+    .map((item) => {
+      const file = path.join(item.parentPath ?? item.path, item.name);
+      return { file: path.relative(outputRoot, file).replace(/\\/g, "/"),
+        hash: createHash("sha256").update(fs.readFileSync(file)).digest("hex") };
+    }).sort((a, b) => a.file.localeCompare(b.file));
+  if (fs.existsSync(outputRoot)) {
+    const { manifestHash, ...manifest } = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+    if (manifestHash !== canonicalHash(manifest) || manifest.bindingHash !== bindingHash ||
+        canonicalHash(manifest.files) !== canonicalHash(inventory())) throw new Error("BOUND_RUNTIME_INTEGRITY_FAILURE");
+    return { outputRoot, compiledFiles: manifest.files.length,
+      entryUrls: Object.fromEntries(entries.map((entry) => [entry,
+        pathToFileURL(path.join(outputRoot, entry.replace(/\.(?:ts|tsx)$/, ".mjs"))).href])) };
+  }
+  const runtime = compileBtG13rRuntime({ outputRoot, entries });
+  const manifest = { bindingHash, files: inventory() };
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, manifestHash: canonicalHash(manifest) }), { flag: "wx" });
+  return runtime;
+};
 
 export const compileBtG13rRuntime = ({
   root = process.cwd(),

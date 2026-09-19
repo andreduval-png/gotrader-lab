@@ -11,17 +11,19 @@ const root = path.resolve(process.argv[2]);
 const read = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
 const manifest = read("manifest.json"), continuation = read("continuation-report.json");
 const plan = qualificationPlan(manifest.observationsPerOwner);
-assert.equal(manifest.stages, plan.stages);
+const batchSize = manifest.batchSize ?? 6;
+assert.ok([3, 6].includes(batchSize));
+assert.equal(manifest.stages, plan.observationsPerOwner / batchSize);
 assert.deepEqual(manifest.schedule, plan.schedule);
 assert.equal(continuation.manifestHash, canonicalHash(manifest));
 assert.equal(continuation.fullEvaluationAllowed, false);
-assert.equal(continuation.reports.length, plan.stages);
-const finalPrefix = `stage-${plan.stages}/`;
+assert.equal(continuation.reports.length, manifest.stages);
+const finalPrefix = `stage-${manifest.stages}/`;
 const final = read(`${finalPrefix}pilot-report.json`);
 const { canonicalFingerprint } = await import(pathToFileURL(path.join(root,
-  finalPrefix, "runtime/src/lib/ictCanonical/canonicalIctIdentity.mjs")).href);
+  finalPrefix, final.runtimeDirectory ?? "runtime", "src/lib/ictCanonical/canonicalIctIdentity.mjs")).href);
 let peakRssBytes = 0;
-for (let stage = 1; stage <= plan.stages; stage += 1) {
+for (let stage = 1; stage <= manifest.stages; stage += 1) {
   const prefix = `stage-${stage}/`, pilot = read(`${prefix}pilot-report.json`);
   const supervisor = read(`${prefix}supervisor-report.json`);
   assert.deepEqual(supervisor, continuation.reports[stage - 1]);
@@ -44,8 +46,8 @@ for (let stage = 1; stage <= plan.stages; stage += 1) {
     const checkpoint = read(`${prefix}${owner.strategyId}.checkpoint.json`);
     const { checkpointHash, ...body } = checkpoint;
     assert.equal(checkpointHash, canonicalFingerprint(body));
-    assert.equal(checkpoint.nextPosition, stage * 6);
-    assert.equal(owner.status, stage === plan.stages ? "completed" : "checkpointed");
+    assert.equal(checkpoint.nextPosition, stage * batchSize);
+    assert.equal(owner.status, stage === manifest.stages ? "completed" : "checkpointed");
   }
 }
 assert.ok(peakRssBytes <= 768 * 1024 ** 2);
