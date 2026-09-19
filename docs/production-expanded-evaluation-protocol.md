@@ -105,3 +105,48 @@ remains disabled. A multi-batch dispatcher, immutable manifest across processes,
 cross-batch deduplication and aggregate reconciliation still require acceptance
 before running all 936 observations per owner. This is not an automatic restart
 or full-dataset authorization. Raw data and generated evidence remain uncommitted.
+
+## Multi-Batch Dispatch And Reconciliation
+
+Implemented durable single-worker fold dispatch with atomic fsynced state writes,
+exclusive per-job locks, binding/schedule/batch-size hashes, monotonic cursors,
+and explicit CHECKPOINTED versus COMPLETED dispositions. Resume supplies the full
+unchanged schedule and scoring interval; checkpoint envelopes/outcomes retain
+geometry deduplication across boundaries. Crashed-process locks require explicit
+diagnosis; they are never automatically removed. This is local checkpoint recovery,
+not a distributed lease service or a guarantee against filesystem power loss.
+
+Reconciliation requires every expected owner exactly once and exact scheduled
+coverage. It rejects duplicate geometry/outcomes and recalculates all lifecycle
+counts, wins/losses, unresolved fills, net/gross R, win rate and average R from
+terminal records. Owner identities and common dataset/configuration/cost identities
+must match. Cumulative batch snapshots are never added together as separate results.
+
+Fixture tests cover one-batch stop plus disk resume, uninterrupted equivalence,
+cross-batch repeated geometry, missing/duplicate owners, forged fill counts and
+metrics, altered bindings, state tampering and retained stale locks. Synthetic
+actionable geometry also verifies a real simulated fill and conservative same-bar
+loss resolve identically across batch boundaries; it is not detector performance.
+
+The first two-batch certified probe was terminated at RSS_LIMIT (815,681,536 bytes)
+after 78,826 ms. Evidence remains in
+`.gotrader/bt-g1-3r/supervised-1789780133079-24912`; four owners reached cursor 12,
+London cursor 6. No automatic resume occurred. Explicit collection of transient
+fact graphs at batch boundaries was added without changing the 768 MiB ceiling.
+
+Separate retry against cf00c0c completed in 78,400 ms at peak RSS 748,494,848 bytes,
+78 samples, output 4,006,543 bytes and zero stderr. Evidence:
+`.gotrader/bt-g1-3r/supervised-1789780258389-17728`.
+All five owners completed two six-observation batches: 60 owner-observations.
+All checkpoint/state/admission/provenance/result hashes, exact schedule coverage,
+package identity and lock removal verified; independent reconciliation matched.
+
+Pilot hash: `sha256:159ddec44eddacfdbf84557faca25081400c94be77b345559dcd65ed1e13e30c`.
+Supervisor hash: `sha256:9fb3f033cde5308e32549807e83d282fed31f093c14a50e7a8d01d0028b71af6`.
+Reconciliation hash: `sha256:28e36694b7ab8647b266d28406f9dd8bea79f2e94a1006e404d3c0e5d9e938c8`.
+
+There were zero eligible candidates, fills or completed trades. The two-batch
+dispatch/dedup/reconciliation workflow is verified; whole-schedule capacity is
+NOT qualified. The observed memory margin is narrow. The full 936-point run remains
+disabled until process-isolated batch capacity and cross-process continuation
+are qualified over longer histories. No performance or production approval follows.

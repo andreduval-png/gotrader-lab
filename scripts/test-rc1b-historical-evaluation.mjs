@@ -306,6 +306,25 @@ try {
     const report = reconcileHistoricalResults({ results: [batched.result], expectedOwners: [strategyId],
       expectedSchedule: batchInput.evaluationTimes });
     assert.equal(report.totalEvaluated, 4);
+    const scoringGeometry = { ...geometry, actionable: true, status: "VALID_ACTIONABLE" };
+    const fillInput = { ...batchInput, adapter: { ...pilotAdapter, detect: () => ({
+      candidateId: geometry.candidateId, status: "fixture_actionable", geometry: scoringGeometry, blockers: []
+    }) }, candlesByTimeframe: { "5m": candles.map((bar, index) =>
+      index === 2 ? { ...bar, high: 120, low: 80 } : bar) } };
+    const filled = folds.runCanonicalHistoricalFold(fillInput);
+    assert.equal(filled.counts.completedTrades, 1);
+    assert.equal(filled.metrics.losses, 1, "same-bar ambiguity must stay a loss across batch boundaries");
+    const filledBatches = dispatchHistoricalFold({ ...dispatch,
+      directory: fs.mkdtempSync(".gotrader/filled-batch-fixture-"), input: fillInput,
+      binding: { foldIdentity: filled.foldIdentityHash } });
+    assert.equal(filledBatches.result.resultIdentityHash, filled.resultIdentityHash);
+    const filledReport = reconcileHistoricalResults({ results: [filledBatches.result],
+      expectedOwners: [strategyId], expectedSchedule: batchInput.evaluationTimes });
+    assert.equal(filledReport.totalCompletedTrades, 1);
+    const badMetric = structuredClone(filled);
+    badMetric.metrics.netRealizedR = 99;
+    assert.throws(() => reconcileHistoricalResults({ results: [badMetric], expectedOwners: [strategyId],
+      expectedSchedule: batchInput.evaluationTimes }), /RECONCILIATION_FAILED/);
     assert.throws(() => reconcileHistoricalResults({ results: [batched.result, batched.result],
       expectedOwners: [strategyId], expectedSchedule: batchInput.evaluationTimes }), /OWNER_COVERAGE/);
     const forged = structuredClone(batched.result);
