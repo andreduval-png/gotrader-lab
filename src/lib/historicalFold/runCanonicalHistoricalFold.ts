@@ -1,8 +1,7 @@
 import { scoreCanonicalHistoricalGeometryWithBt2 } from "@/lib/backtesting/canonicalBt2FoldScoring";
 import { canonicalFingerprint } from "@/lib/ictCanonical/canonicalIctIdentity";
-import { buildIctHierarchicalNarrative } from "@/lib/ictI2/ictI2Runtime";
+import { buildIctCanonicalRuntimeInput } from "@/lib/ictI2/ictI2Runtime";
 import { historicalClosedCandlesAt } from "./historicalClosedCandles";
-import { buildCanonicalIctFactSnapshot } from "@/lib/ictCanonical/canonicalFactBuilder";
 import { BT_G1_1_CERTIFIED_DATASET, adaptCanonicalStrategyGeometryForHistorical } from "@/lib/historicalGeometry";
 import type { Candle, Timeframe } from "@/lib/types";
 import { TRADE_GEOMETRY_VERSION } from "@/lib/tradeGeometry";
@@ -57,6 +56,7 @@ const foldIdentity = (input: RunCanonicalHistoricalFoldInput) => canonicalFinger
   schema: "gotrader.historical-fold-identity.v2",
   scoringVersion: "gotrader.bt2.canonical-fold-scoring.v2",
   narrativeInputPolicy: "gotrader.historical.closed-bars-canonical-narrative.v1",
+  contextInputPolicy: "gotrader.historical.closed-bars-canonical-runtime.v1",
   candleContent: canonicalFingerprint(input.candlesByTimeframe),
   evaluationSchedule: evaluationSchedule(input),
   narratives: evaluationSchedule(input).map((asOf) => input.narrativeAt?.(asOf) ?? null),
@@ -161,17 +161,13 @@ export const runCanonicalHistoricalFold = (input: RunCanonicalHistoricalFoldInpu
       timeframe,
       historicalClosedCandlesAt(candles ?? [], timeframe as Timeframe, asOf)
     ])) as Partial<Record<Timeframe, Candle[]>>;
-    const factSnapshots = Object.entries(causalByTimeframe).flatMap(([timeframe, candles]) => {
-      if (!candles?.length) return [];
-      return buildCanonicalIctFactSnapshot({
-        candles,
-        asOf,
-        symbol: candles[0].symbol,
-        timeframe: timeframe as Timeframe,
-        sourceFingerprint: input.dataset.sourceFingerprint
-      }).facts;
+    const { facts: factSnapshots, narrative } = buildIctCanonicalRuntimeInput({
+      candlesByTimeframe: causalByTimeframe,
+      symbol: input.candlesByTimeframe[input.primaryTimeframe]![0].symbol,
+      asOf,
+      sourceFingerprint: input.dataset.sourceFingerprint,
+      narrative: input.narrativeAt?.(asOf)
     });
-    const narrative = input.narrativeAt?.(asOf) ?? buildIctHierarchicalNarrative(factSnapshots);
     const detection = input.adapter.detect({
       asOf,
       sourceFingerprint: input.dataset.sourceFingerprint,

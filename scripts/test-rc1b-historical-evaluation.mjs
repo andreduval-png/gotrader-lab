@@ -9,6 +9,9 @@ const server = await createServer({ cacheDir: ".gotrader/p2-vite-cache", server:
 try {
   const historical = await server.ssrLoadModule("/src/lib/historicalGeometry/index.ts");
   const folds = await server.ssrLoadModule("/src/lib/historicalFold/index.ts");
+  const { buildIctCanonicalRuntimeInput } = await server.ssrLoadModule("/src/lib/ictI2/ictI2Runtime.ts");
+  const { selectCanonicalDrawOnLiquidity } = await server.ssrLoadModule("/src/lib/ictCanonical/canonicalSwingLiquidity.ts");
+  const { evaluateIct2022Model } = await server.ssrLoadModule("/src/lib/ictI2/ict2022Model.ts");
   const { historicalClosedCandlesAt } = await server.ssrLoadModule("/src/lib/historicalFold/historicalClosedCandles.ts");
   const geometryApi = await server.ssrLoadModule("/src/lib/tradeGeometry/index.ts");
   const coverage = await server.ssrLoadModule("/src/lib/researchCoverage/canonicalResearchCoverageRegistry.ts");
@@ -157,6 +160,13 @@ try {
       ...adapter,
       requiredTimeframes: ["5m"],
       detect: (context) => {
+        const live = buildIctCanonicalRuntimeInput({
+          candlesByTimeframe: context.candlesByTimeframe,
+          symbol: "MNQ", asOf: context.asOf,
+          sourceFingerprint: context.sourceFingerprint
+        });
+        assert.deepEqual(context.canonicalFacts, live.facts, "historical context must include live draw and session facts");
+        assert.deepEqual(context.narrative, live.narrative);
         assert.ok(context.narrative, "runner must build the canonical narrative");
         assert.equal(context.narrative.policyId, "gotrader.ict.c1-1.hierarchical-roles.v1");
         assert.ok(context.candlesByTimeframe["5m"].every((bar) =>
@@ -192,6 +202,41 @@ try {
       checkpointEvery: 2
     };
     const checkpoints = [];
+    if (strategyId === "ict_2022_model_v1") {
+      const shaped = [100, 101, 110, 102, 100, 90, 99, 100].map((price, index) => candle(index, price));
+      const asOf = new Date(Date.parse(first) + shaped.length * 300_000).toISOString();
+      const narrative = {
+        ...buildIctCanonicalRuntimeInput({ candlesByTimeframe: {}, symbol: "MNQ", asOf,
+          sourceFingerprint: certified.sourceFingerprint }).narrative,
+        structural: "bullish", intermediate: "bullish", execution: "bullish", liquidityPath: "buyside"
+      };
+      const expected = buildIctCanonicalRuntimeInput({ candlesByTimeframe: { "5m": shaped },
+        symbol: "MNQ", asOf, sourceFingerprint: certified.sourceFingerprint, narrative });
+      assert.ok(expected.facts.some((fact) => fact.factType === "DRAW_ON_LIQUIDITY"));
+      folds.runCanonicalHistoricalFold({
+        ...input, candlesByTimeframe: { "5m": shaped }, evaluationTimes: [asOf],
+        narrativeAt: () => narrative,
+        fold: { ...input.fold, run: { startInclusive: first,
+          endExclusive: new Date(Date.parse(asOf) + 300_000).toISOString() } },
+        adapter: { ...pilotAdapter, detect: (context) => {
+          assert.deepEqual(context.canonicalFacts, expected.facts);
+          assert.deepEqual(context.narrative, narrative);
+          return { candidateId: "context-parity", status: "SEARCHING", blockers: [] };
+        } }
+      });
+      const empty = buildIctCanonicalRuntimeInput({ candlesByTimeframe: {}, symbol: "MNQ", asOf,
+        sourceFingerprint: certified.sourceFingerprint, narrative });
+      assert.equal(empty.facts.some((fact) => fact.factType === "DRAW_ON_LIQUIDITY"), false);
+      assert.ok(evaluateIct2022Model(empty).blockers.includes("primary_external_draw_missing"));
+      const liquidity = expected.facts.filter((fact) => fact.factType === "LIQUIDITY");
+      assert.equal(selectCanonicalDrawOnLiquidity({
+        liquidity: liquidity.map((fact) => ({ ...fact, status: "CONSUMED" })),
+        currentPrice: 100, direction: "bullish", asOf, sourceFingerprint: certified.sourceFingerprint
+      }), undefined);
+      assert.ok(evaluateIct2022Model({ ...expected,
+        facts: expected.facts.filter((fact) => fact.factType !== "DRAW_ON_LIQUIDITY")
+      }).blockers.includes("primary_external_draw_missing"));
+    }
     for (const invalid of [
       [candles[0], candles[0]],
       [...candles].reverse(),

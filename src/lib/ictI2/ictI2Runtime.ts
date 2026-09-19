@@ -42,13 +42,15 @@ export const buildIctCanonicalRuntimeInput = ({
   candlesByTimeframe,
   symbol,
   asOf,
-  sourceFingerprint
-  ,factSnapshotsByTimeframe
+  sourceFingerprint,
+  factSnapshotsByTimeframe,
+  narrative: suppliedNarrative
 }: {
   candlesByTimeframe: Readonly<Partial<Record<Timeframe, readonly Candle[]>>>;
   symbol: FuturesSymbol;
   asOf: string;
   sourceFingerprint: string;
+  narrative?: IctHierarchicalNarrative;
   factSnapshotsByTimeframe?: Readonly<Partial<Record<Timeframe, CanonicalIctFactSnapshot>>>;
 }): IctCoreDetectionInput => {
   const facts = Object.entries(candlesByTimeframe).flatMap(([timeframe, candles]) =>
@@ -57,7 +59,7 @@ export const buildIctCanonicalRuntimeInput = ({
         buildCanonicalIctFactSnapshot({ candles, asOf, symbol, timeframe: timeframe as Timeframe, sourceFingerprint }).facts
       : []
   );
-  const narrative = buildIctHierarchicalNarrative(facts);
+  const narrative = suppliedNarrative ?? buildIctHierarchicalNarrative(facts);
   const executionCandles = candlesByTimeframe[ROLE_TIMEFRAMES.execution] ?? [];
   const currentPrice = executionCandles.filter((candle) => Date.parse(candle.timestamp) <= Date.parse(asOf)).at(-1)?.close;
   const liquidity = facts.filter((fact): fact is CanonicalLiquidityFact => fact.factType === "LIQUIDITY");
