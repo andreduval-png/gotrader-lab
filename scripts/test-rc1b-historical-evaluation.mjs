@@ -9,6 +9,7 @@ const server = await createServer({ cacheDir: ".gotrader/p2-vite-cache", server:
 try {
   const historical = await server.ssrLoadModule("/src/lib/historicalGeometry/index.ts");
   const folds = await server.ssrLoadModule("/src/lib/historicalFold/index.ts");
+  const { historicalClosedCandlesAt } = await server.ssrLoadModule("/src/lib/historicalFold/historicalClosedCandles.ts");
   const geometryApi = await server.ssrLoadModule("/src/lib/tradeGeometry/index.ts");
   const coverage = await server.ssrLoadModule("/src/lib/researchCoverage/canonicalResearchCoverageRegistry.ts");
   const compatibility = await server.ssrLoadModule("/src/lib/researchCoverage/evidenceCompatibility.ts");
@@ -86,6 +87,11 @@ try {
     volume: 100
   });
   const candles = Array.from({ length: 8 }, (_, index) => candle(index, 100 + index * 0.1));
+  assert.equal(historicalClosedCandlesAt(candles, "5m", first).length, 0);
+  assert.equal(historicalClosedCandlesAt(candles, "5m", candles[1].timestamp).length, 1);
+  assert.equal(historicalClosedCandlesAt(candles, "1h", candles[1].timestamp).length, 0);
+  assert.equal(historicalClosedCandlesAt([{ ...candles[0], closeTimeUtc: candles[2].timestamp }], "5m", candles[1].timestamp).length, 0);
+  assert.throws(() => historicalClosedCandlesAt([{ ...candles[0], closeTimeUtc: "invalid" }], "5m", candles[1].timestamp), /CLOSE_TIME_INVALID/);
   const metadata = new Map(folds.CANONICAL_HISTORICAL_FOLD_ADAPTERS.map((adapter) => [adapter.strategyId, adapter]));
   const prices = {
     ifvg_fresh_retest_v3_research: [100, 95, 110],
@@ -150,7 +156,13 @@ try {
     const pilotAdapter = {
       ...adapter,
       requiredTimeframes: ["5m"],
-      detect: () => ({ candidateId: geometry.candidateId, status: geometry.status, geometry, blockers: geometry.blockers })
+      detect: (context) => {
+        assert.ok(context.narrative, "runner must build the canonical narrative");
+        assert.equal(context.narrative.policyId, "gotrader.ict.c1-1.hierarchical-roles.v1");
+        assert.ok(context.candlesByTimeframe["5m"].every((bar) =>
+          Date.parse(bar.timestamp) + 300_000 <= Date.parse(context.asOf)));
+        return { candidateId: geometry.candidateId, status: geometry.status, geometry, blockers: geometry.blockers };
+      }
     };
     const input = {
       fold: {
@@ -195,6 +207,12 @@ try {
     }
     const fresh = folds.runCanonicalHistoricalFold({ ...input, onCheckpoint: (value) => checkpoints.push(value) });
     const repeated = folds.runCanonicalHistoricalFold(input);
+    const futureChanged = folds.runCanonicalHistoricalFold({
+      ...input, candlesByTimeframe: { "5m": candles.map((bar, index) => index < 4 ? bar :
+        { ...bar, open: 900, high: 1000, low: 800, close: 950 }) }
+    });
+    assert.deepEqual(futureChanged.detections, fresh.detections);
+    assert.ok(fresh.detections.every((record) => record.narrativeIdentity && record.narrative));
     const resumed = folds.runCanonicalHistoricalFold({ ...input, resumeFrom: checkpoints[0] });
     assert.equal(fresh.resultIdentityHash, repeated.resultIdentityHash);
     assert.equal(fresh.resultIdentityHash, resumed.resultIdentityHash);

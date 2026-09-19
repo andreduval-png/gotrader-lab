@@ -115,6 +115,8 @@ export interface HistoricalFoldCheckpoint {
 
 export interface HistoricalFoldDetectionRecord {
   asOf: string;
+  narrativeIdentity: string;
+  narrative: IctHierarchicalNarrative;
   candidateId: string;
   status: string;
   geometryId?: string;

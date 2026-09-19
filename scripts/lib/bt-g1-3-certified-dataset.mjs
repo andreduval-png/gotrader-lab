@@ -343,6 +343,7 @@ export const loadCertifiedTimeframe = ({ verified = verifyCertificateAndManifest
         symbol: "MNQ",
         timeframe,
         timestamp: candle.openTimeUtc,
+        closeTimeUtc: candle.closeTimeUtc,
         open: candle.open,
         high: candle.high,
         low: candle.low,

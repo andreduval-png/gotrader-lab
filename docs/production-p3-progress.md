@@ -126,3 +126,25 @@ The browser pilot remains blocked: it has no trusted execution-side transport
 for this admission. No certified execution was started. Remaining acceptance:
 qualified-host resource measurement, real-dataset bounded execution, and
 authenticated result ingestion into the operator workflow. P3 remains partial.
+
+## Post-Pilot Narrative Remediation
+
+The first supervised pilot at checkpoint 7f36072 completed operationally, but
+ICT 2022/MMBM/MMSM had no historical narrative input. The runner now builds its
+default narrative using the live canonical hierarchical builder from the
+as-of fact snapshot. Each detection records narrative and a source/as-of/fact-ID
+bound identity. Unavailable directional facts remain unavailable, not invented.
+MMBM/MMSM adapter 1.1.0 adds required 15m intermediate context.
+
+Historical inputs now exclude forming bars. Certified loading retains explicit
+closeTimeUtc; fixed timeframe durations are only the fallback for candles without
+that field. Malformed explicit close times fail closed. Resume identity includes
+the new closed-bar/narrative policy, preventing old checkpoint reuse.
+
+Regressions cover close boundaries, explicit close times, missing narrative
+default construction, future-candle isolation, and deterministic resume.
+The prior pilot is preserved and is not evidence for the corrected semantics.
+User authorized the isolated follow-up checkpoint and one gated bounded rerun.
+RC1B, RC1C, ICT 2022 freeze, checksum/admission regressions and production build
+passed; existing build warnings remain. The certified rerun is a separate
+operational result and cannot be inferred from these tests.

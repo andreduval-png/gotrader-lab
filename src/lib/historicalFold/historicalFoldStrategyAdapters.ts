@@ -135,13 +135,13 @@ const marketMakerAdapter = (side: "buy" | "sell"): CanonicalHistoricalFoldAdapte
   const profileId = side === "buy" ? "ict_mmbm_base_research_v1" : "ict_mmsm_base_research_v1";
   return {
     adapterId: `gotrader.fold.${side === "buy" ? "mmbm" : "mmsm"}.control-owner-adapter`,
-    adapterVersion: "1.0.0",
+    adapterVersion: "1.1.0",
     strategyId,
     strategyVersion: "1.0.0",
     profileId,
     profileVersion: "1.0.0",
     parameterHash: "gotrader.ict.i3.market-maker.parameters.v1",
-    requiredTimeframes: ["1h", "5m"],
+    requiredTimeframes: ["1h", "15m", "5m"],
     classification: "FOLD_RUNNER_COMPLETE",
     geometryPolicyId: "gotrader.ict.i3.market-maker.geometry.v1",
     geometryPolicyVersion: "1.0.0",
