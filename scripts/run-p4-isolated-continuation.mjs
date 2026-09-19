@@ -11,23 +11,27 @@ import { canonicalHash } from "./lib/bt-g1-3-certified-dataset.mjs";
 const root = path.resolve(".gotrader/bt-g1-3r");
 if (process.argv[2] === "--worker") {
   const mode = process.argv[3], stage = process.argv[4];
-  if (!/^isolated-\d+-\d+$/.test(mode) || !["1", "2"].includes(stage)) throw new Error("INVALID_ISOLATED_STAGE");
+  if (!/^isolated-\d+-\d+$/.test(mode) || !["1", "2", "3", "4"].includes(stage)) throw new Error("INVALID_ISOLATED_STAGE");
   const directory = path.join(root, mode);
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, "manifest.json"), "utf8"));
+  if (![2, 4].includes(manifest.stages) || Number(stage) > manifest.stages ||
+      manifest.observationsPerOwner !== manifest.stages * 6) throw new Error("INVALID_ISOLATED_MANIFEST");
   const actual = readCleanPackageIdentity(process.cwd());
   if (canonicalHash(actual) !== canonicalHash(manifest.packageIdentity)) throw new Error("ISOLATED_PACKAGE_CHANGED");
   const { runBtG13rPilot } = await import("./lib/bt-g1-3r-pilot.mjs");
   await runBtG13rPilot({ mode: `${mode}/stage-${stage}`, expandedQualification: true,
-    batchDirectory: path.join(directory, "batches"), maxBatches: 1, packageBinding: actual });
+    batchDirectory: path.join(directory, "batches"), maxBatches: 1, packageBinding: actual,
+    qualificationObservations: manifest.observationsPerOwner });
 } else {
-  if (process.argv[2] !== "--qualify-two-processes") throw new Error("EXPLICIT_CONTINUATION_QUALIFICATION_REQUIRED");
+  if (!["--qualify-two-processes", "--qualify-four-processes"].includes(process.argv[2])) throw new Error("EXPLICIT_CONTINUATION_QUALIFICATION_REQUIRED");
+  const stages = process.argv[2] === "--qualify-four-processes" ? 4 : 2;
   const packageIdentity = readCleanPackageIdentity(process.cwd());
   const mode = `isolated-${Date.now()}-${process.pid}`, directory = path.join(root, mode);
   fs.mkdirSync(directory, { recursive: true });
-  const manifest = { packageIdentity, stages: 2, observationsPerOwner: 12, fullEvaluationAllowed: false, authority: "none/none/none" };
+  const manifest = { packageIdentity, stages, observationsPerOwner: stages * 6, fullEvaluationAllowed: false, authority: "none/none/none" };
   fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(manifest, null, 2), { flag: "wx" });
   const reports = [];
-  for (let stage = 1; stage <= 2; stage += 1) {
+  for (let stage = 1; stage <= stages; stage += 1) {
     const disk = fs.statfsSync(directory);
     const preflight = evaluateCapacityPreflight({ freeMemoryBytes: os.freemem(), freeDiskBytes: disk.bavail * disk.bsize });
     if (preflight.status !== "BOUNDED_PROBE_ELIGIBLE") {
@@ -48,9 +52,9 @@ if (process.argv[2] === "--worker") {
     reports.push(report);
     if (result.status !== "COMPLETED" || !packageUnchanged) throw new Error("ISOLATED_STAGE_FAILED_NO_AUTOMATIC_RETRY");
     const pilot = JSON.parse(fs.readFileSync(path.join(stageDirectory, "pilot-report.json"), "utf8"));
-    if (pilot.results.length !== 5 || pilot.results.some((owner) => stage === 1
-      ? owner.status !== "checkpointed" || owner.nextPosition !== 6
-      : owner.status !== "completed" || owner.counts.evaluated !== 12)) throw new Error("ISOLATED_CURSOR_MISMATCH");
+    if (pilot.results.length !== 5 || pilot.results.some((owner) => stage < stages
+      ? owner.status !== "checkpointed" || owner.nextPosition !== stage * 6
+      : owner.status !== "completed" || owner.counts.evaluated !== manifest.observationsPerOwner)) throw new Error("ISOLATED_CURSOR_MISMATCH");
   }
   fs.writeFileSync(path.join(directory, "continuation-report.json"), JSON.stringify({ manifestHash: canonicalHash(manifest),
     reports, status: "COMPLETED_REQUIRES_REVIEW", fullEvaluationAllowed: false, authority: "none/none/none" }, null, 2));

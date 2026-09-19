@@ -75,13 +75,14 @@ const peakSampler = () => {
 };
 
 export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false,
-  batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null } = {}) => {
+  batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null, qualificationObservations = 12 } = {}) => {
+  if (![12, 24].includes(qualificationObservations)) throw new Error("UNADMITTED_QUALIFICATION_SIZE");
   if (batchDirectory && !expandedQualification) throw new Error("BATCH_DIRECTORY_REQUIRES_EXPANDED_MODE");
   if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
   const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
   const definition = protocol ? { ...BT_G1_3R_PILOT,
     startUtc: protocol.evaluationTimes[0], endUtc: "2026-04-07T00:00:00.000Z",
-    selectionPolicy: "Capacity qualification: first twelve observations in two six-observation batches; not full evaluation"
+    selectionPolicy: `Capacity qualification: first ${qualificationObservations} observations in six-observation batches; not full evaluation`
   } : BT_G1_3R_PILOT;
   const startedAt = new Date().toISOString();
   const wallStart = performance.now();
@@ -118,7 +119,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
   const { candlesByTimeframe } = admission;
   const pilotStartMs = Date.parse(definition.startUtc);
   const pilotEndMs = Date.parse(definition.endUtc);
-  const scheduledObservations = protocol ? classifyScheduledObservations(protocol.evaluationTimes.slice(0, 12), candlesByTimeframe["5m"]) : undefined;
+  const scheduledObservations = protocol ? classifyScheduledObservations(protocol.evaluationTimes.slice(0, qualificationObservations), candlesByTimeframe["5m"]) : undefined;
   if (scheduledObservations?.some((observation) => observation.status !== "AVAILABLE")) {
     atomicWrite(path.join(outputDirectory, "unavailable-observations.json"), scheduledObservations);
     throw new Error("EXPANDED_SCHEDULE_UNAVAILABLE");
