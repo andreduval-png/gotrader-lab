@@ -121,11 +121,32 @@ const drawFixture = [
   { ...originalSnapshot.facts.find((fact) => fact.factType === "LIQUIDITY"), factId: "near", liquidityId: "near", factType: "LIQUIDITY", side: "BUY_SIDE_LIQUIDITY", liquidityClass: "SWING", ownerTimeframe: "1m", price: 104, status: "AVAILABLE" },
   { ...originalSnapshot.facts.find((fact) => fact.factType === "LIQUIDITY"), factId: "structural", liquidityId: "structural", factType: "LIQUIDITY", side: "BUY_SIDE_LIQUIDITY", liquidityClass: "EXTERNAL", ownerTimeframe: "1h", price: 110, status: "AVAILABLE" }
 ];
-if (drawFixture.every((fact) => fact.symbol)) {
+assert(drawFixture.every((fact) => fact.symbol), "draw fixture must have canonical source facts");
+{
   const draw = canonical.selectCanonicalDrawOnLiquidity({ liquidity: drawFixture, currentPrice: 100, direction: "bullish", asOf, sourceFingerprint: originalSnapshot.sourceFingerprint });
   assert.equal(draw.targetLiquidityId, "structural");
   assert.equal(draw.nearestLiquidityId, "near");
+  const equal = { ...drawFixture[0], liquidityClass: "EQUAL_HIGH_LOW" };
+  const consumed = { ...drawFixture[1], status: "CONSUMED" };
+  const fallback = canonical.selectCanonicalDrawOnLiquidity({ liquidity: [equal, consumed], currentPrice: 100,
+    direction: "bullish", asOf, sourceFingerprint: originalSnapshot.sourceFingerprint });
+  assert.equal(fallback.targetClass, "EQUAL_HIGH_LOW", "must not relabel an equal level as external");
+  assert.equal(canonical.selectCanonicalDrawOnLiquidity({ liquidity: [consumed], currentPrice: 100,
+    direction: "bullish", asOf, sourceFingerprint: originalSnapshot.sourceFingerprint }), undefined);
 }
+
+assert(range, "range fixture must exist so boundary tests cannot silently skip");
+const baseLiquidity = drawFixture[0];
+const level = (id, price, sourceStructureIds = [id]) => ({ ...baseLiquidity, factId: id,
+  liquidityId: id, price, sourceStructureIds });
+const classified = canonical.classifyCanonicalRangeLiquidity({ dealingRange: range, liquidity: [
+  level("anchor", range.highPrice, [range.highSwingId]),
+  level("inside", (range.highPrice + range.lowPrice) / 2),
+  level("boundary-not-anchor", range.highPrice),
+  level("outside", range.highPrice + 1)
+] });
+assert.deepEqual(classified.map((fact) => fact.liquidityClass), ["EXTERNAL", "INTERNAL"]);
+assert.ok(classified.every((fact) => fact.dealingRangeId === range.dealingRangeId));
 
 for (const fact of originalSnapshot.facts) {
   assert.deepEqual(fact.authority, canonical.CANONICAL_ICT_NONE_AUTHORITY);
