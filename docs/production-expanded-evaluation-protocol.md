@@ -150,3 +150,35 @@ dispatch/dedup/reconciliation workflow is verified; whole-schedule capacity is
 NOT qualified. The observed memory margin is narrow. The full 936-point run remains
 disabled until process-isolated batch capacity and cross-process continuation
 are qualified over longer histories. No performance or production approval follows.
+
+## Two-Process Continuation Qualification
+
+Implementation commit `767bec3` adds a sequential two-worker coordinator. Each
+worker re-verifies the clean package, capacity admission and certified dataset;
+shared owner checkpoints bind the unchanged package, policies and full schedule.
+Worker one stops all five owners at observation 6. Worker two resumes them to 12.
+Failures stop the coordinator without automatic restart or stale-lock removal.
+
+Certified evidence: `.gotrader/bt-g1-3r/isolated-1789780871135-18400`.
+Both workers completed: 54,399 ms and 55,235 ms, respectively. Supervisor sampled
+RSS peaks were 566,784,000 and 563,449,856 bytes. The higher worker-internal peaks
+were 606,363,648 and 606,552,064 bytes; both remain below 768 MiB. Total governed
+output was 7,781,685 bytes. Both stderr files were empty, packages unchanged,
+and supervisor/owner locks released normally.
+
+Independent verification checked state/checkpoint/result/provenance hashes,
+shared admission and policy identities, cursors 6 then 12, and exact terminal
+coverage. Every complete result object equals the earlier same-process two-batch
+result. Recomputed aggregate reconciliation equals the recorded reconciliation.
+All five owners still have zero eligible candidates, fills and completed trades;
+unavailable average R and win rate remain null, not performance passes.
+
+Continuation report: `sha256:97a16571d272210ebd3cef3c76429610477c40bae7e85ed6dc683b9b754b09a3`.
+Stage-two pilot: `sha256:5cbb6cddc552a4c884656c1d34ad56544948fc26e6e8b3dab6cd60135e146c9f`.
+Reconciliation: `sha256:28e36694b7ab8647b266d28406f9dd8bea79f2e94a1006e404d3c0e5d9e938c8`.
+
+Cross-process continuation is qualified only for this 12-observation-per-owner
+slice. Longer-history resource growth and full 936-observation capacity remain
+PARTIAL; fullEvaluationAllowed remains false. Authority is none/none/none,
+researchValidated false, and productionAdoptionAllowed false. No raw candles
+are included in this committed evidence record.
