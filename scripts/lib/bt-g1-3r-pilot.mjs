@@ -11,6 +11,7 @@ import { evaluateCapacityPreflight } from "./p4-capacity-preflight.mjs";
 import { compileBtG13rRuntime } from "./bt-g1-3r-runtime.mjs";
 import { buildExpandedEvaluationProtocol } from "./p4-expanded-evaluation-protocol.mjs";
 import { bindExpandedPolicies, classifyScheduledObservations } from "./p4-expanded-admission.mjs";
+import { dispatchHistoricalFold, reconcileHistoricalResults } from "./p4-batch-dispatch.mjs";
 
 export const BT_G1_3R_PILOT = Object.freeze({
   schemaVersion: "gotrader.bt-g1-3r.pilot-definition.v1",
@@ -78,7 +79,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
   const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
   const definition = protocol ? { ...BT_G1_3R_PILOT,
     startUtc: protocol.evaluationTimes[0], endUtc: "2026-04-07T00:00:00.000Z",
-    selectionPolicy: "Capacity qualification: first six observations of the expanded protocol; not full evaluation"
+    selectionPolicy: "Capacity qualification: first twelve observations in two six-observation batches; not full evaluation"
   } : BT_G1_3R_PILOT;
   const startedAt = new Date().toISOString();
   const wallStart = performance.now();
@@ -115,7 +116,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
   const { candlesByTimeframe } = admission;
   const pilotStartMs = Date.parse(definition.startUtc);
   const pilotEndMs = Date.parse(definition.endUtc);
-  const scheduledObservations = protocol ? classifyScheduledObservations(protocol.evaluationTimes.slice(0, 6), candlesByTimeframe["5m"]) : undefined;
+  const scheduledObservations = protocol ? classifyScheduledObservations(protocol.evaluationTimes.slice(0, 12), candlesByTimeframe["5m"]) : undefined;
   if (scheduledObservations?.some((observation) => observation.status !== "AVAILABLE")) {
     atomicWrite(path.join(outputDirectory, "unavailable-observations.json"), scheduledObservations);
     throw new Error("EXPANDED_SCHEDULE_UNAVAILABLE");
@@ -125,6 +126,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     return timestampMs >= pilotStartMs && timestampMs < pilotEndMs && inPilotSession(timestamp);
   });
   const results = [];
+  const terminalResults = [];
   for (const adapter of adapters) {
     const checkpointFile = path.join(outputDirectory, `${adapter.strategyId}.checkpoint.json`);
     const resumeFile = resumeDirectory ? path.join(path.resolve(resumeDirectory), `${adapter.strategyId}.checkpoint.json`) : undefined;
@@ -132,7 +134,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     let checkpointCount = 0;
     let interrupted = false;
     try {
-      const { result, provenance } = runVerifiedHistoricalFold(admission, runnerModule.runCanonicalHistoricalFold, {
+      const foldInput = {
         fold: {
           experimentFamilyId: protocol ? "p4-expanded-capacity-qualification-v1" : "bt-g1-3r-certified-pilot-v1",
           trialId: `pilot-${adapter.strategyId}`,
@@ -164,7 +166,22 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
             throw new Error("BT_G1_3R_CONTROLLED_INTERRUPT");
           }
         }
-      });
+      };
+      const runFold = (request) => runVerifiedHistoricalFold(admission, runnerModule.runCanonicalHistoricalFold, request);
+      const dispatched = protocol ? dispatchHistoricalFold({
+        directory: path.join(outputDirectory, "batches", adapter.strategyId),
+        binding: { manifestHash: policyBinding.manifestHash, admissionHash: canonicalHash(admission.receipt),
+          owner: adapter.strategyId, fold: foldInput.fold },
+        input: foldInput, runFold, batchSize: protocol.observationsPerBatch
+      }) : undefined;
+      if (dispatched && dispatched.status !== "COMPLETED") throw new Error("EXPANDED_DISPATCH_INCOMPLETE");
+      const { result, provenance } = dispatched ? dispatched.result : runFold(foldInput);
+      if (dispatched) {
+        checkpointCount = dispatched.batchesExecuted;
+        const state = JSON.parse(fs.readFileSync(path.join(outputDirectory, "batches", adapter.strategyId, "state.json"), "utf8"));
+        atomicWrite(checkpointFile, state.checkpoint);
+      }
+      terminalResults.push(result);
       const resultFile = path.join(outputDirectory, `${adapter.strategyId}.result.json`);
       atomicWrite(resultFile, result);
       atomicWrite(path.join(outputDirectory, `${adapter.strategyId}.provenance.json`), provenance);
@@ -189,6 +206,8 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     elapsedMs: Math.round(performance.now() - wallStart),
     definition,
     ...(protocol ? { protocol, policyBinding, scheduledObservations } : {}),
+    ...(protocol ? { reconciliation: reconcileHistoricalResults({ results: terminalResults,
+      expectedOwners: protocol.owners, expectedSchedule: evaluationTimes }) } : {}),
     dataset: datasetIdentity,
     admission: admission.receipt,
     admissionHash: canonicalHash(admission.receipt),

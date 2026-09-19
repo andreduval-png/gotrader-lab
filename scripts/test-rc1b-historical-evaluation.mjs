@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { createServer } from "vite";
 import { bindExpandedPolicies, classifyScheduledObservations } from "./lib/p4-expanded-admission.mjs";
 import { buildExpandedEvaluationProtocol } from "./lib/p4-expanded-evaluation-protocol.mjs";
+import { dispatchHistoricalFold, reconcileHistoricalResults } from "./lib/p4-batch-dispatch.mjs";
 
 const server = await createServer({ cacheDir: ".gotrader/p2-vite-cache", server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
 
@@ -289,6 +290,35 @@ try {
     assert.deepEqual(recovered.geometryEnvelopes, fresh.geometryEnvelopes);
     assert.equal(fresh.resultIdentityHash, repeated.resultIdentityHash);
     assert.equal(fresh.resultIdentityHash, resumed.resultIdentityHash);
+    const batchInput = { ...input, evaluationTimes: candles.slice(0, 4).map((bar) => bar.timestamp) };
+    const directory = fs.mkdtempSync(".gotrader/batch-fixture-");
+    const dispatch = { directory, input: batchInput, binding: { foldIdentity: fresh.foldIdentityHash },
+      runFold: folds.runCanonicalHistoricalFold, batchSize: 1 };
+    const partial = dispatchHistoricalFold({ ...dispatch, maxBatches: 1 });
+    assert.equal(partial.status, "CHECKPOINTED");
+    assert.equal(partial.nextPosition, 1);
+    assert.throws(() => dispatchHistoricalFold({ ...dispatch, binding: { foldIdentity: "foreign" } }), /IDENTITY_MISMATCH/);
+    const batched = dispatchHistoricalFold(dispatch);
+    assert.equal(batched.status, "COMPLETED");
+    assert.equal(batched.result.resultIdentityHash, fresh.resultIdentityHash);
+    assert.equal(batched.result.geometryEnvelopes.length, 1, "cross-batch repeat must not duplicate geometry");
+    assert.deepEqual(batched.result.outcomes, fresh.outcomes);
+    const report = reconcileHistoricalResults({ results: [batched.result], expectedOwners: [strategyId],
+      expectedSchedule: batchInput.evaluationTimes });
+    assert.equal(report.totalEvaluated, 4);
+    assert.throws(() => reconcileHistoricalResults({ results: [batched.result, batched.result],
+      expectedOwners: [strategyId], expectedSchedule: batchInput.evaluationTimes }), /OWNER_COVERAGE/);
+    const forged = structuredClone(batched.result);
+    forged.counts.fills += 1;
+    assert.throws(() => reconcileHistoricalResults({ results: [forged], expectedOwners: [strategyId],
+      expectedSchedule: batchInput.evaluationTimes }), /RECONCILIATION_FAILED/);
+    fs.writeFileSync(`${directory}/dispatch.lock`, JSON.stringify({ token: "foreign", pid: 0 }));
+    assert.throws(() => dispatchHistoricalFold(dispatch), /EEXIST/);
+    fs.unlinkSync(`${directory}/dispatch.lock`);
+    const state = JSON.parse(fs.readFileSync(`${directory}/state.json`, "utf8"));
+    state.checkpoint.nextPosition = 0;
+    fs.writeFileSync(`${directory}/state.json`, JSON.stringify(state));
+    assert.throws(() => dispatchHistoricalFold(dispatch), /IDENTITY_MISMATCH/);
     assert.throws(() => folds.runCanonicalHistoricalFold({ ...input, evaluationTimes: [first], resumeFrom: checkpoints[0] }), /RESTART/);
     const changedCandles = candles.map((bar, index) => index === 0 ? { ...bar, volume: bar.volume + 1 } : bar);
     assert.throws(() => folds.runCanonicalHistoricalFold({ ...input, candlesByTimeframe: { "5m": changedCandles }, resumeFrom: checkpoints[0] }), /RESTART/);
