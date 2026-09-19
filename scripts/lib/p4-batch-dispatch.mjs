@@ -55,6 +55,8 @@ export const dispatchHistoricalFold = ({ directory, binding, input, runFold,
         if (result?.then) throw new Error("BATCH_SYNCHRONOUS_RUNNER_REQUIRED");
       } catch (error) {
         if (error !== stop) throw error;
+        // Release per-batch fact graphs before the next synchronous fold invocation.
+        if (typeof global.gc === "function") global.gc();
         continue;
       }
       const terminal = result.result ?? result;
