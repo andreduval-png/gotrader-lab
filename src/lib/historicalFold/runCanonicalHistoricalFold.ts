@@ -57,6 +57,7 @@ const foldIdentity = (input: RunCanonicalHistoricalFoldInput) => canonicalFinger
   scoringVersion: "gotrader.bt2.canonical-fold-scoring.v2",
   narrativeInputPolicy: "gotrader.historical.closed-bars-canonical-narrative.v1",
   contextInputPolicy: "gotrader.historical.closed-bars-canonical-runtime.v1",
+  diagnosticPolicy: "gotrader.historical.context-diagnostics.v1",
   candleContent: canonicalFingerprint(input.candlesByTimeframe),
   evaluationSchedule: evaluationSchedule(input),
   narratives: evaluationSchedule(input).map((asOf) => input.narrativeAt?.(asOf) ?? null),
@@ -178,6 +179,16 @@ export const runCanonicalHistoricalFold = (input: RunCanonicalHistoricalFoldInpu
     });
     detections.push({
       asOf,
+      contextDiagnostics: {
+        factCounts: factSnapshots.reduce<Record<string, number>>((counts, fact) => {
+          counts[fact.factType] = (counts[fact.factType] ?? 0) + 1;
+          return counts;
+        }, {}),
+        draws: factSnapshots.flatMap((fact) => fact.factType === "DRAW_ON_LIQUIDITY" ? [{
+          factId: fact.factId, targetClass: fact.targetClass, direction: fact.direction,
+          available: fact.available, consumed: fact.consumed
+        }] : [])
+      },
       narrativeIdentity: canonicalFingerprint({
         asOf, sourceFingerprint: input.dataset.sourceFingerprint,
         narrative, factIds: factSnapshots.map((fact) => fact.factId)

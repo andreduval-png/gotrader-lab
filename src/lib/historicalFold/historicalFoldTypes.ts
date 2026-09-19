@@ -117,6 +117,10 @@ export interface HistoricalFoldDetectionRecord {
   asOf: string;
   narrativeIdentity: string;
   narrative: IctHierarchicalNarrative;
+  contextDiagnostics: {
+    factCounts: Record<string, number>;
+    draws: { factId: string; targetClass: string; direction: string; available: boolean; consumed: boolean }[];
+  };
   candidateId: string;
   status: string;
   geometryId?: string;

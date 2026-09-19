@@ -213,7 +213,7 @@ try {
       const expected = buildIctCanonicalRuntimeInput({ candlesByTimeframe: { "5m": shaped },
         symbol: "MNQ", asOf, sourceFingerprint: certified.sourceFingerprint, narrative });
       assert.ok(expected.facts.some((fact) => fact.factType === "DRAW_ON_LIQUIDITY"));
-      folds.runCanonicalHistoricalFold({
+      const diagnosticRun = folds.runCanonicalHistoricalFold({
         ...input, candlesByTimeframe: { "5m": shaped }, evaluationTimes: [asOf],
         narrativeAt: () => narrative,
         fold: { ...input.fold, run: { startInclusive: first,
@@ -224,6 +224,9 @@ try {
           return { candidateId: "context-parity", status: "SEARCHING", blockers: [] };
         } }
       });
+      assert.equal(diagnosticRun.detections[0].contextDiagnostics.factCounts.DRAW_ON_LIQUIDITY, 1);
+      assert.equal(diagnosticRun.detections[0].contextDiagnostics.draws.length, 1);
+      assert.equal(diagnosticRun.detections[0].contextDiagnostics.draws[0].consumed, false);
       const empty = buildIctCanonicalRuntimeInput({ candlesByTimeframe: {}, symbol: "MNQ", asOf,
         sourceFingerprint: certified.sourceFingerprint, narrative });
       assert.equal(empty.facts.some((fact) => fact.factType === "DRAW_ON_LIQUIDITY"), false);
