@@ -11,6 +11,7 @@ import { qualificationPlan } from "./lib/p4-qualification-plan.mjs";
 
 const root = path.resolve(".gotrader/bt-g1-3r");
 if (process.argv[2] === "--worker") {
+  if (typeof global.gc !== "function") throw new Error("ISOLATED_GC_UNAVAILABLE");
   const mode = process.argv[3], stage = process.argv[4];
   if (!/^isolated-\d+-\d+$/.test(mode) || !/^[1-9]\d*$/.test(stage)) throw new Error("INVALID_ISOLATED_STAGE");
   const directory = path.join(root, mode);

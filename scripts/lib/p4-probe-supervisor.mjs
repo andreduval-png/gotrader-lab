@@ -71,7 +71,7 @@ export const superviseProbe = async ({
       logHandles.push(handle);
       return handle;
     };
-    child = spawn(process.execPath, ["--max-old-space-size=512", script, ...args], {
+    child = spawn(process.execPath, ["--expose-gc", "--max-old-space-size=512", script, ...args], {
       cwd, windowsHide: true, stdio: ["ignore", output(stdoutPath), output(stderrPath)]
     });
     const exit = new Promise((resolve) => {

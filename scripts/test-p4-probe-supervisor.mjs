@@ -15,6 +15,7 @@ try {
   const complete = await superviseProbe(input);
   assert.equal(complete.status, "COMPLETED");
   assert.equal(fs.existsSync(lockPath), false);
+  assert.equal((await superviseProbe({ ...input, args: ["require-gc"] })).status, "COMPLETED");
   const failure = await superviseProbe({ ...input, args: ["fail"] });
   assert.equal(failure.status, "FAILED");
   const running = superviseProbe({ ...input, args: ["spin"], timeoutMs: 250 });
