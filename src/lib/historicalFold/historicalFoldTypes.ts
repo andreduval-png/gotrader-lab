@@ -125,6 +125,7 @@ export interface HistoricalFoldDetectionRecord {
   status: string;
   geometryId?: string;
   geometryStatus?: CanonicalTradeGeometry["status"];
+  geometryValid: boolean;
   blockers: string[];
   entryMissed: boolean;
   targetConsumed: boolean;

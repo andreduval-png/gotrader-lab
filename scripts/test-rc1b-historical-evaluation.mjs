@@ -308,6 +308,22 @@ try {
     });
     assert.equal(noGeometry.counts.evaluated, 4);
     assert.equal(noGeometry.counts.candidates, 0);
+    const invalidGeometry = { ...geometry, geometryValid: false, actionable: false,
+      status: "INVALID_GEOMETRY", target: undefined, theoreticalRR: undefined };
+    const invalidInput = { ...input, adapter: { ...pilotAdapter, detect: () => ({
+      candidateId: geometry.candidateId, status: "REJECTED", geometry: invalidGeometry,
+      blockers: ["STOP_DISTANCE_TOO_SMALL"]
+    }) } };
+    const rejected = folds.runCanonicalHistoricalFold(invalidInput);
+    assert.equal(rejected.geometryEnvelopes.length, 0);
+    assert.equal(rejected.counts.geometryComplete, 0);
+    assert.equal(rejected.counts.fills, 0);
+    assert.equal(rejected.counts.candidates, 1);
+    assert.ok(rejected.detections.every((item) => item.blockers.includes("STOP_DISTANCE_TOO_SMALL")));
+    assert.throws(() => folds.runCanonicalHistoricalFold({ ...invalidInput,
+      adapter: { ...pilotAdapter, detect: () => ({ candidateId: geometry.candidateId,
+        status: "invalid", geometry: { ...invalidGeometry, actionable: true }, blockers: [] }) }
+    }), /INVALID_ACTIONABLE_GEOMETRY/);
     assert.equal(fresh.geometryEnvelopes.length, 1);
     assert.equal(fresh.researchValidated, false);
     assert.equal(checkpoints[0].identity.strategyId, strategyId);

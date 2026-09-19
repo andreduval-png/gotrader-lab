@@ -58,6 +58,7 @@ const foldIdentity = (input: RunCanonicalHistoricalFoldInput) => canonicalFinger
   narrativeInputPolicy: "gotrader.historical.closed-bars-canonical-narrative.v1",
   contextInputPolicy: "gotrader.historical.closed-bars-canonical-runtime.v1",
   diagnosticPolicy: "gotrader.historical.context-diagnostics.v1",
+  rejectedGeometryPolicy: "gotrader.historical.invalid-geometry-diagnostic.v1",
   candleContent: canonicalFingerprint(input.candlesByTimeframe),
   evaluationSchedule: evaluationSchedule(input),
   narratives: evaluationSchedule(input).map((asOf) => input.narrativeAt?.(asOf) ?? null),
@@ -198,11 +199,15 @@ export const runCanonicalHistoricalFold = (input: RunCanonicalHistoricalFoldInpu
       status: detection.status,
       geometryId: detection.geometry?.geometryId,
       geometryStatus: detection.geometry?.status,
+      geometryValid: detection.geometry?.geometryValid === true,
       blockers: [...detection.blockers],
       entryMissed: detection.entryMissed === true,
       targetConsumed: detection.targetConsumed === true
     });
-    if (detection.geometry && !seenGeometry.has(detection.geometry.geometryId)) {
+    if (detection.geometry?.actionable && !detection.geometry.geometryValid) {
+      throw new Error("HISTORICAL_FOLD_INVALID_ACTIONABLE_GEOMETRY");
+    }
+    if (detection.geometry?.geometryValid && !seenGeometry.has(detection.geometry.geometryId)) {
       const envelope = adaptCanonicalStrategyGeometryForHistorical({
         geometry: detection.geometry,
         sourceFingerprint: input.dataset.sourceFingerprint,
@@ -259,7 +264,7 @@ export const runCanonicalHistoricalFold = (input: RunCanonicalHistoricalFoldInpu
     }
   }
 
-  const completeGeometry = detections.filter((item) => item.geometryId);
+  const completeGeometry = detections.filter((item) => item.geometryValid);
   const actionableGeometry = geometryEnvelopes.filter((item) => item.actionable && item.geometryStatus === "VALID_ACTIONABLE");
   const belowRR = detections.filter((item) => item.geometryStatus === "VALID_BELOW_RR_THRESHOLD").length;
   const wins = outcomes.filter((item) => item.outcome === "target_hit").length;
