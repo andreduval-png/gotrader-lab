@@ -182,3 +182,32 @@ slice. Longer-history resource growth and full 936-observation capacity remain
 PARTIAL; fullEvaluationAllowed remains false. Authority is none/none/none,
 researchValidated false, and productionAdoptionAllowed false. No raw candles
 are included in this committed evidence record.
+
+## Four-Process Capacity Extension
+
+Implementation `ca0b2b6` admits an explicit 24-observation qualification only;
+the existing 12-observation option remains available. The full schedule gate,
+six-observation batches, scoring interval, owner parameters and resource limits
+are unchanged. Evidence: `.gotrader/bt-g1-3r/isolated-1789781441233-17948`.
+
+Four sequential workers completed in 54,930 / 56,275 / 55,315 / 55,447 ms.
+Maximum supervisor-sampled RSS was 567,975,936 bytes; maximum worker-internal
+RSS was 611,020,800 bytes (approximately 583 MiB). Output reached 15,734,515
+bytes, below 128 MiB. All packages remained unchanged and stderr files empty.
+
+Independent verification confirmed all five owners at cursors 6, 12, 18, 24;
+checkpoint/state/result/provenance hashes; identical admission, policy and
+schedule across workers; released locks; and independently recomputed aggregate
+counts/metrics. Exactly 120 owner-observations were covered. IFVG yielded three
+unique candidates and 18 geometry-complete detections; ICT 2022 yielded one
+candidate and one missed entry. No owner produced an eligible candidate, fill,
+or completed trade. Average R and win rate remain unavailable.
+
+Continuation hash: `sha256:cb6dfcb52f484d66cde82308287c3b882b428d727bfe27208c5708974b69f17e`.
+Final pilot hash: `sha256:dc38dd69adea400e7b6d5a9e5a628a2e5ca47fc7c7141d956a53a2df293b0f06`.
+Reconciliation hash: `sha256:e708143daa4faee25705388b064563e1c0339ddb6ffc43c23a971f3512868bf8`.
+
+RC1B historical evaluation regression and runner syntax check passed. This is a
+same-day capacity extension, not longer calendar-history or full-schedule
+qualification. FullEvaluationAllowed remains false. Whole-session and multi-date
+resource growth remain PARTIAL; no performance/readiness gate was relaxed.
