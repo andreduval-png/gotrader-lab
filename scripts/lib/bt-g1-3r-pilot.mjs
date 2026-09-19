@@ -12,6 +12,7 @@ import { compileBtG13rRuntime } from "./bt-g1-3r-runtime.mjs";
 import { buildExpandedEvaluationProtocol } from "./p4-expanded-evaluation-protocol.mjs";
 import { bindExpandedPolicies, classifyScheduledObservations } from "./p4-expanded-admission.mjs";
 import { dispatchHistoricalFold, reconcileHistoricalResults } from "./p4-batch-dispatch.mjs";
+import { qualificationPlan } from "./p4-qualification-plan.mjs";
 
 export const BT_G1_3R_PILOT = Object.freeze({
   schemaVersion: "gotrader.bt-g1-3r.pilot-definition.v1",
@@ -76,12 +77,12 @@ const peakSampler = () => {
 
 export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false,
   batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null, qualificationObservations = 12 } = {}) => {
-  if (![12, 24].includes(qualificationObservations)) throw new Error("UNADMITTED_QUALIFICATION_SIZE");
+  const qualification = qualificationPlan(qualificationObservations);
   if (batchDirectory && !expandedQualification) throw new Error("BATCH_DIRECTORY_REQUIRES_EXPANDED_MODE");
   if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
   const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
   const definition = protocol ? { ...BT_G1_3R_PILOT,
-    startUtc: protocol.evaluationTimes[0], endUtc: "2026-04-07T00:00:00.000Z",
+    startUtc: qualification.startUtc, endUtc: qualification.endUtc,
     selectionPolicy: `Capacity qualification: first ${qualificationObservations} observations in six-observation batches; not full evaluation`
   } : BT_G1_3R_PILOT;
   const startedAt = new Date().toISOString();
