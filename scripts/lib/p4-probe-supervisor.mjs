@@ -26,10 +26,13 @@ export const readProcessRss = async (pid) => {
 
 export const superviseProbe = async ({
   lockPath, script, args = [], cwd, timeoutMs, maxRssBytes,
-  pollMs = 1000, measureRss = readProcessRss, stdoutPath, stderrPath, inspectDisk
+  pollMs = 1000, measureRss = readProcessRss, stdoutPath, stderrPath, inspectDisk, maxOldSpaceMiB = 512
 }) => {
   if (![timeoutMs, maxRssBytes, pollMs].every((value) => Number.isSafeInteger(value) && value > 0)) {
     throw new Error("P4_INVALID_RESOURCE_LIMIT");
+  }
+  if (!Number.isSafeInteger(maxOldSpaceMiB) || maxOldSpaceMiB < 128 || maxOldSpaceMiB > 512) {
+    throw new Error("P4_INVALID_HEAP_LIMIT");
   }
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
   const token = randomUUID();
@@ -71,7 +74,7 @@ export const superviseProbe = async ({
       logHandles.push(handle);
       return handle;
     };
-    child = spawn(process.execPath, ["--expose-gc", "--max-old-space-size=512", script, ...args], {
+    child = spawn(process.execPath, ["--expose-gc", `--max-old-space-size=${maxOldSpaceMiB}`, script, ...args], {
       cwd, windowsHide: true, stdio: ["ignore", output(stdoutPath), output(stderrPath)]
     });
     const exit = new Promise((resolve) => {

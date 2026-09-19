@@ -16,6 +16,8 @@ try {
   assert.equal(complete.status, "COMPLETED");
   assert.equal(fs.existsSync(lockPath), false);
   assert.equal((await superviseProbe({ ...input, args: ["require-gc"] })).status, "COMPLETED");
+  assert.equal((await superviseProbe({ ...input, args: ["require-small-heap"], maxOldSpaceMiB: 256 })).status, "COMPLETED");
+  await assert.rejects(superviseProbe({ ...input, maxOldSpaceMiB: 1024 }), /INVALID_HEAP_LIMIT/);
   const failure = await superviseProbe({ ...input, args: ["fail"] });
   assert.equal(failure.status, "FAILED");
   const running = superviseProbe({ ...input, args: ["spin"], timeoutMs: 250 });

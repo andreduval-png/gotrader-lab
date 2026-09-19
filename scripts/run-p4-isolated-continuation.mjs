@@ -31,7 +31,7 @@ if (process.argv[2] === "--worker") {
   const packageIdentity = readCleanPackageIdentity(process.cwd());
   const mode = `isolated-${Date.now()}-${process.pid}`, directory = path.join(root, mode);
   fs.mkdirSync(directory, { recursive: true });
-  const manifest = { packageIdentity, ...plan, fullEvaluationAllowed: false, authority: "none/none/none" };
+  const manifest = { packageIdentity, ...plan, maxOldSpaceMiB: 256, fullEvaluationAllowed: false, authority: "none/none/none" };
   fs.writeFileSync(path.join(directory, "manifest.json"), JSON.stringify(manifest, null, 2), { flag: "wx" });
   const reports = [];
   for (let stage = 1; stage <= stages; stage += 1) {
@@ -45,7 +45,7 @@ if (process.argv[2] === "--worker") {
     fs.mkdirSync(stageDirectory);
     const result = await superviseProbe({ lockPath: path.join(root, "supervised-probe.lock"),
       script: fileURLToPath(import.meta.url), args: ["--worker", mode, String(stage)], cwd: process.cwd(),
-      timeoutMs: 120000, maxRssBytes: 768 * 1024 ** 2,
+      timeoutMs: 120000, maxRssBytes: 768 * 1024 ** 2, maxOldSpaceMiB: manifest.maxOldSpaceMiB,
       stdoutPath: path.join(stageDirectory, "stdout.log"), stderrPath: path.join(stageDirectory, "stderr.log"),
       inspectDisk: () => inspectDiskBudget({ directory, maxOutputBytes: 128 * 1024 ** 2, minimumFreeDiskBytes: 2 * 1024 ** 3 }) });
     let packageUnchanged = false;
