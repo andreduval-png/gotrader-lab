@@ -74,7 +74,9 @@ const peakSampler = () => {
   };
 };
 
-export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false } = {}) => {
+export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false,
+  batchDirectory, maxBatches = Number.MAX_SAFE_INTEGER, packageBinding = null } = {}) => {
+  if (batchDirectory && !expandedQualification) throw new Error("BATCH_DIRECTORY_REQUIRES_EXPANDED_MODE");
   if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
   const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
   const definition = protocol ? { ...BT_G1_3R_PILOT,
@@ -168,19 +170,24 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
         }
       };
       const runFold = (request) => runVerifiedHistoricalFold(admission, runnerModule.runCanonicalHistoricalFold, request);
+      const ownerBatchDirectory = path.join(batchDirectory ?? path.join(outputDirectory, "batches"), adapter.strategyId);
       const dispatched = protocol ? dispatchHistoricalFold({
-        directory: path.join(outputDirectory, "batches", adapter.strategyId),
+        directory: ownerBatchDirectory,
         binding: { manifestHash: policyBinding.manifestHash, admissionHash: canonicalHash(admission.receipt),
-          owner: adapter.strategyId, fold: foldInput.fold },
-        input: foldInput, runFold, batchSize: protocol.observationsPerBatch
+          owner: adapter.strategyId, fold: foldInput.fold, packageBinding },
+        input: foldInput, runFold, batchSize: protocol.observationsPerBatch, maxBatches
       }) : undefined;
-      if (dispatched && dispatched.status !== "COMPLETED") throw new Error("EXPANDED_DISPATCH_INCOMPLETE");
-      const { result, provenance } = dispatched ? dispatched.result : runFold(foldInput);
       if (dispatched) {
-        checkpointCount = dispatched.batchesExecuted;
-        const state = JSON.parse(fs.readFileSync(path.join(outputDirectory, "batches", adapter.strategyId, "state.json"), "utf8"));
+        checkpointCount = dispatched.batchesExecuted ?? maxBatches;
+        const state = JSON.parse(fs.readFileSync(path.join(ownerBatchDirectory, "state.json"), "utf8"));
         atomicWrite(checkpointFile, state.checkpoint);
+        if (dispatched.status === "CHECKPOINTED") {
+          results.push({ strategyId: adapter.strategyId, status: "checkpointed", nextPosition: dispatched.nextPosition, checkpointCount });
+          if (typeof global.gc === "function") global.gc();
+          continue;
+        }
       }
+      const { result, provenance } = dispatched ? dispatched.result : runFold(foldInput);
       terminalResults.push(result);
       const resultFile = path.join(outputDirectory, `${adapter.strategyId}.result.json`);
       atomicWrite(resultFile, result);
@@ -206,7 +213,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     elapsedMs: Math.round(performance.now() - wallStart),
     definition,
     ...(protocol ? { protocol, policyBinding, scheduledObservations } : {}),
-    ...(protocol ? { reconciliation: reconcileHistoricalResults({ results: terminalResults,
+    ...(protocol && terminalResults.length === adapters.length ? { reconciliation: reconcileHistoricalResults({ results: terminalResults,
       expectedOwners: protocol.owners, expectedSchedule: evaluationTimes }) } : {}),
     dataset: datasetIdentity,
     admission: admission.receipt,
@@ -222,7 +229,7 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
       freeDiskAfterBytes,
       outputBytes,
       workerCount: 1,
-      checkpointBatchSize: BT_G1_3R_PILOT.checkpointEvery
+      checkpointBatchSize: protocol?.observationsPerBatch ?? BT_G1_3R_PILOT.checkpointEvery
     },
     researchValidated: false,
     productionAdoptionAllowed: false,
