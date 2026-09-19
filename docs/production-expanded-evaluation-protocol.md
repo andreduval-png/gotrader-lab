@@ -61,3 +61,47 @@ diagnostic model, not measured broker costs or a new performance-acceptance poli
 Protocol tests verify deterministic hashing, exact date/window/owner counts,
 uniqueness, certificate date bounds, NY times and disabled admission/authority.
 No expanded dataset job was started by this checkpoint.
+
+## First-Batch Qualification Follow-Up
+
+Implemented owner policy/content hashing and adapter/parameter/geometry/session
+binding into the fold configuration identity. Tests reject altered protocols,
+duplicate/missing owners and mismatched strategy versions. Scheduled timestamp
+availability is explicit and missing data stops the qualification run.
+Actual interruption plus serialized-checkpoint resume matches uninterrupted
+fixture results, outcomes and deduplicated envelopes for all five owners.
+
+Initial first-batch probe at commit db07cfa failed with
+CANONICAL_GEOMETRY_PARITY_FAILURE. Preserved evidence:
+`.gotrader/bt-g1-3r/supervised-1789779379699-18696`.
+The runner incorrectly attempted to envelope an invalid rejected geometry.
+Fix a65c1a7 preserves that record diagnostically, excludes it from complete
+geometry and scoring, and rejects contradictory invalid-but-actionable geometry.
+Valid geometry still passes through strict parity checks. Policy identity changed
+to prohibit resuming pre-fix checkpoints under the corrected disposition.
+
+Separate retry against a65c1a7 completed:
+`.gotrader/bt-g1-3r/supervised-1789779520491-26900`.
+54,004 ms; peak RSS 553,021,440 bytes; 54 samples; 3,848,127 output bytes;
+zero stderr; package unchanged; exclusive lock removed. All five owners processed
+the exact first six April observations. Protocol/manifest, admission, provenance,
+result-content/result-identity and checkpoint hashes verified. All cursors are 6.
+
+Pilot report canonical hash:
+`sha256:82e5f5c4632e348f06ed6ba070402e68d15d6fabe19b8c9f563a35ce652ab268`.
+Supervisor report canonical hash:
+`sha256:1ced96b3d29be9bca24cf95fe35b67543cf99a790927c12e9021cde5434d8d3d`.
+
+ICT 2022 retained one ENTRY_MISSED diagnostic candidate; IFVG retained one
+unique geometry-backed candidate. All owners had zero eligible candidates,
+fills and completed trades. No performance acceptance is claimed.
+
+Passed RC1B including bindings/interruption/rejection tests, protocol tests,
+P3 scoring, RC1C orchestration, supervisor/capacity tests and TypeScript/build.
+Existing circular-chunk and bundle-size warnings remain.
+
+Qualification applies ONLY to this first six-observation batch. Full execution
+remains disabled. A multi-batch dispatcher, immutable manifest across processes,
+cross-batch deduplication and aggregate reconciliation still require acceptance
+before running all 936 observations per owner. This is not an automatic restart
+or full-dataset authorization. Raw data and generated evidence remain uncommitted.
