@@ -9,6 +9,8 @@ import {
 import { loadVerifiedFoldAdmission, runVerifiedHistoricalFold } from "./p3-verified-fold-admission.mjs";
 import { evaluateCapacityPreflight } from "./p4-capacity-preflight.mjs";
 import { compileBtG13rRuntime } from "./bt-g1-3r-runtime.mjs";
+import { buildExpandedEvaluationProtocol } from "./p4-expanded-evaluation-protocol.mjs";
+import { bindExpandedPolicies, classifyScheduledObservations } from "./p4-expanded-admission.mjs";
 
 export const BT_G1_3R_PILOT = Object.freeze({
   schemaVersion: "gotrader.bt-g1-3r.pilot-definition.v1",
@@ -71,7 +73,13 @@ const peakSampler = () => {
   };
 };
 
-export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false } = {}) => {
+export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interruptAfterCheckpoint = false, expandedQualification = false } = {}) => {
+  if (expandedQualification && resumeDirectory) throw new Error("EXPANDED_QUALIFICATION_RESUME_NOT_ADMITTED");
+  const protocol = expandedQualification ? buildExpandedEvaluationProtocol() : undefined;
+  const definition = protocol ? { ...BT_G1_3R_PILOT,
+    startUtc: protocol.evaluationTimes[0], endUtc: "2026-04-07T00:00:00.000Z",
+    selectionPolicy: "Capacity qualification: first six observations of the expanded protocol; not full evaluation"
+  } : BT_G1_3R_PILOT;
   const startedAt = new Date().toISOString();
   const wallStart = performance.now();
   const freeDiskBeforeBytes = fs.statfsSync(process.cwd()).bavail * fs.statfsSync(process.cwd()).bsize;
@@ -85,25 +93,34 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     outputRoot: path.join(outputDirectory, "runtime"),
     entries: [
       "src/lib/historicalFold/historicalFoldStrategyAdapters.ts",
-      "src/lib/historicalFold/runCanonicalHistoricalFold.ts"
+      "src/lib/historicalFold/runCanonicalHistoricalFold.ts",
+      "src/lib/ownerValidationPolicy/ownerPerformancePolicyRegistry.ts"
     ]
   });
   const adaptersModule = await import(runtime.entryUrls["src/lib/historicalFold/historicalFoldStrategyAdapters.ts"]);
   const runnerModule = await import(runtime.entryUrls["src/lib/historicalFold/runCanonicalHistoricalFold.ts"]);
   const adapters = adaptersModule.CANONICAL_HISTORICAL_FOLD_ADAPTERS;
+  const policyModule = await import(runtime.entryUrls["src/lib/ownerValidationPolicy/ownerPerformancePolicyRegistry.ts"]);
+  const policyBinding = protocol ? bindExpandedPolicies({ protocol, adapters,
+    policies: policyModule.canonicalOwnerPerformancePolicyRegistry }) : undefined;
   const requiredTimeframes = [...new Set(adapters.flatMap((adapter) => adapter.requiredTimeframes))];
   const admission = loadVerifiedFoldAdmission({
     requests: requiredTimeframes.map((timeframe) => ({
       timeframe,
-      startUtc: BT_G1_3R_PILOT.startUtc,
-      endUtc: BT_G1_3R_PILOT.endUtc,
+      startUtc: definition.startUtc,
+      endUtc: definition.endUtc,
       warmupDays: timeframe === "1m" ? BT_G1_3R_PILOT.oneMinuteWarmupDays : BT_G1_3R_PILOT.warmupDays
     }))
   });
   const { candlesByTimeframe } = admission;
-  const pilotStartMs = Date.parse(BT_G1_3R_PILOT.startUtc);
-  const pilotEndMs = Date.parse(BT_G1_3R_PILOT.endUtc);
-  const evaluationTimes = candlesByTimeframe["5m"].map((candle) => candle.timestamp).filter((timestamp) => {
+  const pilotStartMs = Date.parse(definition.startUtc);
+  const pilotEndMs = Date.parse(definition.endUtc);
+  const scheduledObservations = protocol ? classifyScheduledObservations(protocol.evaluationTimes.slice(0, 6), candlesByTimeframe["5m"]) : undefined;
+  if (scheduledObservations?.some((observation) => observation.status !== "AVAILABLE")) {
+    atomicWrite(path.join(outputDirectory, "unavailable-observations.json"), scheduledObservations);
+    throw new Error("EXPANDED_SCHEDULE_UNAVAILABLE");
+  }
+  const evaluationTimes = protocol ? scheduledObservations.map((observation) => observation.asOf) : candlesByTimeframe["5m"].map((candle) => candle.timestamp).filter((timestamp) => {
     const timestampMs = Date.parse(timestamp);
     return timestampMs >= pilotStartMs && timestampMs < pilotEndMs && inPilotSession(timestamp);
   });
@@ -117,16 +134,16 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     try {
       const { result, provenance } = runVerifiedHistoricalFold(admission, runnerModule.runCanonicalHistoricalFold, {
         fold: {
-          experimentFamilyId: "bt-g1-3r-certified-pilot-v1",
+          experimentFamilyId: protocol ? "p4-expanded-capacity-qualification-v1" : "bt-g1-3r-certified-pilot-v1",
           trialId: `pilot-${adapter.strategyId}`,
           foldId: "mechanical-three-session-pilot",
           partition: "oos",
           train: { startInclusive: "2024-08-01T00:00:00.000Z", endExclusive: "2025-08-01T00:00:00.000Z" },
-          validation: { startInclusive: "2025-08-01T00:00:00.000Z", endExclusive: BT_G1_3R_PILOT.startUtc },
-          oos: { startInclusive: BT_G1_3R_PILOT.startUtc, endExclusive: BT_G1_3R_PILOT.endUtc },
-          run: { startInclusive: BT_G1_3R_PILOT.startUtc, endExclusive: BT_G1_3R_PILOT.endUtc }
+          validation: { startInclusive: "2025-08-01T00:00:00.000Z", endExclusive: definition.startUtc },
+          oos: { startInclusive: definition.startUtc, endExclusive: definition.endUtc },
+          run: { startInclusive: definition.startUtc, endExclusive: definition.endUtc }
         },
-        configurationId: "bt-g1-3r-frozen-owner-defaults-v1",
+        configurationId: policyBinding ? policyBinding.manifestHash : "bt-g1-3r-frozen-owner-defaults-v1",
         adapter,
         primaryTimeframe: "5m",
         evaluationTimes,
@@ -170,7 +187,8 @@ export const runBtG13rPilot = async ({ mode = "pilot", resumeDirectory, interrup
     startedAt,
     completedAt: new Date().toISOString(),
     elapsedMs: Math.round(performance.now() - wallStart),
-    definition: BT_G1_3R_PILOT,
+    definition,
+    ...(protocol ? { protocol, policyBinding, scheduledObservations } : {}),
     dataset: datasetIdentity,
     admission: admission.receipt,
     admissionHash: canonicalHash(admission.receipt),

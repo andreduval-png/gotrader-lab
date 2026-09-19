@@ -9,9 +9,9 @@ import { readCleanPackageIdentity } from "./lib/p4-package-identity.mjs";
 
 if (process.argv[2] === "--worker") {
   const { runBtG13rPilot } = await import("./lib/bt-g1-3r-pilot.mjs");
-  await runBtG13rPilot({ mode: process.argv[3] });
+  await runBtG13rPilot({ mode: process.argv[3], expandedQualification: process.argv[4] === "expanded" });
 } else {
-  if (process.argv[2] !== "--run-bounded-probe") {
+  if (!["--run-bounded-probe", "--qualify-expanded-probe"].includes(process.argv[2])) {
     throw new Error("P4_EXPLICIT_BOUNDED_PROBE_REQUIRED");
   }
   const packageIdentity = readCleanPackageIdentity(process.cwd());
@@ -28,7 +28,8 @@ if (process.argv[2] === "--worker") {
   fs.mkdirSync(directory, { recursive: false });
   const result = await superviseProbe({
     lockPath: path.resolve(".gotrader", "bt-g1-3r", "supervised-probe.lock"),
-    script: fileURLToPath(import.meta.url), args: ["--worker", mode], cwd: process.cwd(),
+    script: fileURLToPath(import.meta.url), args: ["--worker", mode,
+      process.argv[2] === "--qualify-expanded-probe" ? "expanded" : "pilot"], cwd: process.cwd(),
     timeoutMs: 120_000, maxRssBytes: 768 * 1024 ** 2,
     stdoutPath: path.join(directory, "stdout.log"), stderrPath: path.join(directory, "stderr.log"),
     inspectDisk: () => inspectDiskBudget({

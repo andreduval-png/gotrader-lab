@@ -3,6 +3,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createServer } from "vite";
+import { bindExpandedPolicies, classifyScheduledObservations } from "./lib/p4-expanded-admission.mjs";
+import { buildExpandedEvaluationProtocol } from "./lib/p4-expanded-evaluation-protocol.mjs";
 
 const server = await createServer({ cacheDir: ".gotrader/p2-vite-cache", server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
 
@@ -16,6 +18,19 @@ try {
   const geometryApi = await server.ssrLoadModule("/src/lib/tradeGeometry/index.ts");
   const coverage = await server.ssrLoadModule("/src/lib/researchCoverage/canonicalResearchCoverageRegistry.ts");
   const compatibility = await server.ssrLoadModule("/src/lib/researchCoverage/evidenceCompatibility.ts");
+  const { canonicalOwnerPerformancePolicyRegistry: policies } = await server.ssrLoadModule("/src/lib/ownerValidationPolicy/ownerPerformancePolicyRegistry.ts");
+  const protocol = buildExpandedEvaluationProtocol();
+  const adapters = folds.CANONICAL_HISTORICAL_FOLD_ADAPTERS;
+  const binding = bindExpandedPolicies({ protocol, adapters, policies });
+  assert.equal(binding.owners.length, 5);
+  assert.equal(binding.fullEvaluationAllowed, false);
+  assert.throws(() => bindExpandedPolicies({ protocol: { ...protocol, maximumWorkers: 2 }, adapters, policies }), /HASH_MISMATCH/);
+  assert.throws(() => bindExpandedPolicies({ protocol, adapters: [...adapters, adapters[0]], policies }), /AMBIGUOUS/);
+  assert.throws(() => bindExpandedPolicies({ protocol, adapters, policies: policies.slice(1) }), /AMBIGUOUS/);
+  assert.throws(() => bindExpandedPolicies({ protocol, adapters,
+    policies: policies.map((policy) => ({ ...policy, ownerStrategyVersion: "wrong" })) }), /POLICY_MISMATCH/);
+  assert.deepEqual(classifyScheduledObservations(["a", "b"], [{ timestamp: "a" }]),
+    [{ asOf: "a", status: "AVAILABLE" }, { asOf: "b", status: "UNAVAILABLE" }]);
 
   const owners = [
     "ifvg_fresh_retest_v3_research",
@@ -262,6 +277,16 @@ try {
     assert.deepEqual(futureChanged.detections, fresh.detections);
     assert.ok(fresh.detections.every((record) => record.narrativeIdentity && record.narrative));
     const resumed = folds.runCanonicalHistoricalFold({ ...input, resumeFrom: checkpoints[0] });
+    let interruptedCheckpoint;
+    assert.throws(() => folds.runCanonicalHistoricalFold({ ...input, onCheckpoint: (checkpoint) => {
+      interruptedCheckpoint = checkpoint;
+      throw new Error("TEST_PROCESS_INTERRUPTION");
+    } }), /TEST_PROCESS_INTERRUPTION/);
+    const recovered = folds.runCanonicalHistoricalFold({ ...input,
+      resumeFrom: JSON.parse(JSON.stringify(interruptedCheckpoint)) });
+    assert.equal(recovered.resultIdentityHash, fresh.resultIdentityHash);
+    assert.deepEqual(recovered.outcomes, fresh.outcomes);
+    assert.deepEqual(recovered.geometryEnvelopes, fresh.geometryEnvelopes);
     assert.equal(fresh.resultIdentityHash, repeated.resultIdentityHash);
     assert.equal(fresh.resultIdentityHash, resumed.resultIdentityHash);
     assert.throws(() => folds.runCanonicalHistoricalFold({ ...input, evaluationTimes: [first], resumeFrom: checkpoints[0] }), /RESTART/);
